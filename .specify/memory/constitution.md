@@ -1,50 +1,80 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+同步影響報告
+- 版本變更：未版本化模板 → 1.0.0
+- 修改原則：五個模板佔位原則 → 語言與命名、規格優先與簡潔設計、Python 品質、
+  測試與完成門檻、安全與可審查變更
+- 新增章節：專案約束；開發流程
+- 移除章節：無
+- 後續 TODO：RATIFICATION_DATE 尚未有紀錄，需補上原始批准日期。
+-->
 
-## Core Principles
+# StrayHub 專案憲章
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+## 核心原則
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### I. 語言與命名一致性
+所有供團隊閱讀的專案文件、規格、計畫、任務、分析與測試報告 MUST 使用台灣正體中文。
+程式碼識別字、API、資料表及技術名稱 MUST 維持英文且採中性、可理解的命名；不得將
+語言偏好混入程式碼識別字。此原則確保團隊溝通一致，同時維持技術介面的可攜性與清晰度。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. 規格優先與簡潔設計
+所有使用者可見行為、資料模型、整合介面與營運流程變更 MUST 先建立書面規格，內容至少
+包含目標、範圍、驗收條件、限制與風險。實作計畫與任務 MUST 從規格衍生，並在實作前完成
+審查。每項變更 MUST 採用足以滿足驗收條件的最簡單設計；新增抽象層、依賴或基礎設施
+MUST 記錄當前需求與理由。這能讓決策可追溯，並避免不必要的維護負擔。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### III. Python 工具鏈與品質門檻
+Python 專案 MUST 使用 Ruff 統一管理格式化、import 排序及靜態檢查。除非技術計畫明確
+說明理由，專案 MUST NOT 同時引入職責重疊的 Black、isort 或 Flake8。任何涉及 Python
+的功能，只有在下列指令全部通過後，才能標記為完成：
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+```bash
+ruff check .
+ruff format --check .
+pytest
+```
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+此門檻將格式、靜態品質與行為驗證納入同一套可重複執行的完成判準。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. 測試完整性與不可繞過的驗證
+所有 Python 核心業務邏輯 MUST 使用 Pytest 撰寫自動化測試。新增行為 MUST 在適當的最小
+測試層級涵蓋；每個缺陷修正 MUST 包含回歸測試，除非技術計畫記錄其確實不可測試的理由。
+涉及模組、服務或共享資料結構邊界時，MUST 補充適用的整合或契約測試。不得刪除測試、
+任意放寬 assertion、標記 skip，或停用 Ruff 規則來宣稱功能完成。這能防止品質門檻被繞過，
+並讓驗證結果反映實際行為。
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### V. 安全、可及性與可審查變更
+所有外部輸入 MUST 在信任邊界驗證，受保護操作 MUST 在伺服器端執行授權檢查。專案 MUST
+只蒐集與保留核准功能所需的資料；秘密、憑證與不必要的個人資料 MUST NOT 提交至版本庫
+或寫入日誌。使用者介面變更 MUST 支援鍵盤操作、語意結構、清楚標籤與足夠色彩對比。
+每項變更 MUST 說明使用者影響、遷移需求、已知限制與驗收證據，且範圍必須足以讓審查者
+逐項核對。這能降低安全與隱私風險，並確保產品可使用、可驗證。
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## 專案約束
 
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+規格、計畫、任務與決策紀錄 MUST 放置於專案既有的 Spec Kit 目錄。儲存庫設定 MUST 是
+支援執行環境與指令的唯一依據。新增依賴、服務或持久化資料變更 MUST 說明用途、維護
+責任、安全影響及回滾或遷移方式。本機開發與自動化 MUST 使用非正式環境的憑證與資料。
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+## 開發流程
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+工作 MUST 依序遵循：建立規格、規劃設計、產生可執行任務、實作任務、驗證結果。變更送審
+前，驗收條件 MUST 對應至自動化測試或明確的人工驗證程序；行為變更 MUST 更新相關文件，
+並完成安全與可及性影響檢查。審查者 MUST 拒絕超出規格範圍的工作，或要求拆分為獨立規格。
+任何例外 MUST 記錄理由、負責人、到期日或後續工作，以及補償性驗證措施。
+
+## 治理
+
+本憲章是儲存庫的品質治理標準。其他實務與本憲章衝突時，MUST 依本憲章處理，或依開發
+流程記錄核准的例外。每份功能規格、計畫、合併請求與發布審查 MUST 檢查適用原則；審查者
+MAY 要求提供可驗證的合規證據後才批准。
+
+修訂 MUST 以儲存庫變更提出，並說明動機、對既有工作的影響、遷移需求，以及需要同步更新
+的模板或自動化。修訂只有在專案維護者審查通過，且同步更新版本、最後修訂日期與同步影響
+報告後才生效。版本遵循語意化規則：重大治理不相容變更或原則移除／重新定義使用 MAJOR；
+新增原則或實質擴充要求使用 MINOR；澄清與非語意文字修正使用 PATCH。
+
+當新增功能流程、安全邊界、資料政策或發布流程時，專案 MUST 重新檢視本憲章。合規缺口
+MUST 記錄為可追蹤的後續工作或核准的例外，不得無聲忽略。
+
+**版本**：1.0.0 | **批准日期**：TODO(RATIFICATION_DATE)：儲存庫未記錄原始批准日期 | **最後修訂**：2026-08-05
