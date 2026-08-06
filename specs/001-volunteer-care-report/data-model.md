@@ -1,0 +1,196 @@
+# 資料模型：志工日常照護回報與動物近期歷程
+
+**用途**：定義 Phase 1 的業務實體、關係、租戶邊界、驗證規則與狀態轉換。這不是 SQL 或完整資料庫 Schema；欄位名稱是供實作與測試對齊的業務語意。
+
+## 共通資料治理規則
+
+- 每一筆非公開業務資料都必須有 `shelter_id` 或等價的明確 Shelter 歸屬；Platform Administrator 的平台層資料除外。
+- 所有讀取、新增、修改、刪除、搜尋、匯出與圖片存取都必須取得已驗證的 `ActorScope`，再由 CRM 邊界判定 `shelter_id`。
+- 使用者提交的 `shelter_id`、Animal 識別、Shelter Number、QR Token 或網址只能是候選輸入，不得直接成為授權依據。
+- Shelter Number 只在同一 Shelter 內唯一；查詢、QR 解析與正式關聯都必須同時帶入 Shelter 範圍。
+- 原始回報內容、原始照片、Volunteer Note、原始 AI 輸出與人工修正不可互相覆蓋。
+- Signed URL、MinIO URL 與 Cloud Storage URL 是暫時存取位置，不是永久識別；永久關係只使用 Object Key 與 CRM 關聯。
+
+## Database Access 與 Persistence 邊界
+
+### Model 分層
+
+- **Pydantic Model**：只負責 API Request／Response 的輸入輸出驗證與序列化，不直接代表資料庫持久化模型。
+- **SQLAlchemy Model**：負責 PostgreSQL Database Mapping、關聯與持久化狀態，不直接作為公開 API Schema。
+- **Domain／Application Layer**：負責角色能力、Organization／Shelter Scope、動物選擇、回報送出重新驗證、AI Job 交易流程與 Audit Record。
+- **Controlled Repository**：負責所有租戶資料查詢與寫入；每個操作都必須接收已驗證的 `Organization Scope`，不得讓呼叫端自由省略或改寫範圍。
+
+不使用 SQLModel。API Schema、Database Mapping 與多租戶關係必須保持可分別演進與測試。
+
+### Organization Scope
+
+本計畫以 `Organization` 作為資料存取層的租戶鍵，對應功能規格中的 Shelter／收容所。每個 Repository 操作都必須同時具備：
+
+1. 已驗證的 Actor Context。
+2. 有效的 Organization／Shelter Membership。
+3. 操作所需的角色能力。
+4. 目標資源的 Organization／Shelter 歸屬。
+
+前端、LIFF、QR Token、網址、Shelter Number 或任意 Request 欄位提供的 Organization 識別只能作為候選條件，不能取代已驗證 Scope。
+
+### 租戶 Defense in Depth
+
+- Application Layer 由受控 Repository 強制套用 Organization Scope。
+- SQLAlchemy 關聯與資料庫約束確保跨 Organization 關聯不能成立。
+- 同一 Organization 內的 Shelter Number 使用 Composite Unique Constraint；不同 Organization 可以重複。
+- 需要跨租戶一致性的關聯使用包含 Organization 的 Composite Foreign Key 或等價的資料庫一致性防護。
+- PostgreSQL 以 Row-Level Security／交易層的 Organization Scope 防止繞過 Repository 的讀寫；平台管理員跨機構操作必須使用明確授權流程，不得成為一般連線的預設範圍。
+- `tests/isolation`、Repository 測試、migration 測試與 GCP Demo 驗證共同確認 A／B Organization 不可互相讀寫或推測存在性。
+
+### Migration 管理
+
+- 所有資料表、Constraint、Index、Row-Level Security Policy 與 Schema 變更都由 Alembic Migration 管理。
+- 新環境必須能從空 PostgreSQL 執行完整 migration；不得依賴手動建立資料表或手動操作資料庫介面作為唯一建置方式。
+- Migration 變更必須包含可驗證的 upgrade 路徑；需要回復的變更另提供明確 downgrade 或替代遷移策略。
+- Cloud SQL Demo 必須重新執行 migration 驗證，不能以本機資料庫現況代替。
+
+## 實體
+
+### Shelter / Tenant
+
+代表一個收容所、私人動物之家或中途機構。
+
+主要資料：名稱、機構代碼、地址或服務區域、聯絡資訊、啟用狀態、初始管理員關聯、建立時間、更新時間與公開資料設定。
+
+驗證規則：機構代碼在平台範圍內不可造成歧義；停用 Shelter 不刪除歷史資料；停用後一般使用者不能登入或建立新業務資料；跨 Shelter 管理只由明確授權的 Platform Administrator 執行。
+
+### User、Platform Administrator、Shelter Administrator、Staff Member、Volunteer
+
+代表平台與收容所使用者。User 保存身分狀態、角色與可用服務狀態；角色決定可用操作，但每一次資料存取仍須由 Shelter Membership / Authorization Scope 再判定。
+
+主要關係：Platform Administrator 可管理平台層 Shelter；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；第一階段 Volunteer 預設只操作一個 Shelter，資料模型保留未來多 Shelter 授權的表示能力。
+
+驗證規則：停用帳號不能登入、讀取或建立新資料；未綁定 Volunteer 不能建立匿名正式回報；角色不足不能依網址、識別碼、QR Token 或輸入條件擴大範圍。
+
+### Shelter Membership / Authorization Scope
+
+描述使用者與 Shelter 的所屬或明確授權關係，包含角色、狀態、授權來源、生效時間與失效時間（若適用）。
+
+驗證規則：每次 CRM 操作都由已驗證身分取得有效 Scope；失效或停用的 Membership 不得授權新操作；跨機構操作需要額外授權理由與 Audit Record。
+
+### Cage / Area
+
+代表 Shelter 內的籠舍與區域。可供志工辨識位置，但不能取代 Animal 正式識別或 Shelter 範圍。
+
+### Animal
+
+代表 CRM 中一隻動物，具有不可變正式識別與 Shelter 歸屬。
+
+主要資料：正式識別、Shelter、名稱、目前照片、Shelter Number（可選）、Cage／Area、目前狀態、公開狀態、建立與更新時間。
+
+驗證規則：名稱與照片可重複；動物狀態若不允許回報，建立與送出都必須拒絕；名稱、照片、Shelter Number、籠位或區域變更不得改變既有回報的正式 Animal 關聯。
+
+### Shelter Number
+
+代表機構使用的收容編號。與 Shelter 組成唯一查詢範圍，可被人員搜尋與印在 QR 標示上。
+
+驗證規則：同一 Shelter 內唯一；不同 Shelter 可以相同；重複、修正或缺少時不得自行猜測；歷史回報保存當時的顯示快照，但正式關聯仍使用 Animal 正式識別。
+
+### Daily Reportable Scope / Animal Assignment
+
+代表特定日期、Volunteer 或群組可回報的 Animal 集合。初期至少支援個別 Animal 指定，並保留區域、籠舍、班次與志工等條件的擴充位置。
+
+驗證規則：範圍必須屬於同一 Shelter；送出時重新驗證是否仍有效；未在 Scope 內的 Animal 不得因 QR Code 或 Shelter Number 搜尋而自動取得回報資格。
+
+### QR Code / QR Token
+
+代表貼於籠位或動物資料卡的候選查詢標示。QR Token 是非祕密候選參考值，不是登入憑證或授權證明。
+
+主要資料：Token 參考值、Shelter、候選 Animal、啟用／撤銷狀態、建立人、建立時間與重新產生原因。
+
+驗證規則：解析結果唯一且屬同一 Shelter；使用者 Scope、QR 所屬 Shelter 與 Animal 所屬 Shelter 必須一致；修改或複製 Token 不能繞過授權。
+
+### Daily Care Report
+
+代表一次已送出的人工照護回報。
+
+主要資料：Animal、Shelter、Volunteer、回報來源、回報時間、照護／散步完成狀態、進食、飲水、活動、排泄、行為、外觀、原始建立時間、最後修改時間、動物名稱與 Shelter Number 快照、保存狀態。
+
+驗證規則：必須有已驗證 Volunteer、有效 Shelter Scope、正式 Animal 關聯；同一 Animal 同日可有多筆；原始內容不可被 AI 或更正覆蓋；重複送出必須可辨識。
+
+### Report Draft
+
+代表尚未送出的回報草稿。
+
+主要資料：已確認 Animal、Shelter、Volunteer、已填結構化選項、照片上傳狀態、心得、最後操作時間與草稿狀態。
+
+驗證規則：重新開啟時重新驗證 Animal、Shelter、Volunteer、Scope 與狀態；驗證失敗仍保留草稿內容，不改綁其他 Animal 或 Shelter。
+
+### Photo、Object Metadata、Volunteer Note
+
+Photo 代表原始照片；Object Metadata 描述 Object Key、用途、內容類型、大小、建立時間與來源；Volunteer Note 代表志工原始心得文字。
+
+驗證規則：每個 Photo 與 Note 都有 Shelter、Report 與來源關聯；圖片取用要再次驗證 Scope；資料庫不保存永久 Signed URL；照片模糊、光線不足或 AI 無法判讀是觀察結果，不是人工回報失敗。
+
+### Observation Category / Observation Option
+
+代表可維護的標準化觀察語彙。Option 保存穩定識別、顯示名稱、說明、顯示順序、啟用狀態與適用 Shelter 或平台範圍。
+
+驗證規則：停用 Option 不刪除歷史使用內容；志工能使用非診斷性描述；管理異動留下 Audit Record。
+
+### AI Processing Job / AI Observation
+
+AI Processing Job 代表待處理、處理中、成功、失敗或無效的非同步工作；AI Observation 代表從 Photo 或 Volunteer Note 衍生的描述性訊號。
+
+主要關係：一筆 Report 可有多個 Job 與 AI Observation；每個 Observation 必須可追溯至來源 Photo 或 Note，並保留原始 AI 輸出、模型／Prompt 識別（若有）、人工確認與修正。
+
+驗證規則：Job 失敗不影響 Report 保存；AI 不得診斷、計分、排序、改變狀態、修改 Animal 或覆蓋原始資料；無效或禁用內容不能成為正式觀察結果。
+
+### Animal Timeline
+
+代表以 Shelter 與 Animal 為範圍的時間序列檢視，不是另一份可獨立修改的正式業務資料。
+
+主要內容：近 14 個曆日每日是否有回報、回報筆數、每筆 Report、Photo、Note、AI Observation、人工修正、快照與 Audit Record；更早歷史可查詢。
+
+驗證規則：沒有回報的日期顯示「當日無回報」；不得將空白、未觀察或 AI 失敗當成正常；工作人員只能查看已授權 Shelter。
+
+### Audit Record
+
+代表重要資料與權限異動的稽核紀錄。
+
+主要資料：操作者、角色、來源通道、Shelter 範圍、操作類型、目標實體、時間、修改前後摘要、原因、結果與跨機構授權資訊（適用時）。
+
+驗證規則：跨機構管理、動物綁定更正、權限／Scope 異動、AI 人工確認、公開狀態與重要刪除／停用都必須留下紀錄；一般使用者不能修改稽核紀錄。
+
+### Notification
+
+代表 Shelter 內部通知。必須有 Shelter 歸屬、收件範圍、內容、狀態、建立時間與來源事件，不得跨 Shelter 洩漏。
+
+## 主要關係
+
+```text
+Shelter
+├── Shelter Membership / Authorization Scope ── User / Role
+├── Animal ── Shelter Number / Cage / Area / QR Code
+├── Daily Reportable Scope ── Volunteer / Animal
+├── Daily Care Report ── Photo / Volunteer Note / AI Processing Job
+│   └── AI Observation ── source Photo or Volunteer Note
+├── Animal Timeline ── derived view of Reports and Audit Records
+├── Observation Category ── Observation Option
+├── Notification
+└── Audit Record
+```
+
+## 關鍵狀態轉換
+
+- **Shelter**：`pending_setup` → `active` → `suspended`；停用不刪除既有歷史。
+- **User／Membership**：`invited` → `active` → `disabled`；非 active 不得建立或讀取業務資料。
+- **Report Draft**：`editing` → `ready_to_submit` → `submitted` 或 `blocked_by_revalidation`。
+- **Daily Care Report**：`saved` → `amended`；原始內容永久保留，動物更正另留 Audit Record。
+- **AI Processing Job**：`pending` → `running` → `succeeded`／`failed`／`invalid`；重試不改變原始 Report。
+- **QR Code**：`active` → `revoked`；撤銷後不能帶入回報流程。
+
+## 跨實體驗證規則
+
+1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Notification 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致。
+2. 同一收容編號在不同 Shelter 可並存；任何查詢只在 ActorScope 允許的 Shelter 中執行。
+3. 任何建立、修改、刪除或匯出動作都要檢查 ActorScope、資源 Shelter、資源狀態與角色能力。
+4. 任何物件檔案操作都要檢查 Object Key 的 Shelter 關聯，不接受前端任意 Object Key 作為授權。
+5. Timeline 由 CRM 正式資料重建，不作為第二份事實來源。
+6. Repository 以 `AsyncSession` 執行資料存取；Transaction 邊界必須涵蓋 Scope 驗證與正式資料寫入，避免驗證後範圍被替換。
+7. Pydantic Request／Response Model 不得直接被當作 SQLAlchemy 持久化 Model；兩者轉換由 Application／Domain 邊界負責。
