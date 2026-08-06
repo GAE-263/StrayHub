@@ -5,6 +5,7 @@
 `openapi.yaml` 是本 Feature 的 HTTP API Contract，包含 LINE Messaging API Webhook、LIFF 身分交換、Webhook Session 解析與 Bot 回報流程。LINE Webhook 是本 Feature 的正式輸入邊界；本目錄不建立獨立於 CRM 的通道資料來源。
 
 - [OpenAPI Contract](openapi.yaml)
+- [OpenAPI Contract Types 契約](generated-types.md)
 - [CRM 與 Shelter 存取契約](crm-shelter-access.md)
 - [Object Storage 契約](object-storage.md)
 - [AI 非同步 Job 契約](async-ai.md)

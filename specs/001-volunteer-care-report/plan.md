@@ -6,7 +6,7 @@
 
 ## 摘要
 
-本功能規劃為一個本機優先的多收容所 Web 應用程式，包含 Next.js 手機回報與管理介面、FastAPI CRM 邊界服務、Background Worker，以及由 PostgreSQL 保存的正式業務資料。開發與整合測試使用 Docker Compose 啟動 PostgreSQL、MinIO 與必要的本機基礎服務；Next.js 與 FastAPI 直接以開發模式執行，以保留 Hot Reload。
+本功能規劃為一個本機優先的多收容所平台，包含 LINE Bot 主要回報流程、Next.js LIFF 輔助與管理介面、FastAPI CRM 邊界服務、Background Worker，以及由 PostgreSQL 保存的正式業務資料。開發與整合測試使用 Docker Compose 啟動 PostgreSQL、MinIO 與必要的本機基礎服務；Next.js 與 FastAPI 直接以開發模式執行，以保留 Hot Reload。
 
 所有動物、收容所、使用者、照護回報、照片、AI 結果與稽核資料透過 CRM 邊界管理。每一次資料存取都先依已驗證身分判定 Shelter 範圍。AI 以非同步 Job 處理，不能阻塞人工回報，也不能覆蓋原始資料。
 
@@ -14,15 +14,15 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 ## 技術脈絡
 
-**語言／版本**：Next.js 使用 TypeScript；FastAPI 與 Background Worker 使用 Python。Python 與 Node.js 的精確版本在實作階段依專案工具鏈鎖定，但必須可在本機與 Demo 環境重現。
+**語言／版本**：Next.js 使用 TypeScript；FastAPI 與 Background Worker 使用 Python。Python 專案命令與環境管理採用 `uv`；Python 與 Node.js 的精確版本在實作階段依專案工具鏈鎖定，但必須可在本機與 Demo 環境重現。
 
-**主要依賴**：Next.js Development Server、FastAPI Development Server、SQLAlchemy 2.x、Alembic、`asyncpg`、PostgreSQL Container、MinIO Container、Background Worker、Docker Compose、Mock LINE／LIFF Context、Mock LINE Adapter、Mock AI Service 或測試用 AI Adapter。GCP Demo 依賴 Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
+**主要依賴**：Next.js Development Server、FastAPI Development Server、SQLAlchemy 2.x、Alembic、`asyncpg`、PostgreSQL Container、MinIO Container、Background Worker、Docker Compose、Mock LINE／LIFF Context、Mock LINE Adapter、正式 LINE Messaging API Adapter、Mock AI Service 或測試用 AI Adapter，以及由 `openapi-typescript` 產生的 TypeScript Contract Types。GCP Demo 依賴 Terraform、Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
 
 **儲存**：PostgreSQL 保存 CRM 正式資料、權限範圍、回報、AI 狀態與稽核資料；本機物件檔案使用 MinIO；Demo 物件檔案使用 Cloud Storage。Application Layer 只能透過共通 Object Storage Interface 存取檔案。
 
-**測試**：Python 使用 Ruff 與 Pytest；前端測試工具與命令必須在 `apps/web/package.json` 固定；另需提供 contract、unit、integration、資料隔離、Repository、SQLAlchemy／`AsyncSession`、Alembic migration、Object Storage Adapter、LINE Webhook Signature、Event Idempotency、Rich Menu、Postback State Machine、LIFF、QR Code、Authentication、EXIF 清理與 AI 失敗降級驗證。
+**測試**：Python 使用 Ruff 與 Pytest；前端測試工具與命令必須在 `apps/web/package.json` 固定；另需提供 `tests/contract`、`tests/unit`、`tests/integration`、`tests/security`、`tests/isolation`、`tests/frontend` 與 `tests/e2e`。驗證範圍包含 OpenAPI 與生成型別漂移、Authentication Session 生命週期、Database Scope Setter、Repository／RLS、多租戶隔離、Alembic migration、Object Storage Adapter、正式 LINE Adapter Contract、Webhook Signature、Event Idempotency、Rich Menu、Postback State Machine、LIFF、QR Code、EXIF 清理與 AI 失敗降級。
 
-**目標平台**：本機 Docker Compose 加直接執行的 Next.js／FastAPI／Worker；GCP Demo 使用 Cloud Run、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
+**目標平台**：本機 Docker Compose 加直接執行的 Next.js／FastAPI／Worker；GCP Demo 使用 Terraform 管理 Cloud Run、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
 
 **專案類型**：多租戶 Web application，包含手機優先前端、CRM API、非同步 Worker 與本機／GCP 基礎服務。
 
@@ -43,16 +43,16 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 - **V. 志工回填必須低摩擦：通過。** LINE Bot 的單題 Quick Reply／Postback、90 秒目標、圖片訊息、Mock LINE Adapter 與 AI 非同步均列入設計；LIFF 只作為輔助介面。
 - **VI. 歷史紀錄必須完整且可追溯：通過。** 同日多筆保存、近 14 日逐日檢視、無回報日期與更早歷史查詢列入資料模型與 quickstart。
 - **VII. LINE Bot 是主要輸入通道：通過。** Rich Menu、Quick Reply、Postback、Message／Image Event 與 Webhook 是本 Feature 範圍；Webhook 必須先驗證原始 Body 簽章並依 `webhookEventId` 冪等處理。LIFF 負責身分綁定、完整確認、答案修改、長文字與 Bot 備援，FastAPI 仍是唯一正式權限與 CRM 邊界。
-- **VIII. 權限、隱私與稽核預設啟用：通過。** 一般角色的每一個資料操作均帶有已驗證的 Shelter 範圍；`PLATFORM_ADMIN` 以平台級 `PLATFORM` Scope 執行明確的跨機構管理；跨機構作業與公開資料採白名單並留下 Audit Record。
+- **VIII. 權限、隱私與稽核預設啟用：通過。** 一般角色的每一個資料操作均帶有已驗證的 Shelter 範圍；`PLATFORM_ADMIN` 以平台級 `PLATFORM` Scope 執行跨機構管理並留下 Audit Record；本 Feature 不建立公開頁面，未登入與未授權存取採一致拒絕。
 - **IX. P0 不得依賴 P1 或 P2：通過。** US1、LINE Bot US2 與歷程 US3 不依賴 AI；本機流程不依賴 GCP；真實 LINE 行為以 Mock Adapter 與受控 HTTPS 測試路徑隔離。
 - **X. 正體中文與 Python 品質門檻：通過。** 本計畫與產物使用台灣正體中文；Python 品質門檻為 `ruff check .`、`ruff format --check .` 與 `pytest`。
 - **XI. 多收容所資料隔離：通過。** 所有 query、command、圖片存取與修改都在後端依 Shelter 授權範圍強制判定；本 Feature 不提供批次匯出；A／B 隔離測試為 Demo 門檻。
 
-**Gate 結論**：D-001～D-010 與本輪 LINE Bot、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析及 Active Shelter Context 決策已同步至本計畫與 Phase 1 設計方向。重新產生 `tasks.md` 與執行 `/speckit-analyze` 是本計畫完成後的必要步驟；本文件不預先宣稱尚未執行的 Analyze 結果。沒有以降低 Constitution 要求方式處理的例外。
+**Gate 結論**：D-001～D-010 與本輪 LINE Bot、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS、Database Scope Setter、Authentication API、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform 與 `uv` 決策已同步至本計畫與 Phase 1 設計方向。重新產生 `tasks.md` 與執行 `/speckit-analyze` 是本計畫完成後的必要步驟；本文件不預先宣稱尚未執行的 Analyze 結果。沒有以降低 Constitution 要求方式處理的例外。
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：待重新執行。** 本輪設計將同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、OpenAPI Contract、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive；完成後必須重新產生 `tasks.md` 並執行 `/speckit-analyze`。
+**重新檢查結果：通過。** Phase 1 設計已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS／Database Scope Setter、Authentication API、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform、`uv`、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive。下一步仍須依更新後文件重新產生 `tasks.md` 並執行 `/speckit-analyze`；在 Analyze 通過前不得開始實作。
 
 ## Database Access
 
@@ -66,7 +66,11 @@ Pydantic Model 與 SQLAlchemy Model 分離：
 
 不使用 SQLModel，避免 API Schema、Database Model 與複雜多租戶關係過度耦合。
 
-所有租戶資料查詢必須經過受控 Repository，並強制套用 `Organization Scope`；本計畫中的 `Organization` 是資料存取層對收容所／Shelter 租戶的技術稱呼。租戶隔離另以 Composite Constraint、PostgreSQL Row-Level Security／交易層防護與跨租戶自動化測試提供 Defense in Depth。
+所有租戶資料查詢必須經過受控 Repository，並強制套用 `Organization Scope`；本計畫中的 `Organization` 是資料存取層對收容所／Shelter 租戶的技術稱呼。租戶隔離採 Composite Constraint、PostgreSQL Row-Level Security（RLS）與跨租戶自動化測試提供 Defense in Depth；交易內設定的租戶 Scope 是 RLS 判斷依據，不以單純應用層篩選取代資料庫防護。
+
+Runtime Database Role 不得擁有資料表，也不得具備 `BYPASSRLS`；租戶資料表使用 `FORCE ROW LEVEL SECURITY`。一般 Request／Worker Transaction 只允許由後端在交易內設定單一 `app.current_org_id`。`PLATFORM_ADMIN` 通過 Session、User 與內建角色重新驗證後，後端才能在該交易設定獨立的 `app.platform_scope`；RLS Policy 以此受控旗標允許跨 Organization 操作並要求同一交易寫入 Audit Record。Request、QR Code、Postback 或 Access Token 內容不得直接設定上述 PostgreSQL Scope。Migration 專用 Role 與 Runtime Role 分離；Worker 不取得平台級 Scope。
+
+Database Scope Setter 固定置於 `services/api/app/persistence/database/scope.py`，由 Application Service 在開始 `AsyncSession` transaction 且完成 Actor／Session 驗證後呼叫。一般租戶交易使用參數化的 `set_config('app.current_org_id', :org_id, true)`；經重新驗證的 `PLATFORM_ADMIN` 交易使用 `set_config('app.platform_scope', 'true', true)`。第三個參數必須為 `true`，使設定只存在於目前 transaction，transaction 結束後不得殘留到 connection pool 的下一個使用者。Setter 不接受 Request body、Query、QR、Postback 或 Access Token 直接提供的 scope；Worker 只能呼叫 Organization Scope Setter。測試必須以真實 PostgreSQL 驗證未設定 scope 時拒絕、transaction 結束自動清除、pooled connection 不殘留，以及平台 scope 只能由受控入口建立。
 
 資料表與 Schema 變更只能透過 Alembic Migration 管理，不得以手動操作資料庫介面作為唯一建置方式。空資料庫 migration、升級、必要的回復驗證與 GCP Cloud SQL migration 驗證都必須納入測試與 Demo 門檻。
 
@@ -79,6 +83,8 @@ FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADM
 `PLATFORM_ADMIN` 使用平台級 `PLATFORM` Scope，不建立任何 Shelter Membership，也不需要逐次額外授權；其跨 Shelter 管理能力由內建最高權限角色提供，但每一項跨機構操作仍須由後端記錄完整 Audit Record。一般 Shelter 使用者才透過有效 Membership 取得 Shelter Scope。
 
 `active_org_id` 必須由使用者明確切換、由後端驗證並綁定 Session；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Worker 使用獨立 Credential／Service Account，但每次 Job 處理仍驗證 Job、Report、Organization 與狀態一致。
+
+Authentication HTTP 邊界固定由 `services/api/app/api/authentication.py` 提供，涵蓋 `POST /v1/auth/login`、`POST /v1/auth/refresh`、`POST /v1/auth/logout`、`GET /v1/auth/me`、`POST /v1/auth/liff/exchange`、`GET /v1/auth/active-shelter-context` 與 `PUT /v1/auth/active-shelter-context`。Session 建立、Refresh Token rotation／replay 防護、撤銷、LIFF identity exchange、目前使用者查詢及 Shelter Context 切換由 `services/api/app/application/authentication/` 協調；Token 驗證、密碼雜湊與 LINE Identity 驗證放在受控 Adapter。Contract、Session lifecycle、立即停用與跨 Organization Context 測試必須先於受保護 User Story API。
 
 ### LINE Webhook Session 與 Active Shelter Context 解析
 
@@ -112,9 +118,21 @@ FastAPI 是唯一 Authentication、Authorization、Organization Scope 與 CRM �
 
 Rich Menu 只作為入口，不承載完整問卷；Rich Menu 的環境版本與 Action 設定由受控設定管理。Quick Reply 通常提供 3 至 6 個選項，顯示名稱與穩定 Observation Option Code 分離。
 
+正式 LINE 整合使用 `services/api/app/application/ports/line_messaging.py` 定義的 `LineMessagingPort`。本機 `MockLineAdapter` 與正式 `LineMessagingApiAdapter` 都實作同一契約；正式 Adapter 固定置於 `services/api/app/infrastructure/line/messaging_api_adapter.py`，負責 Reply Message、必要的受控 Push Message、依 Message ID 及時取得圖片內容，以及 Rich Menu 的驗證、建立、上傳與環境綁定。Quick Reply／Postback Message payload 由後端 Presenter 依有效 Observation Vocabulary 產生，不由 Next.js 或 Bot 程式硬編碼第二套選項。Channel secret／access token 只從受控設定取得，不進入 log、Postback 或資料庫業務值。Rich Menu 以版本化設定檔搭配 `scripts/sync_line_rich_menu.py` 發布；Mock 測試不得連線真實 LINE API，正式 Adapter 另以 Contract Test 與受控 Demo smoke test 驗證。
+
 ### AI 版本與原始輸出
 
 每一筆 AI Job 必須保存非空的 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始輸出、驗證結果、失敗原因與 Retry Count。`raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
+
+### Foundational 階段邊界：Observation 與 Job
+
+US1／US2 的 Bot 問答與正式 Care Report 已依賴標準化 Observation Vocabulary，因此 `ObservationCategory`、`ObservationOption`、平台預設 Seed、穩定 Code、停用後保留歷史顯示規則，以及取得 Organization Effective Options 的唯讀 Repository／Service 必須在 Foundational 階段完成。US4 只新增 Shelter Admin 的建立、修改、排序、停用、Audit 與管理畫面，不得等到 US4 才建立 US2 所需的基礎資料模型。
+
+AI Worker 不阻擋 MVP，但 US2 在人工 Report 保存後需要記錄非同步處理意圖，因此 `AI Processing Job` 的 SQLAlchemy Model、Alembic Migration、版本欄位、狀態、唯一冪等關係與 Job Repository 必須在 Foundational 階段完成。Report 的正式交易先獨立 commit；成功後才以另一個受控 transaction 冪等建立 Job，外部 AI 呼叫永遠不在 Report transaction。Job 建立失敗不得回滾已保存 Report，Report 保留 `pending_enqueue`／`enqueue_failed` 的可追蹤狀態，並由 reconciliation 找出已保存但尚無有效 Job 的 Report。US5 才實作 Worker claim／retry、正式 AI Adapter、結構與禁用語意驗證、`AIObservation`、人工 Confirm／Reject／Correct 與前端覆核。
+
+### OpenAPI Contract Types
+
+`specs/001-volunteer-care-report/contracts/openapi.yaml` 是 HTTP Contract 的唯一來源。`packages/contracts/` 使用 `openapi-typescript` 產生 type-only 的 `src/openapi.ts`，供 `apps/web` 與其他 TypeScript consumer 使用；生成檔不得手動修改，也不得反向取代 OpenAPI。FastAPI 的 Pydantic Model 維持獨立實作，透過 `tests/contract/test_openapi_contract.py` 與 endpoint contract tests 驗證，不從 TypeScript 型別推導。`packages/contracts/package.json` 必須提供 `generate` 與 `check` 命令；`check` 重新產生到暫存位置並比較差異，CI／Demo gate 在型別過期時失敗。
 
 ### EXIF 與媒體
 
@@ -144,6 +162,7 @@ Rich Menu 只作為入口，不承載完整問卷；Rich Menu 的環境版本與
 - Mock LINE／LIFF Context
 - Mock AI Service 或測試用 AI Adapter
 - 虛構 Seed Data
+- `uv` Python 專案命令與環境管理
 
 Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服務。Next.js 與 FastAPI 可直接以開發模式執行，以保留 Hot Reload。
 
@@ -175,10 +194,14 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 10. 執行 Ruff 與 Pytest。
 11. 驗證同一志工可有多個授權 Shelter，但同一時間只有 Session 明確選定的 Active Shelter Context；Organization 不一致時阻擋送出並保留 Draft。
 12. 驗證志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
+13. 驗證 Authentication API、Refresh Token rotation、立即撤銷與 Active Shelter Context 切換。
+14. 驗證 Database Scope Setter 在 transaction 與 pooled connection 間不洩漏 Organization Scope。
+15. 驗證 OpenAPI 生成的 Contract Types 無漂移。
+16. 驗證 Observation Vocabulary 與 AI Job Persistence 已在 US2 前可用，且 AI Job 建立失敗不回滾人工 Report。
 
 ### LINE Bot／LIFF 本機整合
 
-一般 LIFF 與 Bot 流程開發使用 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、Mock LINE Adapter、Postback／Image／Redelivery Fixture。需要驗證真正 LINE 身分、Webhook、Rich Menu、LIFF URL 或 LIFF Browser 行為時，使用 LINE 官方建議的 HTTPS 本機開發環境或受控測試入口。Webhook 事件處理不得在一般單元測試呼叫真實 LINE API；圖片內容取得、Reply Token 與 Rich Menu API 以 Adapter／Contract Test 隔離。不得要求所有日常前端開發都透過已部署的 GCP 環境進行。
+一般 LIFF 與 Bot 流程開發使用 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、`MockLineAdapter`、Postback／Image／Redelivery Fixture。需要驗證真正 LINE 身分、Webhook、Rich Menu、LIFF URL 或 LIFF Browser 行為時，才啟用 `LineMessagingApiAdapter` 並使用 LINE 官方建議的 HTTPS 本機開發環境或受控 Demo 入口。Webhook 事件處理不得在一般單元測試呼叫真實 LINE API；圖片內容取得、Reply Token、Push Message 與 Rich Menu API 以 Adapter／Contract Test 隔離。不得要求所有日常前端開發都透過已部署的 GCP 環境進行。
 
 ### Demo 部署門檻
 
@@ -188,11 +211,13 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 - `ruff format --check .` 通過。
 - `pytest` 通過。
 - Frontend 測試通過。
+- `npm --prefix packages/contracts run check` 通過，確認 OpenAPI Contract Types 無漂移。
 - Database Migration 可由空資料庫完整執行。
 - 本機關鍵流程測試通過。
 - Organization A／B 資料隔離測試通過。
 - MinIO Storage Adapter 測試通過。
 - GCS Storage Adapter Contract Test 通過。
+- `terraform fmt -check -recursive infra/gcp-demo/terraform` 與 `terraform -chdir=infra/gcp-demo/terraform validate` 通過；在 Terraform 設定尚未加入前，CI 的 Terraform Job 以 Path Filter 明確跳過，不得因目錄不存在阻擋本機 Setup。
 - 不含真實個資或正式收容所敏感資料。
 
 ### GCP Demo 環境
@@ -208,7 +233,7 @@ Demo 前才建立：
 - Artifact Registry
 - Cloud Logging
 
-GCP Demo 只使用虛構資料或合法公開資料。
+上述 GCP 資源全部由 `infra/gcp-demo/terraform/` 的 Terraform 設定建立與更新，包含三個 Cloud Run 執行單元及其 Service Account、IAM、環境設定與 Cloud SQL／Cloud Storage 關聯。`cloud-run-*.yaml` 不作為正式部署來源；若產生診斷或匯出用 YAML，必須視為可重建產物且不得由部署流程直接套用。LINE Rich Menu 設定不屬於 GCP 資源，可使用獨立的環境設定檔，但不得承載授權資訊。GCP Demo 只使用虛構資料或合法公開資料。
 
 部署後必須重新執行：
 
@@ -219,6 +244,7 @@ GCP Demo 只使用虛構資料或合法公開資料。
 - QR Code 流程驗證
 - Organization A／B 資料隔離驗證
 - AI 失敗降級驗證
+- 正式 `LineMessagingApiAdapter` 的 Reply、Image Content 與 Rich Menu smoke test
 
 本機測試通過不代表 GCP 整合已完成；GCP 專屬的 IAM、Signed URL、Cloud SQL 連線及 Service Account 行為必須在 Demo 環境另外驗證。
 
@@ -245,29 +271,64 @@ apps/
 
 services/
 ├── api/                         # FastAPI CRM 邊界與業務規則
-│   └── app/
-│       ├── api/                 # Pydantic Request／Response 與通道邊界
-│       ├── domain/              # 業務規則與交易流程
-│       ├── persistence/         # SQLAlchemy Mapping、AsyncSession 與受控 Repository
-│       └── migrations/          # Alembic Migration
+│   ├── app/
+│   │   ├── main.py              # FastAPI 啟動入口
+│   │   ├── api/                 # Pydantic Request／Response 與通道邊界
+│   │   │   └── authentication.py # Login、Session、LIFF Exchange 與 Context API
+│   │   ├── application/         # Use Case、交易協調與服務
+│   │   │   ├── authentication/  # Session lifecycle 與 Context 切換
+│   │   │   └── ports/
+│   │   │       └── line_messaging.py # LineMessagingPort
+│   │   ├── domain/              # 業務規則與 Policy
+│   │   ├── infrastructure/      # LINE、Storage、AI 與外部 Adapter
+│   │   │   └── line/
+│   │   │       ├── messaging_api_adapter.py # 正式 LINE Adapter
+│   │   │       └── mock_adapter.py           # 本機／測試 Adapter
+│   │   └── persistence/         # SQLAlchemy Mapping、AsyncSession 與受控 Repository
+│   │       └── database/
+│   │           └── scope.py     # transaction-local Database Scope Setter
+│   └── migrations/              # Alembic env.py 與 versions/
 └── worker/                      # 非同步 AI、圖片與其他背景工作
+    ├── worker.py                # Worker 啟動入口
+    └── app/
+        ├── persistence/         # Worker AsyncSession 與 Job Repository
+        ├── infrastructure/      # AI／Storage Adapter
+        └── handlers/            # Job Handler 與 Validation
 
 packages/
-└── contracts/                   # 由 Feature OpenAPI 產生的前後端契約型別（不取代正式 Feature Contract）
+└── contracts/                   # 由 Feature OpenAPI 產生的 TypeScript 契約型別
+    ├── package.json             # generate／check 命令與 openapi-typescript 版本
+    └── src/
+        └── openapi.ts           # 生成檔；禁止手動修改
+
+scripts/
+└── sync_line_rich_menu.py       # 依環境設定驗證、發布與綁定 Rich Menu
 
 infra/
 ├── local/                       # Docker Compose、MinIO 與本機設定
 └── gcp-demo/                    # Demo 環境設定與驗證文件
+    └── terraform/               # 唯一 GCP Demo Infrastructure as Code
+        ├── main.tf              # Provider 與共通設定
+        ├── cloud-run.tf         # Next.js、FastAPI、Worker／Job
+        ├── cloud-sql.tf         # PostgreSQL
+        ├── storage.tf           # Private Cloud Storage
+        ├── iam.tf               # Service Account、IAM 與 GitHub OIDC
+        ├── observability.tf     # Artifact Registry 與 Cloud Logging
+        ├── variables.tf
+        └── outputs.tf
 
 tests/
 ├── contract/                    # 外部與內部邊界契約測試
 ├── integration/                 # PostgreSQL、MinIO、Worker 與 CRM 流程
+├── security/                    # 簽章、Authentication、Tampering 與資源越權
 ├── isolation/                   # Organization A／B 資料隔離
 ├── frontend/                    # Next.js 使用者流程
+├── e2e/                         # Mock LINE／LIFF 到 FastAPI、PostgreSQL、MinIO、Worker 的垂直流程
+├── fixtures/                    # Webhook、Postback、Redelivery、圖片與 A／B Seed Fixture
 └── unit/                        # FastAPI、Worker 與領域規則
 ```
 
-**結構決策**：採 `apps/web`、`services/api`、`services/worker` 的分離結構，讓前端、CRM 與非同步處理可獨立測試與部署；FastAPI 的 API、Domain／Application、Persistence 與 Alembic 邊界分離，Pydantic Model 不與 SQLAlchemy Model 共用；`contracts/openapi.yaml` 是前後端正式 API Contract；`infra/local` 服務本機優先策略，`infra/gcp-demo` 只承載 Demo 部署與驗證；`tests/isolation` 為多收容所資料隔離的獨立測試領域。此結構不預先決定 Python 類別或模組內部細節。
+**結構決策**：採 `apps/web`、`services/api` 與 `services/worker` 的分離結構。FastAPI 程式碼固定置於 `services/api/app/`，Alembic 固定置於 `services/api/migrations/`；Worker 啟動入口固定為 `services/worker/worker.py`，其 Session、Repository、Adapter 與 Handler 固定置於 `services/worker/app/`。`contracts/openapi.yaml` 是前後端正式 API Contract，`packages/contracts/src/openapi.ts` 只是其生成型別；`infra/local` 服務本機優先策略；`infra/gcp-demo/terraform/` 是所有 GCP Demo 資源的唯一 IaC 來源。`tests/security` 驗證單一安全控制，`tests/isolation` 以真實 PostgreSQL 專測跨租戶矩陣，`tests/e2e` 專測跨程序垂直流程，`tests/fixtures` 只保存非正式、虛構測試輸入。後續 Tasks 不得再建立與此結構平行的第二套 Migration、Worker Persistence、Contract Types 或 Cloud Run 部署路徑。
 
 ## 複雜度追蹤
 

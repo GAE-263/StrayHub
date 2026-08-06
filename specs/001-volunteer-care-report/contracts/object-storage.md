@@ -12,7 +12,7 @@
 - `exists`：僅能在已授權範圍內判定，不得用於洩漏其他 Shelter 的存在性。
 - `create_access_url`：產生短期 Signed URL 或等效存取方式，不得保存為永久識別。
 
-LINE Image Message 來源的檔案必須先由 Webhook／LINE Content Adapter 取得，再經相同的安全清理流程；Storage Adapter 只接受已清理、已重新編碼的位元資料，不負責判定 MIME、EXIF 或租戶政策。
+LINE Image Message 來源的檔案必須先由 Webhook／正式 `LineMessagingApiAdapter` 取得，再交給共通 Media Sanitization Pipeline；Storage Adapter 只接受已清理、已重新編碼的位元資料，不負責判定 MIME、EXIF 或租戶政策。LINE Adapter 不得直接把原始圖片寫入正式 Storage。
 
 ## Adapter
 

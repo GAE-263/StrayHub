@@ -31,7 +31,9 @@
 - Pydantic Request／Response Model、SQLAlchemy Model 與 Domain／Application Layer 分離；不使用 SQLModel。
 - 所有租戶資料查詢與寫入都必須經過受控 Repository，並強制套用 `Organization Scope`（對應 Shelter Scope）。
 - Repository 不能接受呼叫端任意覆寫 Scope；Scope 必須由已驗證的 Actor Context 與有效 Membership 產生。
-- 租戶隔離由 Repository、Composite Constraint、PostgreSQL Row-Level Security／交易層防護與自動化隔離測試共同提供 Defense in Depth。
+- 租戶隔離由 Repository、Composite Constraint、PostgreSQL Row-Level Security（RLS）、交易內 Organization Scope 與自動化隔離測試共同提供 Defense in Depth。Runtime Role 不得擁有資料表或具備 `BYPASSRLS`，租戶資料表必須使用 `FORCE ROW LEVEL SECURITY`。
+- 一般 Request／Worker 只能由後端在交易內設定單一 `app.current_org_id`；只有重新驗證為 `PLATFORM_ADMIN` 的交易能設定 `app.platform_scope`，且同一交易必須留下 Audit Record。使用者輸入、Token、QR Code 與 Postback 不得直接設定 Database Scope；Worker 不得使用平台級 Scope。
+- Database Scope Setter 固定由 Application Service 在開始 `AsyncSession` transaction 且完成 Actor／Session 驗證後呼叫；一般 scope 使用參數化 `set_config('app.current_org_id', :org_id, true)`，平台 scope 使用受控 `set_config('app.platform_scope', 'true', true)`。`is_local=true` 不得改成 session-level 設定；transaction 結束與 pooled connection 重用後都不得保留上一個 scope。
 - 所有 Schema、資料表、Constraint、Index 與 Row-Level Security Policy 變更都必須透過 Alembic Migration；不得以手動資料庫操作作為唯一建置方式。
 
 ## 失敗結果
@@ -49,3 +51,5 @@
 - 後端直接收到偽造 Shelter 識別時仍依已驗證 Actor Scope 判定。
 - 空 PostgreSQL 可由 Alembic 完整建立 Schema，且 migration 後的 Composite Constraint 與 PostgreSQL 防護可被測試驗證。
 - API 與 Worker 的 AsyncSession 交易在 Scope 驗證與正式寫入之間不會改用其他 Organization Scope。
+- 真實 PostgreSQL 測試直接驗證一般 Scope 不能跨租戶、`PLATFORM` Scope 可執行受控跨租戶操作、偽造 Request 不能設定 Database Scope，且 Runtime Role 無法繞過 RLS。
+- 真實 PostgreSQL 測試直接驗證缺少 Scope 時預設拒絕、transaction 結束自動清除 Scope、pooled connection 不繼承前一個 Organization，以及 Worker 無法取得 `PLATFORM` Scope。

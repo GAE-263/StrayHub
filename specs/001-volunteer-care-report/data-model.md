@@ -41,12 +41,13 @@
 - SQLAlchemy 關聯與資料庫約束確保跨 Organization 關聯不能成立。
 - 同一 Organization 內的 Shelter Number 使用 Composite Unique Constraint；不同 Organization 可以重複。
 - 需要跨租戶一致性的關聯使用包含 Organization 的 Composite Foreign Key 或等價的資料庫一致性防護。
-- PostgreSQL 以 Row-Level Security／交易層的 Organization Scope 防止繞過 Repository 的讀寫；只有具備平台級 `PLATFORM` Scope 的 `PLATFORM_ADMIN` 才能使用受控跨 Shelter 路徑，該 Scope 不得成為一般連線的預設範圍。
+- PostgreSQL 以 Row-Level Security（RLS）搭配交易內設定的 Organization Scope 防止繞過 Repository 的讀寫。Runtime Role 不擁有資料表、沒有 `BYPASSRLS`，租戶資料表使用 `FORCE ROW LEVEL SECURITY`。一般 Request／Worker Transaction 只能由後端設定單一 `app.current_org_id`；只有已重新驗證的 `PLATFORM_ADMIN` Transaction 可設定 `app.platform_scope` 並同步寫入 Audit Record。Request、Token、QR Code 或 Postback 不能直接設定 Database Scope；Worker 不取得平台級 Scope。
+- Database Scope Setter 在 `AsyncSession` transaction 內以參數化 `set_config('app.current_org_id', :org_id, true)` 或受控的 `set_config('app.platform_scope', 'true', true)` 設定 RLS Context。`is_local=true` 是強制條件；transaction 結束後 scope 必須自動清除，不得殘留至 connection pool 的下一次使用。缺少 scope 時租戶資料預設不可存取。
 - `tests/isolation`、Repository 測試、migration 測試與 GCP Demo 驗證共同確認 A／B Organization 不可互相讀寫或推測存在性。
 
 ### Migration 管理
 
-- 所有資料表、Constraint、Index、Row-Level Security Policy 與 Schema 變更都由 Alembic Migration 管理。
+- 所有資料表、Constraint、Index、Row-Level Security Policy、`FORCE ROW LEVEL SECURITY`、交易內 Scope 設定與 Schema 變更都由 `services/api/migrations/` 的 Alembic Migration 管理。
 - 新環境必須能從空 PostgreSQL 執行完整 migration；不得依賴手動建立資料表或手動操作資料庫介面作為唯一建置方式。
 - Migration 變更必須包含可驗證的 upgrade 路徑；需要回復的變更另提供明確 downgrade 或替代遷移策略。
 - Cloud SQL Demo 必須重新執行 migration 驗證，不能以本機資料庫現況代替。
@@ -149,7 +150,7 @@ Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值
 
 代表一次已送出的人工照護回報。
 
-主要資料：Animal、Shelter、Volunteer、回報來源、回報時間、照護／散步完成狀態、進食、飲水、活動、排泄、行為、外觀、原始建立時間、最後修改時間、動物名稱與 Shelter Number 快照、保存狀態。
+主要資料：Animal、Shelter、Volunteer、回報來源、回報時間、照護／散步完成狀態、進食、飲水、活動、排泄、行為、外觀、原始建立時間、最後修改時間、動物名稱與 Shelter Number 快照、保存狀態，以及 AI dispatch 狀態 `not_requested`／`pending_enqueue`／`enqueued`／`enqueue_failed`。
 
 驗證規則：必須有已驗證 Volunteer、有效 Shelter Scope、正式 Animal 關聯；同一 Animal 同日可有多筆；原始內容不可被 AI 或更正覆蓋；重複送出必須可辨識。Volunteer 可在建立後 24 小時內修改自己的內容、Photo 與 Note，但不能修改 Animal 綁定；Animal 綁定更正由 Shelter Administrator 或授權 Staff Member 處理。
 
@@ -177,13 +178,17 @@ Photo 代表已清理並重新編碼的正式照片；Object Metadata 描述 Obj
 
 驗證規則：停用 Option 不刪除歷史使用內容；志工能使用非診斷性描述；管理異動留下 Audit Record。
 
+Foundational 邊界：US1／US2 開始前即建立 Category／Option 的持久化模型、Migration、平台預設 Seed、穩定 Code、歷史顯示快照，以及依 Organization 取得 Effective Options 的唯讀 Repository／Service。US4 只增加 Organization Extension、管理命令、排序、停用、Audit 與管理畫面，不重建另一套基礎語彙。
+
 ### AI Processing Job / AI Observation
 
 AI Processing Job 代表待處理、處理中、成功、失敗或無效的非同步工作；AI Observation 代表從 Photo 或 Volunteer Note 衍生的描述性訊號。
 
-主要關係：一筆 Report 可有多個 Job 與 AI Observation；每個 Job 必須保存非空 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始 AI 輸出、驗證結果、失敗原因與 Retry Count。每個 Observation 必須可追溯至清理後 Photo 或 Note，並將 `raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
+主要關係：一筆 Report 可有多個 Job 與 AI Observation；同一 Report、Job Type 與版本組合具有唯一冪等關係。每個 Job 必須保存非空 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、Job Created／Started／Completed At、原始 AI 輸出、驗證結果、失敗原因與 Retry Count。每個 Observation 必須可追溯至清理後 Photo 或 Note，並將 `raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
 
-驗證規則：Job 失敗不影響 Report 保存；AI 不得診斷、計分、排序、改變狀態、修改 Animal 或覆蓋原始資料；無效或禁用內容不能成為正式觀察結果。
+驗證規則：Report 先以獨立 transaction 保存，成功後才以另一個 transaction 冪等建立 Job；Job 建立或 AI 處理失敗都不影響 Report 保存。Report 處於 `pending_enqueue` 或 `enqueue_failed` 且沒有有效 Job 時，可由 reconciliation 安全補建，且不得產生重複 Job。AI 不得診斷、計分、排序、改變狀態、修改 Animal 或覆蓋原始資料；無效或禁用內容不能成為正式觀察結果。
+
+Foundational 邊界：`AIProcessingJob` 的持久化模型、Migration、版本欄位、狀態、唯一冪等關係、Repository 與 reconciliation query 在 US2 前完成。US5 才建立 Worker claim／retry、AI Adapter、`AIObservation`、輸出驗證與人工覆核流程；MVP 不依賴 Worker 或 AI 成功。
 
 ### Animal Timeline
 
@@ -231,7 +236,7 @@ Shelter
 - **LINE Webhook Event**：`received` → `signature_rejected`／`duplicate_ignored`／`processing` → `processed`／`failed`；同一 `webhook_event_id` 不得重複產生業務寫入。
 - **Daily Care Report**：`saved` → `amended` → `archived`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；正式回報不 Hard Delete，原始內容永久保留，所有修改與封存另留 Audit Record。
 - **Temporary Media / Photo**：`temporary` → `processed` → `attached` 或 `failed`；未提交 Temporary Media 可刪除或清理；正式 Photo 不 Hard Delete，只能標記不可使用或封存。
-- **AI Processing Job**：`pending` → `running` → `succeeded`／`failed`／`invalid`；重試不改變原始 Report。
+- **AI Dispatch / Processing Job**：Report `not_requested`／`pending_enqueue` → `enqueued` 或 `enqueue_failed`；成功建 Job 後，Job `pending` → `running` → `succeeded`／`failed`／`invalid`。Reconciliation 可由 `pending_enqueue`／`enqueue_failed` 冪等補建 Job；重試不改變原始 Report。
 - **QR Code**：`active` → `revoked`；撤銷後不能帶入回報流程。
 
 ## 跨實體驗證規則
@@ -243,3 +248,4 @@ Shelter
 5. Timeline 由 CRM 正式資料重建，不作為第二份事實來源。
 6. Repository 以 `AsyncSession` 執行資料存取；Transaction 邊界必須涵蓋 Scope 驗證與正式資料寫入，避免驗證後範圍被替換。
 7. Pydantic Request／Response Model 不得直接被當作 SQLAlchemy 持久化 Model；兩者轉換由 Application／Domain 邊界負責。
+8. 每個租戶 transaction 必須在第一次租戶資料查詢前由 Database Scope Setter 設定 transaction-local scope；未設定、跨 scope、transaction 結束後重用 connection 或 Worker 嘗試平台 scope 都必須拒絕。

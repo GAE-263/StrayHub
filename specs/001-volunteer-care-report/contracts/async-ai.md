@@ -2,7 +2,9 @@
 
 ## 建立 Job
 
-人工 Daily Care Report 成功保存後，CRM 可建立 AI Processing Job。Job 必須指向已保存的 Report、Shelter 與來源 Photo／Volunteer Note；LINE Image Message 必須先完成 EXIF 清理與重新編碼，AI 不得讀取 LINE 原始圖片。不能由 AI 產生 Animal 或 Shelter 識別。Job 建立時必須保存非空的 AI Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version 與 Output Schema Version；若呼叫失敗也不得遺失這些版本資訊。
+人工 Daily Care Report 必須先以獨立 transaction 成功保存，CRM 才能以另一個受控 transaction 冪等建立 AI Processing Job。Job 必須指向已保存的 Report、Shelter 與來源 Photo／Volunteer Note；LINE Image Message 必須先完成 EXIF 清理與重新編碼，AI 不得讀取 LINE 原始圖片。不能由 AI 產生 Animal 或 Shelter 識別。Job 建立時必須保存非空的 AI Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version 與 Output Schema Version；若呼叫失敗也不得遺失這些版本資訊。
+
+Job 建立失敗不得回滾已保存的 Report。Report 以 `pending_enqueue`／`enqueue_failed` 表示尚未取得有效 Job，reconciliation 依 Report 與 Job 的唯一冪等關係安全補建；不得因重試建立重複 Job。外部 AI 呼叫不得出現在 Report 或 Job 建立 transaction。
 
 ## 狀態
 
@@ -27,6 +29,12 @@ pending -> running -> succeeded
 ## Worker 契約
 
 Worker 只能處理 CRM 指定的 Job，依 Job 的 Shelter 與來源關係讀取已清理的 Photo／Note；不得依前端傳入的 Shelter 或 Object Key 擴大範圍。Worker 每次處理都必須驗證 Job `org_id`、關聯資源 `org_id`、Organization 狀態、Job 狀態與 Care Report 存在。完成、失敗、無效、重試與人工覆核都要留下可追溯狀態。
+
+## 實作階段邊界
+
+- Foundational：完成 `AIProcessingJob` 的持久化模型、Migration、版本欄位、狀態、唯一冪等關係、Repository 與 reconciliation query。
+- US2：Report commit 後使用上述能力建立 Job；Job 建立失敗仍回覆 Report 保存成功並保留可追蹤 dispatch 狀態。
+- US5：完成 Worker claim／retry、正式 AI Adapter、輸出驗證、`AIObservation` 與人工覆核。
 
 ## 驗證重點
 

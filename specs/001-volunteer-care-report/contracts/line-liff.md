@@ -41,7 +41,19 @@ Bot 使用 Server-side Draft 與受控狀態機；最終摘要確認前不得建
 
 ## Mock 與真實環境
 
-本機測試提供 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、Mock LINE User、Rich Menu 範本、Postback／Image／Redelivery Fixture 與 Mock LINE Adapter，不呼叫真實 LINE API。需要驗證真正 LINE Webhook、Rich Menu、Reply Token、Image Content、LIFF URL 或 LIFF Browser 行為時，使用官方建議的 HTTPS 本機開發方式或受控 Demo 入口。
+Application Layer 只依賴 `LineMessagingPort`。本機測試提供 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、Mock LINE User、Rich Menu 範本、Postback／Image／Redelivery Fixture 與 `MockLineAdapter`，不呼叫真實 LINE API。
+
+正式 `LineMessagingApiAdapter` 必須實作相同 Port，並負責：
+
+- 使用 Reply Token 傳送 Reply Message。
+- 在規格允許的補償情境傳送受控 Push Message。
+- 依 Message ID 及時取得 Image Content。
+- 驗證、建立、上傳與依環境綁定 Rich Menu。
+- 將 LINE HTTP／API 失敗轉換為不洩漏內部資訊的受控錯誤，不回滾已保存的 Draft 或 Care Report。
+
+Quick Reply 與 Postback payload 由後端 Presenter 依 CRM Effective Observation Options 產生，不由 Next.js 或 Adapter 硬編碼第二套業務選項。Channel secret 與 channel access token 只能由受控環境設定取得，不得出現在 log、Postback、Rich Menu action 或正式業務資料。
+
+需要驗證真正 LINE Webhook、Rich Menu、Reply Token、Image Content、LIFF URL 或 LIFF Browser 行為時，使用官方建議的 HTTPS 本機開發方式或受控 Demo 入口。Rich Menu 由版本化環境設定與 `scripts/sync_line_rich_menu.py` 管理，發布流程必須可重複執行且不得把授權資料寫入 Action。
 
 ## LIFF 強制規則
 
@@ -50,3 +62,10 @@ Bot 使用 Server-side Draft 與受控狀態機；最終摘要確認前不得建
 3. 真實與 Mock 流程必須共用相同的回報確認、送出重新驗證與錯誤行為。
 4. 未綁定使用者不得建立匿名正式回報。
 5. LIFF 前端自行解碼的 LINE Profile 不得直接作為可信身分；FastAPI 必須向 LINE 驗證 Token／ID Token 後才建立本系統 Session。
+
+## Adapter 驗證重點
+
+- `MockLineAdapter` 與 `LineMessagingApiAdapter` 通過相同 Port Contract Test。
+- 一般 unit／integration test 不連線真實 LINE API。
+- Demo smoke test 驗證 Reply Message、Image Content 與 Rich Menu 發布／綁定。
+- Reply 失敗不重複建立 Draft、Care Report 或 AI Job；Resume 仍可讀取 Server-side Draft 狀態。

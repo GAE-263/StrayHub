@@ -21,12 +21,12 @@ docker compose -f infra/local/docker-compose.yml up -d postgres minio
 啟動 FastAPI、Next.js 與 Background Worker 的開發模式：
 
 ```bash
-uv run fastapi dev services/api/app.py
+uv run fastapi dev services/api/app/main.py
 npm --prefix apps/web run dev
-uv run python -m services.worker
+uv run python services/worker/worker.py
 ```
 
-實際入口可在實作階段調整，但必須保留三個獨立的可觀察程序與本機 Hot Reload 能力。
+三個入口必須分別對應 `services/api/app/main.py`、`apps/web` 與 `services/worker/worker.py`，並保留三個獨立的可觀察程序與本機 Hot Reload 能力。
 
 ## 3. 驗證 Database Access 與 Migration
 
@@ -42,6 +42,7 @@ uv run alembic upgrade head
 - Pydantic Request／Response Model 不直接作為 SQLAlchemy Model。
 - API 與 Worker 的資料存取都經過受控 Repository。
 - Repository 每次操作都強制帶入 `Organization Scope`。
+- Database Scope Setter 在 transaction 內使用 `set_config(..., true)`，未設定 scope 時預設拒絕；transaction 結束與 connection pool 重用後不保留上一個 Organization。
 - 同一 Organization 內重複 Shelter Number 被拒絕；不同 Organization 的相同 Shelter Number 可以存在。
 - Composite Constraint 與 PostgreSQL 防護阻止跨 Organization 關聯。
 - 空資料庫可由 migration 建立所有必要 Schema、Constraint、Index 與租戶防護。
@@ -49,12 +50,29 @@ uv run alembic upgrade head
 執行資料存取與 migration 測試：
 
 ```bash
-uv run pytest tests/integration/test_migrations.py tests/isolation -q
+uv run pytest tests/integration/test_migrations.py tests/integration/test_database_scope_setter.py tests/isolation -q
 ```
 
 若需要驗證回復策略，依實作任務提供的明確 migration 測試執行 downgrade 或替代遷移驗證；不得以手動資料庫介面操作取代 migration。
 
-## 4. 建立虛構 Seed Data
+## 4. 驗證 Authentication API 與 Contract Types
+
+執行 Authentication Contract 與 Session lifecycle 測試：
+
+```bash
+uv run pytest tests/contract/test_openapi_contract.py tests/integration/test_authentication_session.py tests/isolation/test_active_shelter_context.py -q
+npm --prefix packages/contracts run generate
+npm --prefix packages/contracts run check
+```
+
+驗證：
+
+- Login、Refresh、Logout、Current User、LIFF Identity Exchange 與 Active Shelter Context Read／Switch 都符合 OpenAPI。
+- Refresh Token rotation、replay 防護、Session 撤銷及 User／Membership／Organization 停用立即生效。
+- Request 不能以自行傳入的 `org_id` 覆寫 Session Active Shelter Context。
+- `packages/contracts/src/openapi.ts` 由 `openapi.yaml` 產生且無漂移；生成檔沒有手動業務規則。
+
+## 5. 建立虛構 Seed Data
 
 建立兩個互相隔離的 Shelter：
 
@@ -62,11 +80,12 @@ uv run pytest tests/integration/test_migrations.py tests/isolation -q
 - Shelter B：`ORG-B`
 - 兩者各建立一個工作人員、一個志工與一隻收容編號 `VAAAG114080610` 的 Animal。
 - 產生各自的 QR Token、Cage／Area 與今日可回報範圍。
+- 載入平台預設 Observation Category／Option 與 Effective Option 測試資料。
 - 不使用真實姓名、電話、地址、照片或正式收容所資料。
 
 預期結果：相同 Shelter Number 可同時存在；每筆使用者、Animal、QR、Scope 與回報都可辨識其 Shelter。
 
-## 5. 驗證多收容所隔離
+## 6. 驗證多收容所隔離
 
 執行隔離測試：
 
@@ -91,7 +110,7 @@ uv run pytest tests/isolation -q
 3. 確認不需逐次額外授權，且每項跨 Shelter 操作都有完整 Audit Record。
 4. 確認正式 Care Report 與正式 Media 仍不得 Hard Delete。
 
-## 6. 驗證 LINE Webhook Session 解析
+## 7. 驗證 LINE Webhook Session 解析
 
 使用 Mock LINE Webhook Payload 驗證下列分支：
 
@@ -101,7 +120,7 @@ uv run pytest tests/isolation -q
 4. 有多個可用 Webhook Session，或沒有 Session 但有多個有效 Shelter Context 時，不自動選擇，回覆 LIFF 連結要求明確選擇。
 5. 修改 Postback、QR Token 或 Request 中的 Organization／Animal 識別不能改變 Webhook Session、Active Shelter Context 或 Draft 的正式歸屬。
 
-## 7. 驗證 LINE Bot 回報與近期歷程
+## 8. 驗證 LINE Bot 回報與近期歷程
 
 在 Mock LINE User、Mock Webhook Payload 與 Mock LIFF Context 中以 A 志工：
 
@@ -110,7 +129,7 @@ uv run pytest tests/isolation -q
 3. 以 Quick Reply／Postback 逐題填寫進食、飲水、活動、排泄、行為與外觀等結構化選項。
 4. 以 Image Message 附加一張虛構照片，測試 EXIF 清理後才建立 Draft Media；心得可略過。
 5. 顯示完整摘要，確認前驗證 Signature、`webhookEventId`、Draft、Animal、Membership 與 Active Shelter Context。
-6. 送出後立即確認人工 Report 已保存，且 AI Job 另行非同步建立。
+6. 送出後立即確認人工 Report 先獨立保存，再由另一個 transaction 冪等建立 AI Job；Job 建立失敗不得回滾 Report。
 7. 重送同一 Webhook Event，確認不重複建立答案、照片關聯、Report 或 AI Job。
 8. 中斷後從 Rich Menu 繼續有效 Draft，或取消 Draft；取消不得建立正式 Report。
 9. 重複建立同一 Animal 同日第二筆回報。
@@ -119,12 +138,12 @@ uv run pytest tests/isolation -q
 
 預期結果：兩筆 Report 都保留；沒有回報日期不顯示為正常；24 小時內的內容修改保留前後版本；動物綁定修改交由授權人員處理；所有資料可追溯至 A Shelter。
 
-## 8. 驗證 Object Storage
+## 9. 驗證 Object Storage
 
 在本機以 MinIO 執行：
 
 ```bash
-uv run pytest tests/integration/test_object_storage.py -q
+uv run pytest tests/integration/test_storage_adapters.py tests/integration/test_media_validation.py -q
 ```
 
 驗證 `MinioStorageAdapter`、`InMemoryStorageFake` 與共通契約：
@@ -139,17 +158,18 @@ uv run pytest tests/integration/test_object_storage.py -q
 
 GCP Demo 另執行同一組 GCS Contract Test，驗證 `GcsStorageAdapter`、IAM、Signed URL、過期與權限錯誤。
 
-## 9. 驗證 AI 非同步與失敗降級
+## 10. 驗證 AI 非同步與失敗降級
 
 以 Mock AI Service 或測試用 AI Adapter 執行：
 
 ```bash
-uv run pytest tests/integration/test_ai_job.py -q
+uv run pytest tests/integration/test_ai_job_version_trace.py tests/integration/test_ai_worker_lifecycle.py tests/integration/test_ai_failure_timeline_status.py -q
 ```
 
 驗證：
 
-- Report 保存後才建立 AI Job。
+- Report 先以獨立 transaction 保存，Job 以另一個 transaction 冪等建立。
+- Job 建立失敗時 Report 保持成功，並呈現 `pending_enqueue`／`enqueue_failed`；reconciliation 可補建且不重複。
 - Worker 可將 Job 從 `pending` 處理至 `succeeded`。
 - 每一筆 Job 都保存非空的 Provider、Model Name／Version、Prompt Template／Version、Output Schema Version 與處理時間；失敗時仍保存預定版本資訊。
 - AI 逾時、服務中斷、無效內容或診斷語意會產生 `failed`／`invalid`，不覆蓋原始 Report。
@@ -157,20 +177,38 @@ uv run pytest tests/integration/test_ai_job.py -q
 - 人工回報與 Timeline 在 AI 失敗時仍可用。
 - AI Observation 可追溯至已移除 EXIF 的 Photo 或 Volunteer Note。
 
-## 10. 本機品質門檻
+## 11. 驗證正式 LINE Adapter Contract
+
+一般測試使用 `MockLineAdapter`，不得呼叫真實 LINE API：
+
+```bash
+uv run pytest tests/contract/test_line_adapter_contract.py tests/integration/test_line_webhook_idempotency.py tests/e2e/test_line_bot_mvp.py -q
+```
+
+驗證 Mock 與正式 Adapter 的共同契約包含 Reply Message、受控 Push Message、Image Content 取得及 Rich Menu 管理；Quick Reply／Postback 由 Effective Observation Options 產生。真正 LINE API 只在受控 HTTPS／Demo 環境執行 smoke test，並由 `scripts/sync_line_rich_menu.py` 依環境設定發布 Rich Menu。
+
+## 12. 本機品質門檻
 
 ```bash
 ruff check .
 ruff format --check .
 pytest
 npm --prefix apps/web test
+npm --prefix packages/contracts run check
 ```
 
 以上命令與 Frontend 測試必須通過，且空資料庫 migration、關鍵本機流程、Shelter A／B 隔離與 MinIO Adapter 測試都必須有成功結果，才可進入 GCP Demo。
 
-## 11. GCP Demo 部署後驗證
+## 13. GCP Demo 部署後驗證
 
-部署前必須重新執行空 Cloud SQL 的 migration 驗證；部署後重新執行：
+部署前先驗證唯一 Terraform 來源：
+
+```bash
+terraform fmt -check -recursive infra/gcp-demo/terraform
+terraform -chdir=infra/gcp-demo/terraform validate
+```
+
+Cloud Run、Cloud SQL、Cloud Storage、IAM、Service Account、Artifact Registry 與 Cloud Logging 均必須由 `infra/gcp-demo/terraform/` 建立；不得直接套用 `cloud-run-*.yaml`。接著重新執行空 Cloud SQL 的 migration 驗證；部署後重新執行：
 
 1. Database Migration 驗證。
 2. Cloud Storage 權限與 Signed URL 驗證。
@@ -180,6 +218,7 @@ npm --prefix apps/web test
 6. Shelter A／B 資料隔離驗證。
 7. AI 失敗降級驗證。
 8. Cloud SQL 連線、IAM、Service Account 與 Cloud Logging 可追溯性驗證。
+9. 正式 `LineMessagingApiAdapter` 的 Reply Message、Image Content 與 Rich Menu 發布／綁定驗證。
 
 本機通過只代表本機流程可用，不代表 GCP 專屬整合完成。任何 Demo 失敗都必須保留失敗證據與環境資訊，不能以本機結果代替。
 

@@ -2,6 +2,7 @@
 
 **Purpose**: 在進入規劃前檢查本功能規格的完整性、可驗收性與範圍邊界
 **Created**: 2026-08-05
+**Updated**: 2026-08-07
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,8 +32,8 @@
 
 ## Notes
 
-- 本次檢查共發現 3 個待釐清標記，均集中在範圍／權限、識別策略與回報修改／必填／草稿政策；符合 `speckit-specify` 最多 3 個標記限制。
-- 待釐清項目位於 [Clarification Items](../spec.md#clarification-items)，在進入 `/speckit-plan` 前應由產品或營運負責人確認。
-- 其餘驗收情境先採規格中的保守行為：未明確授權不寫入、原始資料不覆蓋、無回報與未觀察分開、AI 失敗不阻塞人工回報。
-- 本次更新新增多收容所平台範圍、角色邊界、租戶資料隔離、相同收容編號區分、停用狀態與跨機構稽核的功能需求與驗收情境。
-- 多收容所資料隔離的 Given／When／Then 驗收情境位於 [Acceptance Scenarios](../spec.md#acceptance-scenarios) 的「多收容所管理與資料隔離」段落。
+- 本次更新未新增 `[NEEDS CLARIFICATION]`；現有高影響業務決策均已有明確結論。
+- QR Code 驗收已改為不含業務資料的 QR Token，收容編號只在後端完成候選解析後顯示於確認卡，不再描述為 QR Code 原始內容。
+- 原 SC-021 的 LINE Bot 90 秒計時邊界已完整併入 SC-002，避免兩項成功條件重複；SC-021 編號不重新指派給其他需求。
+- SC-023 已定義至少 15 組固定中斷案例、涵蓋的中斷類型與流程階段、100% 有效 Draft 恢復標準，以及不承諾恢復尚未送達系統之裝置端輸入的邊界。
+- 規格仍維持 `Blocked`，原因是最新 Analyze 尚有 Plan／Tasks 高嚴重度問題；這不影響本 Checklist 對本輪 Specify 修訂內容的品質判定。

@@ -6,6 +6,11 @@ info:
     志工日常照護回報與動物近期歷程的 CRM 邊界契約。一般收容所操作由
     FastAPI 重新驗證 Session、Membership、角色與 Active Shelter Context；
     PLATFORM_ADMIN 使用平台級 PLATFORM Scope，且所有跨收容所操作都留下 Audit Record。
+x-contract-types:
+  generator: openapi-typescript
+  output: packages/contracts/src/openapi.ts
+  source-of-truth: specs/001-volunteer-care-report/contracts/openapi.yaml
+  generated-file-editable: false
 servers:
   - url: http://localhost:8000
     description: 本機開發

@@ -46,9 +46,9 @@
 
 ## 決策 6：以資料庫保存的 AI Job 支援非同步處理
 
-**Decision**：人工回報保存後建立可追蹤的 AI Job，Worker 依 Job 狀態處理照片與心得，狀態至少包含 pending、running、succeeded、failed、invalid；重試與失敗結果都可稽核。AI Observation 是衍生資料，不覆蓋原始回報。
+**Decision**：人工回報以獨立 transaction 成功保存後，才以另一個受控 transaction 冪等建立可追蹤的 AI Job。Worker 依 Job 狀態處理照片與心得，狀態至少包含 pending、running、succeeded、failed、invalid；重試與失敗結果都可稽核。Job 建立失敗不得回滾已保存 Report；Report 保存 `pending_enqueue`／`enqueue_failed` 狀態，並由 reconciliation 找出已保存但尚無有效 Job 的 Report。AI Observation 是衍生資料，不覆蓋原始回報。
 
-**Rationale**：本機不需新增訊息佇列即可測試完整流程；GCP Demo 可用 Background Worker／Job 執行相同契約。資料庫中的 Job 狀態讓人工回報保存與 AI 服務失敗解耦。
+**Rationale**：本機不需新增訊息佇列即可測試完整流程；GCP Demo 可用 Background Worker／Job 執行相同契約。Report 與 Job 使用分離 transaction，能讓外部 AI 或 enqueue 失敗不影響人工回報；Job 的唯一冪等關係與 reconciliation 則處理兩次 transaction 之間的中斷。
 
 **Alternatives considered**：同步等待 AI 完成；拒絕，因阻塞 90 秒回報與違反 AI 失敗降級。引入額外訊息服務；暫不採用，因第一階段未要求且會增加本機與 Demo 的依賴。
 
@@ -72,7 +72,7 @@
 
 **Decision**：FastAPI API 與 Background Worker 使用 SQLAlchemy 2.x 的 `AsyncSession`，PostgreSQL 非同步 Driver 使用 `asyncpg`；Pydantic Model、SQLAlchemy Model 與 Domain／Application Layer 分離；資料表與 Schema 變更全部使用 Alembic Migration。Repository 是唯一允許業務查詢租戶資料的資料存取邊界，所有查詢強制帶入 `Organization Scope`。Authentication 與 Authorization 由 FastAPI 唯一執行；一般使用者使用帳號密碼，Volunteer 透過 LIFF 身分交換後建立本系統 Session；API 使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record。
 
-**Rationale**：SQLAlchemy 2.x 能提供明確的 ORM／資料存取邊界，`AsyncSession` 與 FastAPI／Worker 的非同步流程一致；Pydantic 與 SQLAlchemy 分離可避免 API 驗證模型與複雜多租戶資料關係耦合；Alembic 讓空資料庫建立、Cloud SQL Demo 與 migration 審查可重現。受控 Repository、Composite Constraint、PostgreSQL Row-Level Security／交易層防護與跨租戶測試形成 Defense in Depth。
+**Rationale**：SQLAlchemy 2.x 能提供明確的 ORM／資料存取邊界，`AsyncSession` 與 FastAPI／Worker 的非同步流程一致；Pydantic 與 SQLAlchemy 分離可避免 API 驗證模型與複雜多租戶資料關係耦合；Alembic 讓空資料庫建立、Cloud SQL Demo 與 migration 審查可重現。受控 Repository、Composite Constraint、PostgreSQL Row-Level Security（RLS）、交易內租戶 Scope 與跨租戶測試形成 Defense in Depth。
 
 **Alternatives considered**：使用 SQLModel；拒絕，因 API Schema、Database Model 與多租戶關係會過度耦合。使用同步 SQLAlchemy Session；拒絕，因 API 與 Worker 的 I/O 流程需要一致的非同步存取。以手動資料庫操作建置 Schema；拒絕，因無法保證空資料庫、CI、Demo 與環境遷移的一致性。只依賴 Repository；拒絕，因 Constitution XI 要求資料存取層強制隔離，必須加上資料庫層防護與自動化測試。
 
@@ -81,6 +81,8 @@
 **Decision**：FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼登入；Volunteer 使用 LIFF 完成 LINE 身分驗證，再由 FastAPI 對應既有 User 與 `organization_membership`。系統採短效 Access Token、可輪替 Refresh Token 與 Server-side Session Record；Access Token 不包含可直接授權的 `org_id` 或角色。
 
 每一個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Session 綁定的 Active Shelter Context。停用 User、Membership、Organization 或撤銷 Session／Refresh Token 後，必須立即拒絕後續存取。Worker 不使用一般 User Session，改用受限 Database Credential／Service Account，但每次處理 Job 仍驗證 Job、Report、Organization 與狀態一致。
+
+Authentication API 固定包含 Login、Refresh、Logout、Current User、LIFF Identity Exchange、Active Shelter Context Read 與 Switch；HTTP router 位於 `services/api/app/api/authentication.py`，Session／Token rotation／replay 防護與 Context 切換由 `services/api/app/application/authentication/` 協調。這組 API 與測試是所有受保護 User Story 的 Foundational dependency，不得延後到 US1 或由 Next.js 自行補足。
 
 ## 決策 11：LINE Bot 為主要回報介面，LIFF 為輔助介面
 
@@ -110,7 +112,9 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 ## 補充決策 E：Mock LINE Adapter、正式 Adapter 與本機 HTTPS
 
-**Decision**：本機使用 Mock LINE Webhook、Signature Helper、Mock User、Postback／Image／Redelivery Fixture 與 Mock LINE Adapter，不呼叫真實 LINE API。需要驗證真正 Webhook、Rich Menu、Reply、Image Content、LIFF URL 或 Browser 行為時，使用官方建議的 HTTPS 本機開發方式或受控 Demo 入口。Rich Menu 採環境版本管理，避免本機、Demo 與正式設定互相覆蓋。
+**Decision**：Application Layer 以 `LineMessagingPort` 隔離 LINE Messaging API。本機使用 Mock LINE Webhook、Signature Helper、Mock User、Postback／Image／Redelivery Fixture 與 `MockLineAdapter`，不呼叫真實 LINE API；正式 `LineMessagingApiAdapter` 負責 Reply Message、必要的受控 Push Message、依 Message ID 取得圖片，以及 Rich Menu 驗證、建立、圖片上傳與環境綁定。Quick Reply／Postback payload 由後端依有效 Observation Vocabulary 組合。需要驗證真正 Webhook、Rich Menu、Reply、Image Content、LIFF URL 或 Browser 行為時，使用官方建議的 HTTPS 本機開發方式或受控 Demo 入口。Rich Menu 採版本化環境設定與可重複執行的同步腳本，避免本機、Demo 與正式設定互相覆蓋。
+
+**Rationale**：正式 Adapter 與 Mock 共用 Port，可讓單元／整合測試不依賴 LINE，又能讓 Demo 驗證真正 HTTP、Reply Token、媒體下載與 Rich Menu 行為。LINE 官方要求 Webhook 在事件解析前驗證簽章，且使用者傳送的內容只保留有限期間，因此簽章與媒體取得不能只存在測試 Fake。參考：[Webhook Signature](https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/)、[Receive messages](https://developers.line.biz/en/docs/messaging-api/receiving-messages/)、[Rich menus](https://developers.line.biz/en/docs/messaging-api/rich-menus-overview/) 與 [Messaging API reference](https://developers.line.biz/en/reference/messaging-api/nojs/)。
 
 ## 決策 12：AI 版本與 Prompt 必須完整追溯
 
@@ -144,6 +148,62 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 **Alternatives considered**：依 LINE Binding 永久保存的收容所自動選擇；拒絕，因無法處理多個有效收容所與 Session 撤銷。依 QR Code 或 Postback 直接切換；拒絕，因輸入值不可信。每次回報都要求重新開啟 LIFF；拒絕，因違反 LINE Bot 主要回報介面的低摩擦目標。
 
+## 決策 18：GCP Demo Infrastructure as Code
+
+**Decision**：使用 Terraform 管理 `infra/gcp-demo/terraform/` 下的全部 GCP Demo 基礎設施，涵蓋 Next.js／FastAPI／Worker 的 Cloud Run 執行單元、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry、Cloud Logging、Service Account 與 IAM。`cloud-run-*.yaml` 不作為正式部署來源；如有診斷用 YAML，僅能是 Terraform 可重建的衍生產物。Terraform 設定只服務虛構 Demo 環境，不把正式環境部署納入本 Feature。
+
+**Rationale**：Terraform 已與本計畫的 GCP Demo 元件及部署門檻對齊，可讓資源宣告、審查與重建流程可重現，並避免把本機開發綁定 GCP Console 的手動操作。
+
+**Alternatives considered**：OpenTofu；暫不採用，避免在同一 Feature 保留兩套 IaC 工具語意。GCP Console 手動建立；拒絕，因無法提供可重現的 Demo 資源定義與審查軌跡。
+
+## 決策 19：PostgreSQL 租戶隔離防護
+
+**Decision**：租戶隔離採受控 Repository、交易內設定的 `Organization Scope`、Composite Constraint、PostgreSQL Row-Level Security（RLS）與跨租戶自動化測試的 Defense in Depth。Runtime Role 不擁有資料表且沒有 `BYPASSRLS`，租戶資料表啟用 `FORCE ROW LEVEL SECURITY`。一般 Request 與 Worker 由後端的 Database Scope Setter 在 transaction 內執行參數化 `set_config('app.current_org_id', :org_id, true)`；只有經 FastAPI 重新驗證的 `PLATFORM_ADMIN` 交易可執行 `set_config('app.platform_scope', 'true', true)`，並在同一 transaction 留下 Audit Record。`is_local=true` 讓 scope 在 transaction 結束時自動清除，避免 connection pool 重用時洩漏。Migration Role 與 Runtime Role 分離，Worker 不取得平台級 Scope。RLS Policy 與 Scope 設定由 Alembic Migration 管理，並以真實 PostgreSQL Integration Test 驗證一般 Scope、平台 Scope、缺少 Scope、偽造輸入、transaction 清除、pooled connection 重用與直接資料存取。
+
+**Rationale**：Repository 可集中業務授權，Composite Constraint 可阻擋錯誤關聯，RLS 可降低繞過 Application Layer 的資料外洩風險；多層防護共同符合 Constitution 的後端與資料存取層隔離要求。
+
+**Alternatives considered**：只依賴交易層 Scope；拒絕，因繞過 Repository 時缺少資料庫層防護。只依賴 Repository；拒絕，因無法形成足夠的 Defense in Depth。
+
+**Official reference**：[PostgreSQL `set_config`](https://www.postgresql.org/docs/current/functions-admin.html) 的第三個參數為 `true` 時只套用於目前 transaction；本計畫因此不使用 session-level scope。
+
+## 決策 20：本機 Python 命令與環境管理
+
+**Decision**：本機與 CI 的 Python 命令使用 `uv` 執行；依賴與鎖定檔由專案工具鏈管理，標準驗證命令以 `uv run` 開頭。FastAPI、Worker、Alembic 與 Pytest 的入口路徑依 `plan.md` 的 `services/api/app/main.py`、`services/worker/worker.py` 與既定測試目錄執行。
+
+**Rationale**：統一本機、CI 與 Demo 前驗證的 Python 執行方式，避免不同開發者以不同虛擬環境或入口造成結果不一致。
+
+**Alternatives considered**：直接使用系統 `pip`／`python`；拒絕，因依賴解析與執行環境不易重現。
+
+## 決策 21：Canonical Source Layout
+
+**Decision**：FastAPI 程式碼統一放在 `services/api/app/`，依 `api/`、`application/`、`domain/`、`infrastructure/` 與 `persistence/` 分層；Alembic 統一放在 `services/api/migrations/`。Worker 以 `services/worker/worker.py` 啟動，所有 Worker Session、Repository、Adapter 與 Handler 統一放在 `services/worker/app/`。後續 Tasks 與 Quickstart 必須使用這組路徑，不建立平行目錄。
+
+**Rationale**：Alembic Migration 與 Runtime Package 分離，API 與 Worker 的內部邊界則各自集中於單一 `app/`，可以消除 Migration 與 Worker Persistence 的平行程式碼根目錄。
+
+**Alternatives considered**：將 Alembic 放入 `services/api/app/`；拒絕，因 Migration 是部署與 Schema 管理資產，不是 Runtime Package。將 Worker Repository 放在 `services/worker/persistence/`；拒絕，因會形成第二個 Worker 程式碼根目錄。
+
+## 決策 22：Observation Vocabulary 與 AI Job Persistence 前移至 Foundational
+
+**Decision**：`ObservationCategory`、`ObservationOption`、平台預設 Seed、穩定 Code、停用後歷史顯示與 Effective Options 唯讀查詢在 Foundational 完成，供 US1／US2 的 Quick Reply 與回報驗證使用；US4 只負責管理操作與 UI。`AIProcessingJob` 的持久化模型、Migration、版本欄位、冪等關係、Repository 與 reconciliation 契約同樣在 Foundational 完成；US5 才加入 Worker claim／retry、正式 AI 呼叫、`AIObservation` 與人工覆核。
+
+**Rationale**：US2 的結構化答案不能依賴尚未存在的語彙模型，Report 保存後的非同步意圖也不能依賴 US5 才建立的 Job schema。前移基礎資料與持久化不會讓 MVP 依賴 AI 成功，反而消除跨階段倒置。
+
+**Alternatives considered**：將 Observation 全部留在 US4、Job 全部留在 US5；拒絕，因 US2 已直接依賴兩者。把選項硬編碼在 Bot；拒絕，因會形成第二套業務語彙。
+
+## 決策 23：OpenAPI 產生 TypeScript Contract Types
+
+**Decision**：`contracts/openapi.yaml` 是唯一 HTTP Contract；使用 `openapi-typescript` 產生 `packages/contracts/src/openapi.ts`，只供 TypeScript consumer 使用。生成檔禁止手動修改；`generate` 負責更新，`check` 重新產生並比較差異。FastAPI Pydantic Schema 保持獨立，透過 OpenAPI contract tests 驗證一致性。
+
+**Rationale**：Next.js 不需手動重寫 Request／Response 型別，又不把 TypeScript 生成物誤當成後端或業務規則來源。官方 CLI 支援直接從 OpenAPI schema 產生型別，適合納入可重現的 package script 與 CI drift check。參考：[openapi-typescript CLI](https://openapi-ts.dev/cli)。
+
+**Alternatives considered**：前後端各自手寫型別；拒絕，因容易漂移。從 FastAPI runtime OpenAPI 反向覆蓋 Feature Contract；拒絕，因會讓實作取代已核准契約。生成 Python ORM／Pydantic；拒絕，因會破壞既定分層。
+
+## 決策 24：測試目錄依驗證邊界分工
+
+**Decision**：`tests/contract` 驗證 OpenAPI、Contract Types 與外部 Adapter；`tests/unit` 驗證純 Domain／Application 規則；`tests/integration` 驗證 PostgreSQL、MinIO、Session、Worker 與 transaction；`tests/security` 驗證簽章、Authentication、Tampering 與單一資源越權；`tests/isolation` 使用真實 PostgreSQL 驗證完整 A／B Organization 隔離矩陣；`tests/frontend` 驗證 Next.js 元件與畫面；`tests/e2e` 執行 Mock LINE／LIFF 到 FastAPI、PostgreSQL、MinIO、Worker 的跨程序垂直流程；`tests/fixtures` 只保存虛構 Webhook、Postback、Image、Redelivery 與 Seed 輸入。
+
+**Rationale**：明確區分 test scope 後，Tasks 不會把 E2E 放進不存在的目錄，也不會用 Mock-only 測試取代真實 PostgreSQL 隔離驗證。
+
 ## 研究完成檢查
 
 - 本機與 GCP 的儲存差異已由 Object Storage Interface 隔離。
@@ -152,4 +212,5 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 - Authentication、Active Shelter Context、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive 均已記錄驗證邊界；公開頁面、Notification 與 Export 明確排除。
 - GCP 專屬 IAM、Signed URL、Cloud SQL、Service Account 與 HTTPS LIFF 行為列為 Demo 另行驗證，不假設本機通過即等於 GCP 通過。
 - SQLAlchemy `AsyncSession`、`asyncpg`、受控 Repository、Composite Constraint、PostgreSQL 防護與 Alembic 空資料庫 migration 已納入 Phase 1 設計與 quickstart 驗證路徑。
+- Terraform、`uv`、Canonical Source Layout、PostgreSQL RLS／Database Scope Setter、Authentication API、正式 LINE Adapter、OpenAPI Contract Types 與測試目錄已定案，並與 `plan.md`、`data-model.md`、`quickstart.md` 及相關契約一致；沒有未決的主要技術選型阻擋任務產生。
 - 規格原有的高影響待釐清事項，以及 `PLATFORM_ADMIN` 平台級 Scope 與 LINE Webhook Session／Active Shelter Context 解析流程，均已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。
