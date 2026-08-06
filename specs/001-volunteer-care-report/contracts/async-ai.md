@@ -2,7 +2,7 @@
 
 ## 建立 Job
 
-人工 Daily Care Report 成功保存後，CRM 可建立 AI Processing Job。Job 必須指向已保存的 Report、Shelter 與來源 Photo／Volunteer Note，不能由 AI 產生 Animal 或 Shelter 識別。Job 建立時必須保存非空的 AI Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version 與 Output Schema Version；若呼叫失敗也不得遺失這些版本資訊。
+人工 Daily Care Report 成功保存後，CRM 可建立 AI Processing Job。Job 必須指向已保存的 Report、Shelter 與來源 Photo／Volunteer Note；LINE Image Message 必須先完成 EXIF 清理與重新編碼，AI 不得讀取 LINE 原始圖片。不能由 AI 產生 Animal 或 Shelter 識別。Job 建立時必須保存非空的 AI Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version 與 Output Schema Version；若呼叫失敗也不得遺失這些版本資訊。
 
 ## 狀態
 

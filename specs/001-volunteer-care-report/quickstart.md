@@ -8,7 +8,7 @@
 - Node.js 與專案指定的套件管理工具可用。
 - Python 與專案指定的 Python 執行工具可用。
 - 不使用 GCP 正式憑證、不使用真實個資、不使用正式收容所敏感資料。
-- 本 Feature 使用 LIFF，不啟動或驗證 LINE Messaging API Webhook。
+- 本 Feature 以 LINE Bot 為主要回報介面，使用 Mock LINE Webhook 與 Mock LINE Adapter；LIFF 只作為輔助介面。
 
 ## 2. 啟動本機服務
 
@@ -84,20 +84,21 @@ uv run pytest tests/isolation -q
 6. 停用 Shelter 或使用者後，不能登入、讀取或建立新業務資料。
 7. 同一志工可被授權 A、B 兩個 Shelter；切換時必須明確更新 Active Shelter Context，Draft／Animal／QR Token／Reportable Scope 與目前 Context 不一致時阻擋送出，不以地點、裝置或時間推測志工所在 Shelter。
 
-## 6. 驗證人工回報與近期歷程
+## 6. 驗證 LINE Bot 回報與近期歷程
 
-在 Mock LIFF Context 中以 A 志工：
+在 Mock LINE User、Mock Webhook Payload 與 Mock LIFF Context 中以 A 志工：
 
-1. 從今日範圍選擇 A Animal。
-2. 顯示照片、名稱、完整 Shelter Number 與 Cage／Area。
-3. 明確確認 Animal。
-4. 填寫進食、飲水、活動、排泄、行為與外觀等結構化選項。
-5. 上傳一張或多張虛構照片並填寫 Volunteer Note。
-6. 送出後立即確認人工 Report 已保存。
-7. 重複建立同一 Animal 同日第二筆回報。
-8. 在 Timeline 查看近 14 日每日摘要、同日多筆、原始照片、心得與「當日無回報」。
-9. 在建立後 24 小時內修改自己的回報內容、照片與心得。
-10. 嘗試修改自己的動物綁定、他人回報或超過 24 小時的回報；正式 Report 不得 Hard Delete，只能依權限 Correction 或 Archive。
+1. 從 Rich Menu 的「今日照護毛孩」選擇 A Animal，或解析 A QR Token。
+2. 顯示照片、名稱、完整 Shelter Number 與 Cage／Area，明確確認 Animal。
+3. 以 Quick Reply／Postback 逐題填寫進食、飲水、活動、排泄、行為與外觀等結構化選項。
+4. 以 Image Message 附加一張虛構照片，測試 EXIF 清理後才建立 Draft Media；心得可略過。
+5. 顯示完整摘要，確認前驗證 Signature、`webhookEventId`、Draft、Animal、Membership 與 Active Shelter Context。
+6. 送出後立即確認人工 Report 已保存，且 AI Job 另行非同步建立。
+7. 重送同一 Webhook Event，確認不重複建立答案、照片關聯、Report 或 AI Job。
+8. 中斷後從 Rich Menu 繼續有效 Draft，或取消 Draft；取消不得建立正式 Report。
+9. 重複建立同一 Animal 同日第二筆回報。
+10. 在 Timeline 查看近 14 日每日摘要、同日多筆、原始照片、心得與「當日無回報」。
+11. 在建立後 24 小時內修改自己的回報內容、照片與心得；正式 Report 不得 Hard Delete，只能依權限 Correction 或 Archive。
 
 預期結果：兩筆 Report 都保留；沒有回報日期不顯示為正常；24 小時內的內容修改保留前後版本；動物綁定修改交由授權人員處理；所有資料可追溯至 A Shelter。
 
@@ -156,12 +157,13 @@ npm --prefix apps/web test
 
 1. Database Migration 驗證。
 2. Cloud Storage 權限與 Signed URL 驗證。
-3. LIFF HTTPS 與真正 LINE 身分受控驗證。
-4. QR Code 流程驗證。
-5. Shelter A／B 資料隔離驗證。
-6. AI 失敗降級驗證。
-7. Cloud SQL 連線、IAM、Service Account 與 Cloud Logging 可追溯性驗證。
+3. LINE Webhook HTTPS、Signature、Event Idempotency 與 Rich Menu 驗證。
+4. LIFF HTTPS 與真正 LINE 身分受控驗證。
+5. QR Code 流程驗證。
+6. Shelter A／B 資料隔離驗證。
+7. AI 失敗降級驗證。
+8. Cloud SQL 連線、IAM、Service Account 與 Cloud Logging 可追溯性驗證。
 
 本機通過只代表本機流程可用，不代表 GCP 專屬整合完成。任何 Demo 失敗都必須保留失敗證據與環境資訊，不能以本機結果代替。
 
-本 Feature 不驗證 LINE Messaging API Webhook；若後續需要聊天式回報，必須另建 Specification。
+本 Feature 不實作自然語言自由對話、語音辨識或 AI Agent；LINE Messaging API Webhook、Message／Image／Postback Event 均屬本 Feature 的受控輸入流程。

@@ -35,6 +35,12 @@ def test_required_paths_and_security_are_declared() -> None:
         "/v1/observation-options",
         "/v1/care-reports/{reportId}/ai-observations",
         "/v1/ai-observations/{observationId}/review",
+        "/v1/line/webhook",
+        "/v1/line/bind",
+        "/v1/line/rich-menu/context",
+        "/v1/line/care-report/drafts/current",
+        "/v1/line/care-report/drafts/{draftId}/resume",
+        "/v1/line/care-report/drafts/{draftId}/cancel",
     }
 
     assert required_paths <= paths.keys()
@@ -44,6 +50,17 @@ def test_required_paths_and_security_are_declared() -> None:
     assert paths["/v1/care-reports"]["post"]["parameters"][0]["$ref"].endswith(
         "/IdempotencyKey"
     )
+    webhook = paths["/v1/line/webhook"]["post"]
+    assert webhook["security"] == []
+    assert any(
+        parameter.get("$ref", "").endswith("/LineSignature")
+        for parameter in webhook["parameters"]
+    )
+    assert webhook["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/LineWebhookRequest"
+    )
+    assert "原始 Request Body" in webhook["requestBody"]["description"]
+    assert "webhookEventId" in document["components"]["schemas"]["LineWebhookEvent"]["required"]
 
 
 def test_protected_operations_use_bearer_auth_and_unified_errors() -> None:
@@ -60,7 +77,13 @@ def test_protected_operations_use_bearer_auth_and_unified_errors() -> None:
         for method, operation in path_item.items():
             if method not in {"get", "post", "put", "patch", "delete"}:
                 continue
-            if path in {"/v1/auth/login", "/v1/auth/refresh", "/v1/auth/liff/exchange"}:
+            if path in {
+                "/v1/auth/login",
+                "/v1/auth/refresh",
+                "/v1/auth/liff/exchange",
+                "/v1/line/webhook",
+                "/v1/line/bind",
+            }:
                 continue
 
             assert operation.get("security") or document.get("security")
@@ -94,3 +117,12 @@ def test_general_organization_requests_do_not_accept_client_org_scope() -> None:
     organization_request = document["components"]["schemas"]["OrganizationCreateRequest"]
     assert "org_id" not in organization_request.get("properties", {})
     assert "organization_id" not in organization_request.get("properties", {})
+
+
+def test_line_contract_does_not_make_client_org_scope_trusted() -> None:
+    document = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    for schema_name in ("LineBindRequest", "ResumeDraftRequest"):
+        properties = document["components"]["schemas"][schema_name].get("properties", {})
+        assert "org_id" not in properties
+        assert "organization_id" not in properties

@@ -12,6 +12,8 @@
 - `exists`：僅能在已授權範圍內判定，不得用於洩漏其他 Shelter 的存在性。
 - `create_access_url`：產生短期 Signed URL 或等效存取方式，不得保存為永久識別。
 
+LINE Image Message 來源的檔案必須先由 Webhook／LINE Content Adapter 取得，再經相同的安全清理流程；Storage Adapter 只接受已清理、已重新編碼的位元資料，不負責判定 MIME、EXIF 或租戶政策。
+
 ## Adapter
 
 - `MinioStorageAdapter`：本機 Docker Compose MinIO。
@@ -27,7 +29,8 @@
 5. 物件上傳成功但 CRM 關聯失敗時，必須有可重試、清理或待處理狀態，不可留下無法追蹤的正式照片。
 6. 含原始 EXIF 的檔案不得進入正式 Object Storage；Temporary Media 不得簽發正式 Signed URL，成功或失敗後都必須清理。
 7. AI 只能讀取已驗證、已重新編碼且已移除 EXIF 的正式或受控清理後照片。
+8. LINE 原始圖片不得進入正式儲存空間或供 AI 讀取；取得失敗、解碼失敗、EXIF 清理失敗或重新編碼失敗時，不建立正式 Media，且必須清理 Temporary Object。
 
 ## 契約測試
 
-同一組 Object Storage Contract Test 必須對 `MinioStorageAdapter`、`GcsStorageAdapter` 與必要的 Fake 執行，並驗證 EXIF 清理、Temporary Media、原始檔不保留與 AI 只能讀取清理後照片；本機門檻要求 MinIO 測試通過，Demo 門檻要求 GCS Contract Test 通過。
+同一組 Object Storage Contract Test 必須對 `MinioStorageAdapter`、`GcsStorageAdapter` 與必要的 Fake 執行，並驗證 EXIF 清理、Temporary Media、原始檔不保留、LINE Image Message 來源與 AI 只能讀取清理後照片；本機門檻要求 MinIO 測試通過，Demo 門檻要求 GCS Contract Test 通過。

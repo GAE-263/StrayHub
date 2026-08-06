@@ -111,6 +111,22 @@ Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值
 
 驗證規則：範圍必須屬於同一 Shelter；送出時重新驗證是否仍有效；未在 Scope 內的 Animal 不得因 QR Code 或 Shelter Number 搜尋而自動取得回報資格。
 
+### LINE User Binding
+
+代表經 LINE 官方驗證的 `line_user_id` 與既有 User、Membership 的綁定關係。LINE 身分驗證成功不自動建立正式權限；未綁定或 Membership 無效時不得建立正式 Draft 或 Care Report。
+
+### Rich Menu、Quick Reply / Postback Action
+
+代表 Bot 的環境化入口設定與逐題操作選項。Rich Menu Action 只提供流程入口；Quick Reply 顯示名稱與 Observation Option 的穩定 Code 分離，Postback payload 只能作候選輸入，不是 Organization、角色、Animal 或 Draft 授權資料。
+
+### LINE Webhook Event
+
+代表 LINE Messaging API 傳送的 Message、Image、Postback 或必要綁定事件。
+
+主要資料：`webhook_event_id`、Event Type、Processing Status、Redelivery Flag、Received At、Processed At、Error Code、Failure Reason 與必要的 Message ID。不得長期保存不必要的完整敏感 Payload。
+
+驗證規則：先以未修改的原始 Request Body 與 `X-Line-Signature` 驗證，再解析事件；事件依 `webhook_event_id` 冪等。非法簽章不查詢 CRM、不下載圖片、不建立或更新 Draft、Care Report 或 AI Job。
+
 ### QR Code / QR Token
 
 代表貼於籠位或動物資料卡的候選查詢標示。QR Token 是非祕密候選參考值，不是登入憑證或授權證明。
@@ -127,13 +143,17 @@ Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值
 
 驗證規則：必須有已驗證 Volunteer、有效 Shelter Scope、正式 Animal 關聯；同一 Animal 同日可有多筆；原始內容不可被 AI 或更正覆蓋；重複送出必須可辨識。Volunteer 可在建立後 24 小時內修改自己的內容、Photo 與 Note，但不能修改 Animal 綁定；Animal 綁定更正由 Shelter Administrator 或授權 Staff Member 處理。
 
-### Report Draft
+### Report Draft / Draft Answer / Draft Media
 
 代表尚未送出的回報草稿。
 
-主要資料：已確認 Animal、Shelter、Volunteer、已填結構化選項、照片上傳狀態、心得、最後操作時間與草稿狀態。
+主要資料：`id`、`opaque_token`、Organization、已確認 Animal、Volunteer、Membership、`current_step`、已完成答案、Draft Media 關聯、心得、`last_interaction_at`、`expires_at`、狀態、建立時間與更新時間。
 
-驗證規則：重新開啟時重新驗證 Animal、Shelter、Volunteer、Scope 與狀態；驗證失敗仍保留草稿內容，不改綁其他 Animal 或 Shelter。
+驗證規則：Draft 固定歸屬單一 Organization、Volunteer、Membership 與 Animal；重新開啟及每次 Postback／Image Event 都重新驗證 Animal、Shelter、Volunteer、Scope 與狀態。每名志工在單一 Organization 同時間只保留一筆 active Draft；建立新回報時提示繼續或放棄既有 Draft。取消或過期 Draft 不得建立正式 Care Report，且任何狀態不一致都不得改綁其他 Animal 或 Shelter。
+
+Draft 狀態至少包含：`selecting_animal`、`confirming_animal`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。後端依目前狀態驗證合法轉移，不信任 Postback 的 `step`。
+
+若答案以 JSON 保存，必須由版本化的 Pydantic／Domain Validator 驗證類別、穩定 Code、Draft 狀態與可用選項；每次答案修改保存時間、來源 Event 與前後摘要，送出後由 Care Report 保存不可變的原始答案快照。
 
 ### Photo、Object Metadata、Volunteer Note
 
@@ -177,8 +197,12 @@ AI Processing Job 代表待處理、處理中、成功、失敗或無效的非�
 Shelter
 ├── Shelter Membership / Authorization Scope ── User / Role
 ├── Active Shelter Context ── Volunteer / Session
+├── LINE User Binding ── LINE User ID / User / Membership
+├── Rich Menu ── Postback Action / Conversation State
+├── LINE Webhook Event ── Draft / Message / Image / Postback
 ├── Animal ── Shelter Number / Cage / Area / QR Code
 ├── Daily Reportable Scope ── Volunteer / Animal
+├── Report Draft ── Draft Answer / Draft Media
 ├── Daily Care Report ── Photo / Volunteer Note / AI Processing Job
 │   └── AI Observation ── source Photo or Volunteer Note
 ├── Animal Timeline ── derived view of Reports and Audit Records
@@ -190,7 +214,8 @@ Shelter
 
 - **Shelter**：`pending_setup` → `active` → `suspended`；停用不刪除既有歷史。
 - **User／Membership**：`invited` → `active` → `disabled`；非 active 不得建立或讀取業務資料。
-- **Report Draft**：`editing` → `ready_to_submit` → `submitted`、`blocked_by_revalidation` 或 `expired`；未提交 Draft 可由建立者刪除或由系統過期清理。
+- **Report Draft**：`selecting_animal` → `confirming_animal` → `answering_feeding` → `answering_water` → `answering_activity` → `answering_elimination` → `answering_behavior` → `answering_special_status` → `awaiting_media` → `awaiting_note` → `reviewing` → `submitting` → `submitted`；任一步驟可依規則回到前一步、`cancelled` 或 `expired`。無效轉移必須拒絕；未提交 Draft 可由建立者放棄或由系統依設定過期清理。
+- **LINE Webhook Event**：`received` → `signature_rejected`／`duplicate_ignored`／`processing` → `processed`／`failed`；同一 `webhook_event_id` 不得重複產生業務寫入。
 - **Daily Care Report**：`saved` → `amended` → `archived`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；正式回報不 Hard Delete，原始內容永久保留，所有修改與封存另留 Audit Record。
 - **Temporary Media / Photo**：`temporary` → `processed` → `attached` 或 `failed`；未提交 Temporary Media 可刪除或清理；正式 Photo 不 Hard Delete，只能標記不可使用或封存。
 - **AI Processing Job**：`pending` → `running` → `succeeded`／`failed`／`invalid`；重試不改變原始 Report。

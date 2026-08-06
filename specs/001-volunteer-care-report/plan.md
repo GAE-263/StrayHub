@@ -16,11 +16,11 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 **語言／版本**：Next.js 使用 TypeScript；FastAPI 與 Background Worker 使用 Python。Python 與 Node.js 的精確版本在實作階段依專案工具鏈鎖定，但必須可在本機與 Demo 環境重現。
 
-**主要依賴**：Next.js Development Server、FastAPI Development Server、SQLAlchemy 2.x、Alembic、`asyncpg`、PostgreSQL Container、MinIO Container、Background Worker、Docker Compose、Mock LINE／LIFF Context、Mock AI Service 或測試用 AI Adapter。GCP Demo 依賴 Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
+**主要依賴**：Next.js Development Server、FastAPI Development Server、SQLAlchemy 2.x、Alembic、`asyncpg`、PostgreSQL Container、MinIO Container、Background Worker、Docker Compose、Mock LINE／LIFF Context、Mock LINE Adapter、Mock AI Service 或測試用 AI Adapter。GCP Demo 依賴 Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
 
 **儲存**：PostgreSQL 保存 CRM 正式資料、權限範圍、回報、AI 狀態與稽核資料；本機物件檔案使用 MinIO；Demo 物件檔案使用 Cloud Storage。Application Layer 只能透過共通 Object Storage Interface 存取檔案。
 
-**測試**：Python 使用 Ruff 與 Pytest；前端測試工具與命令必須在 `apps/web/package.json` 固定；另需提供 contract、unit、integration、資料隔離、Repository、SQLAlchemy／`AsyncSession`、Alembic migration、Object Storage Adapter、LIFF、QR Code、Authentication、EXIF 清理與 AI 失敗降級驗證。
+**測試**：Python 使用 Ruff 與 Pytest；前端測試工具與命令必須在 `apps/web/package.json` 固定；另需提供 contract、unit、integration、資料隔離、Repository、SQLAlchemy／`AsyncSession`、Alembic migration、Object Storage Adapter、LINE Webhook Signature、Event Idempotency、Rich Menu、Postback State Machine、LIFF、QR Code、Authentication、EXIF 清理與 AI 失敗降級驗證。
 
 **目標平台**：本機 Docker Compose 加直接執行的 Next.js／FastAPI／Worker；GCP Demo 使用 Cloud Run、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
 
@@ -36,23 +36,23 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 ### Gate：Phase 0 前
 
-- **I. CRM 為唯一事實來源：通過。** PostgreSQL CRM 是正式資料來源；Next.js、LINE／LIFF、QR Code、AI 與 Worker 不保存獨立正式業務副本。
+- **I. CRM 為唯一事實來源：通過。** PostgreSQL CRM 是正式資料來源；Next.js、LINE Bot、LIFF、QR Code、AI 與 Worker 不保存獨立正式業務副本。
 - **II. 原始資料不得被衍生結果取代：通過。** Daily Care Report、Volunteer Note、Photo、原始 AI 輸出與人工覆核分開保存。
 - **III. AI 不負責計算、診斷或最終判定：通過。** AI Job 只產生描述性觀察，所有限制與人工確認邊界列入 contract。
 - **IV. AI 結果必須驗證、標示與追溯：通過。** AI 結果必須保留來源、Provider、Model Name／Version、Prompt Template／Version、Schema Version、原始輸出、處理狀態與人工修正。
-- **V. 志工回填必須低摩擦：通過。** 手機流程、90 秒目標、Mock LINE／LIFF 與 AI 非同步均列入設計。
+- **V. 志工回填必須低摩擦：通過。** LINE Bot 的單題 Quick Reply／Postback、90 秒目標、圖片訊息、Mock LINE Adapter 與 AI 非同步均列入設計；LIFF 只作為輔助介面。
 - **VI. 歷史紀錄必須完整且可追溯：通過。** 同日多筆保存、近 14 日逐日檢視、無回報日期與更早歷史查詢列入資料模型與 quickstart。
-- **VII. LINE Bot 只是輸入通道：適用範圍已限定。** 本 Feature 僅使用 LIFF，不實作 LINE Messaging API Webhook；LIFF 身分、權限、冪等、檔案與 Job 建立仍由 FastAPI／CRM 邊界負責。若後續新增 Webhook，必須另立 Specification。
+- **VII. LINE Bot 是主要輸入通道：通過。** Rich Menu、Quick Reply、Postback、Message／Image Event 與 Webhook 是本 Feature 範圍；Webhook 必須先驗證原始 Body 簽章並依 `webhookEventId` 冪等處理。LIFF 負責身分綁定、完整確認、答案修改、長文字與 Bot 備援，FastAPI 仍是唯一正式權限與 CRM 邊界。
 - **VIII. 權限、隱私與稽核預設啟用：通過。** 每一個資料操作均帶有已驗證的 Shelter 範圍；跨機構作業與公開資料採白名單並留下 Audit Record。
-- **IX. P0 不得依賴 P1 或 P2：通過。** 人工回報與歷程不依賴 AI；本機流程不依賴 GCP；AI、LIFF 真實身分與 GCS 均有替代測試路徑。
+- **IX. P0 不得依賴 P1 或 P2：通過。** US1、LINE Bot US2 與歷程 US3 不依賴 AI；本機流程不依賴 GCP；真實 LINE 行為以 Mock Adapter 與受控 HTTPS 測試路徑隔離。
 - **X. 正體中文與 Python 品質門檻：通過。** 本計畫與產物使用台灣正體中文；Python 品質門檻為 `ruff check .`、`ruff format --check .` 與 `pytest`。
 - **XI. 多收容所資料隔離：通過。** 所有 query、command、圖片存取與修改都在後端依 Shelter 授權範圍強制判定；本 Feature 不提供批次匯出；A／B 隔離測試為 Demo 門檻。
 
-**Gate 結論**：D-001～D-010 已補足原技術阻擋事項，且 OpenAPI、資料模型與 Tasks 已完成同步並通過分析。沒有以降低 Constitution 要求方式處理的例外。
+**Gate 結論**：D-001～D-010 與本輪 LINE Bot 邊界決策已同步至 OpenAPI、資料模型與 Tasks，且分析沒有發現 `CRITICAL` 或 `HIGH`。沒有以降低 Constitution 要求方式處理的例外。
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：通過。** 已同步 Authentication／Session、Active Shelter Context、LIFF-only 邊界、OpenAPI Contract、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive；CRM contract 禁止通道繞過 CRM，quickstart 覆蓋本機 Active Shelter Context、圖片安全、AI 版本與失敗降級驗證。分析未發現 Constitution 或核心資料正確性層級的 CRITICAL 問題。
+**重新檢查結果：通過。** 本輪已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、OpenAPI Contract、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive；`tasks.md` 已重新產生，分析未發現 `CRITICAL` 或 `HIGH`。
 
 ## Database Access
 
@@ -78,9 +78,13 @@ FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADM
 
 `active_org_id` 必須由使用者明確切換、由後端驗證並綁定 Session；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Worker 使用獨立 Credential／Service Account，但每次 Job 處理仍驗證 Job、Report、Organization 與狀態一致。
 
-### LIFF 邊界
+### LINE Bot／LIFF 邊界
 
-本 Feature 只使用 LIFF，不實作 LINE Messaging API Webhook、Message／Image／Postback Event、聊天式回報或 Bot 自動回覆。後續 LINE Bot 必須建立獨立 Specification。
+LINE Bot 是志工日常回報的主要介面，使用 Rich Menu、Quick Reply、Postback、文字訊息、圖片訊息與 LINE Messaging API Webhook。Bot 只能執行受控 Conversation State Machine，不以自然語言自由對話取代結構化選項。LIFF 是輔助介面，提供第一次 LINE 身分綁定、QR／Deep Link 識別、完整動物確認、答案修改、長文字與 Bot 備援；不要求每次回報開啟完整 LIFF 表單。
+
+FastAPI 是唯一 Authentication、Authorization、Organization Scope 與 CRM 業務邊界。LINE Webhook Request 必須以未修改的原始 Request Body 與 `X-Line-Signature` 完成驗證，再解析事件；每個 `webhookEventId` 必須冪等。LINE Webhook 事件中的使用者、Postback、`draft_token`、`step`、`value` 與圖片 Message ID 都只是候選輸入，後端必須重新驗證 Session、LINE User Binding、Membership、Active Shelter Context、Draft 與 CRM 關聯。
+
+Rich Menu 只作為入口，不承載完整問卷；Rich Menu 的環境版本與 Action 設定由受控設定管理。Quick Reply 通常提供 3 至 6 個選項，顯示名稱與穩定 Observation Option Code 分離。
 
 ### AI 版本與原始輸出
 
@@ -146,9 +150,9 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 11. 驗證同一志工可有多個授權 Shelter，但同一時間只有 Session 明確選定的 Active Shelter Context；Organization 不一致時阻擋送出並保留 Draft。
 12. 驗證志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
 
-### LIFF 本機整合
+### LINE Bot／LIFF 本機整合
 
-一般 LIFF 畫面開發使用 Mock LIFF Context。需要驗證真正 LINE 身分、LIFF URL 與 LIFF Browser 行為時，使用 LINE 官方 LIFF 開發工具提供的 HTTPS 本機開發環境或受控測試入口。不得要求所有日常前端開發都透過已部署的 GCP 環境進行。
+一般 LIFF 與 Bot 流程開發使用 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、Mock LINE Adapter、Postback／Image／Redelivery Fixture。需要驗證真正 LINE 身分、Webhook、Rich Menu、LIFF URL 或 LIFF Browser 行為時，使用 LINE 官方建議的 HTTPS 本機開發環境或受控測試入口。Webhook 事件處理不得在一般單元測試呼叫真實 LINE API；圖片內容取得、Reply Token 與 Rich Menu API 以 Adapter／Contract Test 隔離。不得要求所有日常前端開發都透過已部署的 GCP 環境進行。
 
 ### Demo 部署門檻
 
@@ -202,7 +206,7 @@ specs/001-volunteer-care-report/
 ├── research.md          # Phase 0 研究與決策
 ├── data-model.md        # Phase 1 業務資料模型與驗證規則
 ├── quickstart.md        # 本機與 Demo 驗證指南
-├── contracts/           # CRM、租戶、儲存、LIFF 與 AI 邊界契約
+├── contracts/           # CRM、租戶、儲存、LINE Bot／LIFF 與 AI 邊界契約
 │   └── openapi.yaml     # 前後端正式 API Contract
 └── tasks.md             # $speckit-tasks 產生，不由本命令建立
 ```
@@ -223,7 +227,7 @@ services/
 └── worker/                      # 非同步 AI、圖片與其他背景工作
 
 packages/
-└── contracts/                   # 前後端與背景工作共用的契約文件／型別來源
+└── contracts/                   # 由 Feature OpenAPI 產生的前後端契約型別（不取代正式 Feature Contract）
 
 infra/
 ├── local/                       # Docker Compose、MinIO 與本機設定

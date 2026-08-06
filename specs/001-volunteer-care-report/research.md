@@ -82,9 +82,35 @@
 
 每一個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Session 綁定的 Active Shelter Context。停用 User、Membership、Organization 或撤銷 Session／Refresh Token 後，必須立即拒絕後續存取。Worker 不使用一般 User Session，改用受限 Database Credential／Service Account，但每次處理 Job 仍驗證 Job、Report、Organization 與狀態一致。
 
-## 決策 11：本 Feature 僅使用 LIFF，不實作 LINE Webhook
+## 決策 11：LINE Bot 為主要回報介面，LIFF 為輔助介面
 
-**Decision**：本 Feature 的 LINE 能力只包含開啟 LIFF、驗證 LINE 身分、綁定既有 Volunteer、QR Deep Link 與 LIFF 照護回報。不實作 LINE Messaging API Webhook、Message／Image／Postback Event、聊天式回報或 Bot 自動回覆。若後續新增 LINE Bot，必須建立獨立 Specification，並實作 Webhook Signature Validation、Event Idempotency 與非法簽章安全回應。
+**Decision**：本 Feature 的主要回報介面是 LINE Bot，使用 Rich Menu、Quick Reply、Postback、文字訊息、圖片訊息與 LINE Messaging API Webhook；LIFF 僅作為第一次身分綁定、QR／Deep Link 識別、完整動物確認、答案修改、長文字及 Bot 備援介面。Bot 是受控狀態機，不以自然語言自由對話取代結構化選項。FastAPI 仍是唯一 Authentication、Authorization、Organization Scope 與 CRM 業務邊界。
+
+Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，再解析及處理；每個 `webhookEventId` 建立冪等處理紀錄。Postback payload、Rich Menu action、LINE User ID、Message ID 與事件中的 Organization／Animal 候選值都必須回到 FastAPI 重新查詢，不得作為最終授權依據。
+
+**Rationale**：Quick Reply 與 Postback 適合單手逐題操作，圖片訊息能保留現場照片；LIFF 適合較複雜的確認與修改。Server-side Draft 將對話狀態與 CRM 正式資料分開，只有最終確認且重新驗證後才建立 Care Report。
+
+**Official references**：本 Feature 依 [Webhook Signature 驗證](https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/)、[Quick Reply](https://developers.line.biz/en/docs/messaging-api/using-quick-reply/)、[Actions／Postback](https://developers.line.biz/en/docs/messaging-api/actions/)、[Webhook redelivery 與 `webhookEventId`](https://developers.line.biz/en/docs/messaging-api/receiving-messages/)、[Rich Menu](https://developers.line.biz/en/docs/messaging-api/rich-menus-overview/) 與 [Messaging API Content／Reply Token](https://developers.line.biz/en/reference/messaging-api/nojs/) 的規則進行實作與測試。
+
+## 補充決策 A：Rich Menu、Quick Reply 與 Postback
+
+**Decision**：Rich Menu 至少提供開始照護回報、掃描 QR Code、今日照護毛孩、繼續未完成回報與聯絡工作人員。Rich Menu 只負責入口；完整照護問卷由 Bot 狀態機驅動。每次 Bot 原則上只問一題，Quick Reply 通常提供 3 至 6 個高頻選項，適用時包含未觀察、無法判斷、略過或其他。Postback 的穩定 Code 與顯示名稱分離；Option 顯示名稱可修改，Code 不變。Bot 選項由 CRM 有效 Observation Vocabulary 產生或映射，不在 Bot 內建立第二套業務詞彙。
+
+## 補充決策 B：Webhook Signature、冪等與 Reply Token
+
+**Decision**：FastAPI Webhook boundary 使用 LINE channel secret 驗證 `X-Line-Signature`；驗證前不得解析、重排或修改原始 Body。無效簽章不查詢 CRM、不下載圖片、不建立 Draft 或 Care Report，並留下不含敏感資料的 Security Event。事件依 `webhookEventId` 去重，保存事件類型、處理狀態、重送旗標、時間與失敗原因；第一次失敗可安全重試，但冪等鎖定與狀態檢查必須避免重複業務寫入。Reply Token 只作即時回覆通道，不能作為 Draft 或權限狀態；長時間處理使用後續受控訊息或流程狀態。Bot 回覆失敗不回滾已保存的 Draft／Care Report，後端保存失敗狀態並允許以 Rich Menu Resume／受控重試重新取得目前狀態，避免重複建立正式資料。
+
+## 補充決策 C：LINE 圖片內容與 EXIF
+
+**Decision**：Image Message Event 只保存 Message ID 與必要事件 Metadata，事件處理應立即透過 LINE Content API 取得內容。LINE 官方說明內容會在一段時間後刪除且保存期間不保證，因此圖片下載須優先處理。圖片必須通過大小、MIME、實際格式、解碼、EXIF 移除、重新編碼與 Checksum 後才建立 Draft Media；原始圖片不得進入正式 Storage 或 AI。取得 404／410 或清理失敗時，提示重新傳送或略過，不阻擋其他答案。
+
+## 補充決策 D：Bot State Machine 與 Draft Expiration
+
+**Decision**：Draft 固定歸屬 `org_id`、志工、Membership 與 Animal，保存 opaque token、current step、答案、媒體、時間與狀態。狀態至少包含 `selecting_animal`、`confirming_animal`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。同一志工在單一 Organization 同時間只保留一筆 active Draft；有效期限由設定控制。無效轉移、跨 Organization、重送事件與修改 Postback 不得改綁 Draft。
+
+## 補充決策 E：Mock LINE Adapter、正式 Adapter 與本機 HTTPS
+
+**Decision**：本機使用 Mock LINE Webhook、Signature Helper、Mock User、Postback／Image／Redelivery Fixture 與 Mock LINE Adapter，不呼叫真實 LINE API。需要驗證真正 Webhook、Rich Menu、Reply、Image Content、LIFF URL 或 Browser 行為時，使用官方建議的 HTTPS 本機開發方式或受控 Demo 入口。Rich Menu 採環境版本管理，避免本機、Demo 與正式設定互相覆蓋。
 
 ## 決策 12：AI 版本與 Prompt 必須完整追溯
 
@@ -105,9 +131,9 @@
 ## 研究完成檢查
 
 - 本機與 GCP 的儲存差異已由 Object Storage Interface 隔離。
-- LINE／LIFF、QR Code、AI 與後台的正式資料來源均回到 CRM。
+- LINE Bot／LIFF、QR Code、AI 與後台的正式資料來源均回到 CRM；Bot Webhook、Signature、Event Idempotency 與圖片清理已有明確邊界。
 - A／B Shelter 隔離、相同 Shelter Number、圖片存取、匯出與停用狀態均有驗證路徑。
-- Authentication、Active Shelter Context、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive 均已記錄驗證邊界；LINE Webhook、公開頁面、Notification 與 Export 明確排除。
+- Authentication、Active Shelter Context、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive 均已記錄驗證邊界；公開頁面、Notification 與 Export 明確排除。
 - GCP 專屬 IAM、Signed URL、Cloud SQL、Service Account 與 HTTPS LIFF 行為列為 Demo 另行驗證，不假設本機通過即等於 GCP 通過。
 - SQLAlchemy `AsyncSession`、`asyncpg`、受控 Repository、Composite Constraint、PostgreSQL 防護與 Alembic 空資料庫 migration 已納入 Phase 1 設計與 quickstart 驗證路徑。
 - 規格原有的五項高影響待釐清事項已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。

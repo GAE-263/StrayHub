@@ -44,7 +44,8 @@
 
 - **Authentication 與 Session**：FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼；Volunteer 透過 LIFF 身分交換後，由 FastAPI 對應既有 User 與 Membership。系統使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record；每個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context。Access Token 的 `org_id` 與角色不得作為最終授權依據。
 - **Active Shelter Context**：`active_org_id` 必須來自有效 Membership、由後端驗證、綁定目前 Session 並透過明確操作切換；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Draft、Animal、QR Token、Reportable Scope 與 Active Context 的 Organization 不一致時，阻擋送出並保留 Draft。
-- **LIFF 邊界**：本 Feature 只使用 LIFF，不實作 LINE Messaging API Webhook、Message／Image／Postback Event、聊天式回報或 Bot 自動回覆。後續 LINE Bot 必須建立獨立 Specification。
+- **LINE Bot／LIFF 邊界**：LINE Bot 是日常回報的主要操作介面，透過 Rich Menu、Quick Reply、Postback、文字訊息、圖片訊息與 LINE Messaging API Webhook 完成受控狀態機；LIFF 僅作為第一次身分綁定、QR／Deep Link 識別、完整動物確認、答案修改、長文字與 Bot 備援介面。FastAPI 仍是唯一正式 Authentication、Authorization、租戶隔離與 CRM 業務邊界。
+- **Webhook 安全**：每個 Webhook Request 必須先以原始 Request Body 與 `X-Line-Signature` 完成簽章驗證，再解析及處理事件；每個事件依 `webhookEventId` 冪等處理，非法簽章不得查詢或修改 CRM。
 - **AI 版本追溯**：每一筆 AI Job 必須保存非空的 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始輸出、驗證結果、失敗原因與 Retry Count；`raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
 - **EXIF 與圖片安全**：照片在成為正式 `media_asset` 前必須完成大小／MIME／實際格式驗證、解碼、EXIF 清理、重新編碼與 Checksum。含原始 EXIF 的檔案不得進入正式 Object Storage，AI 只能讀取已清理圖片。
 - **公開資料與 Export**：本 Feature 不建立公開動物頁面、公開欄位 Allowlist 或批次 Export；只驗證未登入／未授權者不能取得內部照護資料，後續能力另立 Specification。
@@ -56,7 +57,7 @@
 - **收容所管理員**：管理自己所屬收容所的工作人員、志工、動物、收容編號、籠舍、區域、QR Code、今日可回報範圍與機構設定。
 - **工作人員**：查看與管理被授權收容所的動物、照護回報、近期歷程、照片、心得與 AI 結果。
 - **志工**：在被授權的收容所範圍內，以手機選擇動物並建立日常照護回報。
-- **一般民眾**：只能查看收容所明確設定為公開的資料，不得查看內部照護資料。
+- **一般民眾**：本 Feature 不提供公開動物頁面，也不能查看內部照護資料。
 
 所有平台角色都必須先經過身分驗證與收容所範圍判定。使用者提交的機構識別、動物識別、
 收容編號、QR Code、網址或其他查詢條件，不得直接決定可存取範圍。
@@ -154,7 +155,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 
 ### User Story 1 - 透過名單、QR Code 或收容編號正確選擇動物（Priority: P1）
 
-志工進入回報功能後，優先從今日可回報名單找到動物；也可以掃描籠位 QR Code 或在授權範圍內搜尋收容編號。每個候選項目與確認卡都必須同時呈現目前照片、名稱、完整收容編號及區域或籠位（若有），並在志工明確確認前不建立正式回報。
+志工可以掃描籠位 QR Code、從 Rich Menu 的「今日照護毛孩」進入 LINE Bot 清單、使用收容編號搜尋，或在需要時開啟 LIFF 動物確認畫面找到本次照護的動物。每個候選項目與確認卡都必須同時呈現目前照片、名稱、完整收容編號及區域或籠位（若有），並在志工明確確認前不建立正式回報。
 
 **為什麼是此優先順序**：選錯動物會污染後續歷史與照護判斷。正確的不可變動物關聯是所有人工回報、歷程與 AI 衍生資料的前置條件。
 
@@ -168,13 +169,13 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 4. **Given** QR Code 不存在、重複、格式錯誤、跨機構、已封存或未授權，**When** 志工掃描，**Then** 系統不建立回報，顯示可理解的原因，並提供重新掃描、收容編號搜尋、今日名單或聯繫工作人員的選項。
 5. **Given** 志工使用完整或部分收容編號搜尋，**When** 搜尋結果有多筆，**Then** 系統不得自動選定任何一筆；**When** 結果只有一筆，**Then** 仍顯示確認卡並要求志工明確確認。
 
-### User Story 2 - 建立人工日常照護回報（Priority: P2）
+### User Story 2 - 透過 LINE Bot 快速完成照護回報（Priority: P2）
 
-志工確認動物後，能以結構化選項完成進食、飲水、活動、排泄、行為與外觀等日常觀察，視規則附上照片與心得，預覽後送出。即使 AI 或其他外部服務不可用，原始回報仍能正式保存並立即得到保存成功的確認。
+志工確認動物後，主要透過 LINE Quick Reply 與 Postback Action，逐題完成進食、飲水、活動、排泄、護食或資源防衛、人際互動、動物互動與特殊狀態。志工可以用 LINE 相機、相簿或圖片訊息附加照片；心得為選填，只有選擇「其他」、需要詳細說明或主動補充時才要求文字或開啟 LIFF。Bot 流程無法完成時，志工可以使用 LIFF 輔助介面。即使 AI 或其他外部服務不可用，原始回報仍能正式保存並立即得到保存成功的確認。
 
 **為什麼是此優先順序**：現場照護資料的即時保存是本功能的核心價值；AI 是後續輔助，不得阻塞人工回報。
 
-**獨立測試**：停用 AI 處理，使用已授權志工對已確認動物建立完整回報，驗證 CRM 有保存原始資料、回報者、時間、來源、動物識別與必要的照片或心得，且送出後可以立即查到。
+**獨立測試**：停用 AI 處理，使用已綁定且已授權志工從 Rich Menu 開始 Bot 流程，以 Quick Reply／Postback 完成結構化答案，選擇略過照片與心得後確認送出，驗證 CRM 有保存原始資料、回報者、時間、LINE Webhook 來源、動物識別，且送出後可以立即查到。
 
 **驗收情境**：
 
@@ -185,6 +186,11 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 5. **Given** 志工送出前發現動物選錯，**When** 返回重新選擇，**Then** 系統再次顯示確認卡並明確告知哪些已填內容會保留。
 6. **Given** 志工修改自己建立且未超過 24 小時的回報，**When** 修改內容、照片或心得，**Then** 系統允許修改並保留前後內容；**When** 嘗試修改動物綁定，**Then** 系統要求由收容所管理員或授權工作人員處理。
 7. **Given** 志工修改他人回報或已超過 24 小時的自己的回報，**When** 嘗試修改，**Then** 系統拒絕志工修改；授權人員仍可依權限更正並留下稽核紀錄。
+8. **Given** 志工從 Rich Menu 選擇「開始照護回報」，**When** 身分、Session、Active Shelter Context 與目前授權範圍有效，**Then** Bot 建立或恢復 Server-side Draft，且一次只詢問一個問題。
+9. **Given** Bot 顯示觀察問題，**When** 志工點選 Quick Reply，**Then** Postback 傳送穩定內部 Code，後端依 Draft 的目前狀態驗證並保存答案，不以顯示文字或傳入 `step` 作為正式依據。
+10. **Given** 志工完成結構化答案，**When** Bot 顯示摘要，**Then** 志工可以送出、修改、取消或開啟 LIFF；最終確認前不得建立正式 Care Report。
+11. **Given** 志工傳送圖片訊息，**When** Webhook 簽章、事件冪等、身分、Draft 狀態與圖片清理均通過，**Then** 圖片只附加至目前 Draft；清理失敗時不得建立正式 Media，且文字與結構化答案仍可送出。
+12. **Given** Webhook Event 重送或 Postback 被竄改，**When** 系統處理事件，**Then** 重送不重複寫入，竄改內容不會跳過狀態、權限或動物確認。
 
 ### User Story 3 - 查看單一動物近 14 天歷程（Priority: P3）
 
@@ -260,8 +266,8 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 18. 已綁定志工成功建立一筆完整回報。
 19. 志工在沒有 AI 服務時仍能成功送出回報。
 20. 志工上傳照片與心得後，立即收到原始回報保存成功的確認。
-21. 沒有照片時，系統依本規格的必填規則決定是否可送出；若規則尚未定案，依 Clarification Items 的決定更新。
-22. 沒有心得時，系統依本規格的必填規則決定是否可送出；若規則尚未定案，依 Clarification Items 的決定更新。
+21. 沒有照片時，只要結構化答案有效，系統仍允許送出；志工可選擇略過或稍後處理照片。
+22. 沒有心得時，只要結構化答案有效，系統仍允許送出；只有選擇「其他」、需詳細說明或主動補充時才要求文字。
 23. 同一動物同一天建立兩筆回報，兩筆都被保留。
 24. 多名志工同一天回報同一動物，所有紀錄都被保留。
 25. 同一回報被重複送出時，不得產生無法辨識的重複資料；系統應呈現送出結果，並在狀態不明時允許查回原始回報後再決定是否新增。
@@ -317,6 +323,19 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 63. **Given** 前端傳入其他收容所識別、動物識別、收容編號或查詢條件，**When** 系統處理讀取、新增、修改、搜尋、Draft／Temporary Media 刪除、Care Report Archive 或圖片存取，**Then** 系統依已驗證身分重新判定可存取範圍，不信任前端提供的收容所範圍。
 64. **Given** A 收容所管理員或工作人員嘗試推測 B 收容所的使用者、動物、照片、回報、紀錄筆數或內部設定，**When** 發出查詢，**Then** 系統回傳一致的無權限或無法存取結果，且不洩漏資料存在性。
 
+### LINE Bot、Webhook 與 Draft
+
+65. **Given** 已綁定志工開啟 Rich Menu 的「開始照護回報」，**When** Session、Active Shelter Context 與 Membership 有效，**Then** 系統建立或恢復單一 Organization 內的 Server-side Draft，並顯示第一個合法步驟。
+66. **Given** Rich Menu Action 含有任意 `org_id`、角色或 `animal_id`，**When** Webhook 處理該 Action，**Then** 後端不信任傳入值，重新依 LINE User ID、Session、Membership、Active Shelter Context 與 CRM 查詢結果判定。
+67. **Given** Bot 正在詢問某一個 Draft Step，**When** 志工送出其他 Step 的 Postback 或修改 `draft_token`，**Then** 系統拒絕無效轉移，不跳過必要問題，也不修改其他 Draft。
+68. **Given** Webhook Request 的 `X-Line-Signature` 缺少或錯誤，**When** 系統收到 Request，**Then** 不解析或處理事件、不查詢 CRM、不下載圖片、不建立或更新業務資料，並留下不含敏感內容的 Security Event。
+69. **Given** 同一 `webhookEventId` 被 LINE 重送，**When** 系統再次收到事件，**Then** 不重複建立 Draft、答案、照片關聯、Care Report、AI Job 或業務 Audit Event。
+70. **Given** 志工送出 LINE Image Message 且目前 Draft 允許照片，**When** 系統取得圖片並完成大小、MIME、格式、解碼、EXIF 移除、重新編碼與 Checksum 驗證，**Then** 只將清理後圖片附加至該 Draft。
+71. **Given** LINE 圖片取得或清理失敗，**When** 志工選擇略過或重新傳送，**Then** 不建立正式 Media，文字與結構化答案仍可完成送出，且不顯示內部錯誤內容。
+72. **Given** 志工完成所有結構化答案，**When** Bot 顯示完整摘要，**Then** 志工可以修改、取消或最終確認；最終確認前 CRM 不存在正式 Care Report。
+73. **Given** 志工中斷流程後重新開啟 Rich Menu，**When** 有效 Draft 存在，**Then** 系統提供繼續、放棄或建立新回報；取消或過期 Draft 不可送出成正式回報。
+74. **Given** 未綁定 LINE User 或 Membership 已停用，**When** Webhook 收到回報事件，**Then** 系統不建立正式 Draft 或 Care Report，並引導綁定或聯繫工作人員。
+
 ## Edge Cases
 
 系統必須針對下列邊界條件呈現明確結果，且不得靜默改綁、丟失已填內容或把未知狀態當作正常：
@@ -366,14 +385,14 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 #### 人工回報與草稿
 
 - **FR-015**：已綁定且有權限的志工 MUST 能建立日常照護回報，內容至少包括動物、動物收容編號快照、回報日期與時間、回報者、來源、照護或散步是否完成、原始建立時間與最後修改時間。
-- **FR-016**：回報表單 MUST 以結構化選項為主，至少涵蓋進食、飲水、活動、排泄、行為與互動、外觀與特殊狀態；自由文字與照片作為補充。
+- **FR-016**：回報 MUST 以 LINE Bot 的結構化選項為主，至少涵蓋進食、飲水、活動、排泄、護食或資源防衛、人際互動、動物互動、外觀與特殊狀態；Quick Reply 顯示名稱與穩定內部 Code 分離，自由文字與照片作為補充，LIFF 只作為輔助介面。
 - **FR-017**：進食選項 MUST 至少能表達正常進食、進食較少、幾乎未進食、未提供食物、未觀察與無法判斷；系統不得將未觀察等同於完全未進食。
 - **FR-018**：飲水選項 MUST 至少能表達有觀察到飲水、飲水較平常少、未觀察到飲水、未提供飲水、未觀察與無法判斷；未觀察到飲水不得被解讀為當日完全沒有飲水。
 - **FR-019**：活動選項 MUST 至少能表達與平常相近、活動力較低、活動力較高、不願活動、未觀察與無法判斷。
-- **FR-020**：排泄回報 MUST 能記錄排尿、排便、可觀察的非診斷性描述、照片（若適用）、未觀察與無法判斷；不得要求志工判定疾病或感染。
+- **FR-020**：排泄回報 MUST 能記錄排尿、排便、可觀察的非診斷性描述、可選的照片、未觀察與無法判斷；排泄照片不是送出必要條件，不得要求志工判定疾病或感染。
 - **FR-021**：行為與互動回報 MUST 能記錄護食或資源防衛、對人的互動、對其他動物的互動、情緒、散步反應及其他特殊行為，且以直接觀察事件或非診斷性描述呈現。
 - **FR-022**：外觀與特殊狀態 MUST 能記錄毛髮或外觀差異、持續抓咬某部位、可見紅色區塊、局部毛髮減少、長時間趴臥、行走狀態差異、其他特殊狀況、未觀察到明顯訊號與無法判斷。
-- **FR-023**：系統 MUST 允許志工上傳一張或多張照片、標示照片用途及輸入心得，並依已確認的必填規則處理沒有照片或沒有心得的回報。
+- **FR-023**：系統 MUST 接收來自 LINE 相機、相簿或圖片訊息的一張或多張照片，標示照片用途並保存原始心得；照片與心得均為選填，沒有照片或心得時，只要結構化答案有效仍可送出；「其他」或被設定為需補充的選項才要求文字或開啟 LIFF。
 - **FR-024**：系統 MUST 在志工預覽或確認後送出前保留原始輸入，送出成功後立即告知原始回報已保存；AI 或其他外部服務不可用不得阻止保存人工回報。
 - **FR-025**：同一動物同日的多筆回報 MUST 全部保留；同一回報的重複送出 MUST 可被辨識，且不得產生無法追溯的重複資料。
 - **FR-026**：志工在填寫中斷時，系統 MUST 盡可能保存已確認動物、已填選項、尚未成功上傳的照片狀態、心得文字與最後操作時間；重新開啟草稿時 MUST 重新驗證動物與權限。
@@ -426,7 +445,17 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **FR-060**：使用者嘗試存取未授權收容所資料時，系統 MUST 回傳一致的無權限或無法存取結果，不得洩漏動物、收容編號、使用者、照片、紀錄筆數或內部設定是否存在。
 - **FR-061**：收容所停用後，該收容所一般帳號 MUST 不能繼續登入或建立新的業務資料；停用工作人員帳號後，該帳號 MUST 不能繼續存取收容所資料。
 - **FR-062**：本 Feature 不建立公開動物頁面；未登入或未授權使用者 MUST 無法取得 Care Report、Volunteer Note、照護照片、AI Observation、Animal Timeline 或 Signed URL。公開動物頁面與欄位 Allowlist MUST 由獨立 Specification 定義。
-- **FR-063**：LIFF、QR Code、AI 模組與管理後台 MUST 不得建立獨立的收容所或動物正式資料副本，所有授權與查詢 MUST 依 CRM 的收容所、使用者與動物關係執行；LINE Messaging API Webhook 不屬本 Feature。
+- **FR-063**：LINE Bot、LIFF、QR Code、AI 模組與管理後台 MUST 不得建立獨立的收容所或動物正式資料副本，所有授權與查詢 MUST 依 CRM 的收容所、使用者與動物關係執行；LINE Webhook 是本 Feature 的正式輸入邊界。
+- **FR-065**：LINE Bot MUST 提供 Rich Menu 入口，至少包含開始照護回報、掃描 QR Code、今日照護毛孩、繼續未完成回報與聯絡工作人員；Rich Menu 只作入口，不承載完整問卷，所有 Action MUST 導向可由後端驗證的流程入口。
+- **FR-066**：每一個 Bot 問題原則上 MUST 一次只詢問一個問題，Quick Reply 選項通常為 3 至 6 個，適用時包含未觀察、無法判斷、略過或其他；Postback 只傳穩定內部 Code，顯示名稱修改不得改變 Code。
+- **FR-067**：Bot 流程 MUST 使用 Server-side Draft 與明確狀態機：`selecting_animal`、`confirming_animal`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。無效狀態轉移 MUST 被拒絕，後端 MUST 依 Draft 目前狀態判定合法操作。
+- **FR-068**：Draft MUST 固定歸屬單一 Organization、Volunteer、Membership 與 Animal，保存 `opaque_token`、目前步驟、已完成答案、媒體關聯、最後互動時間、到期時間與狀態；切換 Active Shelter Context、掃描其他 QR Code、竄改 Postback 或 Webhook 重送都不得移動或改綁 Draft。
+- **FR-069**：同一志工在單一 Organization 同時間只保留一筆 active Draft；再次進入時 MUST 提供繼續、放棄或建立新回報，Draft 有效期限由設定控制；取消或過期 Draft 不得建立正式 Care Report。
+- **FR-070**：LINE Webhook MUST 在解析及處理事件前，以原始 Request Body 與 `X-Line-Signature` 驗證簽章；簽章缺少或不正確時 MUST 不查詢 CRM、不建立或更新 Draft、不下載圖片、不建立 Care Report 或 AI Job，並留下不含敏感資料的 Security Event。
+- **FR-071**：每一個 LINE Webhook Event MUST 依 `webhookEventId` 冪等處理並保存 Event Type、Processing Status、Received At、Processed At、Failure Reason 與 Redelivery Flag；重送不得重複建立 Draft、答案、媒體、Care Report、AI Job 或業務 Audit Event。
+- **FR-072**：Postback Payload 中的 `action`、`draft_token`、`step` 與 `value` 都是候選輸入；後端 MUST 依已驗證 LINE User ID、Session、Active Shelter Context、Membership、Server-side Draft、Draft Organization、Draft Animal 與 Draft Current Step 重新判定，不得信任 `org_id`、Role、Membership、`animal_id`、User ID 或 Draft Owner。
+- **FR-073**：LINE Image Message MUST 先驗證事件與目前有效 Draft，再即時取得圖片內容，完成大小、MIME、實際格式、解碼、EXIF 移除、重新編碼與 Checksum 後才可建立 Draft Media；LINE 原始圖片不得進入正式儲存或供 AI 讀取。
+- **FR-074**：LINE Bot 事件、LIFF 與 Next.js MUST 共用 CRM 的使用者、Organization、Animal、Observation Option、Draft 與 Care Report 業務規則，不得建立通道專屬正式副本。
 
 ## Key Entities
 
@@ -450,10 +479,15 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **Animal Assignment**：將志工、日期、個別 Animal、Cage／Area 或指定 Volunteer 與可回報 Animal 關聯的業務概念，用來限制今日可回報範圍；不包含完整班次排班。
 - **Daily Reportable Scope**：某日某志工或某群組可建立回報的動物集合，必須能在送出時重新確認是否仍有效。
 - **QR Code**：貼於籠位或資料卡的候選動物查詢標示，只負責帶出候選，不代表身分驗證或回報授權。
+- **LINE User Binding**：將經 LINE 驗證的 `line_user_id` 對應至既有 User 與有效 Membership；LINE 身分驗證成功不代表自動建立正式權限。
+- **Rich Menu**：LINE Bot 的主要功能入口，提供開始回報、QR Code、今日動物、未完成回報與聯絡工作人員等可驗證 Action。
+- **Quick Reply / Postback Action**：Bot 逐題回報的顯示選項與穩定內部操作代碼；顯示名稱可變更，正式答案不以顯示文字作為唯一值。
+- **LINE Webhook Event**：LINE Messaging API 傳送的 Message、Image、Postback 或必要綁定事件；以簽章與 `webhookEventId` 驗證來源及冪等性。
+- **Conversation State**：Draft 目前允許的 Bot 狀態與合法轉移規則；後端依 Server-side Draft 判斷下一個操作，不信任 Postback 的 `step`。
 - **Animal Timeline**：以單一 Animal 為中心、按日期與時間排列的回報檢視，包含有回報日、無回報日、原始資料、AI 資料、人工修正與異動資訊。
 - **Audit Record**：記錄重要建立、修改、權限、動物綁定更正與 AI 覆核的操作者、時間、內容、原因與來源，以維持可追溯性。
 
-主要關係如下：Shelter 擁有多個使用者、Animal、Shelter Number、Cage / Area、Daily Reportable Scope、QR Code、設定與 Audit Record。Shelter Membership / Authorization Scope 決定使用者可操作哪些 Shelter；Session Record 綁定目前 Active Shelter Context。Animal 擁有多筆 Daily Care Report；每筆回報由一名 Volunteer 建立，可包含多個正式 Photo、零或一個 Volunteer Note、結構化 Observation Option 與零或多個 AI Observation。Animal Assignment 與 Daily Reportable Scope 決定特定 Volunteer 在特定日期可回報哪些 Animal。QR Code 提供指定 Shelter 內的候選 Animal 查詢資訊；Animal Timeline 聚合同一 Shelter 內同一 Animal 的歷史；Audit Record 記錄上述實體的重要異動與跨機構授權。Staff Member 可依權限覆核、修正、封存或管理上述內容。
+主要關係如下：Shelter 擁有多個使用者、Animal、Shelter Number、Cage / Area、Daily Reportable Scope、QR Code、Rich Menu 設定與 Audit Record。LINE User Binding 將經驗證的 LINE 身分對應既有 User 與 Membership；Session Record 綁定目前 Active Shelter Context。Rich Menu Action 進入 Bot 流程，LINE Webhook Event 經驗證後驅動 Conversation State。Conversation State 操作單一 Server-side Report Draft；Draft 可包含 Draft Answer、Draft Media、零或一個 Volunteer Note，確認後才建立 Daily Care Report。Animal 擁有多筆 Daily Care Report；每筆回報可包含正式 Photo、結構化 Observation Option 與零或多個 AI Observation。QR Code 提供指定 Shelter 內的候選 Animal 查詢資訊；Animal Timeline 聚合同一 Shelter 內同一 Animal 的歷史；Audit Record 記錄上述實體的重要異動與跨機構授權。Staff Member 可依權限覆核、修正、封存或管理上述內容。
 
 ## Assumptions
 
@@ -491,7 +525,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - Shelter Number 管理與異常處理能力。
 - Volunteer 身分綁定與基本角色權限。
 - Photo 上傳與內部資料存取能力。
-- LIFF 或等效手機回報入口；LINE Messaging API Webhook 不屬本 Feature。
+- LINE Messaging API Webhook、LINE Official Account、Rich Menu、Quick Reply、Postback、圖片訊息與 LIFF 輔助介面。
 - 工作人員與管理員的管理入口。
 - 可選用的 AI 描述性擷取服務；其失敗不得阻塞 P1、P2、P3。
 
@@ -501,11 +535,11 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - 關注優先度計算與今日排序。
 - 公開島民檔案、領養申請、志工智慧排班或其他後續功能。
 - 以政府公告頁面作為正式回報資料庫。
-- 公開動物頁面、批次 Export 或 LINE Messaging API Webhook。
+- 公開動物頁面、批次 Export、Notification 或公開欄位 Allowlist。
 
 ## Out of Scope
 
-本功能不包含完整志工排班、換班與請假、排班最佳化、動物入所影像辨識、完整醫療紀錄、疫苗管理、關注優先度最終計分或排序、領養申請與審核、領養適配評估、公開島民檔案、公開動物頁面與公開欄位 Allowlist、批次 Export、LINE Messaging API Webhook、Q 版角色與故事生成、送養文案、認養後任務與成就、捐贈物資管理、社群發布、醫療診斷、健康評估、自動就醫建議、與政府收容系統雙向同步，以及資料庫設計、Endpoint、技術架構、套件或框架選型與部署方案。OpenAPI Contract 依 D-004 建立，但不延伸為本段未列的 API 功能。
+本功能不包含完整志工排班、換班與請假、排班最佳化、動物入所影像辨識、完整醫療紀錄、疫苗管理、關注優先度最終計分或排序、領養申請與審核、領養適配評估、公開島民檔案、公開動物頁面與公開欄位 Allowlist、批次 Export、Notification、以自然語言自由對話取代結構化選項、由 AI 自動判斷志工想回答哪一題、語音辨識、Q 版角色與故事生成、送養文案、認養後任務與成就、捐贈物資管理、社群發布、醫療診斷、健康評估、自動就醫建議、與政府收容系統雙向同步，以及資料庫設計、Endpoint、技術架構、套件或框架選型與部署方案。OpenAPI Contract 依 D-004 建立，但不延伸為本段未列的 API 功能。
 
 ## Measurable Success Criteria
 
@@ -529,10 +563,16 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **SC-018**：不同收容所使用相同收容編號的測試資料中，100% 能依收容所範圍正確區分動物、回報、照片與 AI 結果。
 - **SC-019**：100% 的日常回報、照片與 AI 結果都能追溯至唯一所屬收容所；LINE、LIFF、QR Code、AI 模組與管理後台沒有獨立正式收容所或動物資料副本。
 - **SC-020**：收容所或一般帳號停用後，100% 的測試操作無法建立新的非公開業務資料；平台管理員的跨機構操作 100% 可追溯至完整 Audit Record。
+- **SC-021**：標準 LINE Bot 回報從 Bot 顯示第一個可操作問題開始計時，至少 80% 的測試參與者能在 90 秒內看到正式 Care Report 保存成功；AI 處理時間不計入。
+- **SC-022**：標準 Bot 流程除心得或「其他」補充外，文字輸入次數為 0，且不需要開啟完整 LIFF 表單。
+- **SC-023**：至少 95% 的中斷測試可從有效 Server-side Draft 繼續，並恢復已填答案；取消或過期 Draft 在 100% 測試中不建立正式 Care Report。
+- **SC-024**：Webhook 重送的測試中，100% 不會重複建立答案、圖片關聯、Care Report 或 AI Job；非法 `X-Line-Signature` 的測試中，100% 不建立任何業務資料。
+- **SC-025**：A Organization 志工使用 B 的 Draft、Postback、QR Token、Animal ID 或圖片事件時，100% 無法取得或修改 B 的非公開資料，且不得自動切換 Active Shelter Context。
+- **SC-026**：Bot Quick Reply 的顯示名稱調整後，歷史答案與後端穩定 Code 在 100% 測試中仍可正確追溯；Bot 選項來源與管理語彙一致，不存在第二套硬編碼業務選項。
 
 ## Clarification Items
 
-本次高影響待釐清事項均已完成。照片、排泄照片與心得的必填規則、食量與護食量表、草稿保存期限、跨裝置恢復與重複送出文案仍由規劃與任務階段依既有最小可行規則處理；正式 Care Report 的 Archive、Draft／Temporary Media 刪除政策已由實作前決策紀錄確定。公開頁面、批次 Export 與 LINE Webhook 不屬本 Feature。
+本次高影響待釐清事項均已完成。照片、排泄照片與心得均採選填；有效結構化答案即可送出。每名志工在單一 Organization 同時間只保留一筆 active Draft，Draft 有效期限由設定控制，建立新回報時提示繼續或放棄既有 Draft；跨裝置恢復與重複送出文案由實作依同一 CRM Draft／Idempotency 規則處理。正式 Care Report 的 Archive、Draft／Temporary Media 刪除政策已由實作前決策紀錄確定。公開頁面、批次 Export 與 Notification 不屬本 Feature。
 
 
 ## Constitution Compliance Notes

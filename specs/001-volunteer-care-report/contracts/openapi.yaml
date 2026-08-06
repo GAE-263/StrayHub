@@ -19,6 +19,7 @@ tags:
   - name: Timeline
   - name: Observation Vocabulary
   - name: AI
+  - name: LINE Bot
 security:
   - bearerAuth: []
 paths:
@@ -552,6 +553,109 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AiObservation' }
 
+  /v1/line/webhook:
+    post:
+      tags: [LINE Bot]
+      operationId: receiveLineWebhook
+      security: []
+      description: >-
+        LINE Messaging API Webhook 邊界。伺服器必須先以未修改的原始 Request Body
+        與 X-Line-Signature 驗證簽章，再解析事件；事件依 webhookEventId 冪等處理。
+        Webhook 本身不代表 CRM 使用者已取得回報權限。
+      parameters:
+        - $ref: '#/components/parameters/LineSignature'
+      requestBody:
+        required: true
+        description: 必須保留未修改的原始 Request Body，並在 JSON 解析前搭配 X-Line-Signature 完成驗證。
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LineWebhookRequest' }
+      responses:
+        '200':
+          description: 已接受、已忽略重送或已安全處理事件
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LineWebhookResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/line/bind:
+    post:
+      tags: [LINE Bot]
+      operationId: bindLineIdentity
+      security: []
+      description: FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；不得自動建立正式 Membership。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LineBindRequest' }
+      responses:
+        '200':
+          description: 已建立本系統 Session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LineBindResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/line/rich-menu/context:
+    get:
+      tags: [LINE Bot]
+      operationId: getLineRichMenuContext
+      responses:
+        '200':
+          description: 目前 Active Shelter Context 可用的 Rich Menu Action
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RichMenuContext' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/line/care-report/drafts/current:
+    get:
+      tags: [LINE Bot]
+      operationId: getCurrentLineCareReportDraft
+      responses:
+        '200':
+          description: 目前 Organization 的 active Draft；不存在時回傳空值
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentLineDraftResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/line/care-report/drafts/{draftId}/resume:
+    post:
+      tags: [LINE Bot]
+      operationId: resumeLineCareReportDraft
+      parameters:
+        - $ref: '#/components/parameters/DraftId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResumeDraftRequest' }
+      responses:
+        '200':
+          description: Draft 已恢復至其目前合法步驟
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/line/care-report/drafts/{draftId}/cancel:
+    post:
+      tags: [LINE Bot]
+      operationId: cancelLineCareReportDraft
+      parameters:
+        - $ref: '#/components/parameters/DraftId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelDraftRequest' }
+      responses:
+        '200':
+          description: Draft 已取消且不會建立正式回報
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -568,9 +672,13 @@ components:
     OptionId: { name: optionId, in: path, required: true, schema: { type: string, format: uuid } }
     ObservationId: { name: observationId, in: path, required: true, schema: { type: string, format: uuid } }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1 } }
+    LineSignature: { name: X-Line-Signature, in: header, required: true, schema: { type: string, minLength: 1 } }
     Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
     PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
   responses:
+    BadRequest:
+      description: Webhook 或 Request 格式錯誤
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
     AuthResponse:
       description: 本系統 Session 憑證
       content:
@@ -597,6 +705,84 @@ components:
         message: { type: string }
         request_id: { type: string }
         details: { type: object, additionalProperties: true }
+    LineWebhookRequest:
+      type: object
+      required: [destination, events]
+      properties:
+        destination: { type: string }
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineWebhookEvent'
+    LineWebhookEvent:
+      type: object
+      required: [type, webhookEventId, timestamp, source]
+      properties:
+        type: { type: string, enum: [message, postback, follow, unfollow, beacon, join, memberJoined, memberLeft, accountLink, things] }
+        webhookEventId: { type: string, minLength: 1 }
+        timestamp: { type: integer, format: int64 }
+        source: { type: object, additionalProperties: true }
+        deliveryContext:
+          type: object
+          properties:
+            isRedelivery: { type: boolean }
+        message: { type: object, additionalProperties: true }
+        postback: { type: object, additionalProperties: true }
+    LineWebhookResponse:
+      type: object
+      required: [accepted, event_results]
+      properties:
+        accepted: { type: boolean }
+        event_results:
+          type: array
+          items:
+            type: object
+            required: [webhook_event_id, status]
+            properties:
+              webhook_event_id: { type: string }
+              status: { type: string, enum: [processed, duplicate_ignored, rejected, failed] }
+              reason: { type: [string, 'null'] }
+    LineBindRequest:
+      type: object
+      required: [id_token]
+      properties:
+        id_token: { type: string }
+    LineBindResponse:
+      type: object
+      required: [session]
+      properties:
+        session: { $ref: '#/components/schemas/AuthResponse' }
+    RichMenuContext:
+      type: object
+      required: [organization_id, actions]
+      properties:
+        organization_id: { type: string, format: uuid }
+        actions:
+          type: array
+          items:
+            type: object
+            required: [code, display_name]
+            properties:
+              code: { type: string }
+              display_name: { type: string }
+              action_type: { type: string, enum: [postback, uri, camera, camera_roll, message] }
+    CurrentLineDraftResponse:
+      type: object
+      required: [draft]
+      properties:
+        draft:
+          anyOf:
+            - $ref: '#/components/schemas/Draft'
+            - type: 'null'
+    ResumeDraftRequest:
+      type: object
+      properties:
+        draft_token: { type: string, minLength: 1 }
+    CancelDraftRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
     LoginRequest:
       type: object
       required: [username, password]
@@ -745,12 +931,20 @@ components:
         media_ids: { type: array, items: { type: string, format: uuid } }
     Draft:
       type: object
-      required: [id, organization_id, animal_id, status]
+      required: [id, opaque_token, organization_id, animal_id, volunteer_user_id, membership_id, current_step, status, expires_at]
       properties:
         id: { type: string, format: uuid }
+        opaque_token: { type: string, minLength: 1 }
         organization_id: { type: string, format: uuid }
         animal_id: { type: string, format: uuid }
-        status: { type: string, enum: [editing, ready_to_submit, blocked_by_revalidation, submitted, expired] }
+        volunteer_user_id: { type: string, format: uuid }
+        membership_id: { type: string, format: uuid }
+        current_step: { type: string, enum: [selecting_animal, confirming_animal, answering_feeding, answering_water, answering_activity, answering_elimination, answering_behavior, answering_special_status, awaiting_media, awaiting_note, reviewing, submitting, submitted, cancelled, expired] }
+        answers: { type: object, additionalProperties: true }
+        media_ids: { type: array, items: { type: string, format: uuid } }
+        last_interaction_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        status: { type: string, enum: [active, submitted, cancelled, expired] }
     DraftListResponse:
       type: object
       required: [items]
