@@ -8,6 +8,7 @@
 - Node.js 與專案指定的套件管理工具可用。
 - Python 與專案指定的 Python 執行工具可用。
 - 不使用 GCP 正式憑證、不使用真實個資、不使用正式收容所敏感資料。
+- 本 Feature 使用 LIFF，不啟動或驗證 LINE Messaging API Webhook。
 
 ## 2. 啟動本機服務
 
@@ -48,7 +49,7 @@ uv run alembic upgrade head
 執行資料存取與 migration 測試：
 
 ```bash
-uv run pytest tests/integration/test_database_access.py tests/integration/test_migrations.py tests/isolation -q
+uv run pytest tests/integration/test_migrations.py tests/isolation -q
 ```
 
 若需要驗證回復策略，依實作任務提供的明確 migration 測試執行 downgrade 或替代遷移驗證；不得以手動資料庫介面操作取代 migration。
@@ -76,12 +77,12 @@ uv run pytest tests/isolation -q
 至少驗證：
 
 1. A 使用者只能搜尋 A 的 Animal。
-2. A 使用者以 B 的 Animal 識別、Shelter Number、QR Token、網址、Object Key 或匯出條件查詢時，不取得 B 的資料，也不知悉資料是否存在。
+2. A 使用者以 B 的 Animal 識別、Shelter Number、QR Token、網址或 Object Key 查詢時，不取得 B 的資料，也不知悉資料是否存在。
 3. A 與 B 可同時使用 `VAAAG114080610`，查詢結果仍各自正確。
 4. A 志工掃描 B QR Token 時，不能進入回報流程。
 5. 前端偽造 B 的 Shelter 識別時，CRM 仍依已驗證 Actor Scope 拒絕。
 6. 停用 Shelter 或使用者後，不能登入、讀取或建立新業務資料。
-7. 同一志工可被授權 A、B 兩個 Shelter；在 A 有進行中的服務操作時，於 B 或不同地點操作會收到警示，且每筆回報只有一個 Shelter 歸屬。
+7. 同一志工可被授權 A、B 兩個 Shelter；切換時必須明確更新 Active Shelter Context，Draft／Animal／QR Token／Reportable Scope 與目前 Context 不一致時阻擋送出，不以地點、裝置或時間推測志工所在 Shelter。
 
 ## 6. 驗證人工回報與近期歷程
 
@@ -96,7 +97,7 @@ uv run pytest tests/isolation -q
 7. 重複建立同一 Animal 同日第二筆回報。
 8. 在 Timeline 查看近 14 日每日摘要、同日多筆、原始照片、心得與「當日無回報」。
 9. 在建立後 24 小時內修改自己的回報內容、照片與心得。
-10. 嘗試修改自己的動物綁定、他人回報或超過 24 小時的回報。
+10. 嘗試修改自己的動物綁定、他人回報或超過 24 小時的回報；正式 Report 不得 Hard Delete，只能依權限 Correction 或 Archive。
 
 預期結果：兩筆 Report 都保留；沒有回報日期不顯示為正常；24 小時內的內容修改保留前後版本；動物綁定修改交由授權人員處理；所有資料可追溯至 A Shelter。
 
@@ -111,6 +112,9 @@ uv run pytest tests/integration/test_object_storage.py -q
 驗證 `MinioStorageAdapter`、`InMemoryStorageFake` 與共通契約：
 
 - 上傳、讀取、存在性、撤銷與短期存取位置。
+- 正式 Media 僅接受通過大小／MIME／實際格式／解碼驗證、移除 EXIF、重新編碼並計算 Checksum 的位元資料。
+- 含原始 EXIF 的檔案不得進入正式儲存；Temporary Media 不得產生 Signed URL，成功或失敗後都必須清理。
+- MinIO 與 GCS 使用相同圖片安全政策；AI 只能讀取清理後圖片。
 - Object Key 與 Metadata 有 Shelter、Report 與用途關聯。
 - MinIO URL 不會保存為永久識別。
 - A 使用者不能以 B Object Key 讀取圖片。
@@ -129,9 +133,11 @@ uv run pytest tests/integration/test_ai_job.py -q
 
 - Report 保存後才建立 AI Job。
 - Worker 可將 Job 從 `pending` 處理至 `succeeded`。
+- 每一筆 Job 都保存非空的 Provider、Model Name／Version、Prompt Template／Version、Output Schema Version 與處理時間；失敗時仍保存預定版本資訊。
 - AI 逾時、服務中斷、無效內容或診斷語意會產生 `failed`／`invalid`，不覆蓋原始 Report。
+- `raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存；人工修正不覆蓋原始輸出。
 - 人工回報與 Timeline 在 AI 失敗時仍可用。
-- AI Observation 可追溯至 Photo 或 Volunteer Note。
+- AI Observation 可追溯至已移除 EXIF 的 Photo 或 Volunteer Note。
 
 ## 9. 本機品質門檻
 
@@ -157,3 +163,5 @@ npm --prefix apps/web test
 7. Cloud SQL 連線、IAM、Service Account 與 Cloud Logging 可追溯性驗證。
 
 本機通過只代表本機流程可用，不代表 GCP 專屬整合完成。任何 Demo 失敗都必須保留失敗證據與環境資訊，不能以本機結果代替。
+
+本 Feature 不驗證 LINE Messaging API Webhook；若後續需要聊天式回報，必須另建 Specification。

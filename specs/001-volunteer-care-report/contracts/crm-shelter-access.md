@@ -9,7 +9,7 @@
 - 已驗證使用者識別與角色。
 - 有效的 Shelter Membership／Authorization Scope。
 - 目標資源識別或候選查詢條件。
-- 操作類型：read、create、update、delete、search、export 或 photo access。
+- 操作類型：read、create、update、search、archive、photo access 或 draft／temporary media delete。
 - 來源通道：web、LIFF、QR、worker 或管理後台。
 
 ## 強制規則
@@ -21,9 +21,9 @@
 5. QR 解析必須同時驗證 QR Shelter、Actor Scope 與 Animal Shelter。
 6. 所有跨 Shelter 操作都要有平台管理員授權與 Audit Record。
 7. Timeline 是 CRM 資料的讀取檢視，不得成為獨立正式資料來源。
-8. Volunteer 可有多個有效 Shelter Membership，但同一時間只能有一個 Active Shelter Context；發現不同 Shelter 或不同地點同時操作時，系統必須顯示警示，且不能讓單筆回報同時歸屬多個 Shelter。
+8. Volunteer 可有多個有效 Shelter Membership，但同一時間只能有一個 Active Shelter Context；正常切換 Shelter 不視為異常。Draft、Animal、QR Token、Reportable Scope 與 Active Shelter Context 不一致時，系統必須阻擋送出，且不能讓單筆回報同時歸屬多個 Shelter。不得使用 GPS、IP、裝置、時間重疊或地理距離推測服務地點。
 9. Daily Reportable Scope 第一階段支援個別 Animal、Cage／Area 與指定 Volunteer，不包含完整班次排班。
-10. Volunteer 可在建立後 24 小時內修改自己的回報內容、Photo 與 Note；Animal 綁定只能由 Shelter Administrator 或授權 Staff Member 更正，並保留 Audit Record。
+10. Volunteer 可在建立後 24 小時內修改自己的回報內容、Photo 與 Note；正式 Care Report 不得 Hard Delete，只能由授權角色 Correction 或 Archive；Animal 綁定只能由 Shelter Administrator 或授權 Staff Member 更正，並保留 Audit Record。
 
 ## Database Access 規則
 
@@ -45,7 +45,7 @@
 ## 驗證重點
 
 - Organization／Shelter A、B 使用相同 Shelter Number 時可各自查詢。
-- A 使用者使用 B 識別、網址、QR、Object Key 或匯出條件時不取得 B 資料。
+- A 使用者使用 B 識別、網址、QR 或 Object Key 時不取得 B 資料。
 - 後端直接收到偽造 Shelter 識別時仍依已驗證 Actor Scope 判定。
 - 空 PostgreSQL 可由 Alembic 完整建立 Schema，且 migration 後的 Composite Constraint 與 PostgreSQL 防護可被測試驗證。
 - API 與 Worker 的 AsyncSession 交易在 Scope 驗證與正式寫入之間不會改用其他 Organization Scope。

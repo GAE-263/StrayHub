@@ -5,7 +5,7 @@
 ## 共通資料治理規則
 
 - 每一筆非公開業務資料都必須有 `shelter_id` 或等價的明確 Shelter 歸屬；Platform Administrator 的平台層資料除外。
-- 所有讀取、新增、修改、刪除、搜尋、匯出與圖片存取都必須取得已驗證的 `ActorScope`，再由 CRM 邊界判定 `shelter_id`。
+- 所有讀取、新增、修改、搜尋、封存、Draft／Temporary Media 刪除與圖片存取都必須取得已驗證的 `ActorScope`，再由 CRM 邊界判定 `shelter_id`；本 Feature 不提供批次匯出。
 - 使用者提交的 `shelter_id`、Animal 識別、Shelter Number、QR Token 或網址只能是候選輸入，不得直接成為授權依據。
 - Shelter Number 只在同一 Shelter 內唯一；查詢、QR 解析與正式關聯都必須同時帶入 Shelter 範圍。
 - 原始回報內容、原始照片、Volunteer Note、原始 AI 輸出與人工修正不可互相覆蓋。
@@ -63,9 +63,15 @@
 
 代表平台與收容所使用者。User 保存身分狀態、角色與可用服務狀態；角色決定可用操作，但每一次資料存取仍須由 Shelter Membership / Authorization Scope 再判定。
 
-主要關係：Platform Administrator 可管理平台層 Shelter；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；Volunteer 可以有多個有效授權，但同一時間只能有一個 Active Shelter Context，且系統需能記錄同時操作警示。
+主要關係：Platform Administrator 可管理平台層 Shelter；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；Volunteer 可以有多個有效授權，但同一時間只能有一個綁定 Session 的 Active Shelter Context。
 
 驗證規則：停用帳號不能登入、讀取或建立新資料；未綁定 Volunteer 不能建立匿名正式回報；角色不足不能依網址、識別碼、QR Token 或輸入條件擴大範圍。
+
+### Session Record / Refresh Token / Active Shelter Context
+
+Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值並可輪替，Access Token 為短效憑證。Active Shelter Context 代表目前 Session 明確選擇的 Organization。
+
+驗證規則：受保護 Request 必須重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context；Session 或 Refresh Token 撤銷、User／Membership／Organization 停用後立即拒絕存取。Active Shelter Context 必須來自有效 Membership、綁定 Session 且不得由 QR Code 或 Request 任意覆寫；切換時留下 Audit Record，Draft 不得跨 Organization 移動。
 
 ### Shelter Membership / Authorization Scope
 
@@ -91,13 +97,13 @@
 
 驗證規則：同一 Shelter 內唯一；不同 Shelter 可以相同；重複、修正或缺少時不得自行猜測；歷史回報保存當時的顯示快照，但正式關聯仍使用 Animal 正式識別。
 
-### Active Shelter Context / Concurrent Service Warning
+### Active Shelter Context
 
-代表志工目前正在操作或服務的 Shelter Context，以及同一志工在不同 Shelter 或不同地點同時操作的警示事件。
+代表志工目前正在操作的 Shelter Context，以及 Draft、Animal、QR Token、Reportable Scope 與 Active Context 的 Organization 不一致事件。
 
-主要資料：Volunteer、目前 Shelter、開始時間、最後活動時間、來源通道、活動狀態、警示狀態與處理結果。
+主要資料：Volunteer、目前 Shelter、Session、開始時間、最後活動時間、來源通道、阻擋原因與處理結果。
 
-驗證規則：Volunteer 可以有多個 Shelter Membership，但同一時間只能有一個 Active Shelter Context；偵測到不同 Shelter 或不同地點同時操作時必須顯示警示；警示不得讓單筆 Report 同時歸屬多個 Shelter。
+驗證規則：Volunteer 可以有多個 Shelter Membership，但同一時間只能有一個 Active Shelter Context；系統不以 GPS、IP、裝置、時間重疊或地理距離推測地點。Organization 不一致時必須阻擋送出並保留 Draft；不得讓單筆 Report 同時歸屬多個 Shelter。
 
 ### Daily Reportable Scope / Animal Assignment
 
@@ -131,9 +137,9 @@
 
 ### Photo、Object Metadata、Volunteer Note
 
-Photo 代表原始照片；Object Metadata 描述 Object Key、用途、內容類型、大小、建立時間與來源；Volunteer Note 代表志工原始心得文字。
+Photo 代表已清理並重新編碼的正式照片；Object Metadata 描述 Object Key、用途、內容類型、大小、Checksum、`exif_removed`、建立時間與來源；Temporary Media 代表尚未提交的暫存照片；Volunteer Note 代表志工原始心得文字。
 
-驗證規則：每個 Photo 與 Note 都有 Shelter、Report 與來源關聯；圖片取用要再次驗證 Scope；資料庫不保存永久 Signed URL；照片模糊、光線不足或 AI 無法判讀是觀察結果，不是人工回報失敗。
+驗證規則：正式 Photo 必須先完成大小、MIME、實際格式、解碼、EXIF 清理、重新編碼與 Checksum；含原始 EXIF 的檔案不得進入正式 Object Storage，AI 只能讀取清理後圖片。Temporary Media 不得簽發正式 Signed URL，成功或失敗後都必須清理。每個 Photo 與 Note 都有 Shelter、Report 與來源關聯；圖片取用要再次驗證 Scope；資料庫不保存永久 Signed URL；照片模糊、光線不足或 AI 無法判讀是觀察結果，不是人工回報失敗。
 
 ### Observation Category / Observation Option
 
@@ -145,7 +151,7 @@ Photo 代表原始照片；Object Metadata 描述 Object Key、用途、內容�
 
 AI Processing Job 代表待處理、處理中、成功、失敗或無效的非同步工作；AI Observation 代表從 Photo 或 Volunteer Note 衍生的描述性訊號。
 
-主要關係：一筆 Report 可有多個 Job 與 AI Observation；每個 Observation 必須可追溯至來源 Photo 或 Note，並保留原始 AI 輸出、模型／Prompt 識別（若有）、人工確認與修正。
+主要關係：一筆 Report 可有多個 Job 與 AI Observation；每個 Job 必須保存非空 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始 AI 輸出、驗證結果、失敗原因與 Retry Count。每個 Observation 必須可追溯至清理後 Photo 或 Note，並將 `raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
 
 驗證規則：Job 失敗不影響 Report 保存；AI 不得診斷、計分、排序、改變狀態、修改 Animal 或覆蓋原始資料；無效或禁用內容不能成為正式觀察結果。
 
@@ -165,23 +171,18 @@ AI Processing Job 代表待處理、處理中、成功、失敗或無效的非�
 
 驗證規則：跨機構管理、動物綁定更正、權限／Scope 異動、AI 人工確認、公開狀態與重要刪除／停用都必須留下紀錄；一般使用者不能修改稽核紀錄。
 
-### Notification
-
-代表 Shelter 內部通知。必須有 Shelter 歸屬、收件範圍、內容、狀態、建立時間與來源事件，不得跨 Shelter 洩漏。
-
 ## 主要關係
 
 ```text
 Shelter
 ├── Shelter Membership / Authorization Scope ── User / Role
-├── Active Shelter Context ── Volunteer / Concurrent Service Warning
+├── Active Shelter Context ── Volunteer / Session
 ├── Animal ── Shelter Number / Cage / Area / QR Code
 ├── Daily Reportable Scope ── Volunteer / Animal
 ├── Daily Care Report ── Photo / Volunteer Note / AI Processing Job
 │   └── AI Observation ── source Photo or Volunteer Note
 ├── Animal Timeline ── derived view of Reports and Audit Records
 ├── Observation Category ── Observation Option
-├── Notification
 └── Audit Record
 ```
 
@@ -189,16 +190,17 @@ Shelter
 
 - **Shelter**：`pending_setup` → `active` → `suspended`；停用不刪除既有歷史。
 - **User／Membership**：`invited` → `active` → `disabled`；非 active 不得建立或讀取業務資料。
-- **Report Draft**：`editing` → `ready_to_submit` → `submitted` 或 `blocked_by_revalidation`。
-- **Daily Care Report**：`saved` → `amended`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；原始內容永久保留，所有修改另留 Audit Record。
+- **Report Draft**：`editing` → `ready_to_submit` → `submitted`、`blocked_by_revalidation` 或 `expired`；未提交 Draft 可由建立者刪除或由系統過期清理。
+- **Daily Care Report**：`saved` → `amended` → `archived`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；正式回報不 Hard Delete，原始內容永久保留，所有修改與封存另留 Audit Record。
+- **Temporary Media / Photo**：`temporary` → `processed` → `attached` 或 `failed`；未提交 Temporary Media 可刪除或清理；正式 Photo 不 Hard Delete，只能標記不可使用或封存。
 - **AI Processing Job**：`pending` → `running` → `succeeded`／`failed`／`invalid`；重試不改變原始 Report。
 - **QR Code**：`active` → `revoked`；撤銷後不能帶入回報流程。
 
 ## 跨實體驗證規則
 
-1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Active Shelter Context、Notification 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致。
+1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Session、Active Shelter Context 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致。
 2. 同一收容編號在不同 Shelter 可並存；任何查詢只在 ActorScope 允許的 Shelter 中執行。
-3. 任何建立、修改、刪除或匯出動作都要檢查 ActorScope、資源 Shelter、資源狀態與角色能力。
+3. 任何建立、修改、Draft／Temporary Media 刪除或 Care Report Archive 動作都要檢查 ActorScope、資源 Shelter、資源狀態與角色能力；正式 Care Report、正式 Photo 與 AI 原始輸出不得 Hard Delete；本 Feature 不提供批次 Export。
 4. 任何物件檔案操作都要檢查 Object Key 的 Shelter 關聯，不接受前端任意 Object Key 作為授權。
 5. Timeline 由 CRM 正式資料重建，不作為第二份事實來源。
 6. Repository 以 `AsyncSession` 執行資料存取；Transaction 邊界必須涵蓋 Scope 驗證與正式資料寫入，避免驗證後範圍被替換。

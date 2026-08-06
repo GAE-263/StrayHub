@@ -20,7 +20,7 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 **儲存**：PostgreSQL 保存 CRM 正式資料、權限範圍、回報、AI 狀態與稽核資料；本機物件檔案使用 MinIO；Demo 物件檔案使用 Cloud Storage。Application Layer 只能透過共通 Object Storage Interface 存取檔案。
 
-**測試**：Python 使用 Ruff 與 Pytest；前端使用既定的前端測試工具與測試命令；另需提供 contract、unit、integration、資料隔離、Repository、SQLAlchemy／`AsyncSession`、Alembic migration、Object Storage Adapter、LIFF、QR Code 與 AI 失敗降級驗證。
+**測試**：Python 使用 Ruff 與 Pytest；前端測試工具與命令必須在 `apps/web/package.json` 固定；另需提供 contract、unit、integration、資料隔離、Repository、SQLAlchemy／`AsyncSession`、Alembic migration、Object Storage Adapter、LIFF、QR Code、Authentication、EXIF 清理與 AI 失敗降級驗證。
 
 **目標平台**：本機 Docker Compose 加直接執行的 Next.js／FastAPI／Worker；GCP Demo 使用 Cloud Run、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
 
@@ -39,20 +39,20 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 - **I. CRM 為唯一事實來源：通過。** PostgreSQL CRM 是正式資料來源；Next.js、LINE／LIFF、QR Code、AI 與 Worker 不保存獨立正式業務副本。
 - **II. 原始資料不得被衍生結果取代：通過。** Daily Care Report、Volunteer Note、Photo、原始 AI 輸出與人工覆核分開保存。
 - **III. AI 不負責計算、診斷或最終判定：通過。** AI Job 只產生描述性觀察，所有限制與人工確認邊界列入 contract。
-- **IV. AI 結果必須驗證、標示與追溯：通過。** AI 結果必須保留來源、原始輸出、處理狀態與人工修正。
+- **IV. AI 結果必須驗證、標示與追溯：通過。** AI 結果必須保留來源、Provider、Model Name／Version、Prompt Template／Version、Schema Version、原始輸出、處理狀態與人工修正。
 - **V. 志工回填必須低摩擦：通過。** 手機流程、90 秒目標、Mock LINE／LIFF 與 AI 非同步均列入設計。
 - **VI. 歷史紀錄必須完整且可追溯：通過。** 同日多筆保存、近 14 日逐日檢視、無回報日期與更早歷史查詢列入資料模型與 quickstart。
-- **VII. LINE Bot 只是輸入通道：通過。** Mock 與真實 LIFF 都只呼叫 CRM 邊界；身分、權限、冪等、檔案與 Job 建立由後端負責。
+- **VII. LINE Bot 只是輸入通道：適用範圍已限定。** 本 Feature 僅使用 LIFF，不實作 LINE Messaging API Webhook；LIFF 身分、權限、冪等、檔案與 Job 建立仍由 FastAPI／CRM 邊界負責。若後續新增 Webhook，必須另立 Specification。
 - **VIII. 權限、隱私與稽核預設啟用：通過。** 每一個資料操作均帶有已驗證的 Shelter 範圍；跨機構作業與公開資料採白名單並留下 Audit Record。
 - **IX. P0 不得依賴 P1 或 P2：通過。** 人工回報與歷程不依賴 AI；本機流程不依賴 GCP；AI、LIFF 真實身分與 GCS 均有替代測試路徑。
 - **X. 正體中文與 Python 品質門檻：通過。** 本計畫與產物使用台灣正體中文；Python 品質門檻為 `ruff check .`、`ruff format --check .` 與 `pytest`。
-- **XI. 多收容所資料隔離：通過。** 所有 query、command、圖片存取、匯出與修改都在後端依 Shelter 授權範圍強制判定；A／B 隔離測試為 Demo 門檻。
+- **XI. 多收容所資料隔離：通過。** 所有 query、command、圖片存取與修改都在後端依 Shelter 授權範圍強制判定；本 Feature 不提供批次匯出；A／B 隔離測試為 Demo 門檻。
 
-**Gate 結論**：通過，可進入 Phase 0。沒有需要以 Complexity Tracking 合理化的 Constitution 違反。
+**Gate 結論**：D-001～D-010 已補足原技術阻擋事項，且 OpenAPI、資料模型與 Tasks 已完成同步並通過分析。沒有以降低 Constitution 要求方式處理的例外。
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：通過。** 資料模型讓所有非公開資料保有 Shelter 歸屬；CRM contract 禁止通道繞過 CRM；Object Storage contract 不把 Signed URL 當永久識別；AI contract 定義非同步、失敗與無效降級；quickstart 覆蓋本機 A／B 隔離、志工同時操作警示、人工回報、24 小時內容修改、照片、近 14 日歷程、AI Job 與品質門檻。低優先的照片／草稿細節仍列為 tasks 階段決策，不阻擋本計畫進入 `$speckit-tasks`。
+**重新檢查結果：通過。** 已同步 Authentication／Session、Active Shelter Context、LIFF-only 邊界、OpenAPI Contract、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive；CRM contract 禁止通道繞過 CRM，quickstart 覆蓋本機 Active Shelter Context、圖片安全、AI 版本與失敗降級驗證。分析未發現 Constitution 或核心資料正確性層級的 CRITICAL 問題。
 
 ## Database Access
 
@@ -69,6 +69,34 @@ Pydantic Model 與 SQLAlchemy Model 分離：
 所有租戶資料查詢必須經過受控 Repository，並強制套用 `Organization Scope`；本計畫中的 `Organization` 是資料存取層對收容所／Shelter 租戶的技術稱呼。租戶隔離另以 Composite Constraint、PostgreSQL Row-Level Security／交易層防護與跨租戶自動化測試提供 Defense in Depth。
 
 資料表與 Schema 變更只能透過 Alembic Migration 管理，不得以手動操作資料庫介面作為唯一建置方式。空資料庫 migration、升級、必要的回復驗證與 GCP Cloud SQL migration 驗證都必須納入測試與 Demo 門檻。
+
+## 實作前技術與範圍決策同步
+
+### Authentication 與 Session
+
+FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼；Volunteer 透過 LIFF 身分交換後，由 FastAPI 對應既有 User 與 Membership。系統使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record；每個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context。Access Token 的 `org_id` 與角色不得作為最終授權依據。
+
+`active_org_id` 必須由使用者明確切換、由後端驗證並綁定 Session；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Worker 使用獨立 Credential／Service Account，但每次 Job 處理仍驗證 Job、Report、Organization 與狀態一致。
+
+### LIFF 邊界
+
+本 Feature 只使用 LIFF，不實作 LINE Messaging API Webhook、Message／Image／Postback Event、聊天式回報或 Bot 自動回覆。後續 LINE Bot 必須建立獨立 Specification。
+
+### AI 版本與原始輸出
+
+每一筆 AI Job 必須保存非空的 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始輸出、驗證結果、失敗原因與 Retry Count。`raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
+
+### EXIF 與媒體
+
+照片在成為正式 `media_asset` 前完成大小／MIME／格式驗證、解碼、EXIF 清理、重新編碼與 Checksum。含原始 EXIF 的檔案不得進入正式 Object Storage；AI 只能讀取已清理圖片。MinIO 與 GCS 使用相同政策，Storage Adapter 只儲存已清理資料。
+
+### 公開資料與批次 Export
+
+本 Feature 不建立公開動物頁面、公開欄位 Allowlist 或批次 Export；只驗證未登入／未授權者不能取得內部照護資料。這些能力另立 Specification。
+
+### Delete 與 Archive
+
+正式 Care Report 不允許 Hard Delete，只能 Correction 或 Archive 並保留 Audit。Draft 與未提交 Temporary Media 可由建立者刪除或過期清理；正式 Media 不 Hard Delete，只能標記不可使用或封存。
 
 ## 開發與部署階段
 
@@ -115,7 +143,7 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 8. 查看近 14 天歷程。
 9. 驗證跨收容所資料隔離。
 10. 執行 Ruff 與 Pytest。
-11. 驗證同一志工可有多個授權 Shelter，但同一時間在不同 Shelter 或不同地點操作時會收到警示。
+11. 驗證同一志工可有多個授權 Shelter，但同一時間只有 Session 明確選定的 Active Shelter Context；Organization 不一致時阻擋送出並保留 Draft。
 12. 驗證志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
 
 ### LIFF 本機整合
@@ -175,6 +203,7 @@ specs/001-volunteer-care-report/
 ├── data-model.md        # Phase 1 業務資料模型與驗證規則
 ├── quickstart.md        # 本機與 Demo 驗證指南
 ├── contracts/           # CRM、租戶、儲存、LIFF 與 AI 邊界契約
+│   └── openapi.yaml     # 前後端正式 API Contract
 └── tasks.md             # $speckit-tasks 產生，不由本命令建立
 ```
 
@@ -208,7 +237,7 @@ tests/
 └── unit/                        # FastAPI、Worker 與領域規則
 ```
 
-**結構決策**：採 `apps/web`、`services/api`、`services/worker` 的分離結構，讓前端、CRM 與非同步處理可獨立測試與部署；FastAPI 的 API、Domain／Application、Persistence 與 Alembic 邊界分離，Pydantic Model 不與 SQLAlchemy Model 共用；`infra/local` 服務本機優先策略，`infra/gcp-demo` 只承載 Demo 部署與驗證；`tests/isolation` 為多收容所資料隔離的獨立測試領域。此結構不預先決定 Python 類別或模組內部細節。
+**結構決策**：採 `apps/web`、`services/api`、`services/worker` 的分離結構，讓前端、CRM 與非同步處理可獨立測試與部署；FastAPI 的 API、Domain／Application、Persistence 與 Alembic 邊界分離，Pydantic Model 不與 SQLAlchemy Model 共用；`contracts/openapi.yaml` 是前後端正式 API Contract；`infra/local` 服務本機優先策略，`infra/gcp-demo` 只承載 Demo 部署與驗證；`tests/isolation` 為多收容所資料隔離的獨立測試領域。此結構不預先決定 Python 類別或模組內部細節。
 
 ## 複雜度追蹤
 

@@ -2,7 +2,7 @@
 
 ## 通道邊界
 
-Next.js 可接收 Mock LIFF Context 或真實 LIFF Context，但兩者都只能將使用者身分候選資訊交給 CRM 邊界驗證。通道不得自行建立 Shelter Scope、角色、Animal、Report 或 AI Job。
+Next.js 可接收 Mock LIFF Context 或真實 LIFF Context，但兩者都只能將使用者身分候選資訊交給 CRM 邊界驗證。通道不得自行建立 Shelter Scope、角色、Animal、Report 或 AI Job。本 Feature 不實作 LINE Messaging API Webhook；若後續新增 LINE Bot，必須建立獨立 Specification。
 
 ## Mock LIFF Context
 
@@ -24,3 +24,4 @@ Next.js 可接收 Mock LIFF Context 或真實 LIFF Context，但兩者都只能�
 2. 舊畫面或快取資料不能覆蓋 CRM 現行資料。
 3. 真實與 Mock 流程必須共用相同的回報確認、送出重新驗證與錯誤行為。
 4. 未綁定使用者不得建立匿名正式回報。
+5. LIFF 前端自行解碼的 LINE Profile 不得直接作為可信身分；FastAPI 必須向 LINE 驗證 Token／ID Token 後才建立本系統 Session。

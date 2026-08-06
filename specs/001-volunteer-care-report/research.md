@@ -38,9 +38,9 @@
 
 ## 決策 5：租戶隔離在 CRM 邊界與資料存取層強制執行
 
-**Decision**：每個非公開資料實體都帶有 Shelter 歸屬；所有 read、create、update、delete、search、export 與圖片存取都必須接收已驗證的 Actor Scope。Repository／資料存取邊界拒絕缺少或不一致的 Shelter Scope；前端篩選只作呈現，不作安全控制。未授權情況使用一致的無權限或無法存取結果。
+**Decision**：每個非公開資料實體都帶有 Shelter 歸屬；所有 read、create、update、search、圖片存取，以及 Draft／Temporary Media delete、Care Report archive 都必須接收已驗證的 Actor Scope。正式 Care Report 不允許 Hard Delete；本 Feature 不提供批次 Export。Repository／資料存取邊界拒絕缺少或不一致的 Shelter Scope；前端篩選只作呈現，不作安全控制。未授權情況使用一致的無權限或無法存取結果。
 
-**Rationale**：滿足多收容所資料隔離，避免 A／B 資料因網址、識別碼、收容編號或搜尋條件外洩。隔離測試必須涵蓋正常查詢、直接識別、QR、圖片、匯出與修改。
+**Rationale**：滿足多收容所資料隔離，避免 A／B 資料因網址、識別碼、收容編號或搜尋條件外洩。隔離測試必須涵蓋正常查詢、直接識別、QR、圖片、修改、Draft／Temporary Media 刪除與 Care Report Archive；批次 Export 不屬本 Feature。
 
 **Alternatives considered**：只在前端隱藏其他 Shelter；拒絕，因可由網址或請求繞過。先全平台搜尋再前端過濾；拒絕，因會造成存在性與結果外洩。
 
@@ -62,7 +62,7 @@
 
 ## 決策 8：本階段對規格待釐清事項採保守規劃預設
 
-**Decision**：採以下已確認的規劃決策：收容所名稱、機構代碼、啟用狀態與初始管理員為建立收容所的必要資訊；地址／服務區域與聯絡資訊可先為非必要欄位；志工可被授權服務多個 Shelter，但同一時間只有一個目前服務中的 Shelter，發現不同 Shelter 或不同地點同時操作時顯示警示；QR Code 使用非祕密 QR Token 或系統深層連結；每日可回報範圍由收容所管理員或被授權工作人員設定，支援個別 Animal、籠舍／區域與指定 Volunteer，不包含完整班次排班；志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
+**Decision**：採以下已確認的規劃決策：收容所名稱、機構代碼、啟用狀態與初始管理員為建立收容所的必要資訊；地址／服務區域與聯絡資訊可先為非必要欄位；志工可被授權服務多個 Shelter，但同一時間只能透過 Session 明確選擇一個 Active Shelter Context；系統不以 GPS、IP、裝置、時間重疊或地理距離推測地點，只有 Draft、Animal、QR Token、Scope 與 Active Context 的 Organization 不一致時才阻擋送出；QR Code 使用非祕密、可撤銷 QR Token 或系統深層連結；每日可回報範圍由收容所管理員或被授權工作人員設定，支援個別 Animal、籠舍／區域與指定 Volunteer，不包含完整班次排班；志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
 
 **Rationale**：這些決策保留資料隔離與 P1／P2 的最小可驗收流程，允許跨 Shelter 授權但避免同時操作造成回報歸屬不明，也不把功能擴大成完整班次排班、強制照片或同步 AI。照片是否必填、草稿保存期限與跨裝置恢復等低優先細節留到 tasks 階段。
 
@@ -70,17 +70,44 @@
 
 ## 決策 9：SQLAlchemy 2.x、AsyncSession 與 Alembic
 
-**Decision**：FastAPI API 與 Background Worker 使用 SQLAlchemy 2.x 的 `AsyncSession`，PostgreSQL 非同步 Driver 使用 `asyncpg`；Pydantic Model、SQLAlchemy Model 與 Domain／Application Layer 分離；資料表與 Schema 變更全部使用 Alembic Migration。Repository 是唯一允許業務查詢租戶資料的資料存取邊界，所有查詢強制帶入 `Organization Scope`。
+**Decision**：FastAPI API 與 Background Worker 使用 SQLAlchemy 2.x 的 `AsyncSession`，PostgreSQL 非同步 Driver 使用 `asyncpg`；Pydantic Model、SQLAlchemy Model 與 Domain／Application Layer 分離；資料表與 Schema 變更全部使用 Alembic Migration。Repository 是唯一允許業務查詢租戶資料的資料存取邊界，所有查詢強制帶入 `Organization Scope`。Authentication 與 Authorization 由 FastAPI 唯一執行；一般使用者使用帳號密碼，Volunteer 透過 LIFF 身分交換後建立本系統 Session；API 使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record。
 
 **Rationale**：SQLAlchemy 2.x 能提供明確的 ORM／資料存取邊界，`AsyncSession` 與 FastAPI／Worker 的非同步流程一致；Pydantic 與 SQLAlchemy 分離可避免 API 驗證模型與複雜多租戶資料關係耦合；Alembic 讓空資料庫建立、Cloud SQL Demo 與 migration 審查可重現。受控 Repository、Composite Constraint、PostgreSQL Row-Level Security／交易層防護與跨租戶測試形成 Defense in Depth。
 
 **Alternatives considered**：使用 SQLModel；拒絕，因 API Schema、Database Model 與多租戶關係會過度耦合。使用同步 SQLAlchemy Session；拒絕，因 API 與 Worker 的 I/O 流程需要一致的非同步存取。以手動資料庫操作建置 Schema；拒絕，因無法保證空資料庫、CI、Demo 與環境遷移的一致性。只依賴 Repository；拒絕，因 Constitution XI 要求資料存取層強制隔離，必須加上資料庫層防護與自動化測試。
+
+## 決策 10：Authentication、Session 與 LIFF 身分邊界
+
+**Decision**：FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼登入；Volunteer 使用 LIFF 完成 LINE 身分驗證，再由 FastAPI 對應既有 User 與 `organization_membership`。系統採短效 Access Token、可輪替 Refresh Token 與 Server-side Session Record；Access Token 不包含可直接授權的 `org_id` 或角色。
+
+每一個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Session 綁定的 Active Shelter Context。停用 User、Membership、Organization 或撤銷 Session／Refresh Token 後，必須立即拒絕後續存取。Worker 不使用一般 User Session，改用受限 Database Credential／Service Account，但每次處理 Job 仍驗證 Job、Report、Organization 與狀態一致。
+
+## 決策 11：本 Feature 僅使用 LIFF，不實作 LINE Webhook
+
+**Decision**：本 Feature 的 LINE 能力只包含開啟 LIFF、驗證 LINE 身分、綁定既有 Volunteer、QR Deep Link 與 LIFF 照護回報。不實作 LINE Messaging API Webhook、Message／Image／Postback Event、聊天式回報或 Bot 自動回覆。若後續新增 LINE Bot，必須建立獨立 Specification，並實作 Webhook Signature Validation、Event Idempotency 與非法簽章安全回應。
+
+## 決策 12：AI 版本與 Prompt 必須完整追溯
+
+**Decision**：每一筆 AI Job 都保存非空的 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始輸出、驗證結果、失敗原因與 Retry Count。若外部服務沒有獨立 Snapshot，保存實際模型識別名稱與專案內部設定版本。`raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存，人工修正不得覆蓋原始 AI 輸出。
+
+## 決策 13：照片必須在正式保存前完成 EXIF 清理
+
+**Decision**：志工照片在成為正式 `media_asset` 前必須完成大小、MIME、實際格式、解碼、EXIF／非必要 Metadata 移除、重新編碼與 Checksum。含原始 EXIF 的檔案不得進入正式 Object Storage；若暫存，必須在隔離 Temporary Storage、不可簽發 URL、不可供 AI 讀取，成功或失敗後都必須清理。AI 只能讀取已驗證且已清理的圖片。MinIO 與 GCS 使用相同清理規則，Storage Adapter 只保存已清理的位元資料。
+
+## 決策 14：公開資料、Notification 與 Export 不屬本 Feature
+
+**Decision**：本 Feature 不建立公開動物頁面、公開欄位 Allowlist、Notification 或批次 Export。只驗證未登入／未授權者不能取得 Care Report、Volunteer Note、照片、AI Observation、Timeline 或 Signed URL。Notification、公開島民檔案與 Export 必須另立 Specification。
+
+## 決策 15：Draft、Media 與 Care Report 的刪除／封存
+
+**Decision**：正式 Care Report 不允許 Hard Delete，只能 Correction 或 Archive，且保留 Audit。尚未提交的 Draft 與 Temporary Media 可由建立者刪除或由系統過期清理；正式 Media 不 Hard Delete，如需移除只能標記不可使用或封存並保留原因與操作者。
 
 ## 研究完成檢查
 
 - 本機與 GCP 的儲存差異已由 Object Storage Interface 隔離。
 - LINE／LIFF、QR Code、AI 與後台的正式資料來源均回到 CRM。
 - A／B Shelter 隔離、相同 Shelter Number、圖片存取、匯出與停用狀態均有驗證路徑。
+- Authentication、Active Shelter Context、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive 均已記錄驗證邊界；LINE Webhook、公開頁面、Notification 與 Export 明確排除。
 - GCP 專屬 IAM、Signed URL、Cloud SQL、Service Account 與 HTTPS LIFF 行為列為 Demo 另行驗證，不假設本機通過即等於 GCP 通過。
 - SQLAlchemy `AsyncSession`、`asyncpg`、受控 Repository、Composite Constraint、PostgreSQL 防護與 Alembic 空資料庫 migration 已納入 Phase 1 設計與 quickstart 驗證路徑。
 - 規格原有的五項高影響待釐清事項已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。

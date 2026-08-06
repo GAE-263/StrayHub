@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-05
 
-**Status**: Draft
+**Status**: Ready for Implementation
 
 **Input**: User description: 建立「浪浪森友會」第一個功能規格：志工日常照護回報與動物近期歷程。
 
@@ -33,10 +33,22 @@
 ### Session 2026-08-06
 
 - Q: 建立新收容所時，哪些資訊必須填寫，以及收容所何時可以開始建立一般業務資料？ → A: 收容所名稱、機構代碼、啟用狀態與初始管理員為必填；地址／服務區域與聯絡資訊可選；建立後須由平台管理員明確啟用，才能建立一般業務資料。
-- Q: 第一階段志工應只能服務一個收容所，還是可以被授權服務多個收容所？ → A: 志工可以被授權服務多個收容所，但同一時間只能服務一間；若系統發現同一志工同時在不同地點操作，必須顯示警示。
+- Q: 第一階段志工應只能服務一個收容所，還是可以被授權服務多個收容所？ → A: 志工可以被授權服務多個收容所，但同一時間只能透過 Session 明確選擇一個 Active Shelter Context；系統不以 GPS、IP、裝置、時間重疊或地理距離推測地點，只有 Draft、Animal、QR Token、Reportable Scope 與 Active Shelter Context 的 Organization 不一致時，才阻擋送出並保留 Draft。
 - Q: 誰可以設定志工每日可回報範圍，以及第一階段應支援哪些範圍設定方式？ → A: 收容所管理員或被授權的工作人員可以設定；第一階段支援個別動物、籠舍／區域與指定志工，不納入完整班次排班。
 - Q: 第一階段 QR Code 應使用哪種查詢內容？ → A: 使用不含業務資料的非祕密 QR Token 或系統深層連結，由 CRM 依 Token、目前使用者與收容所範圍重新查詢動物。
 - Q: 志工送出回報後，應在什麼期限與範圍內可以自行修改？ → A: 志工可在 24 小時內修改自己回報的內容、照片與心得，但不能自行修改動物綁定；動物綁定更正由收容所管理員或授權工作人員處理，所有修改保留稽核紀錄。
+
+## 實作前技術與範圍決策
+
+本 Feature 在完成本節決策同步、重新產生 `tasks.md` 並再次通過 `/speckit.analyze` 前，不得開始實作。
+
+- **Authentication 與 Session**：FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼；Volunteer 透過 LIFF 身分交換後，由 FastAPI 對應既有 User 與 Membership。系統使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record；每個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context。Access Token 的 `org_id` 與角色不得作為最終授權依據。
+- **Active Shelter Context**：`active_org_id` 必須來自有效 Membership、由後端驗證、綁定目前 Session 並透過明確操作切換；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Draft、Animal、QR Token、Reportable Scope 與 Active Context 的 Organization 不一致時，阻擋送出並保留 Draft。
+- **LIFF 邊界**：本 Feature 只使用 LIFF，不實作 LINE Messaging API Webhook、Message／Image／Postback Event、聊天式回報或 Bot 自動回覆。後續 LINE Bot 必須建立獨立 Specification。
+- **AI 版本追溯**：每一筆 AI Job 必須保存非空的 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、時間、原始輸出、驗證結果、失敗原因與 Retry Count；`raw_ai_output`、`validated_ai_observation` 與 `human_review_result` 分開保存。
+- **EXIF 與圖片安全**：照片在成為正式 `media_asset` 前必須完成大小／MIME／實際格式驗證、解碼、EXIF 清理、重新編碼與 Checksum。含原始 EXIF 的檔案不得進入正式 Object Storage，AI 只能讀取已清理圖片。
+- **公開資料與 Export**：本 Feature 不建立公開動物頁面、公開欄位 Allowlist 或批次 Export；只驗證未登入／未授權者不能取得內部照護資料，後續能力另立 Specification。
+- **Delete 與 Archive**：正式 Care Report 不允許 Hard Delete，只能 Correction 或 Archive 並保留 Audit。Draft 與未提交 Temporary Media 可由建立者刪除或過期清理；正式 Media 不 Hard Delete，只能標記不可使用或封存。
 
 ## 主要使用者
 
@@ -59,7 +71,7 @@
 - 收容所基本資訊、機構使用者與志工
 - 動物、收容編號、籠舍與區域
 - 今日可回報名單、日常照護回報、照片、心得與歷史紀錄
-- AI 觀察結果、QR Code、機構內部設定與通知
+- AI 觀察結果、QR Code 與機構內部設定
 - 稽核紀錄及其他非公開業務資料
 
 ### 平台管理員
@@ -85,9 +97,8 @@
 
 ### 志工
 
-志工可以被授權服務多個收容所，但同一時間只能有一個目前服務中的收容所。系統必須清楚
-顯示目前操作中的收容所，且每次回報只能歸屬至一個收容所。若系統發現同一志工同時在
-不同收容所或不同地點操作，必須顯示警示。志工只能查看授權收容所內完成照護回報所需的
+志工可以被授權服務多個收容所，但同一時間只能透過 Session 明確選擇一個目前服務中的收容所。系統必須清楚
+顯示目前操作中的收容所，且每次回報只能歸屬至一個收容所。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點；只有 Draft、Animal、QR Token、Reportable Scope 與 Active Shelter Context 的 Organization 不一致時，才阻擋送出並保留 Draft。志工只能查看授權收容所內完成照護回報所需的
 最少動物資訊、掃描授權收容所 QR Code、搜尋授權收容所內的收容編號及回報被授權的動物。
 
 ### 收容編號唯一性與 QR Code
@@ -107,14 +118,14 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 
 ### 資料隔離與 CRM 唯一事實來源
 
-每一次讀取、新增、修改、刪除、搜尋、匯出及圖片存取，都必須確認資料屬於使用者被授權的
+每一次讀取、新增、修改、搜尋、Draft／Temporary Media 刪除、Care Report Archive 及圖片存取，都必須確認資料屬於使用者被授權的
 收容所。資料隔離必須由後端及資料存取層強制執行，不得只依靠前端隱藏選單、不公開網址、
-使用者不知道識別碼或 LINE 畫面限制。
+使用者不知道識別碼或 LIFF 畫面限制。本 Feature 不提供批次 Export。
 
 若使用者嘗試存取其他收容所資料，系統不得洩漏動物、收容編號、使用者、照片、紀錄筆數或
 收容所內部設定是否存在；應回傳一致的無權限或無法存取結果，並依安全政策留下紀錄。平台
-可以服務多個收容所，但每筆資料都必須在 CRM 中具有明確收容所歸屬。LINE Bot、LIFF、QR
-Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名單，所有管道都必須依 CRM 中的
+可以服務多個收容所，但每筆資料都必須在 CRM 中具有明確收容所歸屬。LIFF、QR Code、AI
+模組及管理後台不得各自建立獨立的收容所或動物名單，所有管道都必須依 CRM 中的
 收容所、使用者及動物關係進行授權與查詢。
 
 ## User Scenarios & Testing
@@ -136,9 +147,9 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 1. **Given** 平台管理員提供收容所名稱、機構代碼、啟用狀態與初始管理員，**When** 建立收容所，**Then** 收容所具有獨立機構範圍且預設尚未啟用；**When** 平台管理員明確啟用，**Then** 才能建立一般業務資料。
 2. **Given** A 收容所管理員已登入，**When** 建立工作人員或志工，**Then** 新帳號歸屬 A 收容所，且不能建立 B 收容所帳號。
 3. **Given** A、B 收容所各有一隻收容編號為 `VAAAG114080610` 的動物，**When** 各自於授權範圍內搜尋，**Then** 能分別取得本收容所動物且不產生編號衝突。
-4. **Given** A 收容所工作人員使用 B 收容所的動物識別、收容編號、QR Code 或網址，**When** 嘗試查看、搜尋、修改或匯出，**Then** 系統拒絕存取且不洩漏 B 資料是否存在。
+4. **Given** A 收容所工作人員使用 B 收容所的動物識別、收容編號、QR Code 或網址，**When** 嘗試查看、搜尋或修改，**Then** 系統拒絕存取且不洩漏 B 資料是否存在。
 5. **Given** 平台管理員執行明確授權的跨機構管理操作，**When** 操作完成，**Then** 系統留下完整稽核紀錄。
-6. **Given** 同一志工已在 A 收容所有進行中的服務操作，**When** 系統發現該志工同時在 B 收容所或不同地點操作，**Then** 系統顯示跨收容所同時操作警示，且每筆回報仍只能選定一個收容所。
+6. **Given** 志工具有 A、B 收容所 Membership 且目前 Session 的 Active Shelter Context 為 A，**When** 志工嘗試以 B 的 Animal、QR Token、Draft 或 Reportable Scope 送出回報，**Then** 系統阻擋送出、保留 Draft、顯示需要切換目前收容所的原因，且不得由 QR Code 自動切換。
 7. **Given** A 收容所管理員或被授權工作人員設定今日可回報範圍，**When** 選擇個別動物、籠舍／區域或指定志工，**Then** 只有符合該範圍與志工授權的動物可建立正式回報，且不會建立完整班次排班資料。
 
 ### User Story 1 - 透過名單、QR Code 或收容編號正確選擇動物（Priority: P1）
@@ -232,7 +243,7 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 4. 志工掃描包含 `VAAAG114080610` 的 QR Code 後，系統顯示唯一對應動物的確認卡。
 5. 志工未按下確認前，系統不建立正式回報。
 6. 收容編號不存在時，系統不建立空白或匿名紀錄。
-7. 同一收容編號符合多筆資料時，系統阻擋選擇並通知工作人員。
+7. 同一收容編號符合多筆資料時，系統阻擋選擇、顯示資料異常並要求授權工作人員處理。
 8. 志工可以透過完整收容編號搜尋動物。
 9. 部分收容編號符合多筆資料時，系統不得自動選定。
 10. QR Code 損壞時，志工可以改用收容編號搜尋。
@@ -301,9 +312,9 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 58. **Given** 使用者修改 QR Code 內容，**When** 嘗試查詢或建立回報，**Then** 修改內容不能繞過收容所範圍、身分與動物狀態驗證。
 59. **Given** 收容所已被平台管理員停用，**When** 該收容所一般帳號登入或建立業務資料，**Then** 系統拒絕操作；既有資料仍依權限與保存政策處理。
 60. **Given** 工作人員帳號已被收容所管理員停用，**When** 該帳號嘗試存取收容所資料，**Then** 系統拒絕存取。
-61. **Given** 平台管理員執行明確授權的跨機構管理操作，**When** 查看、修改或匯出資料，**Then** 系統留下操作者、時間、範圍、原因與操作結果的完整稽核紀錄。
-62. **Given** 公開動物頁面存在，**When** 一般民眾查看，**Then** 只顯示該收容所明確設定為公開的資料，不顯示內部照護、照片、心得或設定。
-63. **Given** 前端傳入其他收容所識別、動物識別、收容編號或查詢條件，**When** 系統處理讀取、新增、修改、刪除、搜尋、匯出或圖片存取，**Then** 系統依已驗證身分重新判定可存取範圍，不信任前端提供的收容所範圍。
+61. **Given** 平台管理員執行明確授權的跨機構管理操作，**When** 查看或修改資料，**Then** 系統留下操作者、時間、範圍、原因與操作結果的完整稽核紀錄；本 Feature 不提供批次匯出。
+62. **Given** 未登入或未授權使用者嘗試取得內部照護資料，**When** 請求 Care Report、Volunteer Note、照片、AI Observation、Timeline 或 Signed URL，**Then** 系統拒絕且不洩漏資料是否存在。
+63. **Given** 前端傳入其他收容所識別、動物識別、收容編號或查詢條件，**When** 系統處理讀取、新增、修改、搜尋、Draft／Temporary Media 刪除、Care Report Archive 或圖片存取，**Then** 系統依已驗證身分重新判定可存取範圍，不信任前端提供的收容所範圍。
 64. **Given** A 收容所管理員或工作人員嘗試推測 B 收容所的使用者、動物、照片、回報、紀錄筆數或內部設定，**When** 發出查詢，**Then** 系統回傳一致的無權限或無法存取結果，且不洩漏資料存在性。
 
 ## Edge Cases
@@ -323,13 +334,13 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - AI 處理逾時、回傳無效內容、與志工選項不一致、包含診斷語意或無法判讀照片時，保留原始資料並以待處理或失敗狀態呈現。
 - 歷史使用的觀察選項停用後仍可顯示；指定日期無紀錄或近 14 天完全無回報時，每個日期均顯示「當日無回報」。
 - 使用者沒有查看完整歷程權限、LINE／LIFF 顯示舊資料或 CRM 在填寫期間更新時，依最新 CRM 與角色權限重新驗證，不以通道舊畫面或快取作為正式依據。
-- 平台同時服務多個收容所時，每個收容所的使用者、動物、收容編號、籠舍、區域、回報、照片、心得、AI 結果、QR Code、通知、設定與稽核紀錄都必須維持機構歸屬。
+- 平台同時服務多個收容所時，每個收容所的使用者、動物、收容編號、籠舍、區域、回報、照片、心得、AI 結果、QR Code、設定與稽核紀錄都必須維持機構歸屬。
 - 不同收容所使用相同收容編號時，查詢與正式回報仍以機構範圍共同判定，不得在全平台範圍猜測唯一動物。
 - 使用者使用其他收容所的動物識別、收容編號、QR Code、網址或使用者識別時，系統不得洩漏資料是否存在、紀錄筆數或圖片是否存在。
 - 收容所被停用時，一般帳號不得繼續登入或建立新業務資料；既有資料不得因停用而失去可追溯性。
 - 工作人員或志工帳號被停用時，該帳號即使持有舊畫面、QR Code 或網址，也不得繼續存取或建立資料。
 - 平台管理員執行跨機構管理作業時，必須有明確授權與完整 Audit Record；一般工作人員不得取得預設跨機構能力。
-- 同一志工若被授權服務多個收容所，操作畫面必須清楚顯示目前收容所；同一時間在不同收容所或不同地點操作時，系統必須警示，且每筆回報只能歸屬一個收容所。
+- 同一志工若被授權服務多個收容所，操作畫面必須清楚顯示 Session 的 Active Shelter Context；若 Draft、Animal、QR Token、Scope 與 Active Context 的 Organization 不一致，系統必須阻擋送出並保留 Draft，不得以 GPS、IP、裝置或時間重疊推測地點。
 
 ## Requirements
 
@@ -343,7 +354,7 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - **FR-004**：收容所管理員或被授權的工作人員 MUST 能設定志工當日可回報範圍；第一階段至少支援個別動物、籠舍／區域與指定志工；設定結果 MUST 只允許符合範圍與權限的動物建立正式回報，且不得擴大成完整班次排班系統。
 - **FR-005**：系統 MUST 支援今日名單、QR Code 與收容編號搜尋作為動物候選來源，且三者均 MUST 查詢 CRM 的同一份現行動物資料。
 - **FR-006**：系統 MUST 支援完整收容編號搜尋，並可支援部分字串或末幾碼；多筆結果不得自動選擇。
-- **FR-007**：收容編號在同一機構發生重複時，系統 MUST 阻擋新的正式回報綁定、顯示資料異常並通知授權工作人員，不得自行挑選其中一隻。
+- **FR-007**：收容編號在同一機構發生重複時，系統 MUST 阻擋新的正式回報綁定、顯示資料異常並要求授權工作人員處理，不得自行挑選其中一隻。
 - **FR-008**：QR Code MUST 使用不含業務資料的非祕密 QR Token 或系統深層連結，僅承載候選動物查詢所需的穩定參考資訊；不得承載醫療內容、照護紀錄、個資、內部關注資訊或可被視為長效授權祕密；掃描本身不得代表已通過身分或權限驗證。
 - **FR-009**：志工掃描 QR Code 或選擇搜尋結果後，系統 MUST 依目前機構與 CRM 查詢，確認結果唯一、動物仍可回報、志工身分有效且具有權限，然後顯示確認卡。
 - **FR-010**：志工未明確按下「確認是這隻」或語意相同的動作前，系統 MUST 不建立正式照護紀錄。
@@ -388,7 +399,7 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 #### AI 輔助擷取
 
 - **FR-039**：AI MAY 在原始回報保存後，從志工心得與照片擷取描述性觀察訊號，且處理不得阻塞人工送出。
-- **FR-040**：AI 結果 MUST 明確標示為 AI 輔助擷取，與原始回報分開呈現，並可追溯至來源文字或照片；原始 AI 輸出與人工修正結果均 MUST 保留。
+- **FR-040**：AI 結果 MUST 明確標示為 AI 輔助擷取，與原始回報分開呈現，並可追溯至來源文字或照片；每一筆 AI Job MUST 保存非空的 Provider、Model Name、Model Version／Snapshot、Prompt Template ID、Prompt Version、Output Schema Version、處理時間、原始輸出、驗證結果、失敗原因與 Retry Count；`raw_ai_output`、`validated_ai_observation` 與 `human_review_result` MUST 分開保存，人工修正不得覆蓋原始 AI 輸出。
 - **FR-041**：AI MUST NOT 診斷疾病、推測病因、宣稱健康正常或無外傷、決定是否就醫、改變正式狀態、核准或拒絕事項、產生或修改正式動物識別、計算關注分數、決定等級或排序，或改變志工選擇的動物。
 - **FR-042**：AI 輸出出現醫療診斷、健康判定、關注分數、等級、排序、正式狀態或正式識別碼時，系統 MUST 不將其作為正式結果，並保留可供授權人員查核的原始輸出與處理狀態。
 - **FR-043**：授權工作人員 MUST 能確認或修正 AI 描述性結果，且系統 MUST 保留確認或修正人、時間、原因及修正前後內容。
@@ -400,22 +411,22 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - **FR-046**：未完成身分綁定的使用者 MUST 被引導完成綁定或聯繫管理員，不得建立無法辨識回報者的正式紀錄。
 - **FR-047**：志工只能查看完成回報所需的最少動物資訊、授權範圍內名單與自己允許修改的紀錄；不得查看未授權動物完整歷程、其他志工完整私人紀錄、完整醫療內容、內部關注資訊或未確認 AI 結果。
 - **FR-048**：工作人員與管理員依角色權限查看或管理動物、範圍、QR Code、歷程、原始資料、AI 結果、標準語彙與異動紀錄；權限不足者 MUST 被拒絕並看不到受限內容。
-- **FR-049**：照護照片、心得與內部紀錄 MUST 預設為內部資料，不得出現在公開動物檔案、未登入頁面、一般民眾搜尋、QR Code 原始內容或未授權 LINE 對話。
+- **FR-049**：照護照片、心得與內部紀錄 MUST 預設為內部資料，不得出現在未登入頁面、一般民眾搜尋、QR Code 原始內容或未授權 LIFF／LINE 對話；本 Feature 不建立公開動物頁面，公開頁面由獨立 Specification 定義。
 - **FR-050**：重要建立、修改、動物綁定更正、AI 確認或修正、權限與範圍異動 MUST 保留操作者、時間、變更內容、原因（適用時）、原始關聯、修正後關聯（適用時）與來源通道。
 - **FR-051**：LINE 或 LIFF 顯示與 CRM 不一致時，系統 MUST 以 CRM 即時資料與權限判斷為準；通道畫面不得覆蓋 CRM 正式資料。
-- **FR-052**：系統 MUST 支援多個收容所或中途機構共用平台，且每筆非公開業務資料 MUST 明確歸屬至單一收容所，包括使用者、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、通知、設定與 Audit Record。
+- **FR-052**：系統 MUST 支援多個收容所或中途機構共用平台，且每筆非公開業務資料 MUST 明確歸屬至單一收容所，包括使用者、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、設定與 Audit Record。
 - **FR-053**：平台管理員 MUST 能依權限以收容所名稱、機構代碼、啟用狀態與初始管理員建立收容所；地址／服務區域與聯絡資訊可選；平台管理員 MUST 能修改、啟用或停用收容所，建立或協助重設初始收容所管理員，並查看收容所帳號與服務狀態；跨機構管理操作 MUST 有明確授權與稽核紀錄；收容所未啟用前 MUST 不得建立一般業務資料。
 - **FR-054**：收容所管理員 MUST 只能管理自己所屬收容所的帳號、志工、動物、收容編號、籠舍、區域、QR Code、今日可回報範圍、歷程與內部設定，不得管理其他收容所資料。
-- **FR-055**：工作人員帳號 MUST 歸屬至特定收容所；工作人員只能查看、搜尋、建立、修改或刪除所屬或被明確授權收容所的資料。
+- **FR-055**：工作人員帳號 MUST 歸屬至特定收容所；工作人員只能查看、搜尋、建立或修改所屬或被明確授權收容所的資料，並依規則執行 Draft／Temporary Media 刪除或 Care Report Archive；不得 Hard Delete 正式 Care Report 或正式 Media。
 - **FR-056**：志工 MUST 被記錄明確授權的收容所範圍；志工可以被授權服務多個收容所，但同一時間 MUST 只有一個目前服務中的收容所，且只能查看完成回報所需的最少資訊與回報被授權的動物。
-- **FR-064**：系統 MUST 清楚顯示志工目前操作中的收容所；若發現同一志工同一時間在不同收容所或不同地點操作，系統 MUST 顯示警示，且不得讓單筆回報同時歸屬至多個收容所。
-- **FR-057**：每一次讀取、新增、修改、刪除、搜尋、匯出及圖片存取 MUST 依已驗證的使用者身分重新判定收容所範圍；不得只依賴前端選單、網址、LINE 畫面或使用者提交的機構識別。
+- **FR-064**：系統 MUST 清楚顯示 Session 綁定的志工目前操作中的收容所；若 Draft、Animal、QR Token、Reportable Scope 與 Active Shelter Context 的 Organization 不一致，系統 MUST 阻擋送出、保留 Draft 並顯示原因；不得以 GPS、IP、裝置、時間重疊或地理距離推測志工地點，且不得讓單筆回報同時歸屬至多個收容所。
+- **FR-057**：每一次讀取、新增、修改、搜尋、Draft／Temporary Media 刪除、Care Report Archive 及圖片存取 MUST 依已驗證的使用者身分重新判定收容所範圍；不得只依賴前端選單、網址、LIFF 畫面或使用者提交的機構識別。本 Feature 不提供批次 Export。
 - **FR-058**：收容編號 MUST 只在同一收容所內唯一；不同收容所可以有相同收容編號，但所有查詢與正式資料關聯 MUST 同時包含且驗證收容所範圍。
 - **FR-059**：QR Code 掃描時 MUST 同時驗證 QR Code 所屬收容所、使用者可存取的收容所與動物所屬收容所；三者不一致時不得進入回報流程。
 - **FR-060**：使用者嘗試存取未授權收容所資料時，系統 MUST 回傳一致的無權限或無法存取結果，不得洩漏動物、收容編號、使用者、照片、紀錄筆數或內部設定是否存在。
 - **FR-061**：收容所停用後，該收容所一般帳號 MUST 不能繼續登入或建立新的業務資料；停用工作人員帳號後，該帳號 MUST 不能繼續存取收容所資料。
-- **FR-062**：公開動物頁面 MUST 只顯示該收容所明確設定為公開的資料，所有內部照護資料 MUST 維持非公開。
-- **FR-063**：LINE、LIFF、QR Code、AI 模組與管理後台 MUST 不得建立獨立的收容所或動物正式資料副本，所有授權與查詢 MUST 依 CRM 的收容所、使用者與動物關係執行。
+- **FR-062**：本 Feature 不建立公開動物頁面；未登入或未授權使用者 MUST 無法取得 Care Report、Volunteer Note、照護照片、AI Observation、Animal Timeline 或 Signed URL。公開動物頁面與欄位 Allowlist MUST 由獨立 Specification 定義。
+- **FR-063**：LIFF、QR Code、AI 模組與管理後台 MUST 不得建立獨立的收容所或動物正式資料副本，所有授權與查詢 MUST 依 CRM 的收容所、使用者與動物關係執行；LINE Messaging API Webhook 不屬本 Feature。
 
 ## Key Entities
 
@@ -423,6 +434,7 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - **Platform Administrator**：管理平台收容所、初始管理員、帳號服務狀態與明確授權跨機構作業的角色。
 - **Shelter Administrator**：只能管理所屬 Shelter 的帳號、動物、照護範圍、設定與資料異動的角色。
 - **Shelter Membership / Authorization Scope**：記錄使用者所屬或被明確授權的 Shelter 範圍，供每次資料存取重新判定。
+- **Session Record / Active Shelter Context**：Session Record 記錄短效 Access Token、Refresh Token 輪替與伺服器撤銷狀態；Active Shelter Context 記錄使用者目前明確選擇的 Organization，必須來自有效 Membership 並綁定 Session。
 - **Cage / Area**：Shelter 內供人員辨識動物位置的籠舍與區域，不能取代 Animal 的正式識別或 Shelter 範圍。
 - **Animal**：CRM 中代表一隻動物的正式業務對象，具有不可變正式識別；可連結名稱、目前照片、收容編號、籠位、區域、狀態與歷史回報。
 - **Shelter Number**：機構用於人員辨識、搜尋、QR Code 與籠位標示的收容編號；在同一機構內應唯一，但不是正式關聯識別；回報另保存當時顯示的快照。
@@ -432,16 +444,16 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - **Report Draft**：尚未送出的回報內容，包含已確認 Animal、已填選項、心得、照片上傳狀態與最後操作時間；送出後不取代正式回報。
 - **Observation Category**：可維護的觀察主題，例如進食、排泄或活動力，組織志工填寫與工作人員查詢。
 - **Observation Option**：某 Observation Category 下可選的非診斷性描述，具有穩定識別、顯示名稱、說明、順序與啟用狀態。
-- **Photo**：回報附加的原始影像，可標示排泄、毛髮、外觀、活動狀況或其他用途，並可成為 AI 擷取來源。
+- **Photo / Temporary Media**：回報附加的影像。Temporary Media 在送出前可刪除或過期清理；正式 Photo 必須完成格式驗證、EXIF 清理、重新編碼與 Checksum 後保存，且只有清理後影像可成為 AI 擷取來源。
 - **Volunteer Note**：志工輸入的原始心得文字，屬於不可被 AI 摘要取代的現場資料。
-- **AI Observation**：由 AI 從 Photo 或 Volunteer Note 擷取的描述性衍生結果，需標示、追溯、保留原始輸出並可由授權人員確認或修正。
-- **Animal Assignment**：將志工、日期、班次或其他授權條件與可回報 Animal 關聯的業務概念，用來限制今日可回報範圍；實際採用的條件待 Clarification Items 決定。
+- **AI Processing Job / AI Observation**：AI Job 保存 Provider、Model、Prompt、Schema 版本、時間、原始輸出、驗證與失敗資訊；AI Observation 是從已清理 Photo 或 Volunteer Note 擷取的描述性衍生結果，需標示、追溯並可由授權人員確認或修正。
+- **Animal Assignment**：將志工、日期、個別 Animal、Cage／Area 或指定 Volunteer 與可回報 Animal 關聯的業務概念，用來限制今日可回報範圍；不包含完整班次排班。
 - **Daily Reportable Scope**：某日某志工或某群組可建立回報的動物集合，必須能在送出時重新確認是否仍有效。
 - **QR Code**：貼於籠位或資料卡的候選動物查詢標示，只負責帶出候選，不代表身分驗證或回報授權。
 - **Animal Timeline**：以單一 Animal 為中心、按日期與時間排列的回報檢視，包含有回報日、無回報日、原始資料、AI 資料、人工修正與異動資訊。
 - **Audit Record**：記錄重要建立、修改、權限、動物綁定更正與 AI 覆核的操作者、時間、內容、原因與來源，以維持可追溯性。
 
-主要關係如下：Shelter 擁有多個使用者、Animal、Shelter Number、Cage / Area、Daily Reportable Scope、QR Code、通知、設定與 Audit Record。Shelter Membership / Authorization Scope 決定使用者可操作哪些 Shelter。Animal 擁有多筆 Daily Care Report；每筆回報由一名 Volunteer 建立，可包含多個 Photo、零或一個 Volunteer Note、結構化 Observation Option 與零或多個 AI Observation。Animal Assignment 與 Daily Reportable Scope 決定特定 Volunteer 在特定日期可回報哪些 Animal。QR Code 提供指定 Shelter 內的候選 Animal 查詢資訊；Animal Timeline 聚合同一 Shelter 內同一 Animal 的歷史；Audit Record 記錄上述實體的重要異動與跨機構授權。Staff Member 可依權限覆核、修正或管理上述內容。
+主要關係如下：Shelter 擁有多個使用者、Animal、Shelter Number、Cage / Area、Daily Reportable Scope、QR Code、設定與 Audit Record。Shelter Membership / Authorization Scope 決定使用者可操作哪些 Shelter；Session Record 綁定目前 Active Shelter Context。Animal 擁有多筆 Daily Care Report；每筆回報由一名 Volunteer 建立，可包含多個正式 Photo、零或一個 Volunteer Note、結構化 Observation Option 與零或多個 AI Observation。Animal Assignment 與 Daily Reportable Scope 決定特定 Volunteer 在特定日期可回報哪些 Animal。QR Code 提供指定 Shelter 內的候選 Animal 查詢資訊；Animal Timeline 聚合同一 Shelter 內同一 Animal 的歷史；Audit Record 記錄上述實體的重要異動與跨機構授權。Staff Member 可依權限覆核、修正、封存或管理上述內容。
 
 ## Assumptions
 
@@ -450,24 +462,24 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - 每位志工在建立正式回報前都已完成 LINE 或系統身分綁定；未綁定者只能進入綁定或求助流程。
 - 平台服務多個收容所，每個收容所都是獨立的機構資料範圍；非公開資料不因共用平台而互相可見。
 - 建立收容所時，名稱、機構代碼、啟用狀態與初始管理員為必填；地址／服務區域與聯絡資訊可選；新收容所預設未啟用，只有平台管理員明確啟用後才能建立一般業務資料。
-- 使用者帳號、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、通知、內部設定與 Audit Record 都具有明確 Shelter 歸屬。
+- 使用者帳號、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、內部設定與 Audit Record 都具有明確 Shelter 歸屬。
 - 平台管理員可以執行明確授權的跨機構管理作業；一般收容所管理員、工作人員與志工不具備預設跨機構能力。
-- 志工可以被授權服務多個收容所，但同一時間只能有一個目前服務中的收容所；發現不同收容所或不同地點的同時操作時，系統會顯示警示。
+- 志工可以被授權服務多個收容所，但同一時間只能透過 Session 明確選擇一個目前服務中的收容所；系統不以 GPS、IP、裝置、時間重疊或地理距離推測所在位置。Draft、Animal、QR Token、Scope 與 Active Context 的 Organization 不一致時，系統阻擋送出並保留 Draft。
 - 志工可在建立後 24 小時內修改自己回報的內容、照片與心得，但不能自行修改動物綁定；動物綁定更正由收容所管理員或授權工作人員處理，並保留完整稽核紀錄。
 - 收容編號只在同一收容所內唯一；不同收容所可使用相同收容編號，查詢與正式關聯都以 Shelter 範圍共同判定。
 - 收容所停用後，一般帳號不能登入或建立新的業務資料；既有資料仍依權限與保存政策保留可追溯性。
-- 每隻 Animal 在 CRM 中都有不可變正式識別；沒有 Shelter Number 的動物仍可被授權人員以 CRM 正式識別管理，但 QR Code 識別方式待確認。
+- 每隻 Animal 在 CRM 中都有不可變正式識別；沒有 Shelter Number 的 Animal 使用不可預測且可撤銷的 QR Token 建立候選查詢，不依賴 Shelter Number。
 - Shelter Number 預設在同一機構內唯一；發現重複時視為資料異常，不由系統猜測。
 - QR Code 使用不含業務資料的非祕密 QR Token 或系統深層連結，只用於查詢候選 Animal，不代表身分驗證、回報授權或長效祕密；沒有 Shelter Number 的 Animal 仍可使用 CRM 正式識別建立候選查詢。
 - 正式回報關聯 CRM 的 Animal，不關聯 QR Code 原始文字或當時顯示名稱。
 - 志工可能不記得動物名稱，但可以使用照片、籠位、區域或 Shelter Number 辨識。
 - 工作人員或收容所管理員能在管理入口設定所屬 Shelter 的 Daily Reportable Scope；第一階段支援個別動物、籠舍／區域與指定志工，不包含完整班次排班。
-- 公開動物資料採收容所明確設定的白名單範圍；內部照護資料預設不公開。
+- 本 Feature 不建立公開動物頁面或公開欄位 Allowlist；未登入或未授權者不能取得內部照護資料，公開資料規則由獨立 Specification 定義。
 - 一般工作人員與志工無法透過前端、網址、QR Code、收容編號或其他使用者輸入繞過 Shelter 授權。
 - 動物名稱可以重複，照片相似也不能作為唯一識別。
 - AI 分析採人工回報保存後的非同步處理；AI 失敗不會阻止人工保存。
 - 近 14 個曆日是預設近期檢視範圍，不是資料保存期限；更早歷史可查詢。
-- 照片、心得、原始回報、AI 輸出與人工修正均依 CRM 及組織資料保存政策保留；刪除、封存與保存期限政策待確認。
+- 正式 Care Report 不允許 Hard Delete，只能 Correction 或 Archive 並保留 Audit；Draft 與未提交 Temporary Media 可刪除或過期清理；正式 Media 不 Hard Delete，只能標記不可使用或封存。
 - 第一階段的預設錯誤處理是顯示原因、保留已填內容、提供替代操作或聯繫工作人員；不以相似名稱或舊通道資料猜測。
 - 依 Constitution，AI 結果不會自動成為醫療、健康、關注等級、排序或正式狀態判定。
 
@@ -479,7 +491,7 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - Shelter Number 管理與異常處理能力。
 - Volunteer 身分綁定與基本角色權限。
 - Photo 上傳與內部資料存取能力。
-- LINE／LIFF 或等效手機回報入口。
+- LIFF 或等效手機回報入口；LINE Messaging API Webhook 不屬本 Feature。
 - 工作人員與管理員的管理入口。
 - 可選用的 AI 描述性擷取服務；其失敗不得阻塞 P1、P2、P3。
 
@@ -489,10 +501,11 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 - 關注優先度計算與今日排序。
 - 公開島民檔案、領養申請、志工智慧排班或其他後續功能。
 - 以政府公告頁面作為正式回報資料庫。
+- 公開動物頁面、批次 Export 或 LINE Messaging API Webhook。
 
 ## Out of Scope
 
-本功能不包含完整志工排班、換班與請假、排班最佳化、動物入所影像辨識、完整醫療紀錄、疫苗管理、關注優先度最終計分或排序、領養申請與審核、領養適配評估、公開島民檔案、Q 版角色與故事生成、送養文案、認養後任務與成就、捐贈物資管理、社群發布、醫療診斷、健康評估、自動就醫建議、與政府收容系統雙向同步，以及資料庫設計、API Contract、Endpoint、技術架構、套件或框架選型與部署方案。
+本功能不包含完整志工排班、換班與請假、排班最佳化、動物入所影像辨識、完整醫療紀錄、疫苗管理、關注優先度最終計分或排序、領養申請與審核、領養適配評估、公開島民檔案、公開動物頁面與公開欄位 Allowlist、批次 Export、LINE Messaging API Webhook、Q 版角色與故事生成、送養文案、認養後任務與成就、捐贈物資管理、社群發布、醫療診斷、健康評估、自動就醫建議、與政府收容系統雙向同步，以及資料庫設計、Endpoint、技術架構、套件或框架選型與部署方案。OpenAPI Contract 依 D-004 建立，但不延伸為本段未列的 API 功能。
 
 ## Measurable Success Criteria
 
@@ -519,7 +532,7 @@ Code、AI 模組及管理後台不得各自建立獨立的收容所或動物名�
 
 ## Clarification Items
 
-本次高影響待釐清事項均已完成；照片是否必填、排泄照片是否必填、心得是否必填、食量與護食量表、草稿保存期限、跨裝置恢復、重複送出、刪除與封存政策保留至規劃與任務階段確認，不阻擋本功能的核心回報與資料隔離驗收。
+本次高影響待釐清事項均已完成。照片、排泄照片與心得的必填規則、食量與護食量表、草稿保存期限、跨裝置恢復與重複送出文案仍由規劃與任務階段依既有最小可行規則處理；正式 Care Report 的 Archive、Draft／Temporary Media 刪除政策已由實作前決策紀錄確定。公開頁面、批次 Export 與 LINE Webhook 不屬本 Feature。
 
 
 ## Constitution Compliance Notes
