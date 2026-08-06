@@ -21,6 +21,9 @@
 5. QR 解析必須同時驗證 QR Shelter、Actor Scope 與 Animal Shelter。
 6. 所有跨 Shelter 操作都要有平台管理員授權與 Audit Record。
 7. Timeline 是 CRM 資料的讀取檢視，不得成為獨立正式資料來源。
+8. Volunteer 可有多個有效 Shelter Membership，但同一時間只能有一個 Active Shelter Context；發現不同 Shelter 或不同地點同時操作時，系統必須顯示警示，且不能讓單筆回報同時歸屬多個 Shelter。
+9. Daily Reportable Scope 第一階段支援個別 Animal、Cage／Area 與指定 Volunteer，不包含完整班次排班。
+10. Volunteer 可在建立後 24 小時內修改自己的回報內容、Photo 與 Note；Animal 綁定只能由 Shelter Administrator 或授權 Staff Member 更正，並保留 Audit Record。
 
 ## Database Access 規則
 

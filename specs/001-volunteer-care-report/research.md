@@ -62,11 +62,11 @@
 
 ## 決策 8：本階段對規格待釐清事項採保守規劃預設
 
-**Decision**：為了讓 Phase 1 可以形成可執行設計，採以下規劃預設：收容所名稱、機構代碼、啟用狀態與初始管理員為建立收容所的必要資訊；地址／服務區域與聯絡資訊可先為非必要欄位；志工第一階段只操作一個所屬 Shelter；QR Code 只作候選查詢；照片與心得不阻塞人工回報；每日可回報範圍由收容所管理員或授權工作人員設定，至少支援個別 Animal 範圍。
+**Decision**：採以下已確認的規劃決策：收容所名稱、機構代碼、啟用狀態與初始管理員為建立收容所的必要資訊；地址／服務區域與聯絡資訊可先為非必要欄位；志工可被授權服務多個 Shelter，但同一時間只有一個目前服務中的 Shelter，發現不同 Shelter 或不同地點同時操作時顯示警示；QR Code 使用非祕密 QR Token 或系統深層連結；每日可回報範圍由收容所管理員或被授權工作人員設定，支援個別 Animal、籠舍／區域與指定 Volunteer，不包含完整班次排班；志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
 
-**Rationale**：這些預設能保留資料隔離與 P1／P2 的最小可驗收流程，同時不把未確認內容擴大成跨機構切換、強制照片或同步 AI。
+**Rationale**：這些決策保留資料隔離與 P1／P2 的最小可驗收流程，允許跨 Shelter 授權但避免同時操作造成回報歸屬不明，也不把功能擴大成完整班次排班、強制照片或同步 AI。照片是否必填、草稿保存期限與跨裝置恢復等低優先細節留到 tasks 階段。
 
-**Alternatives considered**：等待所有業務選項確認才產生設計；拒絕，因會阻塞本階段規劃。對未授權 Shelter 自動放寬；拒絕，因與 Constitution XI 衝突。
+**Alternatives considered**：志工永久只能隸屬單一 Shelter；拒絕，因不支援實際跨地點志願服務。由 QR 或搜尋結果自動切換目前 Shelter；拒絕，因可能造成跨租戶誤綁。等待低優先照片／草稿政策確認才產生設計；拒絕，因不阻擋核心回報與隔離驗收。
 
 ## 決策 9：SQLAlchemy 2.x、AsyncSession 與 Alembic
 
@@ -83,4 +83,4 @@
 - A／B Shelter 隔離、相同 Shelter Number、圖片存取、匯出與停用狀態均有驗證路徑。
 - GCP 專屬 IAM、Signed URL、Cloud SQL、Service Account 與 HTTPS LIFF 行為列為 Demo 另行驗證，不假設本機通過即等於 GCP 通過。
 - SQLAlchemy `AsyncSession`、`asyncpg`、受控 Repository、Composite Constraint、PostgreSQL 防護與 Alembic 空資料庫 migration 已納入 Phase 1 設計與 quickstart 驗證路徑。
-- 規格原有的三項待釐清事項已在本計畫採取可執行的保守預設；若產品確認不同，必須在任務建立前同步更新規格。
+- 規格原有的五項高影響待釐清事項已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。

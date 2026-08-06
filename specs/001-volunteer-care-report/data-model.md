@@ -63,7 +63,7 @@
 
 代表平台與收容所使用者。User 保存身分狀態、角色與可用服務狀態；角色決定可用操作，但每一次資料存取仍須由 Shelter Membership / Authorization Scope 再判定。
 
-主要關係：Platform Administrator 可管理平台層 Shelter；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；第一階段 Volunteer 預設只操作一個 Shelter，資料模型保留未來多 Shelter 授權的表示能力。
+主要關係：Platform Administrator 可管理平台層 Shelter；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；Volunteer 可以有多個有效授權，但同一時間只能有一個 Active Shelter Context，且系統需能記錄同時操作警示。
 
 驗證規則：停用帳號不能登入、讀取或建立新資料；未綁定 Volunteer 不能建立匿名正式回報；角色不足不能依網址、識別碼、QR Token 或輸入條件擴大範圍。
 
@@ -91,9 +91,17 @@
 
 驗證規則：同一 Shelter 內唯一；不同 Shelter 可以相同；重複、修正或缺少時不得自行猜測；歷史回報保存當時的顯示快照，但正式關聯仍使用 Animal 正式識別。
 
+### Active Shelter Context / Concurrent Service Warning
+
+代表志工目前正在操作或服務的 Shelter Context，以及同一志工在不同 Shelter 或不同地點同時操作的警示事件。
+
+主要資料：Volunteer、目前 Shelter、開始時間、最後活動時間、來源通道、活動狀態、警示狀態與處理結果。
+
+驗證規則：Volunteer 可以有多個 Shelter Membership，但同一時間只能有一個 Active Shelter Context；偵測到不同 Shelter 或不同地點同時操作時必須顯示警示；警示不得讓單筆 Report 同時歸屬多個 Shelter。
+
 ### Daily Reportable Scope / Animal Assignment
 
-代表特定日期、Volunteer 或群組可回報的 Animal 集合。初期至少支援個別 Animal 指定，並保留區域、籠舍、班次與志工等條件的擴充位置。
+代表特定日期、Volunteer 或群組可回報的 Animal 集合。第一階段支援個別 Animal、Cage／Area 與指定 Volunteer，不包含完整班次排班。
 
 驗證規則：範圍必須屬於同一 Shelter；送出時重新驗證是否仍有效；未在 Scope 內的 Animal 不得因 QR Code 或 Shelter Number 搜尋而自動取得回報資格。
 
@@ -111,7 +119,7 @@
 
 主要資料：Animal、Shelter、Volunteer、回報來源、回報時間、照護／散步完成狀態、進食、飲水、活動、排泄、行為、外觀、原始建立時間、最後修改時間、動物名稱與 Shelter Number 快照、保存狀態。
 
-驗證規則：必須有已驗證 Volunteer、有效 Shelter Scope、正式 Animal 關聯；同一 Animal 同日可有多筆；原始內容不可被 AI 或更正覆蓋；重複送出必須可辨識。
+驗證規則：必須有已驗證 Volunteer、有效 Shelter Scope、正式 Animal 關聯；同一 Animal 同日可有多筆；原始內容不可被 AI 或更正覆蓋；重複送出必須可辨識。Volunteer 可在建立後 24 小時內修改自己的內容、Photo 與 Note，但不能修改 Animal 綁定；Animal 綁定更正由 Shelter Administrator 或授權 Staff Member 處理。
 
 ### Report Draft
 
@@ -166,6 +174,7 @@ AI Processing Job 代表待處理、處理中、成功、失敗或無效的非�
 ```text
 Shelter
 ├── Shelter Membership / Authorization Scope ── User / Role
+├── Active Shelter Context ── Volunteer / Concurrent Service Warning
 ├── Animal ── Shelter Number / Cage / Area / QR Code
 ├── Daily Reportable Scope ── Volunteer / Animal
 ├── Daily Care Report ── Photo / Volunteer Note / AI Processing Job
@@ -181,13 +190,13 @@ Shelter
 - **Shelter**：`pending_setup` → `active` → `suspended`；停用不刪除既有歷史。
 - **User／Membership**：`invited` → `active` → `disabled`；非 active 不得建立或讀取業務資料。
 - **Report Draft**：`editing` → `ready_to_submit` → `submitted` 或 `blocked_by_revalidation`。
-- **Daily Care Report**：`saved` → `amended`；原始內容永久保留，動物更正另留 Audit Record。
+- **Daily Care Report**：`saved` → `amended`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；原始內容永久保留，所有修改另留 Audit Record。
 - **AI Processing Job**：`pending` → `running` → `succeeded`／`failed`／`invalid`；重試不改變原始 Report。
 - **QR Code**：`active` → `revoked`；撤銷後不能帶入回報流程。
 
 ## 跨實體驗證規則
 
-1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Notification 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致。
+1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Active Shelter Context、Notification 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致。
 2. 同一收容編號在不同 Shelter 可並存；任何查詢只在 ActorScope 允許的 Shelter 中執行。
 3. 任何建立、修改、刪除或匯出動作都要檢查 ActorScope、資源 Shelter、資源狀態與角色能力。
 4. 任何物件檔案操作都要檢查 Object Key 的 Shelter 關聯，不接受前端任意 Object Key 作為授權。

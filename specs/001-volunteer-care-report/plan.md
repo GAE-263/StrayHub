@@ -30,7 +30,7 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 **限制**：本機日常開發、單元測試與主要整合測試不得要求連接 GCP 正式資源；所有正式資料必須歸屬單一 Shelter；資料隔離不得只靠前端；AI 不得診斷、計分、排序、修改正式狀態或阻塞人工回報；Demo 不得包含真實個資或正式收容所敏感資料。
 
-**規模／範圍**：第一階段支援多個台灣收容所或中途機構、相同 Shelter Number 在不同 Shelter 並存、平台管理員跨機構明確授權、一般角色單一 Shelter 範圍，以及同日多筆 Daily Care Report。精確使用者數、動物數與併發容量不是本 feature 的已知驗收數字，實作任務需保留可調整設定，不得把未確認容量誤寫成產品承諾。
+**規模／範圍**：第一階段支援多個台灣收容所或中途機構、相同 Shelter Number 在不同 Shelter 並存、平台管理員跨機構明確授權、一般角色依授權 Shelter 範圍操作、志工可被授權多個 Shelter 但同一時間只有一個目前服務中的 Shelter，以及同日多筆 Daily Care Report。精確使用者數、動物數與併發容量不是本 feature 的已知驗收數字，實作任務需保留可調整設定，不得把未確認容量誤寫成產品承諾。
 
 ## Constitution Check
 
@@ -52,7 +52,7 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：通過。** 資料模型讓所有非公開資料保有 Shelter 歸屬；CRM contract 禁止通道繞過 CRM；Object Storage contract 不把 Signed URL 當永久識別；AI contract 定義非同步、失敗與無效降級；quickstart 覆蓋本機 A／B 隔離、人工回報、照片、近 14 日歷程、AI Job 與品質門檻。上述設計可進入 `$speckit-tasks`，但實作前仍須依產品確認結果更新本計畫的三項保守預設。
+**重新檢查結果：通過。** 資料模型讓所有非公開資料保有 Shelter 歸屬；CRM contract 禁止通道繞過 CRM；Object Storage contract 不把 Signed URL 當永久識別；AI contract 定義非同步、失敗與無效降級；quickstart 覆蓋本機 A／B 隔離、志工同時操作警示、人工回報、24 小時內容修改、照片、近 14 日歷程、AI Job 與品質門檻。低優先的照片／草稿細節仍列為 tasks 階段決策，不阻擋本計畫進入 `$speckit-tasks`。
 
 ## Database Access
 
@@ -115,6 +115,8 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 8. 查看近 14 天歷程。
 9. 驗證跨收容所資料隔離。
 10. 執行 Ruff 與 Pytest。
+11. 驗證同一志工可有多個授權 Shelter，但同一時間在不同 Shelter 或不同地點操作時會收到警示。
+12. 驗證志工可在 24 小時內修改自己的回報內容、照片與心得，但不能修改動物綁定。
 
 ### LIFF 本機整合
 
