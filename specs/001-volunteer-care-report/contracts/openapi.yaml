@@ -3,8 +3,9 @@ info:
   title: StrayHub CRM Care Report API
   version: 0.1.0
   description: >-
-    志工日常照護回報與動物近期歷程的 CRM 邊界契約。所有受保護操作由
-    FastAPI 重新驗證 Session、Membership、角色與 Active Shelter Context。
+    志工日常照護回報與動物近期歷程的 CRM 邊界契約。一般收容所操作由
+    FastAPI 重新驗證 Session、Membership、角色與 Active Shelter Context；
+    PLATFORM_ADMIN 使用平台級 PLATFORM Scope，且所有跨收容所操作都留下 Audit Record。
 servers:
   - url: http://localhost:8000
     description: 本機開發
@@ -561,7 +562,8 @@ paths:
       description: >-
         LINE Messaging API Webhook 邊界。伺服器必須先以未修改的原始 Request Body
         與 X-Line-Signature 驗證簽章，再解析事件；事件依 webhookEventId 冪等處理。
-        Webhook 本身不代表 CRM 使用者已取得回報權限。
+        Webhook 本身不代表 CRM 使用者已取得回報權限；系統必須依 LINE Binding、唯一
+        Webhook Session 或唯一 Shelter Context 重新判定是否可以開始回報，多個候選不得自動選擇。
       parameters:
         - $ref: '#/components/parameters/LineSignature'
       requestBody:
@@ -740,8 +742,10 @@ components:
             required: [webhook_event_id, status]
             properties:
               webhook_event_id: { type: string }
-              status: { type: string, enum: [processed, duplicate_ignored, rejected, failed] }
+              status: { type: string, enum: [processed, duplicate_ignored, signature_rejected, requires_liff, rejected, failed] }
               reason: { type: [string, 'null'] }
+              webhook_session: { $ref: '#/components/schemas/WebhookSession' }
+              next_action: { type: [string, 'null'], enum: [resume_report, bind_line_identity, select_shelter_in_liff, null] }
     LineBindRequest:
       type: object
       required: [id_token]
@@ -754,9 +758,11 @@ components:
         session: { $ref: '#/components/schemas/AuthResponse' }
     RichMenuContext:
       type: object
-      required: [organization_id, actions]
+      required: [context_status, actions]
       properties:
-        organization_id: { type: string, format: uuid }
+        context_status: { type: string, enum: [single_context, multiple_contexts, no_context, requires_liff] }
+        organization_id: { type: [string, 'null'], format: uuid }
+        webhook_session_id: { type: [string, 'null'], format: uuid }
         actions:
           type: array
           items:
@@ -807,12 +813,20 @@ components:
         expires_in: { type: integer, example: 900 }
         session_id: { type: string, format: uuid }
         user: { $ref: '#/components/schemas/User' }
+    AccessScope:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [PLATFORM, SHELTER] }
+        organization_ids: { type: array, items: { type: string, format: uuid } }
     User:
       type: object
-      required: [id, status]
+      required: [id, status, roles, scope]
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [active, disabled] }
+        roles: { type: array, items: { type: string, enum: [PLATFORM_ADMIN, SHELTER_ADMIN, STAFF, VOLUNTEER] } }
+        scope: { $ref: '#/components/schemas/AccessScope' }
     CurrentUserResponse:
       type: object
       required: [user, memberships]
@@ -827,6 +841,17 @@ components:
       properties:
         organization_id: { type: string, format: uuid }
         session_id: { type: string, format: uuid }
+    WebhookSession:
+      type: object
+      required: [id, system_user_id, status]
+      properties:
+        id: { type: string, format: uuid }
+        system_user_id: { type: string, format: uuid }
+        organization_id: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [active, revoked, expired, requires_liff] }
+        active_shelter_context_id: { type: [string, 'null'], format: uuid }
+        created_at: { type: string, format: date-time }
+        last_interaction_at: { type: string, format: date-time }
     ShelterContextSwitchRequest:
       type: object
       required: [organization_id]

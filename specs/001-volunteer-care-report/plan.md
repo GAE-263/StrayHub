@@ -1,6 +1,6 @@
 # 實作計畫：志工日常照護回報與動物近期歷程
 
-**分支**：`001-volunteer-care-report` | **日期**：2026-08-06 | **規格**：[spec.md](spec.md)
+**分支**：`001-volunteer-care-report` | **日期**：2026-08-07 | **規格**：[spec.md](spec.md)
 
 **輸入**：來自 `specs/001-volunteer-care-report/spec.md` 的功能規格，以及使用者提供的「開發與部署階段」約束。
 
@@ -30,7 +30,7 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 **限制**：本機日常開發、單元測試與主要整合測試不得要求連接 GCP 正式資源；所有正式資料必須歸屬單一 Shelter；資料隔離不得只靠前端；AI 不得診斷、計分、排序、修改正式狀態或阻塞人工回報；Demo 不得包含真實個資或正式收容所敏感資料。
 
-**規模／範圍**：第一階段支援多個台灣收容所或中途機構、相同 Shelter Number 在不同 Shelter 並存、平台管理員跨機構明確授權、一般角色依授權 Shelter 範圍操作、志工可被授權多個 Shelter 但同一時間只有一個目前服務中的 Shelter，以及同日多筆 Daily Care Report。精確使用者數、動物數與併發容量不是本 feature 的已知驗收數字，實作任務需保留可調整設定，不得把未確認容量誤寫成產品承諾。
+**規模／範圍**：第一階段支援多個台灣收容所或中途機構、相同 Shelter Number 在不同 Shelter 並存、`PLATFORM_ADMIN` 使用平台級 `PLATFORM` Scope 且不建立 Shelter Membership、一般角色依授權 Shelter 範圍操作、志工可被授權多個 Shelter 但同一時間只有一個目前服務中的 Shelter，以及同日多筆 Daily Care Report。精確使用者數、動物數與併發容量不是本 feature 的已知驗收數字，實作任務需保留可調整設定，不得把未確認容量誤寫成產品承諾。
 
 ## Constitution Check
 
@@ -43,16 +43,16 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 - **V. 志工回填必須低摩擦：通過。** LINE Bot 的單題 Quick Reply／Postback、90 秒目標、圖片訊息、Mock LINE Adapter 與 AI 非同步均列入設計；LIFF 只作為輔助介面。
 - **VI. 歷史紀錄必須完整且可追溯：通過。** 同日多筆保存、近 14 日逐日檢視、無回報日期與更早歷史查詢列入資料模型與 quickstart。
 - **VII. LINE Bot 是主要輸入通道：通過。** Rich Menu、Quick Reply、Postback、Message／Image Event 與 Webhook 是本 Feature 範圍；Webhook 必須先驗證原始 Body 簽章並依 `webhookEventId` 冪等處理。LIFF 負責身分綁定、完整確認、答案修改、長文字與 Bot 備援，FastAPI 仍是唯一正式權限與 CRM 邊界。
-- **VIII. 權限、隱私與稽核預設啟用：通過。** 每一個資料操作均帶有已驗證的 Shelter 範圍；跨機構作業與公開資料採白名單並留下 Audit Record。
+- **VIII. 權限、隱私與稽核預設啟用：通過。** 一般角色的每一個資料操作均帶有已驗證的 Shelter 範圍；`PLATFORM_ADMIN` 以平台級 `PLATFORM` Scope 執行明確的跨機構管理；跨機構作業與公開資料採白名單並留下 Audit Record。
 - **IX. P0 不得依賴 P1 或 P2：通過。** US1、LINE Bot US2 與歷程 US3 不依賴 AI；本機流程不依賴 GCP；真實 LINE 行為以 Mock Adapter 與受控 HTTPS 測試路徑隔離。
 - **X. 正體中文與 Python 品質門檻：通過。** 本計畫與產物使用台灣正體中文；Python 品質門檻為 `ruff check .`、`ruff format --check .` 與 `pytest`。
 - **XI. 多收容所資料隔離：通過。** 所有 query、command、圖片存取與修改都在後端依 Shelter 授權範圍強制判定；本 Feature 不提供批次匯出；A／B 隔離測試為 Demo 門檻。
 
-**Gate 結論**：D-001～D-010 與本輪 LINE Bot 邊界決策已同步至 OpenAPI、資料模型與 Tasks，且分析沒有發現 `CRITICAL` 或 `HIGH`。沒有以降低 Constitution 要求方式處理的例外。
+**Gate 結論**：D-001～D-010 與本輪 LINE Bot、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析及 Active Shelter Context 決策已同步至本計畫與 Phase 1 設計方向。重新產生 `tasks.md` 與執行 `/speckit-analyze` 是本計畫完成後的必要步驟；本文件不預先宣稱尚未執行的 Analyze 結果。沒有以降低 Constitution 要求方式處理的例外。
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：通過。** 本輪已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、OpenAPI Contract、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive；`tasks.md` 已重新產生，分析未發現 `CRITICAL` 或 `HIGH`。
+**重新檢查結果：待重新執行。** 本輪設計將同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、OpenAPI Contract、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive；完成後必須重新產生 `tasks.md` 並執行 `/speckit-analyze`。
 
 ## Database Access
 
@@ -76,7 +76,33 @@ Pydantic Model 與 SQLAlchemy Model 分離：
 
 FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼；Volunteer 透過 LIFF 身分交換後，由 FastAPI 對應既有 User 與 Membership。系統使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record；每個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context。Access Token 的 `org_id` 與角色不得作為最終授權依據。
 
+`PLATFORM_ADMIN` 使用平台級 `PLATFORM` Scope，不建立任何 Shelter Membership，也不需要逐次額外授權；其跨 Shelter 管理能力由內建最高權限角色提供，但每一項跨機構操作仍須由後端記錄完整 Audit Record。一般 Shelter 使用者才透過有效 Membership 取得 Shelter Scope。
+
 `active_org_id` 必須由使用者明確切換、由後端驗證並綁定 Session；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Worker 使用獨立 Credential／Service Account，但每次 Job 處理仍驗證 Job、Report、Organization 與狀態一致。
+
+### LINE Webhook Session 與 Active Shelter Context 解析
+
+LINE Webhook 收到 `line_user_id` 後，FastAPI 依序查詢有效 LINE Binding、取得 `system_user_id`，再查詢有效 Webhook Session。只有一個可用 Webhook Session 時，重新檢查其 Shelter Membership 與權限；權限失效不得開始回報。沒有可用 Webhook Session 時，系統查詢可用 Shelter Context，只有一個有效收容所時才建立綁定該 Context 的 Webhook Session。有多個可用 Webhook Session 或多個有效收容所時，系統不得自動選擇，應回覆 LIFF 連結要求明確選擇。LINE Binding 無效時同樣回覆 LIFF 驗證連結，不建立正式 Draft 或 Care Report。
+
+```mermaid
+flowchart TD
+    A[LINE Webhook 收到 line_user_id] --> B[查詢 LINE Binding]
+    B --> C{Binding 是否有效}
+    C -- 否 --> L[回覆 LIFF 驗證連結]
+    C -- 是 --> D[取得 system_user_id]
+    D --> E[查詢有效 Webhook Session]
+    E --> F{是否只有一個可用 Session}
+    F -- 是 --> G[檢查 Shelter Membership 與權限]
+    F -- 否：沒有 --> H[查詢可用 Shelter Context]
+    F -- 否：多個 --> L
+    H --> I{是否只有一個有效收容所}
+    I -- 是 --> J[建立 Webhook Session]
+    I -- 否 --> L
+    G --> K{權限是否仍有效}
+    K -- 是 --> M[允許開始回報]
+    K -- 否 --> L
+    J --> M
+```
 
 ### LINE Bot／LIFF 邊界
 
@@ -206,7 +232,7 @@ specs/001-volunteer-care-report/
 ├── research.md          # Phase 0 研究與決策
 ├── data-model.md        # Phase 1 業務資料模型與驗證規則
 ├── quickstart.md        # 本機與 Demo 驗證指南
-├── contracts/           # CRM、租戶、儲存、LINE Bot／LIFF 與 AI 邊界契約
+├── contracts/           # CRM、租戶、儲存、LINE Bot／LIFF／Webhook 與 AI 邊界契約
 │   └── openapi.yaml     # 前後端正式 API Contract
 └── tasks.md             # $speckit-tasks 產生，不由本命令建立
 ```

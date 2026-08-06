@@ -1,6 +1,6 @@
 # 研究與設計決策：志工日常照護回報與動物近期歷程
 
-**日期**：2026-08-06
+**日期**：2026-08-07
 
 本文件記錄 Phase 0 對技術脈絡、部署邊界、整合方式與規格待釐清事項的規劃決策。這些決策服務於實作與驗證，不改寫功能規格中的業務權限；未來若產品確認與本文的暫定決策不同，必須先更新規格、資料模型與任務。
 
@@ -128,6 +128,22 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 **Decision**：正式 Care Report 不允許 Hard Delete，只能 Correction 或 Archive，且保留 Audit。尚未提交的 Draft 與 Temporary Media 可由建立者刪除或由系統過期清理；正式 Media 不 Hard Delete，如需移除只能標記不可使用或封存並保留原因與操作者。
 
+## 決策 16：平台管理員使用平台級 Scope
+
+**Decision**：`PLATFORM_ADMIN` 是平台內建最高權限角色，使用獨立的 `PLATFORM` Scope，不建立任何 Shelter Membership，也不需要逐次額外授權。平台管理員可管理所有 Shelter 的非公開業務資料；正式 Care Report 與正式 Media 仍不得 Hard Delete。每項平台管理員的跨機構操作都必須留下完整 Audit Record。
+
+**Rationale**：這與最新規格釐清一致，避免把平台治理帳號錯誤建模成某一個 Shelter 的成員，也避免一般管理員取得預設跨機構能力。平台級 Scope 仍由 FastAPI 與資料存取層強制驗證，不能只依賴角色名稱或前端畫面。
+
+**Alternatives considered**：要求平台管理員逐一建立 Shelter Membership；拒絕，因與「不需額外權限授予」衝突。將平台管理員歸屬至特殊 Shelter；拒絕，因會產生錯誤的租戶歸屬與跨機構查詢邊界。
+
+## 決策 17：LINE Webhook 的 Session 與收容所 Context 解析
+
+**Decision**：Webhook 收到 `line_user_id` 後，先查詢有效 LINE Binding；無效時回覆 LIFF 驗證連結，不建立正式資料。Binding 有效後取得 `system_user_id` 並查詢有效 Webhook Session。只有一個可用 Session 時重新驗證 Shelter Membership 與權限；沒有可用 Session 時查詢有效 Shelter Context，只有一個 Context 才建立 Webhook Session。多個可用 Session 或多個有效 Shelter Context 時不得自動選擇，回覆 LIFF 連結要求明確選擇。Webhook 不得因 QR Code、Postback、裝置、地理位置或時間訊號自動切換 Active Shelter Context。
+
+**Rationale**：Webhook 輸入本身不代表使用者具有 CRM 權限，也不能安全地推測目前收容所。唯一候選可降低操作摩擦；多個候選則必須交由使用者在 LIFF 明確選擇，以避免跨租戶誤綁與草稿錯誤歸屬。
+
+**Alternatives considered**：依 LINE Binding 永久保存的收容所自動選擇；拒絕，因無法處理多個有效收容所與 Session 撤銷。依 QR Code 或 Postback 直接切換；拒絕，因輸入值不可信。每次回報都要求重新開啟 LIFF；拒絕，因違反 LINE Bot 主要回報介面的低摩擦目標。
+
 ## 研究完成檢查
 
 - 本機與 GCP 的儲存差異已由 Object Storage Interface 隔離。
@@ -136,4 +152,4 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 - Authentication、Active Shelter Context、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive 均已記錄驗證邊界；公開頁面、Notification 與 Export 明確排除。
 - GCP 專屬 IAM、Signed URL、Cloud SQL、Service Account 與 HTTPS LIFF 行為列為 Demo 另行驗證，不假設本機通過即等於 GCP 通過。
 - SQLAlchemy `AsyncSession`、`asyncpg`、受控 Repository、Composite Constraint、PostgreSQL 防護與 Alembic 空資料庫 migration 已納入 Phase 1 設計與 quickstart 驗證路徑。
-- 規格原有的五項高影響待釐清事項已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。
+- 規格原有的高影響待釐清事項，以及 `PLATFORM_ADMIN` 平台級 Scope 與 LINE Webhook Session／Active Shelter Context 解析流程，均已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。

@@ -14,6 +14,19 @@ LINE Bot、LIFF 與 Next.js 不得自行建立正式 Shelter、Animal、Draft、
 4. Postback、Rich Menu Action、LINE User ID、`draft_token`、`step`、`value`、Animal ID 與 Message ID 都是候選輸入；後端必須重新驗證 Session、LINE User Binding、Membership、Active Shelter Context、Draft 與 CRM 關係。
 5. Webhook 事件不得自動切換 Active Shelter Context；Organization 不一致時拒絕操作並保留既有 Draft。
 
+## Webhook Session 與 Active Shelter Context
+
+LINE Webhook 收到 `line_user_id` 後必須依序：
+
+1. 查詢有效 LINE Binding。
+2. Binding 無效時回覆 LIFF 驗證連結，不建立正式 Draft 或 Care Report。
+3. Binding 有效時取得 `system_user_id`，查詢有效 Webhook Session。
+4. 只有一個可用 Webhook Session 時，重新檢查 Shelter Membership 與權限。
+5. 沒有可用 Webhook Session 時，查詢可用 Shelter Context；只有一個有效收容所才建立 Webhook Session。
+6. 有多個可用 Webhook Session 或多個有效 Shelter Context 時，不自動選擇，回覆 LIFF 連結要求明確選擇。
+
+Webhook Session 不得由 QR Code、Postback、裝置、GPS、IP 或時間重疊自動切換 Active Shelter Context。`PLATFORM_ADMIN` 使用平台級 `PLATFORM` Scope，不需 Shelter Membership；其跨收容所操作仍須由 FastAPI 驗證並留下 Audit Record。
+
 ## Rich Menu 與 Bot 回報
 
 Rich Menu 至少提供開始照護回報、掃描 QR Code、今日照護毛孩、繼續未完成回報與聯絡工作人員。Rich Menu 只提供流程入口，不承載完整照護問卷。

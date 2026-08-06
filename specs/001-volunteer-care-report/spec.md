@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-05
 
-**Status**: Ready for Implementation
+**Status**: Blocked — 平台管理員權限範圍已釐清，待同步 Plan／Tasks 並重新分析
 
 **Input**: User description: 建立「浪浪森友會」第一個功能規格：志工日常照護回報與動物近期歷程。
 
@@ -25,7 +25,7 @@
 - AI 僅能擷取描述性訊號，不得診斷、計分、排序、變更狀態或決定最終結果。
 - 所有重要異動、動物綁定更正與 AI 人工覆核都必須可追溯。
 - P1、P2、P3 可獨立測試與展示，且不以 AI 成功為前提。
-- 每筆非公開業務資料都必須具有明確的收容所歸屬；跨機構存取只能由平台管理員依明確授權執行。
+- 每筆非公開業務資料都必須具有單一收容所或平台級 `PLATFORM` Scope 歸屬；`PLATFORM_ADMIN` 的平台級角色本身即構成跨機構管理的明確授權，不需逐次額外授權，但所有操作都必須由後端執行範圍驗證並留下 Audit Record。
 - 規格不決定程式語言、框架、資料表、API、套件、部署或其他技術實作。
 
 ## Clarifications
@@ -37,12 +37,41 @@
 - Q: 誰可以設定志工每日可回報範圍，以及第一階段應支援哪些範圍設定方式？ → A: 收容所管理員或被授權的工作人員可以設定；第一階段支援個別動物、籠舍／區域與指定志工，不納入完整班次排班。
 - Q: 第一階段 QR Code 應使用哪種查詢內容？ → A: 使用不含業務資料的非祕密 QR Token 或系統深層連結，由 CRM 依 Token、目前使用者與收容所範圍重新查詢動物。
 - Q: 志工送出回報後，應在什麼期限與範圍內可以自行修改？ → A: 志工可在 24 小時內修改自己回報的內容、照片與心得，但不能自行修改動物綁定；動物綁定更正由收容所管理員或授權工作人員處理，所有修改保留稽核紀錄。
+- Q: 平台管理員是否可以直接存取所有收容所的非公開業務資料？ → A: 可以。`PLATFORM_ADMIN` 是平台內建最高權限角色，不需逐次額外授權即可查看、建立、修改、封存或管理所有收容所的動物、照護回報、照片、心得與 AI 結果；正式 Care Report 與正式 Media 仍不得 Hard Delete，所有操作都必須留下完整 Audit Record。
+- Q: `PLATFORM_ADMIN` 是否需要收容所 Membership 才能管理各收容所？ → A: 不需要。`PLATFORM_ADMIN` 使用獨立的平台級 `PLATFORM` Scope，不建立任何收容所 Membership；平台內建最高權限角色本身即授予所有收容所的管理與資料存取能力，不需逐次額外授權，但仍須由後端驗證平台 Scope 並留下完整 Audit Record。
+- Q: LINE Webhook 收到 `line_user_id` 時，系統應如何取得可用的 Webhook Session 與 Active Shelter Context？ → A: 先查詢有效的 LINE Binding；Binding 無效時回覆 LIFF 驗證連結。Binding 有效後取得 `system_user_id`，查詢有效 Webhook Session。只有一個可用 Session 時檢查 Shelter Membership 與權限；沒有可用 Session 時查詢可用 Shelter Context，只有一個有效收容所才建立 Webhook Session；有多個可用 Session 或多個有效收容所時，不自動選擇，回覆 LIFF 連結要求明確選擇。權限失效時不得開始回報。
 
 ## 實作前技術與範圍決策
 
 本 Feature 在完成本節決策同步、重新產生 `tasks.md` 並再次通過 `/speckit.analyze` 前，不得開始實作。
 
 - **Authentication 與 Session**：FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` 使用帳號密碼；Volunteer 透過 LIFF 身分交換後，由 FastAPI 對應既有 User 與 Membership。系統使用短效 Access Token、可輪替 Refresh Token 與可立即撤銷的 Server-side Session Record；每個受保護 Request 都重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context。Access Token 的 `org_id` 與角色不得作為最終授權依據。
+- **LINE Webhook Session 解析**：LINE Webhook 收到 `line_user_id` 後，系統先查詢 LINE Binding；Binding 無效時回覆 LIFF 驗證連結，不建立正式 Draft 或 Care Report。Binding 有效時取得 `system_user_id` 並查詢有效 Webhook Session；只有一個可用 Session 時檢查 Shelter Membership 與權限，沒有可用 Session 時只有在可用 Shelter Context 恰好一個時建立 Webhook Session；若有多個可用 Session 或多個有效收容所，系統不得自動選擇，應回覆 LIFF 連結要求明確選擇。權限失效時不得開始回報。
+
+```mermaid
+flowchart TD
+    A[LINE Webhook 收到 line_user_id] --> B[查詢 LINE Binding]
+    B --> C{Binding 是否有效}
+    C -- 否 --> L[回覆 LIFF 驗證連結]
+    C -- 是 --> D[取得 system_user_id]
+
+    D --> E[查詢有效 Webhook Session]
+    E --> F{是否只有一個可用 Session}
+
+    F -- 是 --> G[檢查 Shelter Membership 與權限]
+    F -- 否：沒有 --> H[查詢可用 Shelter Context]
+    F -- 否：多個 --> L
+
+    H --> I{是否只有一個有效收容所}
+    I -- 是 --> J[建立 Webhook Session]
+    I -- 否 --> L
+
+    G --> K{權限是否仍有效}
+    K -- 是 --> M[允許開始回報]
+    K -- 否 --> L
+
+    J --> M
+```
 - **Active Shelter Context**：`active_org_id` 必須來自有效 Membership、由後端驗證、綁定目前 Session 並透過明確操作切換；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Draft、Animal、QR Token、Reportable Scope 與 Active Context 的 Organization 不一致時，阻擋送出並保留 Draft。
 - **LINE Bot／LIFF 邊界**：LINE Bot 是日常回報的主要操作介面，透過 Rich Menu、Quick Reply、Postback、文字訊息、圖片訊息與 LINE Messaging API Webhook 完成受控狀態機；LIFF 僅作為第一次身分綁定、QR／Deep Link 識別、完整動物確認、答案修改、長文字與 Bot 備援介面。FastAPI 仍是唯一正式 Authentication、Authorization、租戶隔離與 CRM 業務邊界。
 - **Webhook 安全**：每個 Webhook Request 必須先以原始 Request Body 與 `X-Line-Signature` 完成簽章驗證，再解析及處理事件；每個事件依 `webhookEventId` 冪等處理，非法簽章不得查詢或修改 CRM。
@@ -53,7 +82,7 @@
 
 ## 主要使用者
 
-- **平台管理員**：管理平台上的收容所、初始管理員、帳號服務狀態與明確授權的跨機構系統問題。
+- **平台管理員**：具備平台內建最高權限，管理所有收容所、初始管理員、帳號服務狀態、動物、照護回報、照片、心得、AI 結果與機構設定；不需逐次額外授權即可執行跨收容所操作，但所有操作都必須留下 Audit Record。
 - **收容所管理員**：管理自己所屬收容所的工作人員、志工、動物、收容編號、籠舍、區域、QR Code、今日可回報範圍與機構設定。
 - **工作人員**：查看與管理被授權收容所的動物、照護回報、近期歷程、照片、心得與 AI 結果。
 - **志工**：在被授權的收容所範圍內，以手機選擇動物並建立日常照護回報。
@@ -77,8 +106,11 @@
 
 ### 平台管理員
 
-平台管理員依權限可以新增、修改、啟用或停用收容所，建立該收容所的初始管理員帳號、
-協助重設收容所管理員帳號、查看收容所帳號與服務狀態，以及處理明確授權的跨機構系統問題。
+`PLATFORM_ADMIN` 是平台內建最高權限角色，具有平台級 Scope，不需逐次額外授權或逐一建立收容所 Membership，
+即可新增、修改、啟用或停用收容所，建立該收容所的初始管理員帳號、協助重設收容所管理員帳號、
+查看收容所帳號與服務狀態，並查看、建立、修改、封存或管理所有收容所的動物、照護回報、照片、心得、
+AI 結果與機構設定。正式 Care Report 與正式 Media 仍不得 Hard Delete；所有平台管理員操作都必須由後端
+留下操作者、時間、目標收容所、操作範圍、原因（適用時）與結果的完整 Audit Record。
 建立收容所時，收容所名稱、機構代碼、啟用狀態與初始管理員為必填；地址或服務區域、
 聯絡資訊為可選。收容所建立後預設尚未啟用，必須由平台管理員明確啟用，才能建立一般業務資料。
 
@@ -149,7 +181,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 2. **Given** A 收容所管理員已登入，**When** 建立工作人員或志工，**Then** 新帳號歸屬 A 收容所，且不能建立 B 收容所帳號。
 3. **Given** A、B 收容所各有一隻收容編號為 `VAAAG114080610` 的動物，**When** 各自於授權範圍內搜尋，**Then** 能分別取得本收容所動物且不產生編號衝突。
 4. **Given** A 收容所工作人員使用 B 收容所的動物識別、收容編號、QR Code 或網址，**When** 嘗試查看、搜尋或修改，**Then** 系統拒絕存取且不洩漏 B 資料是否存在。
-5. **Given** 平台管理員執行明確授權的跨機構管理操作，**When** 操作完成，**Then** 系統留下完整稽核紀錄。
+5. **Given** 平台管理員以平台內建最高權限執行跨機構管理操作，**When** 操作完成，**Then** 系統不要求逐次額外授權，但留下完整稽核紀錄。
 6. **Given** 志工具有 A、B 收容所 Membership 且目前 Session 的 Active Shelter Context 為 A，**When** 志工嘗試以 B 的 Animal、QR Token、Draft 或 Reportable Scope 送出回報，**Then** 系統阻擋送出、保留 Draft、顯示需要切換目前收容所的原因，且不得由 QR Code 自動切換。
 7. **Given** A 收容所管理員或被授權工作人員設定今日可回報範圍，**When** 選擇個別動物、籠舍／區域或指定志工，**Then** 只有符合該範圍與志工授權的動物可建立正式回報，且不會建立完整班次排班資料。
 
@@ -191,6 +223,10 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 10. **Given** 志工完成結構化答案，**When** Bot 顯示摘要，**Then** 志工可以送出、修改、取消或開啟 LIFF；最終確認前不得建立正式 Care Report。
 11. **Given** 志工傳送圖片訊息，**When** Webhook 簽章、事件冪等、身分、Draft 狀態與圖片清理均通過，**Then** 圖片只附加至目前 Draft；清理失敗時不得建立正式 Media，且文字與結構化答案仍可送出。
 12. **Given** Webhook Event 重送或 Postback 被竄改，**When** 系統處理事件，**Then** 重送不重複寫入，竄改內容不會跳過狀態、權限或動物確認。
+13. **Given** LINE Binding 無效，**When** LINE Webhook 收到事件，**Then** 系統不建立 Draft 或 Care Report，並回覆 LIFF 驗證連結。
+14. **Given** LINE Binding 有效且只有一個可用 Webhook Session，**When** Webhook 開始處理回報，**Then** 系統重新檢查 Shelter Membership 與權限；權限有效才允許開始回報。
+15. **Given** LINE Binding 有效但沒有可用 Webhook Session，且只有一個有效 Shelter Context，**When** Webhook 開始處理回報，**Then** 系統建立綁定該 Context 的 Webhook Session 後允許開始回報。
+16. **Given** LINE Binding 有效但有多個可用 Webhook Session，或沒有 Session 且有多個有效 Shelter Context，**When** Webhook 開始處理回報，**Then** 系統不得自動選擇收容所或 Session，並回覆 LIFF 連結要求明確選擇。
 
 ### User Story 3 - 查看單一動物近 14 天歷程（Priority: P3）
 
@@ -318,7 +354,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 58. **Given** 使用者修改 QR Code 內容，**When** 嘗試查詢或建立回報，**Then** 修改內容不能繞過收容所範圍、身分與動物狀態驗證。
 59. **Given** 收容所已被平台管理員停用，**When** 該收容所一般帳號登入或建立業務資料，**Then** 系統拒絕操作；既有資料仍依權限與保存政策處理。
 60. **Given** 工作人員帳號已被收容所管理員停用，**When** 該帳號嘗試存取收容所資料，**Then** 系統拒絕存取。
-61. **Given** 平台管理員執行明確授權的跨機構管理操作，**When** 查看或修改資料，**Then** 系統留下操作者、時間、範圍、原因與操作結果的完整稽核紀錄；本 Feature 不提供批次匯出。
+61. **Given** 平台管理員以平台內建最高權限查看或修改跨機構資料，**When** 操作完成，**Then** 系統不要求逐次額外授權，但留下操作者、時間、範圍、原因與操作結果的完整稽核紀錄；本 Feature 不提供批次匯出。
 62. **Given** 未登入或未授權使用者嘗試取得內部照護資料，**When** 請求 Care Report、Volunteer Note、照片、AI Observation、Timeline 或 Signed URL，**Then** 系統拒絕且不洩漏資料是否存在。
 63. **Given** 前端傳入其他收容所識別、動物識別、收容編號或查詢條件，**When** 系統處理讀取、新增、修改、搜尋、Draft／Temporary Media 刪除、Care Report Archive 或圖片存取，**Then** 系統依已驗證身分重新判定可存取範圍，不信任前端提供的收容所範圍。
 64. **Given** A 收容所管理員或工作人員嘗試推測 B 收容所的使用者、動物、照片、回報、紀錄筆數或內部設定，**When** 發出查詢，**Then** 系統回傳一致的無權限或無法存取結果，且不洩漏資料存在性。
@@ -358,7 +394,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - 使用者使用其他收容所的動物識別、收容編號、QR Code、網址或使用者識別時，系統不得洩漏資料是否存在、紀錄筆數或圖片是否存在。
 - 收容所被停用時，一般帳號不得繼續登入或建立新業務資料；既有資料不得因停用而失去可追溯性。
 - 工作人員或志工帳號被停用時，該帳號即使持有舊畫面、QR Code 或網址，也不得繼續存取或建立資料。
-- 平台管理員執行跨機構管理作業時，必須有明確授權與完整 Audit Record；一般工作人員不得取得預設跨機構能力。
+- `PLATFORM_ADMIN` 的平台級角色本身即提供跨機構管理的明確授權；平台管理員不需逐次額外授權，但所有跨機構操作都必須留下完整 Audit Record；一般工作人員不得取得預設跨機構能力。
 - 同一志工若被授權服務多個收容所，操作畫面必須清楚顯示 Session 的 Active Shelter Context；若 Draft、Animal、QR Token、Scope 與 Active Context 的 Organization 不一致，系統必須阻擋送出並保留 Draft，不得以 GPS、IP、裝置或時間重疊推測地點。
 
 ## Requirements
@@ -434,7 +470,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **FR-050**：重要建立、修改、動物綁定更正、AI 確認或修正、權限與範圍異動 MUST 保留操作者、時間、變更內容、原因（適用時）、原始關聯、修正後關聯（適用時）與來源通道。
 - **FR-051**：LINE 或 LIFF 顯示與 CRM 不一致時，系統 MUST 以 CRM 即時資料與權限判斷為準；通道畫面不得覆蓋 CRM 正式資料。
 - **FR-052**：系統 MUST 支援多個收容所或中途機構共用平台，且每筆非公開業務資料 MUST 明確歸屬至單一收容所，包括使用者、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、設定與 Audit Record。
-- **FR-053**：平台管理員 MUST 能依權限以收容所名稱、機構代碼、啟用狀態與初始管理員建立收容所；地址／服務區域與聯絡資訊可選；平台管理員 MUST 能修改、啟用或停用收容所，建立或協助重設初始收容所管理員，並查看收容所帳號與服務狀態；跨機構管理操作 MUST 有明確授權與稽核紀錄；收容所未啟用前 MUST 不得建立一般業務資料。
+- **FR-053**：`PLATFORM_ADMIN` MUST 作為平台內建最高權限角色，以平台級 Scope 管理所有收容所，不需逐次額外授權或逐一建立收容所 Membership；平台管理員 MUST 能以收容所名稱、機構代碼、啟用狀態與初始管理員建立收容所，並能修改、啟用或停用收容所，建立或協助重設初始收容所管理員，查看收容所帳號與服務狀態，以及查看、建立、修改或封存所有收容所的非公開業務資料；正式 Care Report 與正式 Media 不得 Hard Delete；所有操作 MUST 留下完整稽核紀錄；收容所未啟用前 MUST 不得建立一般業務資料。
 - **FR-054**：收容所管理員 MUST 只能管理自己所屬收容所的帳號、志工、動物、收容編號、籠舍、區域、QR Code、今日可回報範圍、歷程與內部設定，不得管理其他收容所資料。
 - **FR-055**：工作人員帳號 MUST 歸屬至特定收容所；工作人員只能查看、搜尋、建立或修改所屬或被明確授權收容所的資料，並依規則執行 Draft／Temporary Media 刪除或 Care Report Archive；不得 Hard Delete 正式 Care Report 或正式 Media。
 - **FR-056**：志工 MUST 被記錄明確授權的收容所範圍；志工可以被授權服務多個收容所，但同一時間 MUST 只有一個目前服務中的收容所，且只能查看完成回報所需的最少資訊與回報被授權的動物。
@@ -456,11 +492,12 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **FR-072**：Postback Payload 中的 `action`、`draft_token`、`step` 與 `value` 都是候選輸入；後端 MUST 依已驗證 LINE User ID、Session、Active Shelter Context、Membership、Server-side Draft、Draft Organization、Draft Animal 與 Draft Current Step 重新判定，不得信任 `org_id`、Role、Membership、`animal_id`、User ID 或 Draft Owner。
 - **FR-073**：LINE Image Message MUST 先驗證事件與目前有效 Draft，再即時取得圖片內容，完成大小、MIME、實際格式、解碼、EXIF 移除、重新編碼與 Checksum 後才可建立 Draft Media；LINE 原始圖片不得進入正式儲存或供 AI 讀取。
 - **FR-074**：LINE Bot 事件、LIFF 與 Next.js MUST 共用 CRM 的使用者、Organization、Animal、Observation Option、Draft 與 Care Report 業務規則，不得建立通道專屬正式副本。
+- **FR-075**：LINE Webhook 依 `line_user_id` 處理事件時 MUST 先解析有效 LINE Binding；Binding 無效不得建立正式資料。Binding 有效但有多個可用 Webhook Session，或沒有 Session 且有多個有效 Shelter Context 時，系統 MUST 不自動選擇並要求透過 LIFF 明確選擇；只有唯一有效 Session 或唯一有效 Shelter Context 且 Membership 與權限通過重新驗證時，才可開始回報。
 
 ## Key Entities
 
 - **Shelter / Tenant**：平台中的獨立收容所或中途機構資料範圍；所有非公開業務資料都必須歸屬至一個 Shelter。
-- **Platform Administrator**：管理平台收容所、初始管理員、帳號服務狀態與明確授權跨機構作業的角色。
+- **Platform Administrator**：具備平台內建最高權限與平台級 Scope，可直接管理所有收容所及其非公開業務資料；不需逐次額外授權，但所有跨機構操作都必須留下 Audit Record。
 - **Shelter Administrator**：只能管理所屬 Shelter 的帳號、動物、照護範圍、設定與資料異動的角色。
 - **Shelter Membership / Authorization Scope**：記錄使用者所屬或被明確授權的 Shelter 範圍，供每次資料存取重新判定。
 - **Session Record / Active Shelter Context**：Session Record 記錄短效 Access Token、Refresh Token 輪替與伺服器撤銷狀態；Active Shelter Context 記錄使用者目前明確選擇的 Organization，必須來自有效 Membership 並綁定 Session。
@@ -479,7 +516,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **Animal Assignment**：將志工、日期、個別 Animal、Cage／Area 或指定 Volunteer 與可回報 Animal 關聯的業務概念，用來限制今日可回報範圍；不包含完整班次排班。
 - **Daily Reportable Scope**：某日某志工或某群組可建立回報的動物集合，必須能在送出時重新確認是否仍有效。
 - **QR Code**：貼於籠位或資料卡的候選動物查詢標示，只負責帶出候選，不代表身分驗證或回報授權。
-- **LINE User Binding**：將經 LINE 驗證的 `line_user_id` 對應至既有 User 與有效 Membership；LINE 身分驗證成功不代表自動建立正式權限。
+- **LINE User Binding**：將經 LINE 驗證的 `line_user_id` 對應至既有 User 與有效 Membership；LINE 身分驗證成功不代表自動建立正式權限。Webhook 需先以 Binding 取得 `system_user_id`，再依唯一有效 Webhook Session 或唯一有效 Shelter Context 建立可用回報上下文；多個候選不得自動選擇。
 - **Rich Menu**：LINE Bot 的主要功能入口，提供開始回報、QR Code、今日動物、未完成回報與聯絡工作人員等可驗證 Action。
 - **Quick Reply / Postback Action**：Bot 逐題回報的顯示選項與穩定內部操作代碼；顯示名稱可變更，正式答案不以顯示文字作為唯一值。
 - **LINE Webhook Event**：LINE Messaging API 傳送的 Message、Image、Postback 或必要綁定事件；以簽章與 `webhookEventId` 驗證來源及冪等性。
@@ -496,12 +533,13 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - 每位志工在建立正式回報前都已完成 LINE 或系統身分綁定；未綁定者只能進入綁定或求助流程。
 - 平台服務多個收容所，每個收容所都是獨立的機構資料範圍；非公開資料不因共用平台而互相可見。
 - 建立收容所時，名稱、機構代碼、啟用狀態與初始管理員為必填；地址／服務區域與聯絡資訊可選；新收容所預設未啟用，只有平台管理員明確啟用後才能建立一般業務資料。
-- 使用者帳號、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、內部設定與 Audit Record 都具有明確 Shelter 歸屬。
-- 平台管理員可以執行明確授權的跨機構管理作業；一般收容所管理員、工作人員與志工不具備預設跨機構能力。
+- 收容所使用者帳號、動物、收容編號、籠舍、區域、志工、今日可回報範圍、回報、照片、心得、AI 結果、歷史、QR Code、內部設定與 Audit Record 都具有明確 Shelter 歸屬；平台管理員帳號、Session 與平台治理資料歸屬平台級 `PLATFORM` Scope。
+- `PLATFORM_ADMIN` 的平台級角色本身即提供所有收容所的管理與資料存取授權，不需逐次額外授權；一般收容所管理員、工作人員與志工不具備預設跨機構能力。
 - 志工可以被授權服務多個收容所，但同一時間只能透過 Session 明確選擇一個目前服務中的收容所；系統不以 GPS、IP、裝置、時間重疊或地理距離推測所在位置。Draft、Animal、QR Token、Scope 與 Active Context 的 Organization 不一致時，系統阻擋送出並保留 Draft。
 - 志工可在建立後 24 小時內修改自己回報的內容、照片與心得，但不能自行修改動物綁定；動物綁定更正由收容所管理員或授權工作人員處理，並保留完整稽核紀錄。
 - 收容編號只在同一收容所內唯一；不同收容所可使用相同收容編號，查詢與正式關聯都以 Shelter 範圍共同判定。
 - 收容所停用後，一般帳號不能登入或建立新的業務資料；既有資料仍依權限與保存政策保留可追溯性。
+- LINE Webhook 只有在 LINE Binding 有效、唯一的 Webhook Session 或唯一的有效 Shelter Context 已解析，且 Membership 與權限重新驗證成功後，才能開始回報；多個 Session 或多個有效收容所不得自動選擇，應要求透過 LIFF 明確選擇。
 - 每隻 Animal 在 CRM 中都有不可變正式識別；沒有 Shelter Number 的 Animal 使用不可預測且可撤銷的 QR Token 建立候選查詢，不依賴 Shelter Number。
 - Shelter Number 預設在同一機構內唯一；發現重複時視為資料異常，不由系統猜測。
 - QR Code 使用不含業務資料的非祕密 QR Token 或系統深層連結，只用於查詢候選 Animal，不代表身分驗證、回報授權或長效祕密；沒有 Shelter Number 的 Animal 仍可使用 CRM 正式識別建立候選查詢。
@@ -581,6 +619,6 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **符合 II、VI**：原始回報與完整時間序列保存；同日多筆並存；無回報與未觀察明確分開。
 - **符合 III、IV**：AI 僅產生描述性衍生觀察，明確標示、可追溯、可人工確認或修正，不能診斷或做最終判定。
 - **符合 V、IX**：手機回報以 90 秒目標驗收，AI 不阻塞人工回報；P1 至 P3 可獨立測試與展示。
-- **符合 VIII、XI**：依最小權限、內部資料預設不公開、每個收容所獨立隔離、跨機構明確授權與重要異動稽核。
+- **符合 VIII、XI**：依最小權限、內部資料預設不公開、每個收容所獨立隔離；`PLATFORM_ADMIN` 的平台級角色提供跨機構明確授權，但所有操作仍受後端範圍驗證與重要異動稽核。
 - **符合 X**：本規格使用台灣正體中文，未提前決定程式或測試實作。
 - 本規格未發現與 Constitution 的衝突；Constitution 中尚未補上的批准日期不影響本功能需求內容。

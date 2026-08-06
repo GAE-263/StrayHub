@@ -4,7 +4,7 @@
 
 ## 共通資料治理規則
 
-- 每一筆非公開業務資料都必須有 `shelter_id` 或等價的明確 Shelter 歸屬；Platform Administrator 的平台層資料除外。
+- 每一筆非公開業務資料都必須有 `shelter_id` 或等價的明確 Shelter 歸屬；平台治理資料與 `PLATFORM_ADMIN` 的授權上下文使用平台級 `PLATFORM` Scope。
 - 所有讀取、新增、修改、搜尋、封存、Draft／Temporary Media 刪除與圖片存取都必須取得已驗證的 `ActorScope`，再由 CRM 邊界判定 `shelter_id`；本 Feature 不提供批次匯出。
 - 使用者提交的 `shelter_id`、Animal 識別、Shelter Number、QR Token 或網址只能是候選輸入，不得直接成為授權依據。
 - Shelter Number 只在同一 Shelter 內唯一；查詢、QR 解析與正式關聯都必須同時帶入 Shelter 範圍。
@@ -24,7 +24,7 @@
 
 ### Organization Scope
 
-本計畫以 `Organization` 作為資料存取層的租戶鍵，對應功能規格中的 Shelter／收容所。每個 Repository 操作都必須同時具備：
+本計畫以 `Organization` 作為資料存取層的租戶鍵，對應功能規格中的 Shelter／收容所。一般 Shelter 操作的每個 Repository 操作都必須同時具備：
 
 1. 已驗證的 Actor Context。
 2. 有效的 Organization／Shelter Membership。
@@ -33,13 +33,15 @@
 
 前端、LIFF、QR Token、網址、Shelter Number 或任意 Request 欄位提供的 Organization 識別只能作為候選條件，不能取代已驗證 Scope。
 
+`PLATFORM_ADMIN` 使用獨立的平台級 `PLATFORM` Scope，不建立 Shelter Membership；其內建最高權限角色可直接管理所有 Shelter 的非公開資料，不需逐次額外授權。資料存取層仍必須明確辨識 `PLATFORM` Scope，並對所有跨 Shelter 操作寫入 Audit Record。
+
 ### 租戶 Defense in Depth
 
 - Application Layer 由受控 Repository 強制套用 Organization Scope。
 - SQLAlchemy 關聯與資料庫約束確保跨 Organization 關聯不能成立。
 - 同一 Organization 內的 Shelter Number 使用 Composite Unique Constraint；不同 Organization 可以重複。
 - 需要跨租戶一致性的關聯使用包含 Organization 的 Composite Foreign Key 或等價的資料庫一致性防護。
-- PostgreSQL 以 Row-Level Security／交易層的 Organization Scope 防止繞過 Repository 的讀寫；平台管理員跨機構操作必須使用明確授權流程，不得成為一般連線的預設範圍。
+- PostgreSQL 以 Row-Level Security／交易層的 Organization Scope 防止繞過 Repository 的讀寫；只有具備平台級 `PLATFORM` Scope 的 `PLATFORM_ADMIN` 才能使用受控跨 Shelter 路徑，該 Scope 不得成為一般連線的預設範圍。
 - `tests/isolation`、Repository 測試、migration 測試與 GCP Demo 驗證共同確認 A／B Organization 不可互相讀寫或推測存在性。
 
 ### Migration 管理
@@ -61,23 +63,23 @@
 
 ### User、Platform Administrator、Shelter Administrator、Staff Member、Volunteer
 
-代表平台與收容所使用者。User 保存身分狀態、角色與可用服務狀態；角色決定可用操作，但每一次資料存取仍須由 Shelter Membership / Authorization Scope 再判定。
+代表平台與收容所使用者。User 保存身分狀態、角色與可用服務狀態；一般 Shelter 角色的每一次資料存取由 Shelter Membership／Authorization Scope 判定，`PLATFORM_ADMIN` 則由平台級 `PLATFORM` Scope 判定。
 
-主要關係：Platform Administrator 可管理平台層 Shelter；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；Volunteer 可以有多個有效授權，但同一時間只能有一個綁定 Session 的 Active Shelter Context。
+主要關係：Platform Administrator 可管理平台層 Shelter，且不建立任何 Shelter Membership；Shelter Administrator、Staff Member 與 Volunteer 必須有至少一個 Shelter Membership；Volunteer 可以有多個有效授權，但同一時間只能有一個綁定 Session 的 Active Shelter Context。
 
-驗證規則：停用帳號不能登入、讀取或建立新資料；未綁定 Volunteer 不能建立匿名正式回報；角色不足不能依網址、識別碼、QR Token 或輸入條件擴大範圍。
+驗證規則：停用帳號不能登入、讀取或建立新資料；未綁定 Volunteer 不能建立匿名正式回報；一般角色不足不能依網址、識別碼、QR Token 或輸入條件擴大範圍；`PLATFORM_ADMIN` 的平台級角色本身即提供所有 Shelter 的管理與資料存取能力，但仍須留下 Audit Record。
 
 ### Session Record / Refresh Token / Active Shelter Context
 
-Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值並可輪替，Access Token 為短效憑證。Active Shelter Context 代表目前 Session 明確選擇的 Organization。
+Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值並可輪替，Access Token 為短效憑證。Active Shelter Context 代表目前 Session 明確選擇的 Organization；Webhook Session 代表 LINE Webhook 依可信 LINE Binding 建立的受控事件處理上下文。
 
-驗證規則：受保護 Request 必須重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context；Session 或 Refresh Token 撤銷、User／Membership／Organization 停用後立即拒絕存取。Active Shelter Context 必須來自有效 Membership、綁定 Session 且不得由 QR Code 或 Request 任意覆寫；切換時留下 Audit Record，Draft 不得跨 Organization 移動。
+驗證規則：受保護 Request 必須重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context；`PLATFORM_ADMIN` 的平台級 Request 改驗證 `PLATFORM` Scope。Session 或 Refresh Token 撤銷、User／Membership／Organization 停用後立即拒絕存取。Active Shelter Context 必須來自有效 Membership、綁定 Session 且不得由 QR Code 或 Request 任意覆寫；切換時留下 Audit Record，Draft 不得跨 Organization 移動。Webhook Session 必須綁定 `system_user_id`、唯一有效 Shelter Context 與目前權限狀態。
 
 ### Shelter Membership / Authorization Scope
 
 描述使用者與 Shelter 的所屬或明確授權關係，包含角色、狀態、授權來源、生效時間與失效時間（若適用）。
 
-驗證規則：每次 CRM 操作都由已驗證身分取得有效 Scope；失效或停用的 Membership 不得授權新操作；跨機構操作需要額外授權理由與 Audit Record。
+驗證規則：每次 CRM 操作都由已驗證身分取得有效 Scope；失效或停用的 Membership 不得授權新操作；`PLATFORM_ADMIN` 不需 Shelter Membership 或逐次額外授權，但所有跨機構操作都必須留下 Audit Record。
 
 ### Cage / Area
 
@@ -113,7 +115,15 @@ Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值
 
 ### LINE User Binding
 
-代表經 LINE 官方驗證的 `line_user_id` 與既有 User、Membership 的綁定關係。LINE 身分驗證成功不自動建立正式權限；未綁定或 Membership 無效時不得建立正式 Draft 或 Care Report。
+代表經 LINE 官方驗證的 `line_user_id` 與既有 User、Membership 的綁定關係。LINE 身分驗證成功不自動建立正式權限；未綁定或 Membership 無效時不得建立正式 Draft 或 Care Report。Webhook 必須先透過 Binding 取得 `system_user_id`，再解析唯一有效 Webhook Session 或唯一有效 Shelter Context；多個候選不得自動選擇。
+
+### Webhook Session
+
+代表 LINE Webhook 在完成 Signature 驗證後，依 `line_user_id`、LINE User Binding、`system_user_id` 與 Shelter Context 建立的受控處理上下文，不取代一般使用者 Session。
+
+主要資料：`id`、`system_user_id`、LINE Binding、Organization／Shelter Context、建立時間、最後互動時間、撤銷時間、狀態與來源事件。
+
+驗證規則：只有一個有效 Webhook Session 時才可直接進入 Membership 與權限檢查；沒有 Session 時只有一個有效 Shelter Context 才能建立新的 Webhook Session；多個 Session 或多個有效 Shelter Context 時不得自動選擇，應要求透過 LIFF 明確選擇。Webhook Session 不得由 Postback、QR Code、裝置、GPS、IP 或時間重疊自動改綁。
 
 ### Rich Menu、Quick Reply / Postback Action
 
@@ -195,8 +205,10 @@ AI Processing Job 代表待處理、處理中、成功、失敗或無效的非�
 
 ```text
 Shelter
+├── PLATFORM Scope ── Platform Administrator
 ├── Shelter Membership / Authorization Scope ── User / Role
 ├── Active Shelter Context ── Volunteer / Session
+├── Webhook Session ── LINE User Binding / Active Shelter Context
 ├── LINE User Binding ── LINE User ID / User / Membership
 ├── Rich Menu ── Postback Action / Conversation State
 ├── LINE Webhook Event ── Draft / Message / Image / Postback
@@ -214,6 +226,7 @@ Shelter
 
 - **Shelter**：`pending_setup` → `active` → `suspended`；停用不刪除既有歷史。
 - **User／Membership**：`invited` → `active` → `disabled`；非 active 不得建立或讀取業務資料。
+- **Webhook Session**：`created` → `active` → `revoked`／`expired`；建立前必須完成 LINE Binding、唯一 Context 與權限驗證。
 - **Report Draft**：`selecting_animal` → `confirming_animal` → `answering_feeding` → `answering_water` → `answering_activity` → `answering_elimination` → `answering_behavior` → `answering_special_status` → `awaiting_media` → `awaiting_note` → `reviewing` → `submitting` → `submitted`；任一步驟可依規則回到前一步、`cancelled` 或 `expired`。無效轉移必須拒絕；未提交 Draft 可由建立者放棄或由系統依設定過期清理。
 - **LINE Webhook Event**：`received` → `signature_rejected`／`duplicate_ignored`／`processing` → `processed`／`failed`；同一 `webhook_event_id` 不得重複產生業務寫入。
 - **Daily Care Report**：`saved` → `amended` → `archived`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；正式回報不 Hard Delete，原始內容永久保留，所有修改與封存另留 Audit Record。
@@ -223,7 +236,7 @@ Shelter
 
 ## 跨實體驗證規則
 
-1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Session、Active Shelter Context 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致。
+1. Report、Draft、Photo、Note、AI Job、AI Observation、QR Code、Scope、Session、Webhook Session、Active Shelter Context 與 Audit Record 的 Shelter 必須與其關聯 Animal／User／來源事件一致；`PLATFORM_ADMIN` 的平台治理資料使用 `PLATFORM` Scope。
 2. 同一收容編號在不同 Shelter 可並存；任何查詢只在 ActorScope 允許的 Shelter 中執行。
 3. 任何建立、修改、Draft／Temporary Media 刪除或 Care Report Archive 動作都要檢查 ActorScope、資源 Shelter、資源狀態與角色能力；正式 Care Report、正式 Photo 與 AI 原始輸出不得 Hard Delete；本 Feature 不提供批次 Export。
 4. 任何物件檔案操作都要檢查 Object Key 的 Shelter 關聯，不接受前端任意 Object Key 作為授權。

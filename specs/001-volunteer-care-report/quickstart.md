@@ -84,7 +84,24 @@ uv run pytest tests/isolation -q
 6. 停用 Shelter 或使用者後，不能登入、讀取或建立新業務資料。
 7. 同一志工可被授權 A、B 兩個 Shelter；切換時必須明確更新 Active Shelter Context，Draft／Animal／QR Token／Reportable Scope 與目前 Context 不一致時阻擋送出，不以地點、裝置或時間推測志工所在 Shelter。
 
-## 6. 驗證 LINE Bot 回報與近期歷程
+另以 `PLATFORM_ADMIN` 驗證平台級 Scope：
+
+1. 建立沒有任何 Shelter Membership 的 `PLATFORM_ADMIN`。
+2. 以該帳號查看、建立、修改或封存 A／B Shelter 的非公開業務資料。
+3. 確認不需逐次額外授權，且每項跨 Shelter 操作都有完整 Audit Record。
+4. 確認正式 Care Report 與正式 Media 仍不得 Hard Delete。
+
+## 6. 驗證 LINE Webhook Session 解析
+
+使用 Mock LINE Webhook Payload 驗證下列分支：
+
+1. LINE Binding 無效時，回覆 LIFF 驗證連結，且不建立 Draft、Care Report 或其他正式業務資料。
+2. Binding 有效且只有一個可用 Webhook Session 時，重新驗證 Shelter Membership 與權限；權限有效才允許開始回報。
+3. 沒有可用 Webhook Session 且只有一個有效 Shelter Context 時，建立綁定該 Context 的 Webhook Session 後開始回報。
+4. 有多個可用 Webhook Session，或沒有 Session 但有多個有效 Shelter Context 時，不自動選擇，回覆 LIFF 連結要求明確選擇。
+5. 修改 Postback、QR Token 或 Request 中的 Organization／Animal 識別不能改變 Webhook Session、Active Shelter Context 或 Draft 的正式歸屬。
+
+## 7. 驗證 LINE Bot 回報與近期歷程
 
 在 Mock LINE User、Mock Webhook Payload 與 Mock LIFF Context 中以 A 志工：
 
@@ -102,7 +119,7 @@ uv run pytest tests/isolation -q
 
 預期結果：兩筆 Report 都保留；沒有回報日期不顯示為正常；24 小時內的內容修改保留前後版本；動物綁定修改交由授權人員處理；所有資料可追溯至 A Shelter。
 
-## 7. 驗證 Object Storage
+## 8. 驗證 Object Storage
 
 在本機以 MinIO 執行：
 
@@ -122,7 +139,7 @@ uv run pytest tests/integration/test_object_storage.py -q
 
 GCP Demo 另執行同一組 GCS Contract Test，驗證 `GcsStorageAdapter`、IAM、Signed URL、過期與權限錯誤。
 
-## 8. 驗證 AI 非同步與失敗降級
+## 9. 驗證 AI 非同步與失敗降級
 
 以 Mock AI Service 或測試用 AI Adapter 執行：
 
@@ -140,7 +157,7 @@ uv run pytest tests/integration/test_ai_job.py -q
 - 人工回報與 Timeline 在 AI 失敗時仍可用。
 - AI Observation 可追溯至已移除 EXIF 的 Photo 或 Volunteer Note。
 
-## 9. 本機品質門檻
+## 10. 本機品質門檻
 
 ```bash
 ruff check .
@@ -151,7 +168,7 @@ npm --prefix apps/web test
 
 以上命令與 Frontend 測試必須通過，且空資料庫 migration、關鍵本機流程、Shelter A／B 隔離與 MinIO Adapter 測試都必須有成功結果，才可進入 GCP Demo。
 
-## 10. GCP Demo 部署後驗證
+## 11. GCP Demo 部署後驗證
 
 部署前必須重新執行空 Cloud SQL 的 migration 驗證；部署後重新執行：
 
