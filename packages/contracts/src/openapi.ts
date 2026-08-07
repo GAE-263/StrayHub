@@ -911,6 +911,9 @@ export interface components {
             organization_id: string;
             can_report: boolean;
         };
+        AnimalConfirmationResponse: components["schemas"]["AnimalCandidate"] & {
+            confirmation_token: string;
+        };
         AnimalListResponse: {
             items: components["schemas"]["AnimalCandidate"][];
             page: number;
@@ -922,6 +925,7 @@ export interface components {
         DraftCreateRequest: {
             /** Format: uuid */
             animal_id: string;
+            confirmation_token: string;
         };
         /**
          * @description 照護完成狀態；未觀察與無法判斷不得解讀為已完成
@@ -1734,7 +1738,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnimalCandidate"];
+                    "application/json": components["schemas"]["AnimalConfirmationResponse"];
                 };
             };
             403: components["responses"]["Forbidden"];

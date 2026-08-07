@@ -12,11 +12,11 @@ from services.api.app.api.dependencies import (
 )
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.create_report_draft import CreateReportDraftService
 from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
 )
-from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.report_correction import ReportCorrectionService
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.application.report_submission import ReportSubmissionService
@@ -39,6 +39,7 @@ router = APIRouter(tags=["Drafts", "Care Reports"])
 
 class DraftCreateRequest(BaseModel):
     animal_id: UUID
+    confirmation_token: str
 
 
 class DraftUpdateRequest(BaseModel):
@@ -175,6 +176,8 @@ async def create_draft(
 ) -> DraftResponse:
     if context.organization_id is None or context.membership_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
+    if context.session_id is None:
+        raise DomainError("invalid_session", "Session 無效", 401)
     animal = await AnimalRepository(session, context.organization_id).get(payload.animal_id)
     if animal is None or animal.status != "active":
         raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
@@ -185,13 +188,17 @@ async def create_draft(
         volunteer_user_id=context.user_id,
     ):
         raise DomainError("animal_not_reportable", "動物目前不在你的今日可回報範圍", 403)
-    draft, raw_token = await LineDraftService(
+    draft, raw_token = await CreateReportDraftService(
         CareReportDraftRepository(session, context.organization_id)
     ).create(
         volunteer_user_id=context.user_id,
+        organization_id=context.organization_id,
         membership_id=context.membership_id,
+        session_id=context.session_id,
         animal_id=animal.id,
+        confirmation_token=payload.confirmation_token,
     )
+    await session.commit()
     return _draft_response(draft, opaque_token=raw_token)
 
 

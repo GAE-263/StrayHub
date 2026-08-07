@@ -203,35 +203,35 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Tests First
 
-- [ ] T098 [US1] 在 `tests/contract/test_animal_selection_contract.py` 建立今日清單、Shelter Number Search、QR Resolve、Animal Confirmation 與錯誤的失敗優先 Contract Test (depends on T020, T097)
-- [ ] T099 [P] [US1] 在 `tests/integration/test_shelter_number_constraints.py` 建立同 Organization 不可重複、跨 Organization 可相同、缺少 Shelter Number 與歷史快照 Test (depends on T097)
-- [ ] T100 [P] [US1] 在 `tests/security/test_qr_token_tampering.py` 建立 A Volunteer 使用 B／篡改／撤銷／貼錯 Cage QR Token 不能越權的 Test (depends on T080, T097)
-- [ ] T101 [P] [US1] 在 `tests/unit/test_reportable_scope_rules.py` 建立今日 Scope、封存、不可回報、唯一確認及未確認不建立 Draft 的 Unit Test (depends on T097)
-- [ ] T102 [P] [US1] 在 `tests/frontend/test_animal_disambiguation.tsx` 建立同名、相似照片、多筆搜尋及照片／名稱／完整 Shelter Number／Cage 顯示 Test (depends on T022, T098)
-- [ ] T103 [US1] 在 `tests/frontend/test_liff_animal_confirmation.tsx` 建立 QR Deep Link、掃描失敗、搜尋替代、最多兩個確認步驟與 LIFF 確認 Test (depends on T102)
+- [x] T098 [US1] 在 `tests/contract/test_animal_selection_contract.py` 建立今日清單、Shelter Number Search、QR Resolve、Animal Confirmation 與錯誤的失敗優先 Contract Test (depends on T020, T097)
+- [x] T099 [P] [US1] 在 `tests/integration/test_shelter_number_constraints.py` 建立同 Organization 不可重複、跨 Organization 可相同、缺少 Shelter Number 與歷史快照 Test (depends on T097)
+- [x] T100 [P] [US1] 在 `tests/security/test_qr_token_tampering.py` 建立 A Volunteer 使用 B／篡改／撤銷／貼錯 Cage QR Token 不能越權的 Test (depends on T080, T097)
+- [x] T101 [P] [US1] 在 `tests/unit/test_reportable_scope_rules.py` 建立今日 Scope、封存、不可回報、唯一確認及未確認不建立 Draft 的 Unit Test (depends on T097)
+- [x] T102 [P] [US1] 在 `tests/frontend/test_animal_disambiguation.tsx` 建立同名、相似照片、多筆搜尋及照片／名稱／完整 Shelter Number／Cage 顯示 Test (depends on T022, T098)
+- [x] T103 [US1] 在 `tests/frontend/test_liff_animal_confirmation.tsx` 建立 QR Deep Link、掃描失敗、搜尋替代、最多兩個確認步驟與 LIFF 確認 Test (depends on T102)
 
 ### Model 與 Migration
 
-- [ ] T104 [US1] 在 `services/api/app/persistence/models/animal.py` 建立 Animal、Shelter Number 與 Cage／Area 關聯 SQLAlchemy Model (depends on T099, T101)
-- [ ] T105 [US1] 在 `services/api/migrations/versions/0009_animals.py` 建立 T104 對應資料表、Organization 內 Shelter Number Unique、Composite Constraint、Index、RLS 與可回復 Migration (depends on T089, T104)
-- [ ] T106 [US1] 在 `services/api/app/persistence/models/qr_code.py` 建立不可預測 QR Token、撤銷狀態、Organization 與 Animal 關聯 SQLAlchemy Model (depends on T100, T104)
-- [ ] T107 [US1] 在 `services/api/migrations/versions/0010_qr_codes.py` 建立 T106 對應資料表、Token Unique、Composite Constraint、Index、RLS 與可回復 Migration (depends on T105, T106)
-- [ ] T108 [US1] 在 `services/api/app/persistence/models/reportable_scope.py` 建立個別 Animal、Cage／Area、指定 Volunteer 與有效期間 SQLAlchemy Model (depends on T101, T104)
-- [ ] T109 [US1] 在 `services/api/migrations/versions/0011_reportable_scopes.py` 建立 T108 對應資料表、Composite Constraint、Index、RLS 與可回復 Migration (depends on T105, T108)
+- [x] T104 [US1] 在 `services/api/app/persistence/models/animal.py` 建立 Animal、Shelter Number 與 Cage／Area 關聯 SQLAlchemy Model (depends on T099, T101)
+- [x] T105 [US1] 在 `services/api/migrations/versions/0009_animals.py` 建立 T104 對應資料表、Organization 內 Shelter Number Unique、Composite Constraint、Index、RLS 與可回復 Migration (depends on T089, T104)
+- [x] T106 [US1] 在 `services/api/app/persistence/models/qr_code.py` 建立不可預測 QR Token、撤銷狀態、Organization 與 Animal 關聯 SQLAlchemy Model (depends on T100, T104)
+- [x] T107 [US1] 在 `services/api/migrations/versions/0010_qr_codes.py` 建立 T106 對應資料表、Token Unique、Composite Constraint、Index、RLS 與可回復 Migration (depends on T105, T106)
+- [x] T108 [US1] 在 `services/api/app/persistence/models/reportable_scope.py` 建立個別 Animal、Cage／Area、指定 Volunteer 與有效期間 SQLAlchemy Model (depends on T101, T104)
+- [x] T109 [US1] 在 `services/api/migrations/versions/0011_reportable_scopes.py` 建立 T108 對應資料表、Composite Constraint、Index、RLS 與可回復 Migration (depends on T105, T108)
 
 ### Repository、Service、API 與 LIFF
 
 - [x] T110 [US1] 在 `services/api/app/persistence/repositories/animal_repository.py` 建立 scoped Animal List、Shelter Number Search、多筆結果與識別快照查詢 (depends on T037, T105)
 - [x] T111 [US1] 在 `services/api/app/persistence/repositories/qr_code_repository.py` 建立 QR Token create／resolve／revoke 與 Organization Scope Repository (depends on T037, T107)
-- [ ] T112 [US1] 在 `services/api/app/persistence/repositories/reportable_scope_repository.py` 建立個別 Animal、Cage／Area、Volunteer 與有效期間查詢 (depends on T037, T109)
+- [x] T112 [US1] 在 `services/api/app/persistence/repositories/reportable_scope_repository.py` 建立個別 Animal、Cage／Area、Volunteer 與有效期間查詢 (depends on T037, T109)
 - [x] T113 [US1] 在 `services/api/app/application/qr_token_service.py` 實作非祕密 Token 產生、撤銷、唯一解析及 QR／Actor／Animal Organization 三方驗證 (depends on T100, T111)
-- [ ] T114 [US1] 在 `services/api/app/application/reportable_scope_service.py` 實作今日範圍查詢與送出前重驗證 (depends on T101, T112)
-- [ ] T115 [US1] 在 `services/api/app/application/animal_selection.py` 實作今日清單、搜尋、QR Resolve、Animal Confirmation 及確認後 Draft 入口 (depends on T098, T110, T113, T114)
-- [ ] T116 [US1] 在 `services/api/app/api/animal_selection.py` 實作 OpenAPI 的 List、Search、QR Resolve、Confirmation 與一致拒絕 API (depends on T098, T115)
-- [ ] T117 [P] [US1] 在 `apps/web/features/animal-selection/AnimalConfirmationCard.tsx` 建立照片、名稱、完整 Shelter Number、Cage／Area、狀態與明確確認 (depends on T102, T116)
-- [ ] T118 [P] [US1] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 建立 QR Deep Link、Shelter Number Search、重新掃描與 LIFF 輔助確認頁 (depends on T103, T116)
-- [ ] T119 [US1] 在 `services/api/app/application/create_report_draft.py` 建立確認後才產生 Server-side Draft Token 的入口並固定 Animal／Organization (depends on T115)
-- [ ] T120 [US1] 在 `tests/e2e/test_us1_animal_selection.py` 執行 US1 Independent Test、Acceptance Scenarios 1～17、SC-003～SC-005 與跨租戶回歸 (depends on T097, T116-T119)
+- [x] T114 [US1] 在 `services/api/app/application/reportable_scope_service.py` 實作今日範圍查詢與送出前重驗證 (depends on T101, T112)
+- [x] T115 [US1] 在 `services/api/app/application/animal_selection.py` 實作今日清單、搜尋、QR Resolve、Animal Confirmation 及確認後 Draft 入口 (depends on T098, T110, T113, T114)
+- [x] T116 [US1] 在 `services/api/app/api/animal_selection.py` 實作 OpenAPI 的 List、Search、QR Resolve、Confirmation 與一致拒絕 API (depends on T098, T115)
+- [x] T117 [P] [US1] 在 `apps/web/features/animal-selection/AnimalConfirmationCard.tsx` 建立照片、名稱、完整 Shelter Number、Cage／Area、狀態與明確確認 (depends on T102, T116)
+- [x] T118 [P] [US1] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 建立 QR Deep Link、Shelter Number Search、重新掃描與 LIFF 輔助確認頁 (depends on T103, T116)
+- [x] T119 [US1] 在 `services/api/app/application/create_report_draft.py` 建立確認後才產生 Server-side Draft Token 的入口並固定 Animal／Organization (depends on T115)
+- [x] T120 [US1] 在 `tests/e2e/test_us1_animal_selection.py` 執行 US1 Independent Test、Acceptance Scenarios 1～17、SC-003～SC-005 與跨租戶回歸 (depends on T097, T116-T119)
 
 **Story Checkpoint**：T120 通過後，可完成 Rich Menu／今日名單／QR／Shelter Number／LIFF → 確認卡 → Draft，且 QR 只識別候選 Animal，不是授權憑證。
 

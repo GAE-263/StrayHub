@@ -361,7 +361,7 @@ paths:
           description: 已確認的 Animal
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/AnimalCandidate" }
+              schema: { $ref: "#/components/schemas/AnimalConfirmationResponse" }
         "403": { $ref: "#/components/responses/Forbidden" }
   /v1/care-report-drafts:
     post:
@@ -1199,6 +1199,13 @@ components:
         area: { type: [string, "null"] }
         organization_id: { type: string, format: uuid }
         can_report: { type: boolean }
+    AnimalConfirmationResponse:
+      allOf:
+        - $ref: "#/components/schemas/AnimalCandidate"
+        - type: object
+          required: [confirmation_token]
+          properties:
+            confirmation_token: { type: string, minLength: 1 }
     AnimalListResponse:
       type: object
       required: [items, page, page_size]
@@ -1217,9 +1224,10 @@ components:
         qr_token: { type: string }
     DraftCreateRequest:
       type: object
-      required: [animal_id]
+      required: [animal_id, confirmation_token]
       properties:
         animal_id: { type: string, format: uuid }
+        confirmation_token: { type: string, minLength: 1 }
     CareCompletionCode:
       type: string
       enum:
