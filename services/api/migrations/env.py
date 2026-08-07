@@ -1,6 +1,7 @@
 """Async Alembic environment shared by local and Demo migrations."""
 
 import asyncio
+import os
 
 from alembic import context
 from services.api.app.persistence import models  # noqa: F401
@@ -9,6 +10,9 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
