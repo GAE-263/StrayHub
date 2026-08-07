@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.persistence.database.scope import set_authentication_user_scope
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     Organization,
@@ -22,6 +23,9 @@ class AuthenticationRepository:
     async def find_user_by_username(self, username: str) -> User | None:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
+
+    async def set_authentication_user_scope(self, user_id: UUID) -> None:
+        await set_authentication_user_scope(self.session, user_id)
 
     async def get_user(self, user_id: UUID) -> User | None:
         return await self.session.get(User, user_id)

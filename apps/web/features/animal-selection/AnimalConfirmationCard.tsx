@@ -33,7 +33,9 @@ export function AnimalConfirmationCard({
       )}
       <p>名稱：{animal.name}</p>
       <p>收容編號：{animal.shelterNumber ?? "未維護"}</p>
-      <p>籠位／區域：{animal.cage ?? animal.area ?? "未維護"}</p>
+      {animal.cage && <p>籠位：{animal.cage}</p>}
+      {animal.area && <p>區域：{animal.area}</p>}
+      {!animal.cage && !animal.area && <p>籠位／區域：未維護</p>}
       <p>{animal.canReport ? "目前可回報" : "目前不可回報"}</p>
       <button type="button" onClick={onConfirm} disabled={!animal.canReport}>
         確認是這隻

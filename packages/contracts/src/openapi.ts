@@ -186,6 +186,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/{organizationId}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createOrganizationAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/{organizationId}/memberships/{membershipId}": {
         parameters: {
             query?: never;
@@ -203,6 +221,43 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateMembership"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listShelterAreas"];
+        put?: never;
+        post: operations["createShelterArea"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/areas/{areaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                areaId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateShelterArea"];
         trace?: never;
     };
     "/v1/animals": {
@@ -748,8 +803,11 @@ export interface components {
         OrganizationCreateRequest: {
             code: string;
             name: string;
-            /** Format: uuid */
-            initial_admin_user_id: string;
+            /** @enum {string} */
+            status: "pending_setup";
+            initial_admin_username: string;
+            /** Format: password */
+            initial_admin_temporary_password: string;
             address?: string;
             service_area?: string;
             contact?: string;
@@ -797,6 +855,49 @@ export interface components {
         MembershipListResponse: {
             items: components["schemas"]["Membership"][];
         };
+        AccountCreateRequest: {
+            username: string;
+            display_name: string;
+            /** Format: password */
+            temporary_password: string;
+            /** @enum {string} */
+            role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
+        };
+        ShelterArea: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            name: string;
+            /** @enum {string} */
+            area_type: "area" | "cage";
+            /** Format: uuid */
+            parent_id?: string | null;
+            /** @enum {string} */
+            status: "active" | "inactive";
+        };
+        ShelterAreaCreateRequest: {
+            name: string;
+            /**
+             * @default area
+             * @enum {string}
+             */
+            area_type: "area" | "cage";
+            /** Format: uuid */
+            parent_id?: string | null;
+        };
+        ShelterAreaUpdateRequest: {
+            name?: string;
+            /** @enum {string} */
+            area_type?: "area" | "cage";
+            /** Format: uuid */
+            parent_id?: string | null;
+            /** @enum {string} */
+            status?: "active" | "inactive";
+        };
+        ShelterAreaListResponse: {
+            items: components["schemas"]["ShelterArea"][];
+        };
         AnimalCandidate: {
             /** Format: uuid */
             id: string;
@@ -810,6 +911,9 @@ export interface components {
             organization_id: string;
             can_report: boolean;
         };
+        AnimalConfirmationResponse: components["schemas"]["AnimalCandidate"] & {
+            confirmation_token: string;
+        };
         AnimalListResponse: {
             items: components["schemas"]["AnimalCandidate"][];
             page: number;
@@ -821,6 +925,7 @@ export interface components {
         DraftCreateRequest: {
             /** Format: uuid */
             animal_id: string;
+            confirmation_token: string;
         };
         /**
          * @description 照護完成狀態；未觀察與無法判斷不得解讀為已完成
@@ -1412,6 +1517,33 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    createOrganizationAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 收容所帳號與 Membership 已建立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Membership"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
     updateMembership: {
         parameters: {
             query?: never;
@@ -1435,6 +1567,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Membership"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listShelterAreas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 收容所 Cage/Area 清單 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelterAreaListResponse"];
+                };
+            };
+        };
+    };
+    createShelterArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShelterAreaCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Cage/Area 已建立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelterArea"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateShelterArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                areaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShelterAreaUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Cage/Area 已更新 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelterArea"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -1529,7 +1738,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnimalCandidate"];
+                    "application/json": components["schemas"]["AnimalConfirmationResponse"];
                 };
             };
             403: components["responses"]["Forbidden"];

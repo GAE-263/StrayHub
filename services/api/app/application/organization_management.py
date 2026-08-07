@@ -14,7 +14,9 @@ class OrganizationManagementService:
         self.password_hasher = password_hasher
 
     async def create(self, *, code: str, name: str, initial_admin_user_id=None) -> Organization:
-        organization = await self.repository.add(Organization(code=code, name=name))
+        organization = await self.repository.add(
+            Organization(code=code, name=name, status="pending_setup")
+        )
         if initial_admin_user_id:
             await self.repository.add(
                 OrganizationMembership(
@@ -32,6 +34,8 @@ class OrganizationManagementService:
         organization = await self.repository.get(organization_id)
         if organization is None or organization.status == "suspended":
             raise DomainError("organization_not_found", "收容所不存在或已停用", 404)
+        if await self.repository.user_by_username(username) is not None:
+            raise DomainError("username_exists", "帳號名稱已存在", 409)
         user = await self.repository.add(
             User(
                 username=username,
@@ -50,6 +54,35 @@ class OrganizationManagementService:
         )
         return user
 
+    async def create_account(
+        self,
+        *,
+        organization_id,
+        username: str,
+        display_name: str,
+        temporary_password: str,
+        role: str,
+    ) -> tuple[User, OrganizationMembership]:
+        organization = await self.repository.get(organization_id)
+        if organization is None or organization.status != "active":
+            raise DomainError("organization_not_active", "收容所尚未啟用或已停用", 409)
+        if await self.repository.user_by_username(username) is not None:
+            raise DomainError("username_exists", "帳號名稱已存在", 409)
+        user = await self.repository.add(
+            User(
+                username=username,
+                display_name=display_name,
+                password_hash=self.password_hasher.hash(temporary_password),
+                status="active",
+            )
+        )
+        membership = await self.create_membership(
+            organization_id=organization_id,
+            user_id=user.id,
+            role=role,
+        )
+        return user, membership
+
     async def disable(self, organization_id) -> Organization:
         organization = await self.repository.get(organization_id)
         if organization is None:
@@ -62,8 +95,10 @@ class OrganizationManagementService:
             raise DomainError("invalid_role", "收容所角色無效", 422)
         organization = await self.repository.get(organization_id)
         user = await self.repository.user(user_id)
-        if organization is None or organization.status == "suspended" or user is None:
+        if organization is None or user is None:
             raise DomainError("resource_not_found", "收容所或使用者不存在", 404)
+        if organization.status != "active":
+            raise DomainError("organization_not_active", "收容所尚未啟用或已停用", 409)
         if user.status != "active":
             raise DomainError("user_disabled", "使用者目前停用", 409)
         if await self.repository.membership(user_id, organization_id) is not None:

@@ -10,6 +10,13 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.errors import DomainError
+from services.api.app.application.animal_selection import (
+    AnimalCandidate,
+    AnimalSelectionService,
+    issue_animal_confirmation_token,
+)
+from services.api.app.application.media_access import MediaAccessService
+from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
@@ -31,6 +38,10 @@ class AnimalCandidateResponse(BaseModel):
     can_report: bool
 
 
+class AnimalConfirmationResponse(AnimalCandidateResponse):
+    confirmation_token: str
+
+
 class AnimalListResponse(BaseModel):
     items: list[AnimalCandidateResponse]
     page: int
@@ -41,14 +52,39 @@ class QrResolveRequest(BaseModel):
     qr_token: str
 
 
-def _candidate(animal, *, organization_id: UUID) -> AnimalCandidateResponse:
+async def _candidate(
+    candidate: AnimalCandidate, *, organization_id: UUID
+) -> AnimalCandidateResponse:
+    animal = candidate.animal
+    area = candidate.area
+    photo_url = None
+    if animal.current_photo_key:
+        try:
+            photo_url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
+                media_organization_id=organization_id,
+                object_key=animal.current_photo_key,
+                expires_seconds=300,
+            )
+        except Exception:
+            # Photo access must not prevent identity confirmation.
+            photo_url = None
     return AnimalCandidateResponse(
         id=animal.id,
         name=animal.name,
         shelter_number=animal.shelter_number,
-        photo_url=None,
+        photo_url=photo_url,
+        cage=area.name if area is not None and area.area_type == "cage" else None,
+        area=area.name if area is not None and area.area_type != "cage" else None,
         organization_id=organization_id,
         can_report=animal.status == "active",
+    )
+
+
+def _selection_service(session: AsyncSession, organization_id: UUID) -> AnimalSelectionService:
+    return AnimalSelectionService(
+        AnimalRepository(session, organization_id),
+        QrCodeRepository(session, organization_id),
+        ReportableScopeRepository(session, organization_id),
     )
 
 
@@ -63,17 +99,14 @@ async def list_reportable_animals(
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
     if context.organization_id is None:
         return AnimalListResponse(items=[], page=page, page_size=page_size)
-    animals = await AnimalRepository(session, context.organization_id).search("")
-    if context.role == "VOLUNTEER":
-        allowed = await ReportableScopeRepository(
-            session, context.organization_id
-        ).active_animal_ids(volunteer_user_id=context.user_id)
-        animals = [animal for animal in animals if animal.id in allowed]
+    candidates = await _selection_service(session, context.organization_id).list_candidates(
+        user_id=context.user_id, role=context.role
+    )
     start = (page - 1) * page_size
     return AnimalListResponse(
         items=[
-            _candidate(animal, organization_id=context.organization_id)
-            for animal in animals[start : start + page_size]
+            await _candidate(candidate, organization_id=context.organization_id)
+            for candidate in candidates[start : start + page_size]
         ],
         page=page,
         page_size=page_size,
@@ -90,17 +123,14 @@ async def search_animals(
 ) -> AnimalListResponse:
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
-    animals = await AnimalRepository(session, context.organization_id).search(query)
-    if context.role == "VOLUNTEER":
-        allowed = await ReportableScopeRepository(
-            session, context.organization_id
-        ).active_animal_ids(volunteer_user_id=context.user_id)
-        animals = [animal for animal in animals if animal.id in allowed]
+    candidates = await _selection_service(session, context.organization_id).list_candidates(
+        user_id=context.user_id, role=context.role, query=query
+    )
     start = (page - 1) * page_size
     return AnimalListResponse(
         items=[
-            _candidate(animal, organization_id=context.organization_id)
-            for animal in animals[start : start + page_size]
+            await _candidate(candidate, organization_id=context.organization_id)
+            for candidate in candidates[start : start + page_size]
         ],
         page=page,
         page_size=page_size,
@@ -115,36 +145,33 @@ async def resolve_qr_token(
 ) -> AnimalCandidateResponse:
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
-    qr = await QrCodeRepository(session, context.organization_id).resolve(payload.qr_token)
-    if qr is None:
-        raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-    animal = await AnimalRepository(session, context.organization_id).get(qr.animal_id)
-    if animal is None or (
-        context.role == "VOLUNTEER"
-        and not await ReportableScopeRepository(
-            session, context.organization_id
-        ).is_animal_reportable(
-            animal_id=animal.id,
-            volunteer_user_id=context.user_id,
-        )
-    ):
-        raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-    return _candidate(animal, organization_id=context.organization_id)
+    candidate = await _selection_service(session, context.organization_id).resolve_qr(
+        raw_token=payload.qr_token, user_id=context.user_id, role=context.role
+    )
+    return await _candidate(candidate, organization_id=context.organization_id)
 
 
-@router.post("/v1/animals/{animalId}/confirm", response_model=AnimalCandidateResponse)
+@router.post("/v1/animals/{animalId}/confirm", response_model=AnimalConfirmationResponse)
 async def confirm_animal(
     animalId: UUID,  # noqa: N803
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
-) -> AnimalCandidateResponse:
+) -> AnimalConfirmationResponse:
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
-    animal = await AnimalRepository(session, context.organization_id).get(animalId)
-    if animal is None or animal.status != "active":
-        raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-    if context.role == "VOLUNTEER" and not await ReportableScopeRepository(
-        session, context.organization_id
-    ).is_animal_reportable(animal_id=animal.id, volunteer_user_id=context.user_id):
-        raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-    return _candidate(animal, organization_id=context.organization_id)
+    if context.membership_id is None or context.session_id is None:
+        raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
+    candidate = await _selection_service(session, context.organization_id).confirm(
+        animal_id=animalId, user_id=context.user_id, role=context.role
+    )
+    response = await _candidate(candidate, organization_id=context.organization_id)
+    return AnimalConfirmationResponse(
+        **response.model_dump(),
+        confirmation_token=issue_animal_confirmation_token(
+            user_id=context.user_id,
+            organization_id=context.organization_id,
+            membership_id=context.membership_id,
+            session_id=context.session_id,
+            animal_id=animalId,
+        ),
+    )

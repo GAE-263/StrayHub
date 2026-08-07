@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.animal import Animal
@@ -21,12 +21,23 @@ class ReportableScopeRepository:
         current = now or datetime.now(timezone.utc)
         result = await self.session.execute(
             select(Animal.id)
-            .join(Animal, Animal.organization_id == DailyReportableScope.organization_id)
+            .select_from(DailyReportableScope)
+            .join(
+                Animal,
+                and_(
+                    Animal.organization_id == DailyReportableScope.organization_id,
+                    or_(
+                        DailyReportableScope.animal_id == Animal.id,
+                        DailyReportableScope.area_id == Animal.area_id,
+                    ),
+                ),
+            )
             .where(
                 DailyReportableScope.organization_id == self.organization_id,
                 DailyReportableScope.status == "active",
                 DailyReportableScope.starts_at <= current,
                 DailyReportableScope.ends_at >= current,
+                Animal.status == "active",
                 or_(
                     DailyReportableScope.volunteer_user_id.is_(None),
                     DailyReportableScope.volunteer_user_id == volunteer_user_id,
