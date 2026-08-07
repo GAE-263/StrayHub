@@ -72,9 +72,9 @@
 
 ### Session Record / Refresh Token / Active Shelter Context
 
-Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值並可輪替，Access Token 為短效憑證。Active Shelter Context 代表目前 Session 明確選擇的 Organization；Webhook Session 代表 LINE Webhook 依可信 LINE Binding 建立的受控事件處理上下文。
+Session Record 代表本系統的登入狀態；Password Hash 使用 `Argon2id` 的 PHC encoded hash；Refresh Token 是至少 256-bit 的 opaque random value，只保存其 `SHA-256` digest 並可輪替；Access Token 是 `RS256` 簽署、15 分鐘有效的 JWT 短效憑證。JWT 的 `sub`、`sid`、`jti`、`iat`、`exp`、`iss`、`aud` 與 access-token type 是受控 Claims，`org_id`、角色與 Membership 不得放入；JWT 驗證通過後仍須查詢 Server-side Session。Active Shelter Context 代表目前 Session 明確選擇的 Organization；Webhook Session 代表 LINE Webhook 依可信 LINE Binding 建立的受控事件處理上下文。
 
-驗證規則：受保護 Request 必須重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context；`PLATFORM_ADMIN` 的平台級 Request 改驗證 `PLATFORM` Scope。Session 或 Refresh Token 撤銷、User／Membership／Organization 停用後立即拒絕存取。Active Shelter Context 必須來自有效 Membership、綁定 Session 且不得由 QR Code 或 Request 任意覆寫；切換時留下 Audit Record，Draft 不得跨 Organization 移動。Webhook Session 必須綁定 `system_user_id`、唯一有效 Shelter Context 與目前權限狀態。
+驗證規則：受保護 Request 必須先以固定 `RS256` allowlist、`kid`、issuer、audience、type、時間與必要 Claims 驗證 Access Token，再重新驗證 Session、User、Organization、Membership、角色與 Active Shelter Context；`PLATFORM_ADMIN` 的平台級 Request 改驗證 `PLATFORM` Scope。Session 或 Refresh Token 撤銷、User／Membership／Organization 停用後立即拒絕存取。Refresh Token replay 必須撤銷該 Token family。Active Shelter Context 必須來自有效 Membership、綁定 Session 且不得由 QR Code 或 Request 任意覆寫；切換時留下 Audit Record，Draft 不得跨 Organization 移動。Webhook Session 必須綁定 `system_user_id`、唯一有效 Shelter Context 與目前權限狀態。
 
 ### Shelter Membership / Authorization Scope
 
@@ -150,7 +150,9 @@ Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值
 
 代表一次已送出的人工照護回報。
 
-主要資料：Animal、Shelter、Volunteer、回報來源、回報時間、照護／散步完成狀態、進食、飲水、活動、排泄、行為、外觀、原始建立時間、最後修改時間、動物名稱與 Shelter Number 快照、保存狀態，以及 AI dispatch 狀態 `not_requested`／`pending_enqueue`／`enqueued`／`enqueue_failed`。
+主要資料：Animal、Shelter、Volunteer、回報來源、回報時間、照護完成狀態、散步完成狀態、進食、飲水、活動、排尿、排便、護食或資源防衛、對人的互動、對其他動物的互動、情緒、散步反應、外觀／特殊狀態、原始建立時間、最後修改時間、動物名稱與 Shelter Number 快照、保存狀態，以及 AI dispatch 狀態 `not_requested`／`pending_enqueue`／`enqueued`／`enqueue_failed`。
+
+照護完成狀態使用 `care_completion.completed`、`care_completion.partially_completed`、`care_completion.not_provided`、`care_completion.not_observed` 與 `care_completion.uncertain`；散步完成狀態使用 `walk_completion.completed`、`walk_completion.partially_completed`、`walk_completion.not_done`、`walk_completion.not_observed` 與 `walk_completion.uncertain`。兩組狀態分開保存；`walk_completion.*` 不得與散步反應的 `walk.*` 混用。
 
 驗證規則：必須有已驗證 Volunteer、有效 Shelter Scope、正式 Animal 關聯；同一 Animal 同日可有多筆；原始內容不可被 AI 或更正覆蓋；重複送出必須可辨識。Volunteer 可在建立後 24 小時內修改自己的內容、Photo 與 Note，但不能修改 Animal 綁定；Animal 綁定更正由 Shelter Administrator 或授權 Staff Member 處理。
 
@@ -158,11 +160,11 @@ Session Record 代表本系統的登入狀態；Refresh Token 只保存雜湊值
 
 代表尚未送出的回報草稿。
 
-主要資料：`id`、`opaque_token`、Organization、已確認 Animal、Volunteer、Membership、`current_step`、已完成答案、Draft Media 關聯、心得、`last_interaction_at`、`expires_at`、狀態、建立時間與更新時間。
+主要資料：`id`、`opaque_token`、Organization、已確認 Animal、Volunteer、Membership、`current_step`、已完成答案、Draft Media 關聯、心得、`last_interaction_at`、`expires_at`、狀態、建立時間與更新時間。已完成答案至少以以下穩定欄位保存：`care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction` 與 `appearance_special_status`。
 
-驗證規則：Draft 固定歸屬單一 Organization、Volunteer、Membership 與 Animal；重新開啟及每次 Postback／Image Event 都重新驗證 Animal、Shelter、Volunteer、Scope 與狀態。每名志工在單一 Organization 同時間只保留一筆 active Draft；建立新回報時提示繼續或放棄既有 Draft。取消或過期 Draft 不得建立正式 Care Report，且任何狀態不一致都不得改綁其他 Animal 或 Shelter。
+驗證規則：Draft 固定歸屬單一 Organization、Volunteer、Membership 與 Animal；重新開啟及每次 Postback／Image Event 都重新驗證 Animal、Shelter、Volunteer、Scope 與狀態。每名志工在單一 Organization 同時間只保留一筆 active Draft；建立新回報時提示繼續或放棄既有 Draft。取消或過期 Draft 不得建立正式 Care Report，且任何狀態不一致都不得改綁其他 Animal 或 Shelter。送出前重新選擇 Animal 時，先建立待確認的候選關聯，不直接覆寫原 Animal；結構化答案與心得可保留為 `requires_reconfirmation`，原 Draft Media 不得自動沿用。新 Animal、Scope 與權限確認完成且所有保留答案重新確認後，才更新 Draft 的 Animal 並允許繼續送出；跨 Organization 候選一律拒絕。
 
-Draft 狀態至少包含：`selecting_animal`、`confirming_animal`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。後端依目前狀態驗證合法轉移，不信任 Postback 的 `step`。
+Draft 狀態至少包含：`selecting_animal`、`confirming_animal`、`answering_completion`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。`answering_completion` 依序保存照護完成狀態與散步完成狀態；`answering_behavior` 依序保存護食或資源防衛、對人的互動、對其他動物的互動、情緒與散步反應；`answering_special_status` 保存外觀／特殊狀態。後端依目前狀態驗證合法轉移，不信任 Postback 的 `step`；任一必要答案缺少時不得進入 `reviewing` 或 `submitting`。
 
 若答案以 JSON 保存，必須由版本化的 Pydantic／Domain Validator 驗證類別、穩定 Code、Draft 狀態與可用選項；每次答案修改保存時間、來源 Event 與前後摘要，送出後由 Care Report 保存不可變的原始答案快照。
 
@@ -177,6 +179,8 @@ Photo 代表已清理並重新編碼的正式照片；Object Metadata 描述 Obj
 代表可維護的標準化觀察語彙。Option 保存穩定識別、顯示名稱、說明、顯示順序、啟用狀態與適用 Shelter 或平台範圍。
 
 驗證規則：停用 Option 不刪除歷史使用內容；志工能使用非診斷性描述；管理異動留下 Audit Record。
+
+平台預設最低語彙另外固定包含兩組非診斷性選項：情緒使用 `emotion.usual`、`emotion.calm`、`emotion.alert`、`emotion.excited`、`emotion.tense`、`emotion.withdrawn`、`emotion.seeking_interaction`、`emotion.not_observed`、`emotion.uncertain`、`emotion.other`；散步反應使用 `walk.usual`、`walk.willing`、`walk.exploring`、`walk.reluctant`、`walk.slow_or_stopping`、`walk.tries_to_return`、`walk.human_reaction`、`walk.animal_reaction`、`walk.not_done`、`walk.not_observed`、`walk.uncertain`、`walk.other`。照護與散步完成狀態另使用 `care_completion.*` 與 `walk_completion.*` 必要 Code。`not_observed` 與 `uncertain` 是不同語意，均不得轉換為正常或沒有特殊訊號；`other` 必須保留補充文字。歷史答案保存當時使用的穩定 Code 與顯示快照，顯示名稱後續修改不影響原始內容。
 
 Foundational 邊界：US1／US2 開始前即建立 Category／Option 的持久化模型、Migration、平台預設 Seed、穩定 Code、歷史顯示快照，以及依 Organization 取得 Effective Options 的唯讀 Repository／Service。US4 只增加 Organization Extension、管理命令、排序、停用、Audit 與管理畫面，不重建另一套基礎語彙。
 
@@ -232,7 +236,7 @@ Shelter
 - **Shelter**：`pending_setup` → `active` → `suspended`；停用不刪除既有歷史。
 - **User／Membership**：`invited` → `active` → `disabled`；非 active 不得建立或讀取業務資料。
 - **Webhook Session**：`created` → `active` → `revoked`／`expired`；建立前必須完成 LINE Binding、唯一 Context 與權限驗證。
-- **Report Draft**：`selecting_animal` → `confirming_animal` → `answering_feeding` → `answering_water` → `answering_activity` → `answering_elimination` → `answering_behavior` → `answering_special_status` → `awaiting_media` → `awaiting_note` → `reviewing` → `submitting` → `submitted`；任一步驟可依規則回到前一步、`cancelled` 或 `expired`。無效轉移必須拒絕；未提交 Draft 可由建立者放棄或由系統依設定過期清理。
+- **Report Draft**：`selecting_animal` → `confirming_animal` → `answering_completion` → `answering_feeding` → `answering_water` → `answering_activity` → `answering_elimination` → `answering_behavior` → `answering_special_status` → `awaiting_media` → `awaiting_note` → `reviewing` → `submitting` → `submitted`；任一步驟可依規則回到前一步、`cancelled` 或 `expired`。尚有必要答案未完成時不得進入 `reviewing` 或 `submitting`。無效轉移必須拒絕；未提交 Draft 可由建立者放棄或由系統依設定過期清理。
 - **LINE Webhook Event**：`received` → `signature_rejected`／`duplicate_ignored`／`processing` → `processed`／`failed`；同一 `webhook_event_id` 不得重複產生業務寫入。
 - **Daily Care Report**：`saved` → `amended` → `archived`；Volunteer 可在 24 小時內修改內容、Photo 與 Note；Animal 綁定更正由授權人員執行；正式回報不 Hard Delete，原始內容永久保留，所有修改與封存另留 Audit Record。
 - **Temporary Media / Photo**：`temporary` → `processed` → `attached` 或 `failed`；未提交 Temporary Media 可刪除或清理；正式 Photo 不 Hard Delete，只能標記不可使用或封存。

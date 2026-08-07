@@ -84,6 +84,16 @@
 
 Authentication API 固定包含 Login、Refresh、Logout、Current User、LIFF Identity Exchange、Active Shelter Context Read 與 Switch；HTTP router 位於 `services/api/app/api/authentication.py`，Session／Token rotation／replay 防護與 Context 切換由 `services/api/app/application/authentication/` 協調。這組 API 與測試是所有受保護 User Story 的 Foundational dependency，不得延後到 US1 或由 Next.js 自行補足。
 
+Authentication 外部與密碼學能力以 `services/api/app/application/ports/authentication.py` 定義 `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort`。正式實作分別固定於 `services/api/app/infrastructure/auth/password_hasher.py`、`services/api/app/infrastructure/auth/access_token_adapter.py` 與 `services/api/app/infrastructure/line/identity_verification_adapter.py`；Application Service 只能依賴 Port，不得直接呼叫密碼雜湊套件、Token 套件或 LINE 驗證 API。Adapter Contract Test 與 Security Test 必須涵蓋錯誤密碼、過期／格式錯誤 Token、Refresh replay、錯誤 issuer／audience、無效 LINE 身分資料、撤銷後立即拒絕及 Secret 不進 Log。
+
+**Decision**：Password Hash 固定使用 `argon2-cffi` 的 `Argon2id`，採 PHC encoded hash，基準參數為 `m=19456 KiB`、`t=2`、`p=1`，salt 由函式庫逐筆產生；本期不使用 pepper。低於目前基準的舊 hash 在成功登入後重新雜湊。Access Token 固定使用 `PyJWT[crypto]`／`cryptography` 的 `RS256` JWT，RSA key 至少 2048-bit，TTL 15 分鐘，Header 使用 `typ=JWT`、`alg=RS256`、`kid`，Claims 使用 `sub`、`sid`、`jti`、`iat`、`exp`、`iss`、`aud` 與固定 access-token type，不放入 `org_id`、角色或 Membership。`AUTH_JWT_ISSUER`、`AUTH_JWT_AUDIENCE` 與 current／previous key set 由受控設定提供；驗證固定 allowlist `RS256`，並檢查 key、issuer、audience、type、時間與必要 Claims。Refresh Token 是至少 256-bit 的 opaque random value，只保存 `SHA-256` digest，rotation 與 family replay detection 仍由 Server-side Session 執行。
+
+**Rationale**：OWASP 建議新系統使用 Argon2id，且提供 `m=19456`、`t=2`、`p=1` 的最低設定。JWT 使用非對稱簽章可避免把同一個 shared secret 散布至驗證元件；RS256 與 `PyJWT[crypto]` 可明確固定演算法、issuer、audience 與 key id。即使 JWT 尚未過期，每次 Request 仍查詢 Server-side Session，因此 User、Membership、Organization 或 Session 撤銷可以立即生效。Refresh Token 使用高熵 opaque value 並只保存 digest，可避免將可重放憑證寫入資料庫。
+
+**Alternatives considered**：使用 bcrypt；拒絕，因新系統優先採用 memory-hard 的 Argon2id。使用 HS256；拒絕，因需要在簽發與驗證端共享高敏感 symmetric key，且本系統已有多個驗證邊界。使用 opaque Access Token；拒絕，因本 Feature 已定義短效 Access Token Claims、OpenAPI Bearer 介面與 issuer／audience 驗證，採受控 JWT 並以 Server-side Session 作最終授權判定。使用 pepper；暫不採用，避免第一階段增加全量密碼失效與 Secret rotation 的耦合。
+
+**Official references**：[OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)、[RFC 8725 JSON Web Token Best Current Practices](https://datatracker.ietf.org/doc/rfc8725/)、[RFC 9068 JWT Profile for OAuth 2.0 Access Tokens](https://datatracker.ietf.org/doc/html/rfc9068)、[PyJWT Usage Examples](https://pyjwt.readthedocs.io/en/latest/usage.html) 與 [PyJWT API Reference](https://pyjwt.readthedocs.io/en/stable/api.html)。
+
 ## 決策 11：LINE Bot 為主要回報介面，LIFF 為輔助介面
 
 **Decision**：本 Feature 的主要回報介面是 LINE Bot，使用 Rich Menu、Quick Reply、Postback、文字訊息、圖片訊息與 LINE Messaging API Webhook；LIFF 僅作為第一次身分綁定、QR／Deep Link 識別、完整動物確認、答案修改、長文字及 Bot 備援介面。Bot 是受控狀態機，不以自然語言自由對話取代結構化選項。FastAPI 仍是唯一 Authentication、Authorization、Organization Scope 與 CRM 業務邊界。
@@ -108,7 +118,7 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 ## 補充決策 D：Bot State Machine 與 Draft Expiration
 
-**Decision**：Draft 固定歸屬 `org_id`、志工、Membership 與 Animal，保存 opaque token、current step、答案、媒體、時間與狀態。狀態至少包含 `selecting_animal`、`confirming_animal`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。同一志工在單一 Organization 同時間只保留一筆 active Draft；有效期限由設定控制。無效轉移、跨 Organization、重送事件與修改 Postback 不得改綁 Draft。
+**Decision**：Draft 固定歸屬 `org_id`、志工、Membership 與 Animal，保存 opaque token、current step、答案、媒體、時間與狀態。狀態至少包含 `selecting_animal`、`confirming_animal`、`answering_completion`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled`、`expired`。`answering_completion` 依序取得照護完成狀態與散步完成狀態；`answering_behavior` 依序取得護食或資源防衛、對人的互動、對其他動物的互動、情緒與散步反應；`answering_special_status` 取得外觀／特殊狀態。標準回報必要答案包含 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction` 與 `appearance_special_status`；`not_observed`、`uncertain` 與 `walk_completion.not_done` 是有效答案，不是略過。尚有必要答案未完成時不得進入 `reviewing` 或 `submitting`。同一志工在單一 Organization 同時間只保留一筆 active Draft；有效期限由設定控制。無效轉移、跨 Organization、重送事件與修改 Postback 不得改綁 Draft。
 
 ## 補充決策 E：Mock LINE Adapter、正式 Adapter 與本機 HTTPS
 
@@ -190,6 +200,8 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 **Alternatives considered**：將 Observation 全部留在 US4、Job 全部留在 US5；拒絕，因 US2 已直接依賴兩者。把選項硬編碼在 Bot；拒絕，因會形成第二套業務語彙。
 
+平台預設 Observation Seed 的最低內容直接依 FR-017～FR-022：進食、飲水、活動、排泄、護食／資源防衛、人際互動、動物互動、外觀與特殊狀態各自具有穩定 Code，並包含規格要求的「未觀察」、「無法判斷」及適用的「其他」選項。Seed Test 必須逐一驗證最低 Code 集合，不得只檢查資料列存在。
+
 ## 決策 23：OpenAPI 產生 TypeScript Contract Types
 
 **Decision**：`contracts/openapi.yaml` 是唯一 HTTP Contract；使用 `openapi-typescript` 產生 `packages/contracts/src/openapi.ts`，只供 TypeScript consumer 使用。生成檔禁止手動修改；`generate` 負責更新，`check` 重新產生並比較差異。FastAPI Pydantic Schema 保持獨立，透過 OpenAPI contract tests 驗證一致性。
@@ -204,6 +216,14 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 **Rationale**：明確區分 test scope 後，Tasks 不會把 E2E 放進不存在的目錄，也不會用 Mock-only 測試取代真實 PostgreSQL 隔離驗證。
 
+## 決策 25：真人 Usability Validation 與自動化效能測試分工
+
+**Decision**：SC-001／SC-002 使用至少 10 名未受本系統專門訓練且未參與設計／實作的志工，SC-006／SC-014 使用至少 10 名未參與設計／實作的工作人員；固定腳本與去識別化證據置於 `specs/001-volunteer-care-report/validation/`。自動化測試只量測計時埋點、固定路徑、Timeline latency 與 Query Count，不得取代真人完成率、操作次數或狀態辨識率。
+
+**Rationale**：Integration／E2E Test 可以證明系統行為與效能，但不能證明未受訓使用者能獨立完成或理解狀態。固定樣本下限、腳本、計數方式與失敗樣本保留規則，可避免以少量或篩選後樣本宣稱達成成功條件。
+
+**Alternatives considered**：只以自動化測試模擬真人操作；拒絕，因無法驗證學習成本與語意辨識。只記錄百分比而不保存去識別化證據；拒絕，因無法重現或稽核驗收結果。
+
 ## 研究完成檢查
 
 - 本機與 GCP 的儲存差異已由 Object Storage Interface 隔離。
@@ -212,5 +232,5 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 - Authentication、Active Shelter Context、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive 均已記錄驗證邊界；公開頁面、Notification 與 Export 明確排除。
 - GCP 專屬 IAM、Signed URL、Cloud SQL、Service Account 與 HTTPS LIFF 行為列為 Demo 另行驗證，不假設本機通過即等於 GCP 通過。
 - SQLAlchemy `AsyncSession`、`asyncpg`、受控 Repository、Composite Constraint、PostgreSQL 防護與 Alembic 空資料庫 migration 已納入 Phase 1 設計與 quickstart 驗證路徑。
-- Terraform、`uv`、Canonical Source Layout、PostgreSQL RLS／Database Scope Setter、Authentication API、正式 LINE Adapter、OpenAPI Contract Types 與測試目錄已定案，並與 `plan.md`、`data-model.md`、`quickstart.md` 及相關契約一致；沒有未決的主要技術選型阻擋任務產生。
+- Terraform、`uv`、Canonical Source Layout、PostgreSQL RLS／Database Scope Setter、Authentication API／Ports／Adapters、正式 LINE Adapter、OpenAPI Contract Types、測試目錄與真人 Usability Validation Protocol 已定案，並與 `plan.md`、`data-model.md`、`quickstart.md` 及相關契約一致；沒有未決的主要技術選型阻擋任務產生。
 - 規格原有的高影響待釐清事項，以及 `PLATFORM_ADMIN` 平台級 Scope 與 LINE Webhook Session／Active Shelter Context 解析流程，均已完成確認並同步至本計畫；照片必填、草稿保存與刪除／封存等低優先細節列為 tasks 階段決策。

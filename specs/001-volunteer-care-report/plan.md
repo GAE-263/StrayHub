@@ -16,7 +16,7 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 **語言／版本**：Next.js 使用 TypeScript；FastAPI 與 Background Worker 使用 Python。Python 專案命令與環境管理採用 `uv`；Python 與 Node.js 的精確版本在實作階段依專案工具鏈鎖定，但必須可在本機與 Demo 環境重現。
 
-**主要依賴**：Next.js Development Server、FastAPI Development Server、SQLAlchemy 2.x、Alembic、`asyncpg`、PostgreSQL Container、MinIO Container、Background Worker、Docker Compose、Mock LINE／LIFF Context、Mock LINE Adapter、正式 LINE Messaging API Adapter、Mock AI Service 或測試用 AI Adapter，以及由 `openapi-typescript` 產生的 TypeScript Contract Types。GCP Demo 依賴 Terraform、Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
+**主要依賴**：Next.js Development Server、FastAPI Development Server、SQLAlchemy 2.x、Alembic、`asyncpg`、`argon2-cffi`、`PyJWT[crypto]`、`cryptography`、PostgreSQL Container、MinIO Container、Background Worker、Docker Compose、Mock LINE／LIFF Context、Mock LINE Adapter、正式 LINE Messaging API Adapter、Mock AI Service 或測試用 AI Adapter，以及由 `openapi-typescript` 產生的 TypeScript Contract Types。GCP Demo 依賴 Terraform、Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging。
 
 **儲存**：PostgreSQL 保存 CRM 正式資料、權限範圍、回報、AI 狀態與稽核資料；本機物件檔案使用 MinIO；Demo 物件檔案使用 Cloud Storage。Application Layer 只能透過共通 Object Storage Interface 存取檔案。
 
@@ -52,7 +52,7 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：通過。** Phase 1 設計已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS／Database Scope Setter、Authentication API、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform、`uv`、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive。下一步仍須依更新後文件重新產生 `tasks.md` 並執行 `/speckit-analyze`；在 Analyze 通過前不得開始實作。
+**重新檢查結果：通過。** Phase 1 設計已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS／Database Scope Setter、Authentication API、`Argon2id` Password Hash、`RS256` JWT Access Token、Refresh Token digest／rotation、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform、`uv`、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive。下一步仍須依更新後文件重新產生 `tasks.md` 並執行 `/speckit-analyze`；在 Analyze 通過前不得開始實作。
 
 ## Database Access
 
@@ -86,6 +86,10 @@ FastAPI 是唯一的 Authentication／Authorization 執行邊界。`PLATFORM_ADM
 
 Authentication HTTP 邊界固定由 `services/api/app/api/authentication.py` 提供，涵蓋 `POST /v1/auth/login`、`POST /v1/auth/refresh`、`POST /v1/auth/logout`、`GET /v1/auth/me`、`POST /v1/auth/liff/exchange`、`GET /v1/auth/active-shelter-context` 與 `PUT /v1/auth/active-shelter-context`。Session 建立、Refresh Token rotation／replay 防護、撤銷、LIFF identity exchange、目前使用者查詢及 Shelter Context 切換由 `services/api/app/application/authentication/` 協調；Token 驗證、密碼雜湊與 LINE Identity 驗證放在受控 Adapter。Contract、Session lifecycle、立即停用與跨 Organization Context 測試必須先於受保護 User Story API。
 
+Authentication Port 固定置於 `services/api/app/application/ports/authentication.py`，分別定義 `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort`。正式 Adapter 固定置於 `services/api/app/infrastructure/auth/password_hasher.py`、`services/api/app/infrastructure/auth/access_token_adapter.py` 與 `services/api/app/infrastructure/line/identity_verification_adapter.py`。Application Service 只依賴 Port，不得直接匯入密碼雜湊、Token 或 LINE SDK；測試以 `tests/contract/test_authentication_adapters.py` 驗證共同契約，並以 `tests/security/test_authentication_adapters.py` 驗證錯誤密碼、格式錯誤／過期 Token、Refresh replay、錯誤 issuer／audience、無效 LINE 身分資料、撤銷後立即拒絕與 Secret 遮罩。Adapter、Contract 與 Security Test 均為 Foundational Gate，必須先於 `session_service.py` 與所有受保護 API。
+
+Authentication 密碼與 Token 密碼學方案固定如下：密碼使用 `argon2-cffi` 實作 `Argon2id`，產生 PHC encoded hash；基準參數為 `m=19456 KiB`、`t=2`、`p=1`，每個密碼由函式庫產生唯一 salt，不使用可逆加密，也不在本期加入 pepper。Password Hash Adapter 必須依儲存字串中的演算法與參數驗證，若低於目前基準則在成功登入後重新雜湊。Access Token 使用 `PyJWT[crypto]` 與 `cryptography` 實作 `RS256` 簽署的 JWT，RSA key 至少 2048-bit；Header 固定包含 `typ=JWT`、`alg=RS256` 與版本化 `kid`。Payload 必須包含 `sub`、`sid`、`jti`、`iat`、`exp`、`iss`、`aud` 與固定的 access-token type，TTL 為 15 分鐘；不得包含可直接授權的 `org_id`、角色或 Membership。`AUTH_JWT_ISSUER`、`AUTH_JWT_AUDIENCE` 與 active／previous public key set 由受控設定提供，不接受 Request 或 Token 內容覆寫；驗證固定允許 `RS256`，並檢查簽章、`kid`、issuer、audience、`typ`、時間與必要 Claims。Access Token 通過密碼學驗證後仍必須查詢有效 Server-side Session，才能授權請求。Refresh Token 使用至少 256-bit 的 opaque random value，只將其 `SHA-256` digest 保存於 CRM，採 rotation／family replay detection；原始 Refresh Token 不寫入 Log、Database 或 Audit Record。Key rotation 必須在同時接受 current 與 previous public key 的 15 分鐘 Token TTL 加 30 秒 clock skew 窗口內完成。
+
 ### LINE Webhook Session 與 Active Shelter Context 解析
 
 LINE Webhook 收到 `line_user_id` 後，FastAPI 依序查詢有效 LINE Binding、取得 `system_user_id`，再查詢有效 Webhook Session。只有一個可用 Webhook Session 時，重新檢查其 Shelter Membership 與權限；權限失效不得開始回報。沒有可用 Webhook Session 時，系統查詢可用 Shelter Context，只有一個有效收容所時才建立綁定該 Context 的 Webhook Session。有多個可用 Webhook Session 或多個有效收容所時，系統不得自動選擇，應回覆 LIFF 連結要求明確選擇。LINE Binding 無效時同樣回覆 LIFF 驗證連結，不建立正式 Draft 或 Care Report。
@@ -118,6 +122,12 @@ FastAPI 是唯一 Authentication、Authorization、Organization Scope 與 CRM �
 
 Rich Menu 只作為入口，不承載完整問卷；Rich Menu 的環境版本與 Action 設定由受控設定管理。Quick Reply 通常提供 3 至 6 個選項，顯示名稱與穩定 Observation Option Code 分離。
 
+標準回報的必要結構化答案固定包含 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction` 與 `appearance_special_status`。每個欄位都必須有答案；`not_observed`、`uncertain` 及 `walk_completion.not_done` 是有效答案，不代表略過。照片與心得不屬於標準回報必要項目；選擇 `other` 或被設定為需補充的選項時才要求文字。
+
+Bot State Machine 的主要轉移為：`selecting_animal` → `confirming_animal` → `answering_completion` → `answering_feeding` → `answering_water` → `answering_activity` → `answering_elimination` → `answering_behavior` → `answering_special_status` → `awaiting_media` → `awaiting_note` → `reviewing` → `submitting` → `submitted`。`answering_completion` 依序取得照護完成狀態與散步完成狀態；`answering_behavior` 依序取得護食或資源防衛、對人的互動、對其他動物的互動、情緒與散步反應；`answering_special_status` 取得外觀／特殊狀態。尚有未回答的必要欄位時不得進入 `reviewing` 或 `submitting`；任一步驟仍可依規則回到上一步、取消或過期，但不得由 Postback 的 `step` 直接跳轉。
+
+志工在送出前重新選擇 Animal 時，後端先保留原 Draft 並顯示內容保留預覽，不得立即改綁。確認新 Animal、Organization、Membership 與 Reportable Scope 後，結構化答案與心得可複製為待重新確認內容；原 Draft Media 不自動移至新 Animal，志工必須重新附加。所有保留答案在逐項確認前不得進入 `submitting`，跨 Organization 重新選擇一律拒絕。
+
 正式 LINE 整合使用 `services/api/app/application/ports/line_messaging.py` 定義的 `LineMessagingPort`。本機 `MockLineAdapter` 與正式 `LineMessagingApiAdapter` 都實作同一契約；正式 Adapter 固定置於 `services/api/app/infrastructure/line/messaging_api_adapter.py`，負責 Reply Message、必要的受控 Push Message、依 Message ID 及時取得圖片內容，以及 Rich Menu 的驗證、建立、上傳與環境綁定。Quick Reply／Postback Message payload 由後端 Presenter 依有效 Observation Vocabulary 產生，不由 Next.js 或 Bot 程式硬編碼第二套選項。Channel secret／access token 只從受控設定取得，不進入 log、Postback 或資料庫業務值。Rich Menu 以版本化設定檔搭配 `scripts/sync_line_rich_menu.py` 發布；Mock 測試不得連線真實 LINE API，正式 Adapter 另以 Contract Test 與受控 Demo smoke test 驗證。
 
 ### AI 版本與原始輸出
@@ -126,13 +136,17 @@ Rich Menu 只作為入口，不承載完整問卷；Rich Menu 的環境版本與
 
 ### Foundational 階段邊界：Observation 與 Job
 
-US1／US2 的 Bot 問答與正式 Care Report 已依賴標準化 Observation Vocabulary，因此 `ObservationCategory`、`ObservationOption`、平台預設 Seed、穩定 Code、停用後保留歷史顯示規則，以及取得 Organization Effective Options 的唯讀 Repository／Service 必須在 Foundational 階段完成。US4 只新增 Shelter Admin 的建立、修改、排序、停用、Audit 與管理畫面，不得等到 US4 才建立 US2 所需的基礎資料模型。
+US1／US2 的 Bot 問答與正式 Care Report 已依賴標準化 Observation Vocabulary，因此 `ObservationCategory`、`ObservationOption`、平台預設 Seed、穩定 Code、停用後保留歷史顯示規則，以及取得 Organization Effective Options 的唯讀 Repository／Service 必須在 Foundational 階段完成。平台預設 Seed 必須逐一涵蓋 FR-017～FR-022 的進食、飲水、活動、排泄、護食／資源防衛、人際互動、動物互動、外觀與特殊狀態最低選項，包含各類適用的「未觀察」、「無法判斷」與「其他」穩定 Code；Seed Test 驗證完整最低 Code 集合，不得只驗證資料列存在。情緒最低 Code 為 `emotion.usual`、`emotion.calm`、`emotion.alert`、`emotion.excited`、`emotion.tense`、`emotion.withdrawn`、`emotion.seeking_interaction`、`emotion.not_observed`、`emotion.uncertain`、`emotion.other`；散步反應最低 Code 為 `walk.usual`、`walk.willing`、`walk.exploring`、`walk.reluctant`、`walk.slow_or_stopping`、`walk.tries_to_return`、`walk.human_reaction`、`walk.animal_reaction`、`walk.not_done`、`walk.not_observed`、`walk.uncertain`、`walk.other`。上述 Code、預設顯示名稱與非診斷性說明必須與 `spec.md` 一致。US4 只新增 Shelter Admin 的建立、修改、排序、停用、Audit 與管理畫面，不得等到 US4 才建立 US2 所需的基礎資料模型。
+
+照護與散步完成狀態是 US2 必要的基礎語彙，必須在同一個 Foundational 邊界提供 `care_completion.completed`、`care_completion.partially_completed`、`care_completion.not_provided`、`care_completion.not_observed`、`care_completion.uncertain`，以及 `walk_completion.completed`、`walk_completion.partially_completed`、`walk_completion.not_done`、`walk_completion.not_observed`、`walk_completion.uncertain`。這些必要 Code 不得因 Organization 自訂選項停用而使標準回報無法完成；顯示名稱與說明仍由有效語彙查詢提供，歷史回報保存當時的 Code 與顯示快照。`walk_completion.*` 與散步反應的 `walk.*` 是不同類別，不得混用。
 
 AI Worker 不阻擋 MVP，但 US2 在人工 Report 保存後需要記錄非同步處理意圖，因此 `AI Processing Job` 的 SQLAlchemy Model、Alembic Migration、版本欄位、狀態、唯一冪等關係與 Job Repository 必須在 Foundational 階段完成。Report 的正式交易先獨立 commit；成功後才以另一個受控 transaction 冪等建立 Job，外部 AI 呼叫永遠不在 Report transaction。Job 建立失敗不得回滾已保存 Report，Report 保留 `pending_enqueue`／`enqueue_failed` 的可追蹤狀態，並由 reconciliation 找出已保存但尚無有效 Job 的 Report。US5 才實作 Worker claim／retry、正式 AI Adapter、結構與禁用語意驗證、`AIObservation`、人工 Confirm／Reject／Correct 與前端覆核。
 
 ### OpenAPI Contract Types
 
 `specs/001-volunteer-care-report/contracts/openapi.yaml` 是 HTTP Contract 的唯一來源。`packages/contracts/` 使用 `openapi-typescript` 產生 type-only 的 `src/openapi.ts`，供 `apps/web` 與其他 TypeScript consumer 使用；生成檔不得手動修改，也不得反向取代 OpenAPI。FastAPI 的 Pydantic Model 維持獨立實作，透過 `tests/contract/test_openapi_contract.py` 與 endpoint contract tests 驗證，不從 TypeScript 型別推導。`packages/contracts/package.json` 必須提供 `generate` 與 `check` 命令；`check` 重新產生到暫存位置並比較差異，CI／Demo gate 在型別過期時失敗。
+
+Care Report HTTP Contract 使用 `DraftAnswers` 表達可逐題累積的草稿答案，使用 `CareReportAnswers` 表達送出時必須完整具備的答案集合。`CareReportAnswers` 必須包含 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction` 與 `appearance_special_status`；照護／散步完成狀態使用固定 Code enum，其餘值使用 CRM 有效 Observation Vocabulary 的穩定 Code。Draft PATCH 可以只傳目前答案，但 Application Service 必須依 Draft State 驗證順序；`POST /v1/care-reports` 只能接受完整 `CareReportAnswers`，缺少任何必要欄位時拒絕正式寫入。
 
 ### EXIF 與媒體
 
@@ -198,6 +212,17 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 14. 驗證 Database Scope Setter 在 transaction 與 pooled connection 間不洩漏 Organization Scope。
 15. 驗證 OpenAPI 生成的 Contract Types 無漂移。
 16. 驗證 Observation Vocabulary 與 AI Job Persistence 已在 US2 前可用，且 AI Job 建立失敗不回滾人工 Report。
+17. 驗證 `Argon2id` Password Hash、`RS256` JWT Access Token、Refresh Token digest、key rotation 與 Session 立即撤銷。
+
+### 真人 Usability Validation Protocol
+
+真人驗收使用 `specs/001-volunteer-care-report/validation/usability-test-plan.md` 保存固定測試腳本，並將去識別化結果分別保存至 `validation/volunteer-usability-evidence.md` 與 `validation/staff-usability-evidence.md`。所有測試只使用本機或受控 Demo 的虛構 Seed Data，不保存 LINE User ID、真實姓名或正式收容所敏感資料。
+
+- 志工組至少 10 人，未接受本系統專門訓練且未參與設計／實作；使用相同標準 LINE Bot 回報案例驗證 SC-001／SC-002，至少 8 人獨立完成 SC-001，且至少 8 人在 90 秒內完成 SC-002。
+- 工作人員組至少 10 人，未參與設計／實作；使用相同 Timeline 案例驗證 SC-006／SC-014，至少 9 人在最多三次主要操作內進入歷程並正確區分四種狀態。
+- 證據至少記錄測試批次、去識別化參與者代碼、角色群組、裝置類型、開始／結束時間、是否完成、是否接受協助、操作次數、狀態辨識答案與失敗原因。失敗樣本不得排除。
+- `tests/integration/test_performance_targets.py` 只驗證系統計時、Timeline 兩秒、Query Count 與固定路徑，不得用自動化通過結果代替真人完成率或辨識率。
+- 真人驗收在本機 MVP 可運作後即可執行，不依賴 US4、US5 或 GCP Demo；結果未達門檻時不得把 Feature 標記完成，但不阻擋團隊繼續修正與重測。
 
 ### LINE Bot／LIFF 本機整合
 
@@ -267,7 +292,7 @@ specs/001-volunteer-care-report/
 
 ```text
 apps/
-└── web/                         # Next.js 手機回報與管理介面
+└── web/                         # Next.js LIFF 輔助回報與管理介面
 
 services/
 ├── api/                         # FastAPI CRM 邊界與業務規則
@@ -278,12 +303,17 @@ services/
 │   │   ├── application/         # Use Case、交易協調與服務
 │   │   │   ├── authentication/  # Session lifecycle 與 Context 切換
 │   │   │   └── ports/
+│   │   │       ├── authentication.py # Password／Token／LINE Identity Ports
 │   │   │       └── line_messaging.py # LineMessagingPort
 │   │   ├── domain/              # 業務規則與 Policy
 │   │   ├── infrastructure/      # LINE、Storage、AI 與外部 Adapter
+│   │   │   ├── auth/
+│   │   │   │   ├── password_hasher.py       # PasswordHasherPort 正式 Adapter
+│   │   │   │   └── access_token_adapter.py  # AccessTokenPort 正式 Adapter
 │   │   │   └── line/
-│   │   │       ├── messaging_api_adapter.py # 正式 LINE Adapter
-│   │   │       └── mock_adapter.py           # 本機／測試 Adapter
+│   │   │       ├── identity_verification_adapter.py # LineIdentityVerifierPort Adapter
+│   │   │       ├── messaging_api_adapter.py         # 正式 LINE Adapter
+│   │   │       └── mock_adapter.py                   # 本機／測試 Adapter
 │   │   └── persistence/         # SQLAlchemy Mapping、AsyncSession 與受控 Repository
 │   │       └── database/
 │   │           └── scope.py     # transaction-local Database Scope Setter
@@ -326,6 +356,11 @@ tests/
 ├── e2e/                         # Mock LINE／LIFF 到 FastAPI、PostgreSQL、MinIO、Worker 的垂直流程
 ├── fixtures/                    # Webhook、Postback、Redelivery、圖片與 A／B Seed Fixture
 └── unit/                        # FastAPI、Worker 與領域規則
+
+specs/001-volunteer-care-report/validation/
+├── usability-test-plan.md       # 固定真人測試腳本與量測規則
+├── volunteer-usability-evidence.md # SC-001／SC-002 去識別化證據
+└── staff-usability-evidence.md  # SC-006／SC-014 去識別化證據
 ```
 
 **結構決策**：採 `apps/web`、`services/api` 與 `services/worker` 的分離結構。FastAPI 程式碼固定置於 `services/api/app/`，Alembic 固定置於 `services/api/migrations/`；Worker 啟動入口固定為 `services/worker/worker.py`，其 Session、Repository、Adapter 與 Handler 固定置於 `services/worker/app/`。`contracts/openapi.yaml` 是前後端正式 API Contract，`packages/contracts/src/openapi.ts` 只是其生成型別；`infra/local` 服務本機優先策略；`infra/gcp-demo/terraform/` 是所有 GCP Demo 資源的唯一 IaC 來源。`tests/security` 驗證單一安全控制，`tests/isolation` 以真實 PostgreSQL 專測跨租戶矩陣，`tests/e2e` 專測跨程序垂直流程，`tests/fixtures` 只保存非正式、虛構測試輸入。後續 Tasks 不得再建立與此結構平行的第二套 Migration、Worker Persistence、Contract Types 或 Cloud Run 部署路徑。

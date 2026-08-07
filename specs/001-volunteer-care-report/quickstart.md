@@ -60,7 +60,7 @@ uv run pytest tests/integration/test_migrations.py tests/integration/test_databa
 執行 Authentication Contract 與 Session lifecycle 測試：
 
 ```bash
-uv run pytest tests/contract/test_openapi_contract.py tests/integration/test_authentication_session.py tests/isolation/test_active_shelter_context.py -q
+uv run pytest tests/contract/test_openapi_contract.py tests/contract/test_authentication_adapters.py tests/security/test_authentication_adapters.py tests/integration/test_authentication_session.py tests/isolation/test_active_shelter_context.py -q
 npm --prefix packages/contracts run generate
 npm --prefix packages/contracts run check
 ```
@@ -69,6 +69,9 @@ npm --prefix packages/contracts run check
 
 - Login、Refresh、Logout、Current User、LIFF Identity Exchange 與 Active Shelter Context Read／Switch 都符合 OpenAPI。
 - Refresh Token rotation、replay 防護、Session 撤銷及 User／Membership／Organization 停用立即生效。
+- `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort` 的正式 Adapter 通過共同契約與安全測試；Application Service 不直接依賴密碼、Token 或 LINE SDK。
+- Password Hash 使用 `Argon2id`（`m=19456 KiB`、`t=2`、`p=1）；Access Token 使用 `RS256` JWT，檢查 `kid`、issuer、audience、type、時間與必要 Claims；Refresh Token 只在 CRM 保存 `SHA-256` digest。
+- Access Token 不含 `org_id`、角色或 Membership；即使 JWT 尚未過期，Session／User／Membership／Organization 撤銷後仍立即拒絕。
 - Request 不能以自行傳入的 `org_id` 覆寫 Session Active Shelter Context。
 - `packages/contracts/src/openapi.ts` 由 `openapi.yaml` 產生且無漂移；生成檔沒有手動業務規則。
 
@@ -126,7 +129,7 @@ uv run pytest tests/isolation -q
 
 1. 從 Rich Menu 的「今日照護毛孩」選擇 A Animal，或解析 A QR Token。
 2. 顯示照片、名稱、完整 Shelter Number 與 Cage／Area，明確確認 Animal。
-3. 以 Quick Reply／Postback 逐題填寫進食、飲水、活動、排泄、行為與外觀等結構化選項。
+3. 以 Quick Reply／Postback 依序完成照護完成狀態、散步完成狀態、進食、飲水、活動、排尿、排便、護食或資源防衛、對人的互動、對其他動物的互動、情緒、散步反應及外觀／特殊狀態；各題可選擇有效的「未觀察」、「無法判斷」或「未進行散步」，但不可略過必要題目。
 4. 以 Image Message 附加一張虛構照片，測試 EXIF 清理後才建立 Draft Media；心得可略過。
 5. 顯示完整摘要，確認前驗證 Signature、`webhookEventId`、Draft、Animal、Membership 與 Active Shelter Context。
 6. 送出後立即確認人工 Report 先獨立保存，再由另一個 transaction 冪等建立 AI Job；Job 建立失敗不得回滾 Report。
@@ -137,6 +140,8 @@ uv run pytest tests/isolation -q
 11. 在建立後 24 小時內修改自己的回報內容、照片與心得；正式 Report 不得 Hard Delete，只能依權限 Correction 或 Archive。
 
 預期結果：兩筆 Report 都保留；沒有回報日期不顯示為正常；24 小時內的內容修改保留前後版本；動物綁定修改交由授權人員處理；所有資料可追溯至 A Shelter。
+
+重新選擇動物的驗證必須另外確認：原結構化答案與心得顯示為待重新確認、原照片不自動沿用、新 Animal 重新通過確認與 Reportable Scope，且跨 Organization 候選被拒絕。
 
 ## 9. 驗證 Object Storage
 
@@ -187,7 +192,16 @@ uv run pytest tests/contract/test_line_adapter_contract.py tests/integration/tes
 
 驗證 Mock 與正式 Adapter 的共同契約包含 Reply Message、受控 Push Message、Image Content 取得及 Rich Menu 管理；Quick Reply／Postback 由 Effective Observation Options 產生。真正 LINE API 只在受控 HTTPS／Demo 環境執行 smoke test，並由 `scripts/sync_line_rich_menu.py` 依環境設定發布 Rich Menu。
 
-## 12. 本機品質門檻
+## 12. 真人 Usability Validation
+
+依 `validation/usability-test-plan.md` 執行固定腳本：
+
+1. 使用至少 10 名未受本系統專門訓練的志工測試者驗證 SC-001／SC-002，將去識別化結果寫入 `validation/volunteer-usability-evidence.md`。
+2. 使用至少 10 名未參與設計或實作的工作人員測試者驗證 SC-006／SC-014，將去識別化結果寫入 `validation/staff-usability-evidence.md`。
+3. SC-001：至少 8 名志工能獨立完成標準回報；SC-002：至少 8 名志工能在 90 秒內完成標準回報；SC-006／SC-014：至少 9 名工作人員能在三次主要操作內進入 Timeline 並正確區分四種狀態。
+4. 不得保存 LINE User ID、真實姓名或正式收容所資料；不得排除失敗樣本；自動化測試不得代替真人結果。
+
+## 13. 本機品質門檻
 
 ```bash
 ruff check .
@@ -199,7 +213,7 @@ npm --prefix packages/contracts run check
 
 以上命令與 Frontend 測試必須通過，且空資料庫 migration、關鍵本機流程、Shelter A／B 隔離與 MinIO Adapter 測試都必須有成功結果，才可進入 GCP Demo。
 
-## 13. GCP Demo 部署後驗證
+## 14. GCP Demo 部署後驗證
 
 部署前先驗證唯一 Terraform 來源：
 
