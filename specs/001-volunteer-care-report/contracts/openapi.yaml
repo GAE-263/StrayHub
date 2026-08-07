@@ -38,10 +38,10 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LoginRequest' }
+            schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
-        '200': { $ref: '#/components/responses/AuthResponse' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        "200": { $ref: "#/components/responses/AuthResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/auth/refresh:
     post:
       tags: [Authentication]
@@ -51,28 +51,28 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/RefreshRequest' }
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
       responses:
-        '200': { $ref: '#/components/responses/AuthResponse' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        "200": { $ref: "#/components/responses/AuthResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/auth/logout:
     post:
       tags: [Authentication]
       operationId: logout
       responses:
-        '204': { description: Session 已撤銷 }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        "204": { description: Session 已撤銷 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/auth/me:
     get:
       tags: [Authentication]
       operationId: getCurrentUser
       responses:
-        '200':
+        "200":
           description: 目前使用者與 Membership
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CurrentUserResponse' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+              schema: { $ref: "#/components/schemas/CurrentUserResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/auth/liff/exchange:
     post:
       tags: [Authentication]
@@ -82,20 +82,20 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LiffExchangeRequest' }
+            schema: { $ref: "#/components/schemas/LiffExchangeRequest" }
       responses:
-        '200': { $ref: '#/components/responses/AuthResponse' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        "200": { $ref: "#/components/responses/AuthResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/auth/active-shelter-context:
     get:
       tags: [Authentication]
       operationId: getActiveShelterContext
       responses:
-        '200':
+        "200":
           description: 目前 Session 的 Active Shelter Context
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ActiveShelterContext' }
+              schema: { $ref: "#/components/schemas/ActiveShelterContext" }
     put:
       tags: [Authentication]
       operationId: switchActiveShelterContext
@@ -103,24 +103,24 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ShelterContextSwitchRequest' }
+            schema: { $ref: "#/components/schemas/ShelterContextSwitchRequest" }
       responses:
-        '200':
+        "200":
           description: 切換後的 Active Shelter Context
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ActiveShelterContext' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/ActiveShelterContext" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations:
     get:
       tags: [Organizations]
       operationId: listOrganizations
       responses:
-        '200':
+        "200":
           description: 依角色可見的收容所
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OrganizationListResponse' }
+              schema: { $ref: "#/components/schemas/OrganizationListResponse" }
     post:
       tags: [Organizations]
       operationId: createOrganization
@@ -128,27 +128,27 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/OrganizationCreateRequest' }
+            schema: { $ref: "#/components/schemas/OrganizationCreateRequest" }
       responses:
-        '201':
+        "201":
           description: 收容所已建立，預設未啟用
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Organization' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/Organization" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations/{organizationId}:
     parameters:
-      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: "#/components/parameters/OrganizationId"
     get:
       tags: [Organizations]
       operationId: getOrganization
       responses:
-        '200':
+        "200":
           description: 收容所資料
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Organization' }
-        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+              schema: { $ref: "#/components/schemas/Organization" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
     patch:
       tags: [Organizations]
       operationId: updateOrganization
@@ -156,26 +156,26 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/OrganizationUpdateRequest' }
+            schema: { $ref: "#/components/schemas/OrganizationUpdateRequest" }
       responses:
-        '200':
+        "200":
           description: 收容所已更新
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Organization' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/Organization" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations/{organizationId}/disable:
     post:
       tags: [Organizations]
       operationId: disableOrganization
       parameters:
-        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: "#/components/parameters/OrganizationId"
       responses:
-        '204': { description: 收容所已停用 }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        "204": { description: 收容所已停用 }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations/{organizationId}/initial-admin:
     parameters:
-      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: "#/components/parameters/OrganizationId"
     post:
       tags: [Organizations]
       operationId: createInitialShelterAdmin
@@ -183,26 +183,26 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/InitialAdminCreateRequest' }
+            schema: { $ref: "#/components/schemas/InitialAdminCreateRequest" }
       responses:
-        '201':
+        "201":
           description: 初始收容所管理員帳號已建立
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Membership' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations/{organizationId}/memberships:
     parameters:
-      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: "#/components/parameters/OrganizationId"
     get:
       tags: [Memberships]
       operationId: listMemberships
       responses:
-        '200':
+        "200":
           description: 收容所 Membership
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MembershipListResponse' }
+              schema: { $ref: "#/components/schemas/MembershipListResponse" }
     post:
       tags: [Memberships]
       operationId: createMembership
@@ -210,18 +210,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/MembershipCreateRequest' }
+            schema: { $ref: "#/components/schemas/MembershipCreateRequest" }
       responses:
-        '201':
+        "201":
           description: Membership 已建立
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Membership' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations/{organizationId}/memberships/{membershipId}:
     parameters:
-      - $ref: '#/components/parameters/OrganizationId'
-      - $ref: '#/components/parameters/MembershipId'
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/MembershipId"
     patch:
       tags: [Memberships]
       operationId: updateMembership
@@ -229,27 +229,27 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/MembershipUpdateRequest' }
+            schema: { $ref: "#/components/schemas/MembershipUpdateRequest" }
       responses:
-        '200':
+        "200":
           description: Membership 已更新
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Membership' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/animals:
     get:
       tags: [Animal Selection]
       operationId: listReportableAnimals
       parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PageSize'
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
-        '200':
+        "200":
           description: 目前 Active Shelter Context 內的授權 Animal
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AnimalListResponse' }
+              schema: { $ref: "#/components/schemas/AnimalListResponse" }
   /v1/animals/search:
     get:
       tags: [Animal Selection]
@@ -259,14 +259,14 @@ paths:
           in: query
           required: true
           schema: { type: string, minLength: 1 }
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PageSize'
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
-        '200':
+        "200":
           description: 授權範圍內的候選 Animal
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AnimalListResponse' }
+              schema: { $ref: "#/components/schemas/AnimalListResponse" }
   /v1/qr-tokens/resolve:
     post:
       tags: [Animal Selection]
@@ -275,27 +275,27 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/QrResolveRequest' }
+            schema: { $ref: "#/components/schemas/QrResolveRequest" }
       responses:
-        '200':
+        "200":
           description: 唯一候選 Animal 確認卡資料
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AnimalCandidate' }
-        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+              schema: { $ref: "#/components/schemas/AnimalCandidate" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
   /v1/animals/{animalId}/confirm:
     post:
       tags: [Animal Selection]
       operationId: confirmAnimal
       parameters:
-        - $ref: '#/components/parameters/AnimalId'
+        - $ref: "#/components/parameters/AnimalId"
       responses:
-        '200':
+        "200":
           description: 已確認的 Animal
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AnimalCandidate' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/AnimalCandidate" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/care-report-drafts:
     post:
       tags: [Drafts]
@@ -304,34 +304,34 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/DraftCreateRequest' }
+            schema: { $ref: "#/components/schemas/DraftCreateRequest" }
       responses:
-        '201':
+        "201":
           description: Draft 已建立
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Draft' }
+              schema: { $ref: "#/components/schemas/Draft" }
     get:
       tags: [Drafts]
       operationId: listCareReportDrafts
       responses:
-        '200':
+        "200":
           description: 本人可見 Draft
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/DraftListResponse' }
+              schema: { $ref: "#/components/schemas/DraftListResponse" }
   /v1/care-report-drafts/{draftId}:
     parameters:
-      - $ref: '#/components/parameters/DraftId'
+      - $ref: "#/components/parameters/DraftId"
     get:
       tags: [Drafts]
       operationId: getCareReportDraft
       responses:
-        '200':
+        "200":
           description: Draft
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Draft' }
+              schema: { $ref: "#/components/schemas/Draft" }
     patch:
       tags: [Drafts]
       operationId: updateCareReportDraft
@@ -339,18 +339,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/DraftUpdateRequest' }
+            schema: { $ref: "#/components/schemas/DraftUpdateRequest" }
       responses:
-        '200':
+        "200":
           description: Draft 已更新
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Draft' }
+              schema: { $ref: "#/components/schemas/Draft" }
     delete:
       tags: [Drafts]
       operationId: deleteCareReportDraft
       responses:
-        '204': { description: Draft 已刪除或進入清理流程 }
+        "204": { description: Draft 已刪除或進入清理流程 }
   /v1/media:
     post:
       tags: [Media]
@@ -364,73 +364,77 @@ paths:
               required: [draft_id, purpose, file]
               properties:
                 draft_id: { type: string, format: uuid }
-                purpose: { type: string, enum: [elimination, fur, appearance, activity, other] }
+                purpose:
+                  {
+                    type: string,
+                    enum: [elimination, fur, appearance, activity, other],
+                  }
                 file: { type: string, format: binary }
       responses:
-        '201':
+        "201":
           description: Media 處理狀態
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MediaAsset' }
+              schema: { $ref: "#/components/schemas/MediaAsset" }
   /v1/media/{mediaId}:
     parameters:
-      - $ref: '#/components/parameters/MediaId'
+      - $ref: "#/components/parameters/MediaId"
     get:
       tags: [Media]
       operationId: getMediaStatus
       responses:
-        '200':
+        "200":
           description: Media 狀態
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MediaAsset' }
+              schema: { $ref: "#/components/schemas/MediaAsset" }
     delete:
       tags: [Media]
       operationId: deleteTemporaryMedia
       responses:
-        '204': { description: 尚未提交的 Temporary Media 已刪除 }
+        "204": { description: 尚未提交的 Temporary Media 已刪除 }
   /v1/media/{mediaId}/download-url:
     post:
       tags: [Media]
       operationId: createSignedDownloadUrl
       parameters:
-        - $ref: '#/components/parameters/MediaId'
+        - $ref: "#/components/parameters/MediaId"
       responses:
-        '200':
+        "200":
           description: 短效 Signed URL
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SignedUrlResponse' }
+              schema: { $ref: "#/components/schemas/SignedUrlResponse" }
   /v1/care-reports:
     post:
       tags: [Care Reports]
       operationId: createCareReport
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CareReportCreateRequest' }
+            schema: { $ref: "#/components/schemas/CareReportCreateRequest" }
       responses:
-        '201':
+        "201":
           description: 原始 Care Report 已保存
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CareReport' }
-        '409': { $ref: '#/components/responses/Conflict' }
+              schema: { $ref: "#/components/schemas/CareReport" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/care-reports/{reportId}:
     parameters:
-      - $ref: '#/components/parameters/ReportId'
+      - $ref: "#/components/parameters/ReportId"
     get:
       tags: [Care Reports]
       operationId: getCareReport
       responses:
-        '200':
+        "200":
           description: Care Report
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CareReport' }
+              schema: { $ref: "#/components/schemas/CareReport" }
     patch:
       tags: [Care Reports]
       operationId: correctCareReport
@@ -438,66 +442,68 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CareReportCorrectionRequest' }
+            schema: { $ref: "#/components/schemas/CareReportCorrectionRequest" }
       responses:
-        '200':
+        "200":
           description: Care Report 已修正或封存
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CareReport' }
+              schema: { $ref: "#/components/schemas/CareReport" }
   /v1/care-reports/{reportId}/archive:
     post:
       tags: [Care Reports]
       operationId: archiveCareReport
       parameters:
-        - $ref: '#/components/parameters/ReportId'
+        - $ref: "#/components/parameters/ReportId"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ArchiveRequest' }
+            schema: { $ref: "#/components/schemas/ArchiveRequest" }
       responses:
-        '204': { description: Care Report 已封存並留下 Audit Record }
+        "204": { description: Care Report 已封存並留下 Audit Record }
   /v1/animals/{animalId}/timeline:
     get:
       tags: [Timeline]
       operationId: getAnimalTimeline
       parameters:
-        - $ref: '#/components/parameters/AnimalId'
+        - $ref: "#/components/parameters/AnimalId"
         - name: start_date
           in: query
           schema: { type: string, format: date }
         - name: end_date
           in: query
           schema: { type: string, format: date }
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PageSize'
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
-        '200':
+        "200":
           description: 每日摘要與逐筆 Timeline
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TimelineResponse' }
+              schema: { $ref: "#/components/schemas/TimelineResponse" }
   /v1/observation-categories:
     get:
       tags: [Observation Vocabulary]
       operationId: listObservationCategories
       responses:
-        '200':
+        "200":
           description: 觀察類別
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ObservationCategoryListResponse' }
+              schema:
+                { $ref: "#/components/schemas/ObservationCategoryListResponse" }
   /v1/observation-options:
     get:
       tags: [Observation Vocabulary]
       operationId: listObservationOptions
       responses:
-        '200':
+        "200":
           description: 目前可用與歷史 Observation Option
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ObservationOptionListResponse' }
+              schema:
+                { $ref: "#/components/schemas/ObservationOptionListResponse" }
     post:
       tags: [Observation Vocabulary]
       operationId: createObservationOption
@@ -505,16 +511,17 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ObservationOptionCreateRequest' }
+            schema:
+              { $ref: "#/components/schemas/ObservationOptionCreateRequest" }
       responses:
-        '201':
+        "201":
           description: Observation Option 已建立
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ObservationOption' }
+              schema: { $ref: "#/components/schemas/ObservationOption" }
   /v1/observation-options/{optionId}:
     parameters:
-      - $ref: '#/components/parameters/OptionId'
+      - $ref: "#/components/parameters/OptionId"
     patch:
       tags: [Observation Vocabulary]
       operationId: updateObservationOption
@@ -522,42 +529,43 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ObservationOptionUpdateRequest' }
+            schema:
+              { $ref: "#/components/schemas/ObservationOptionUpdateRequest" }
       responses:
-        '200':
+        "200":
           description: Observation Option 已更新
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ObservationOption' }
+              schema: { $ref: "#/components/schemas/ObservationOption" }
   /v1/care-reports/{reportId}/ai-observations:
     get:
       tags: [AI]
       operationId: listAiObservations
       parameters:
-        - $ref: '#/components/parameters/ReportId'
+        - $ref: "#/components/parameters/ReportId"
       responses:
-        '200':
+        "200":
           description: AI Observation 與處理狀態
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AiObservationListResponse' }
+              schema: { $ref: "#/components/schemas/AiObservationListResponse" }
   /v1/ai-observations/{observationId}/review:
     post:
       tags: [AI]
       operationId: reviewAiObservation
       parameters:
-        - $ref: '#/components/parameters/ObservationId'
+        - $ref: "#/components/parameters/ObservationId"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/AiReviewRequest' }
+            schema: { $ref: "#/components/schemas/AiReviewRequest" }
       responses:
-        '200':
+        "200":
           description: AI Observation 已確認、拒絕或修正
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AiObservation' }
+              schema: { $ref: "#/components/schemas/AiObservation" }
 
   /v1/line/webhook:
     post:
@@ -570,21 +578,21 @@ paths:
         Webhook 本身不代表 CRM 使用者已取得回報權限；系統必須依 LINE Binding、唯一
         Webhook Session 或唯一 Shelter Context 重新判定是否可以開始回報，多個候選不得自動選擇。
       parameters:
-        - $ref: '#/components/parameters/LineSignature'
+        - $ref: "#/components/parameters/LineSignature"
       requestBody:
         required: true
         description: 必須保留未修改的原始 Request Body，並在 JSON 解析前搭配 X-Line-Signature 完成驗證。
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LineWebhookRequest' }
+            schema: { $ref: "#/components/schemas/LineWebhookRequest" }
       responses:
-        '200':
+        "200":
           description: 已接受、已忽略重送或已安全處理事件
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LineWebhookResponse' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+              schema: { $ref: "#/components/schemas/LineWebhookResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/line/bind:
     post:
       tags: [LINE Bot]
@@ -595,73 +603,73 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LineBindRequest' }
+            schema: { $ref: "#/components/schemas/LineBindRequest" }
       responses:
-        '200':
+        "200":
           description: 已建立本系統 Session
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LineBindResponse' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/LineBindResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/line/rich-menu/context:
     get:
       tags: [LINE Bot]
       operationId: getLineRichMenuContext
       responses:
-        '200':
+        "200":
           description: 目前 Active Shelter Context 可用的 Rich Menu Action
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RichMenuContext' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/RichMenuContext" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/line/care-report/drafts/current:
     get:
       tags: [LINE Bot]
       operationId: getCurrentLineCareReportDraft
       responses:
-        '200':
+        "200":
           description: 目前 Organization 的 active Draft；不存在時回傳空值
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CurrentLineDraftResponse' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/CurrentLineDraftResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/line/care-report/drafts/{draftId}/resume:
     post:
       tags: [LINE Bot]
       operationId: resumeLineCareReportDraft
       parameters:
-        - $ref: '#/components/parameters/DraftId'
+        - $ref: "#/components/parameters/DraftId"
       requestBody:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ResumeDraftRequest' }
+            schema: { $ref: "#/components/schemas/ResumeDraftRequest" }
       responses:
-        '200':
+        "200":
           description: Draft 已恢復至其目前合法步驟
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Draft' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
+              schema: { $ref: "#/components/schemas/Draft" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/line/care-report/drafts/{draftId}/cancel:
     post:
       tags: [LINE Bot]
       operationId: cancelLineCareReportDraft
       parameters:
-        - $ref: '#/components/parameters/DraftId'
+        - $ref: "#/components/parameters/DraftId"
       requestBody:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CancelDraftRequest' }
+            schema: { $ref: "#/components/schemas/CancelDraftRequest" }
       responses:
-        '200':
+        "200":
           description: Draft 已取消且不會建立正式回報
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Draft' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/Draft" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
 components:
   securitySchemes:
@@ -671,39 +679,129 @@ components:
       bearerFormat: JWT
       description: RS256 簽署的短效 Access Token；每次受保護 Request 仍必須通過 Server-side Session 與 Organization Scope 驗證。
   parameters:
-    OrganizationId: { name: organizationId, in: path, required: true, schema: { type: string, format: uuid } }
-    MembershipId: { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }
-    AnimalId: { name: animalId, in: path, required: true, schema: { type: string, format: uuid } }
-    DraftId: { name: draftId, in: path, required: true, schema: { type: string, format: uuid } }
-    MediaId: { name: mediaId, in: path, required: true, schema: { type: string, format: uuid } }
-    ReportId: { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }
-    OptionId: { name: optionId, in: path, required: true, schema: { type: string, format: uuid } }
-    ObservationId: { name: observationId, in: path, required: true, schema: { type: string, format: uuid } }
-    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1 } }
-    LineSignature: { name: X-Line-Signature, in: header, required: true, schema: { type: string, minLength: 1 } }
-    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
-    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    OrganizationId:
+      {
+        name: organizationId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    MembershipId:
+      {
+        name: membershipId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    AnimalId:
+      {
+        name: animalId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    DraftId:
+      {
+        name: draftId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    MediaId:
+      {
+        name: mediaId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    ReportId:
+      {
+        name: reportId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    OptionId:
+      {
+        name: optionId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    ObservationId:
+      {
+        name: observationId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    IdempotencyKey:
+      {
+        name: Idempotency-Key,
+        in: header,
+        required: true,
+        schema: { type: string, minLength: 1 },
+      }
+    LineSignature:
+      {
+        name: X-Line-Signature,
+        in: header,
+        required: true,
+        schema: { type: string, minLength: 1 },
+      }
+    Page:
+      {
+        name: page,
+        in: query,
+        schema: { type: integer, minimum: 1, default: 1 },
+      }
+    PageSize:
+      {
+        name: page_size,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 100, default: 20 },
+      }
   responses:
     BadRequest:
       description: Webhook 或 Request 格式錯誤
-      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        }
     AuthResponse:
       description: 本系統 Session 憑證
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/AuthResponse' }
+          schema: { $ref: "#/components/schemas/AuthResponse" }
     Unauthorized:
       description: 未通過身分驗證
-      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        }
     Forbidden:
       description: 無權限或無法存取，不能洩漏資源存在性
-      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        }
     NotFoundOrForbidden:
       description: 不存在或未授權的一致結果
-      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        }
     Conflict:
       description: Idempotency 或資料狀態衝突
-      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        }
   schemas:
     ErrorResponse:
       type: object
@@ -721,12 +819,28 @@ components:
         events:
           type: array
           items:
-            $ref: '#/components/schemas/LineWebhookEvent'
+            $ref: "#/components/schemas/LineWebhookEvent"
     LineWebhookEvent:
       type: object
       required: [type, webhookEventId, timestamp, source]
       properties:
-        type: { type: string, enum: [message, postback, follow, unfollow, beacon, join, memberJoined, memberLeft, accountLink, things] }
+        type:
+          {
+            type: string,
+            enum:
+              [
+                message,
+                postback,
+                follow,
+                unfollow,
+                beacon,
+                join,
+                memberJoined,
+                memberLeft,
+                accountLink,
+                things,
+              ],
+          }
         webhookEventId: { type: string, minLength: 1 }
         timestamp: { type: integer, format: int64 }
         source: { type: object, additionalProperties: true }
@@ -748,10 +862,32 @@ components:
             required: [webhook_event_id, status]
             properties:
               webhook_event_id: { type: string }
-              status: { type: string, enum: [processed, duplicate_ignored, signature_rejected, requires_liff, rejected, failed] }
-              reason: { type: [string, 'null'] }
-              webhook_session: { $ref: '#/components/schemas/WebhookSession' }
-              next_action: { type: [string, 'null'], enum: [resume_report, bind_line_identity, select_shelter_in_liff, null] }
+              status:
+                {
+                  type: string,
+                  enum:
+                    [
+                      processed,
+                      duplicate_ignored,
+                      signature_rejected,
+                      requires_liff,
+                      rejected,
+                      failed,
+                    ],
+                }
+              reason: { type: [string, "null"] }
+              webhook_session: { $ref: "#/components/schemas/WebhookSession" }
+              next_action:
+                {
+                  type: [string, "null"],
+                  enum:
+                    [
+                      resume_report,
+                      bind_line_identity,
+                      select_shelter_in_liff,
+                      null,
+                    ],
+                }
     LineBindRequest:
       type: object
       required: [id_token]
@@ -761,14 +897,19 @@ components:
       type: object
       required: [session]
       properties:
-        session: { $ref: '#/components/schemas/AuthResponse' }
+        session: { $ref: "#/components/schemas/AuthResponse" }
     RichMenuContext:
       type: object
       required: [context_status, actions]
       properties:
-        context_status: { type: string, enum: [single_context, multiple_contexts, no_context, requires_liff] }
-        organization_id: { type: [string, 'null'], format: uuid }
-        webhook_session_id: { type: [string, 'null'], format: uuid }
+        context_status:
+          {
+            type: string,
+            enum:
+              [single_context, multiple_contexts, no_context, requires_liff],
+          }
+        organization_id: { type: [string, "null"], format: uuid }
+        webhook_session_id: { type: [string, "null"], format: uuid }
         actions:
           type: array
           items:
@@ -777,15 +918,19 @@ components:
             properties:
               code: { type: string }
               display_name: { type: string }
-              action_type: { type: string, enum: [postback, uri, camera, camera_roll, message] }
+              action_type:
+                {
+                  type: string,
+                  enum: [postback, uri, camera, camera_roll, message],
+                }
     CurrentLineDraftResponse:
       type: object
       required: [draft]
       properties:
         draft:
           anyOf:
-            - $ref: '#/components/schemas/Draft'
-            - type: 'null'
+            - $ref: "#/components/schemas/Draft"
+            - type: "null"
     ResumeDraftRequest:
       type: object
       properties:
@@ -818,7 +963,7 @@ components:
         access_token: { type: string }
         expires_in: { type: integer, example: 900 }
         session_id: { type: string, format: uuid }
-        user: { $ref: '#/components/schemas/User' }
+        user: { $ref: "#/components/schemas/User" }
     AccessScope:
       type: object
       required: [type]
@@ -831,16 +976,24 @@ components:
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [active, disabled] }
-        roles: { type: array, items: { type: string, enum: [PLATFORM_ADMIN, SHELTER_ADMIN, STAFF, VOLUNTEER] } }
-        scope: { $ref: '#/components/schemas/AccessScope' }
+        roles:
+          {
+            type: array,
+            items:
+              {
+                type: string,
+                enum: [PLATFORM_ADMIN, SHELTER_ADMIN, STAFF, VOLUNTEER],
+              },
+          }
+        scope: { $ref: "#/components/schemas/AccessScope" }
     CurrentUserResponse:
       type: object
       required: [user, memberships]
       properties:
-        user: { $ref: '#/components/schemas/User' }
+        user: { $ref: "#/components/schemas/User" }
         memberships:
           type: array
-          items: { $ref: '#/components/schemas/Membership' }
+          items: { $ref: "#/components/schemas/Membership" }
     ActiveShelterContext:
       type: object
       required: [organization_id, session_id]
@@ -853,9 +1006,10 @@ components:
       properties:
         id: { type: string, format: uuid }
         system_user_id: { type: string, format: uuid }
-        organization_id: { type: [string, 'null'], format: uuid }
-        status: { type: string, enum: [active, revoked, expired, requires_liff] }
-        active_shelter_context_id: { type: [string, 'null'], format: uuid }
+        organization_id: { type: [string, "null"], format: uuid }
+        status:
+          { type: string, enum: [active, revoked, expired, requires_liff] }
+        active_shelter_context_id: { type: [string, "null"], format: uuid }
         created_at: { type: string, format: date-time }
         last_interaction_at: { type: string, format: date-time }
     ShelterContextSwitchRequest:
@@ -899,7 +1053,8 @@ components:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/Organization' } }
+        items:
+          { type: array, items: { $ref: "#/components/schemas/Organization" } }
     Membership:
       type: object
       required: [id, organization_id, user_id, role, status]
@@ -924,24 +1079,29 @@ components:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/Membership' } }
+        items:
+          { type: array, items: { $ref: "#/components/schemas/Membership" } }
     AnimalCandidate:
       type: object
       required: [id, name, organization_id, can_report]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        shelter_number: { type: [string, 'null'] }
-        photo_url: { type: [string, 'null'], format: uri }
-        cage: { type: [string, 'null'] }
-        area: { type: [string, 'null'] }
+        shelter_number: { type: [string, "null"] }
+        photo_url: { type: [string, "null"], format: uri }
+        cage: { type: [string, "null"] }
+        area: { type: [string, "null"] }
         organization_id: { type: string, format: uuid }
         can_report: { type: boolean }
     AnimalListResponse:
       type: object
       required: [items, page, page_size]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/AnimalCandidate' } }
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/AnimalCandidate" },
+          }
         page: { type: integer }
         page_size: { type: integer }
     QrResolveRequest:
@@ -956,11 +1116,25 @@ components:
         animal_id: { type: string, format: uuid }
     CareCompletionCode:
       type: string
-      enum: [care_completion.completed, care_completion.partially_completed, care_completion.not_provided, care_completion.not_observed, care_completion.uncertain]
+      enum:
+        [
+          care_completion.completed,
+          care_completion.partially_completed,
+          care_completion.not_provided,
+          care_completion.not_observed,
+          care_completion.uncertain,
+        ]
       description: 照護完成狀態；未觀察與無法判斷不得解讀為已完成
     WalkCompletionCode:
       type: string
-      enum: [walk_completion.completed, walk_completion.partially_completed, walk_completion.not_done, walk_completion.not_observed, walk_completion.uncertain]
+      enum:
+        [
+          walk_completion.completed,
+          walk_completion.partially_completed,
+          walk_completion.not_done,
+          walk_completion.not_observed,
+          walk_completion.uncertain,
+        ]
       description: 散步完成狀態；與散步反應的 walk.* 選項分開
     ObservationAnswerCode:
       type: string
@@ -970,47 +1144,100 @@ components:
       type: object
       additionalProperties: true
       properties:
-        care_completion: { $ref: '#/components/schemas/CareCompletionCode' }
-        walk_completion: { $ref: '#/components/schemas/WalkCompletionCode' }
-        feeding: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        water: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        activity: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        urination: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        defecation: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        resource_guarding: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        human_interaction: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        animal_interaction: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        emotion: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        walk_reaction: { $ref: '#/components/schemas/ObservationAnswerCode' }
-        appearance_special_status: { $ref: '#/components/schemas/ObservationAnswerCode' }
+        care_completion: { $ref: "#/components/schemas/CareCompletionCode" }
+        walk_completion: { $ref: "#/components/schemas/WalkCompletionCode" }
+        feeding: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        water: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        activity: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        urination: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        defecation: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        resource_guarding:
+          { $ref: "#/components/schemas/ObservationAnswerCode" }
+        human_interaction:
+          { $ref: "#/components/schemas/ObservationAnswerCode" }
+        animal_interaction:
+          { $ref: "#/components/schemas/ObservationAnswerCode" }
+        emotion: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        walk_reaction: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        appearance_special_status:
+          { $ref: "#/components/schemas/ObservationAnswerCode" }
       description: 可逐題保存的標準回報答案；草稿階段允許不完整，正式送出時必須符合 CareReportAnswers
     CareReportAnswers:
       allOf:
-        - $ref: '#/components/schemas/DraftAnswers'
+        - $ref: "#/components/schemas/DraftAnswers"
         - type: object
-          required: [care_completion, walk_completion, feeding, water, activity, urination, defecation, resource_guarding, human_interaction, animal_interaction, emotion, walk_reaction, appearance_special_status]
+          required:
+            [
+              care_completion,
+              walk_completion,
+              feeding,
+              water,
+              activity,
+              urination,
+              defecation,
+              resource_guarding,
+              human_interaction,
+              animal_interaction,
+              emotion,
+              walk_reaction,
+              appearance_special_status,
+            ]
       description: 正式 Care Report 必須完整包含的標準結構化答案；照片與心得不在此必要集合
     DraftUpdateRequest:
       type: object
       properties:
         answers:
-          $ref: '#/components/schemas/DraftAnswers'
+          $ref: "#/components/schemas/DraftAnswers"
           description: 可只包含目前新增或修改的答案；後端依 Draft 目前狀態驗證，不接受跳步或略過必要題目
         note: { type: string }
         media_ids: { type: array, items: { type: string, format: uuid } }
     Draft:
       type: object
-      required: [id, opaque_token, organization_id, animal_id, volunteer_user_id, membership_id, current_step, answers, status, expires_at]
+      required:
+        [
+          id,
+          opaque_token,
+          organization_id,
+          animal_id,
+          volunteer_user_id,
+          membership_id,
+          current_step,
+          answers,
+          status,
+          expires_at,
+        ]
       properties:
         id: { type: string, format: uuid }
-        opaque_token: { type: string, minLength: 1 }
+        opaque_token: { type: [string, "null"], minLength: 1 }
         organization_id: { type: string, format: uuid }
         animal_id: { type: string, format: uuid }
         volunteer_user_id: { type: string, format: uuid }
         membership_id: { type: string, format: uuid }
-        current_step: { type: string, enum: [selecting_animal, confirming_animal, answering_completion, answering_feeding, answering_water, answering_activity, answering_elimination, answering_behavior, answering_special_status, awaiting_media, awaiting_note, reviewing, submitting, submitted, cancelled, expired] }
+        current_step:
+          {
+            type: string,
+            enum:
+              [
+                selecting_animal,
+                confirming_animal,
+                answering_completion,
+                answering_feeding,
+                answering_water,
+                answering_activity,
+                answering_elimination,
+                answering_behavior,
+                answering_special_status,
+                awaiting_media,
+                awaiting_note,
+                reviewing,
+                submitting,
+                submitted,
+                cancelled,
+                expired,
+              ],
+          }
         answers:
-          $ref: '#/components/schemas/DraftAnswers'
+          $ref: "#/components/schemas/DraftAnswers"
         media_ids: { type: array, items: { type: string, format: uuid } }
         last_interaction_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
@@ -1019,14 +1246,27 @@ components:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/Draft' } }
+        items: { type: array, items: { $ref: "#/components/schemas/Draft" } }
     MediaAsset:
       type: object
       required: [id, organization_id, status, exif_removed]
       properties:
         id: { type: string, format: uuid }
         organization_id: { type: string, format: uuid }
-        status: { type: string, enum: [temporary, processing, processed, attached, failed, unusable, archived] }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                temporary,
+                processing,
+                processed,
+                attached,
+                failed,
+                unusable,
+                archived,
+              ],
+          }
         exif_removed: { type: boolean, const: true }
         checksum: { type: string }
         purpose: { type: string }
@@ -1042,7 +1282,7 @@ components:
       properties:
         draft_id: { type: string, format: uuid }
         observations:
-          $ref: '#/components/schemas/CareReportAnswers'
+          $ref: "#/components/schemas/CareReportAnswers"
           description: 標準回報完整結構化答案；照片與心得不屬於必要欄位
         note: { type: string }
         media_ids: { type: array, items: { type: string, format: uuid } }
@@ -1061,14 +1301,15 @@ components:
         reason: { type: string }
     CareReport:
       type: object
-      required: [id, organization_id, animal_id, status, observations, created_at]
+      required:
+        [id, organization_id, animal_id, status, observations, created_at]
       properties:
         id: { type: string, format: uuid }
         organization_id: { type: string, format: uuid }
         animal_id: { type: string, format: uuid }
         status: { type: string, enum: [saved, amended, archived] }
         observations:
-          $ref: '#/components/schemas/CareReportAnswers'
+          $ref: "#/components/schemas/CareReportAnswers"
         created_at: { type: string, format: date-time }
     TimelineResponse:
       type: object
@@ -1083,13 +1324,18 @@ components:
               date: { type: string, format: date }
               has_report: { type: boolean }
               report_count: { type: integer, minimum: 0 }
-              no_report_label: { type: [string, 'null'], example: 當日無回報 }
-              reports: { type: array, items: { $ref: '#/components/schemas/CareReport' } }
+              no_report_label: { type: [string, "null"], example: 當日無回報 }
+              reports:
+                {
+                  type: array,
+                  items: { $ref: "#/components/schemas/CareReport" },
+                }
     ObservationCategoryListResponse:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { type: object, additionalProperties: true } }
+        items:
+          { type: array, items: { type: object, additionalProperties: true } }
     ObservationOption:
       type: object
       required: [id, code, display_name, enabled, display_order]
@@ -1119,13 +1365,41 @@ components:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/ObservationOption' } }
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ObservationOption" },
+          }
     AiObservation:
       type: object
-      required: [id, status, provider, model_name, model_version, prompt_template_id, prompt_version, schema_version]
+      required:
+        [
+          id,
+          status,
+          provider,
+          model_name,
+          model_version,
+          prompt_template_id,
+          prompt_version,
+          schema_version,
+        ]
       properties:
         id: { type: string, format: uuid }
-        status: { type: string, enum: [pending, running, succeeded, failed, invalid, confirmed, rejected, corrected] }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                pending,
+                running,
+                succeeded,
+                failed,
+                invalid,
+                confirmed,
+                rejected,
+                corrected,
+              ],
+          }
         provider: { type: string, minLength: 1 }
         model_name: { type: string, minLength: 1 }
         model_version: { type: string, minLength: 1 }
@@ -1134,12 +1408,13 @@ components:
         schema_version: { type: string, minLength: 1 }
         raw_ai_output: { type: object, additionalProperties: true }
         validation_result: { type: object, additionalProperties: true }
-        failure_reason: { type: [string, 'null'] }
+        failure_reason: { type: [string, "null"] }
     AiObservationListResponse:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/AiObservation' } }
+        items:
+          { type: array, items: { $ref: "#/components/schemas/AiObservation" } }
     AiReviewRequest:
       type: object
       required: [action, reason]

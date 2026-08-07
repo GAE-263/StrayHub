@@ -1,0 +1,1 @@
+"""StrayHub worker service package."""

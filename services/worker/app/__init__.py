@@ -1,0 +1,1 @@
+"""StrayHub background worker package."""

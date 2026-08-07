@@ -2,7 +2,6 @@ from pathlib import Path
 
 import yaml
 
-
 CONTRACT_PATH = Path("specs/001-volunteer-care-report/contracts/openapi.yaml")
 
 
@@ -44,17 +43,14 @@ def test_required_paths_and_security_are_declared() -> None:
     }
 
     assert required_paths <= paths.keys()
-    assert "security" not in paths["/v1/auth/login"]["post"]
-    assert "security" not in paths["/v1/auth/refresh"]["post"]
-    assert "security" not in paths["/v1/auth/liff/exchange"]["post"]
-    assert paths["/v1/care-reports"]["post"]["parameters"][0]["$ref"].endswith(
-        "/IdempotencyKey"
-    )
+    assert paths["/v1/auth/login"]["post"]["security"] == []
+    assert paths["/v1/auth/refresh"]["post"]["security"] == []
+    assert paths["/v1/auth/liff/exchange"]["post"]["security"] == []
+    assert paths["/v1/care-reports"]["post"]["parameters"][0]["$ref"].endswith("/IdempotencyKey")
     webhook = paths["/v1/line/webhook"]["post"]
     assert webhook["security"] == []
     assert any(
-        parameter.get("$ref", "").endswith("/LineSignature")
-        for parameter in webhook["parameters"]
+        parameter.get("$ref", "").endswith("/LineSignature") for parameter in webhook["parameters"]
     )
     assert webhook["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/LineWebhookRequest"
@@ -73,11 +69,11 @@ def test_protected_operations_use_bearer_auth_and_unified_errors() -> None:
         name = reference.rsplit("/", 1)[-1]
         return document["components"]["responses"][name]
 
-    for path, path_item in document["paths"].items():
+    for _path, path_item in document["paths"].items():
         for method, operation in path_item.items():
             if method not in {"get", "post", "put", "patch", "delete"}:
                 continue
-            if path in {
+            if _path in {
                 "/v1/auth/login",
                 "/v1/auth/refresh",
                 "/v1/auth/liff/exchange",
@@ -96,7 +92,7 @@ def test_request_and_response_schemas_are_declared() -> None:
     document = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
     schemas = document["components"]["schemas"]
 
-    for path, path_item in document["paths"].items():
+    for _path, path_item in document["paths"].items():
         for method, operation in path_item.items():
             if method not in {"get", "post", "put", "patch", "delete"}:
                 continue
@@ -126,3 +122,32 @@ def test_line_contract_does_not_make_client_org_scope_trusted() -> None:
         properties = document["components"]["schemas"][schema_name].get("properties", {})
         assert "org_id" not in properties
         assert "organization_id" not in properties
+
+
+def test_care_answers_distinguish_partial_draft_and_complete_report() -> None:
+    document = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    schemas = document["components"]["schemas"]
+    draft = schemas["DraftAnswers"]
+    complete = schemas["CareReportAnswers"]
+    required = {
+        "care_completion",
+        "walk_completion",
+        "feeding",
+        "water",
+        "activity",
+        "urination",
+        "defecation",
+        "resource_guarding",
+        "human_interaction",
+        "animal_interaction",
+        "emotion",
+        "walk_reaction",
+        "appearance_special_status",
+    }
+
+    assert not draft.get("required")
+    assert "answering_completion" in schemas["Draft"]["properties"]["current_step"]["enum"]
+    assert required <= set(complete["allOf"][1]["required"])
+    assert schemas["CareReportCreateRequest"]["properties"]["observations"]["$ref"].endswith(
+        "/CareReportAnswers"
+    )

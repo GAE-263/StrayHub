@@ -1,0 +1,11 @@
+{
+  "name": "@strayhub/contracts",
+  "private": true,
+  "scripts": {
+    "generate": "openapi-typescript ../../specs/001-volunteer-care-report/contracts/openapi.yaml -o src/openapi.ts",
+    "check": "npm run generate && git diff --exit-code -- src/openapi.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.0"
+  }
+}

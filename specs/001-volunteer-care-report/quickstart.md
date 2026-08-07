@@ -70,7 +70,7 @@ npm --prefix packages/contracts run check
 - Login、Refresh、Logout、Current User、LIFF Identity Exchange 與 Active Shelter Context Read／Switch 都符合 OpenAPI。
 - Refresh Token rotation、replay 防護、Session 撤銷及 User／Membership／Organization 停用立即生效。
 - `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort` 的正式 Adapter 通過共同契約與安全測試；Application Service 不直接依賴密碼、Token 或 LINE SDK。
-- Password Hash 使用 `Argon2id`（`m=19456 KiB`、`t=2`、`p=1）；Access Token 使用 `RS256` JWT，檢查 `kid`、issuer、audience、type、時間與必要 Claims；Refresh Token 只在 CRM 保存 `SHA-256` digest。
+- Password Hash 使用 `Argon2id`（`m=19456 KiB`、`t=2`、`p=1）；Access Token 使用 `RS256`JWT，檢查`kid`、issuer、audience、type、時間與必要 Claims；Refresh Token 只在 CRM 保存 `SHA-256` digest。
 - Access Token 不含 `org_id`、角色或 Membership；即使 JWT 尚未過期，Session／User／Membership／Organization 撤銷後仍立即拒絕。
 - Request 不能以自行傳入的 `org_id` 覆寫 Session Active Shelter Context。
 - `packages/contracts/src/openapi.ts` 由 `openapi.yaml` 產生且無漂移；生成檔沒有手動業務規則。

@@ -39,24 +39,24 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 **目的**：建立可在本機啟動、檢查與重設的 Next.js、FastAPI、Worker、PostgreSQL、MinIO、Mock LINE 與品質工具基礎。
 
-- [ ] T001 [P] 在 `apps/web/package.json` 建立 Next.js、TypeScript、前端格式化、型別檢查與測試命令
-- [ ] T002 [P] 在 `apps/web/tsconfig.json` 設定 `apps/web` 與 `packages/contracts` 的 TypeScript 路徑及嚴格型別檢查
-- [ ] T003 [P] 在 `apps/web/next.config.ts` 設定本機 Development Server 與 LIFF 輔助頁的開發模式
-- [ ] T004 [P] 在 `pyproject.toml` 建立 `uv`、FastAPI、SQLAlchemy 2.x、Alembic、`asyncpg`、`argon2-cffi`、`PyJWT[crypto]`、`cryptography`、Ruff、Pytest、圖片處理與 LINE HTTP Client 依賴及命令，並讓 runtime 與 test 安裝設定都包含 Argon2id／RS256 所需的 cryptography 依賴
-- [ ] T005 [P] 在 `services/api/app/main.py` 建立 FastAPI 啟動入口、健康檢查與 router 掛載骨架
-- [ ] T006 [P] 在 `services/worker/worker.py` 建立可啟動、停止及回報健康狀態的 Background Worker 入口
-- [ ] T007 [P] 在 `.env.example` 建立 PostgreSQL、MinIO、GCS、LINE、LIFF、Session、`AUTH_JWT_ISSUER`、`AUTH_JWT_AUDIENCE`、active／previous RSA key reference、AI 與 Worker 設定範例並使用假值遮罩祕密
-- [ ] T008 在 `infra/local/docker-compose.yml` 建立 PostgreSQL、MinIO 與本機必要基礎服務的可重複啟動設定
-- [ ] T009 在 `infra/local/init-minio.sh` 建立 Private Bucket、Temporary Prefix 與測試 Prefix 初始化流程 (depends on T008)
-- [ ] T010 [P] 在 `tests/fixtures/line_webhook.py` 建立 Mock LINE User、Webhook、Postback、Image、Redelivery 與 Signature Fixture
-- [ ] T011 [P] 在 `infra/local/line-rich-menu.yaml` 建立不含授權資訊的本機 Rich Menu 版本化範本
-- [ ] T012 [P] 在 `scripts/seed_local.py` 建立可於 Schema 完成後載入 Organization A／B、角色、相同 Shelter Number、Observation 預設值與虛構資料的 Seed 命令
-- [ ] T013 [P] 在 `scripts/reset_local.py` 建立只針對本機資料庫、MinIO 測試物件與 Fixture 狀態的安全 Reset 命令
-- [ ] T014 [P] 在 `packages/contracts/package.json` 建立固定版本的 `openapi-typescript`、`generate` 與 `check` 命令
-- [ ] T015 在 `services/api/migrations/env.py` 建立 Alembic Async Configuration、metadata 載入入口與 Runtime／Migration Role 分離設定骨架 (depends on T004)
-- [ ] T016 在 `services/api/migrations/versions/0001_bootstrap.py` 建立可於空 PostgreSQL 執行與回復的空 Bootstrap Migration (depends on T015)
-- [ ] T017 [P] 在 `.github/workflows/ci.yml` 建立 `uv run` Ruff／Pytest、Frontend、Contract Types、Secret Scan、Docker Build 與 Terraform path-filter Workflow
-- [ ] T018 在 `scripts/check_setup.sh` 建立 PostgreSQL、MinIO、Next.js、FastAPI、Worker、Bootstrap Migration、Ruff、Pytest discovery、Contract Types 與 Seed／Reset 命令可執行檢查 (depends on T001-T017)
+- [x] T001 [P] 在 `apps/web/package.json` 建立 Next.js、TypeScript、前端格式化、型別檢查與測試命令
+- [x] T002 [P] 在 `apps/web/tsconfig.json` 設定 `apps/web` 與 `packages/contracts` 的 TypeScript 路徑及嚴格型別檢查
+- [x] T003 [P] 在 `apps/web/next.config.ts` 設定本機 Development Server 與 LIFF 輔助頁的開發模式
+- [x] T004 [P] 在 `pyproject.toml` 建立 `uv`、FastAPI、SQLAlchemy 2.x、Alembic、`asyncpg`、`argon2-cffi`、`PyJWT[crypto]`、`cryptography`、Ruff、Pytest、圖片處理與 LINE HTTP Client 依賴及命令，並讓 runtime 與 test 安裝設定都包含 Argon2id／RS256 所需的 cryptography 依賴
+- [x] T005 [P] 在 `services/api/app/main.py` 建立 FastAPI 啟動入口、健康檢查與 router 掛載骨架
+- [x] T006 [P] 在 `services/worker/worker.py` 建立可啟動、停止及回報健康狀態的 Background Worker 入口
+- [x] T007 [P] 在 `.env.example` 建立 PostgreSQL、MinIO、GCS、LINE、LIFF、Session、`AUTH_JWT_ISSUER`、`AUTH_JWT_AUDIENCE`、active／previous RSA key reference、AI 與 Worker 設定範例並使用假值遮罩祕密
+- [x] T008 在 `infra/local/docker-compose.yml` 建立 PostgreSQL、MinIO 與本機必要基礎服務的可重複啟動設定
+- [x] T009 在 `infra/local/init-minio.sh` 建立 Private Bucket、Temporary Prefix 與測試 Prefix 初始化流程 (depends on T008)
+- [x] T010 [P] 在 `tests/fixtures/line_webhook.py` 建立 Mock LINE User、Webhook、Postback、Image、Redelivery 與 Signature Fixture
+- [x] T011 [P] 在 `infra/local/line-rich-menu.yaml` 建立不含授權資訊的本機 Rich Menu 版本化範本
+- [x] T012 [P] 在 `scripts/seed_local.py` 建立可於 Schema 完成後載入 Organization A／B、角色、相同 Shelter Number、Observation 預設值與虛構資料的 Seed 命令
+- [x] T013 [P] 在 `scripts/reset_local.py` 建立只針對本機資料庫、MinIO 測試物件與 Fixture 狀態的安全 Reset 命令
+- [x] T014 [P] 在 `packages/contracts/package.json` 建立固定版本的 `openapi-typescript`、`generate` 與 `check` 命令
+- [x] T015 在 `services/api/migrations/env.py` 建立 Alembic Async Configuration、metadata 載入入口與 Runtime／Migration Role 分離設定骨架 (depends on T004)
+- [x] T016 在 `services/api/migrations/versions/0001_bootstrap.py` 建立可於空 PostgreSQL 執行與回復的空 Bootstrap Migration (depends on T015)
+- [x] T017 [P] 在 `.github/workflows/ci.yml` 建立 `uv run` Ruff／Pytest、Frontend、Contract Types、Secret Scan、Docker Build 與 Terraform path-filter Workflow
+- [x] T018 在 `scripts/check_setup.sh` 建立 PostgreSQL、MinIO、Next.js、FastAPI、Worker、Bootstrap Migration、Ruff、Pytest discovery、Contract Types 與 Seed／Reset 命令可執行檢查 (depends on T001-T017)
 
 **Setup Checkpoint**：T018 通過後，所有本機服務可啟動，Bootstrap Migration 可在空資料庫執行，品質命令可被發現，Seed／Reset 入口可執行；完整 A／B 業務 Seed 於 Foundational Model／Migration 完成後驗證。
 
@@ -68,87 +68,87 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Contract、設定與共通執行環境
 
-- [ ] T019 在 `specs/001-volunteer-care-report/contracts/openapi.yaml` 完成 Authentication、Organization、Animal、Draft、Media、Care Report、Timeline、Observation、AI、LINE Webhook 與 Contract Types metadata
-- [ ] T020 在 `tests/contract/test_openapi_contract.py` 建立 OpenAPI 解析、必要路徑、Authentication、統一錯誤、Idempotency、`X-Line-Signature`、`DraftAnswers` 可部分完成、`CareReportAnswers` 必須包含 13 個標準答案、`answering_completion` 狀態值、缺少必要答案不得送出，以及禁止 Request 任意控制 `org_id` 的失敗優先 Contract Test (depends on T019)
-- [ ] T021 [P] 在 `tests/contract/test_generated_contract_types.py` 建立 `openapi.yaml` 與 `packages/contracts/src/openapi.ts` 漂移檢查 Test (depends on T014, T019)
-- [ ] T022 在 `packages/contracts/src/openapi.ts` 由 OpenAPI 產生禁止手動修改的 TypeScript Contract Types，並使 T021 通過 (depends on T020, T021)
-- [ ] T023 [P] 在 `services/api/app/config/settings.py` 建立 Pydantic Settings、Database、Session、MinIO、GCS、LINE、LIFF、AI、Draft TTL 與 Secret 遮罩設定
-- [ ] T024 [P] 在 `services/api/app/observability/logging.py` 建立結構化 Logging、Request ID、Security Event 及 Secret／Token／Signed URL 遮罩
-- [ ] T025 在 `services/api/app/api/errors.py` 建立統一 API Error Schema、Exception Handler、一致拒絕結果與 Cross-tenant Enumeration 防護 (depends on T020)
+- [x] T019 在 `specs/001-volunteer-care-report/contracts/openapi.yaml` 完成 Authentication、Organization、Animal、Draft、Media、Care Report、Timeline、Observation、AI、LINE Webhook 與 Contract Types metadata
+- [x] T020 在 `tests/contract/test_openapi_contract.py` 建立 OpenAPI 解析、必要路徑、Authentication、統一錯誤、Idempotency、`X-Line-Signature`、`DraftAnswers` 可部分完成、`CareReportAnswers` 必須包含 13 個標準答案、`answering_completion` 狀態值、缺少必要答案不得送出，以及禁止 Request 任意控制 `org_id` 的失敗優先 Contract Test (depends on T019)
+- [x] T021 [P] 在 `tests/contract/test_generated_contract_types.py` 建立 `openapi.yaml` 與 `packages/contracts/src/openapi.ts` 漂移檢查 Test (depends on T014, T019)
+- [x] T022 在 `packages/contracts/src/openapi.ts` 由 OpenAPI 產生禁止手動修改的 TypeScript Contract Types，並使 T021 通過 (depends on T020, T021)
+- [x] T023 [P] 在 `services/api/app/config/settings.py` 建立 Pydantic Settings、Database、Session、MinIO、GCS、LINE、LIFF、AI、Draft TTL 與 Secret 遮罩設定
+- [x] T024 [P] 在 `services/api/app/observability/logging.py` 建立結構化 Logging、Request ID、Security Event 及 Secret／Token／Signed URL 遮罩
+- [x] T025 在 `services/api/app/api/errors.py` 建立統一 API Error Schema、Exception Handler、一致拒絕結果與 Cross-tenant Enumeration 防護 (depends on T020)
 
 ### Database、Transaction 與 Scope Setter
 
-- [ ] T026 [P] 在 `services/api/app/persistence/database/base.py` 建立 SQLAlchemy Declarative Base、共通 Audit 欄位及 Pydantic／SQLAlchemy 分離邊界
-- [ ] T027 在 `services/api/app/persistence/database/engine.py` 建立 SQLAlchemy 2.x Async Engine、`asyncpg`、API `AsyncSession` Factory 與 pool 設定 (depends on T023, T026)
-- [ ] T028 在 `services/worker/app/persistence/session.py` 建立 Worker 專用 `AsyncSession` Factory、受限 Credential 與失敗關閉規則 (depends on T023, T026)
-- [ ] T029 在 `services/api/app/domain/transactions.py` 建立由 Application Service 控制 transaction 且 Repository 不得自行 `commit()` 的規則 (depends on T027)
-- [ ] T030 在 `services/api/app/api/dependencies.py` 建立 Request `AsyncSession`、Current User 與 transaction 生命週期 Dependency (depends on T027, T029)
+- [x] T026 [P] 在 `services/api/app/persistence/database/base.py` 建立 SQLAlchemy Declarative Base、共通 Audit 欄位及 Pydantic／SQLAlchemy 分離邊界
+- [x] T027 在 `services/api/app/persistence/database/engine.py` 建立 SQLAlchemy 2.x Async Engine、`asyncpg`、API `AsyncSession` Factory 與 pool 設定 (depends on T023, T026)
+- [x] T028 在 `services/worker/app/persistence/session.py` 建立 Worker 專用 `AsyncSession` Factory、受限 Credential 與失敗關閉規則 (depends on T023, T026)
+- [x] T029 在 `services/api/app/domain/transactions.py` 建立由 Application Service 控制 transaction 且 Repository 不得自行 `commit()` 的規則 (depends on T027)
+- [x] T030 在 `services/api/app/api/dependencies.py` 建立 Request `AsyncSession`、Current User 與 transaction 生命週期 Dependency (depends on T027, T029)
 - [ ] T031 在 `tests/integration/test_database_scope_setter.py` 以真實 PostgreSQL 建立缺少 Scope 拒絕、`set_config(..., true)`、transaction 結束清除、pooled connection 不殘留與 Worker 禁止平台 Scope Test (depends on T027, T028)
-- [ ] T032 在 `services/api/app/persistence/database/scope.py` 實作 Organization／`PLATFORM` transaction-local Database Scope Setter，禁止 Request、QR、Token 或 Postback 直接設定 (depends on T029, T031)
+- [x] T032 在 `services/api/app/persistence/database/scope.py` 實作 Organization／`PLATFORM` transaction-local Database Scope Setter，禁止 Request、QR、Token 或 Postback 直接設定 (depends on T029, T031)
 
 ### Organization、Authentication 與租戶防護
 
-- [ ] T033 在 `services/api/app/persistence/models/identity.py` 建立 Organization、User、Membership、Session、Refresh Token 與 Active Shelter Context SQLAlchemy Model (depends on T026)
-- [ ] T034 在 `services/api/migrations/versions/0002_identity_and_sessions.py` 建立 T033 對應資料表、Index、Unique／Composite Constraint 與可回復 Migration (depends on T016, T033)
+- [x] T033 在 `services/api/app/persistence/models/identity.py` 建立 Organization、User、Membership、Session、Refresh Token 與 Active Shelter Context SQLAlchemy Model (depends on T026)
+- [x] T034 在 `services/api/migrations/versions/0002_identity_and_sessions.py` 建立 T033 對應資料表、Index、Unique／Composite Constraint 與可回復 Migration (depends on T016, T033)
 - [ ] T035 在 `services/api/migrations/versions/0003_tenant_rls.py` 建立 Runtime Role 非 Owner／無 `BYPASSRLS`、`FORCE ROW LEVEL SECURITY`、`app.current_org_id` 與受控 `app.platform_scope` Policy (depends on T032, T034)
-- [ ] T036 在 `services/api/app/domain/tenant_context.py` 建立 Current User、Membership、Active Shelter Context 與內建最高權限 `PLATFORM` Scope 驗證物件 (depends on T033)
-- [ ] T037 在 `services/api/app/persistence/repositories/base.py` 建立每次操作都要求已驗證 Scope 的 Controlled Repository 基底 (depends on T029, T032, T036)
+- [x] T036 在 `services/api/app/domain/tenant_context.py` 建立 Current User、Membership、Active Shelter Context 與內建最高權限 `PLATFORM` Scope 驗證物件 (depends on T033)
+- [x] T037 在 `services/api/app/persistence/repositories/base.py` 建立每次操作都要求已驗證 Scope 的 Controlled Repository 基底 (depends on T029, T032, T036)
 - [ ] T038 在 `tests/contract/test_authentication_contract.py` 建立 Login、Refresh、Logout、Current User、LIFF Exchange 及 Active Shelter Context Read／Switch 的失敗優先 Contract Test (depends on T020)
 - [ ] T039 在 `tests/integration/test_authentication_session.py` 建立 `Argon2id` Password Hash、RS256 JWT Claims／TTL、Refresh SHA-256 digest、rotation／family replay、Session 撤銷、立即停用、LIFF Exchange 與 Context Switch Test (depends on T034, T038)
-- [ ] T040 在 `services/api/app/application/ports/authentication.py` 定義 `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort`，禁止 Application Service 依賴具體密碼、Token 或 LINE SDK (depends on T038)
+- [x] T040 在 `services/api/app/application/ports/authentication.py` 定義 `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort`，禁止 Application Service 依賴具體密碼、Token 或 LINE SDK (depends on T038)
 - [ ] T041 [P] 在 `tests/contract/test_authentication_adapters.py` 建立 `Argon2id`（`m=19456 KiB`、`t=2`、`p=1`）、RS256 JWT、至少 256-bit opaque Refresh Token 的 SHA-256 digest、rotation／family replay 與三個 Authentication Port 的成功、失敗、錯誤轉換、current／previous key 驗證、必要 Claims、固定 issuer／audience 與 Secret 不洩漏失敗優先 Contract Test (depends on T040)
 - [ ] T042 [P] 在 `tests/security/test_authentication_adapters.py` 建立錯誤密碼、低於基準的 hash rehash、RSA 2048-bit 以上 RS256 JWT 的 `alg`／`kid`／issuer／audience／type／時間／必要 Claims 驗證、拒絕 `alg none` 與 algorithm confusion、current／previous key rotation 與 15 分鐘 TTL 加 30 秒 clock skew 窗口、Refresh replay／family 撤銷、原始 Refresh Token 不進 Log／Database／Audit、無效 LINE 身分資料與撤銷後立即拒絕 Test (depends on T034, T040)
-- [ ] T043 [P] 在 `services/api/app/infrastructure/auth/password_hasher.py` 使用 `argon2-cffi` 實作 `PasswordHasherPort` 的 Argon2id PHC encoded hash、每筆密碼唯一 salt、基準參數、驗證與低於基準時 rehash；不得使用 pepper 或可逆加密 (depends on T004, T041, T042)
-- [ ] T044 [P] 在 `services/api/app/infrastructure/auth/access_token_adapter.py` 使用 `PyJWT[crypto]`／`cryptography` 實作 `AccessTokenPort` 的 RSA 2048-bit 以上 RS256 JWT、15 分鐘 TTL、`typ`／`kid`、必要 Claims、current／previous key rotation，並在 15 分鐘 TTL 加 30 秒 clock skew 窗口內驗證兩代公鑰；僅允許 RS256 的 algorithm allowlist、固定 `AUTH_JWT_ISSUER`／`AUTH_JWT_AUDIENCE` 與時間驗證，並拒絕 `alg none` 或 algorithm confusion；不得放入 `org_id`、角色或 Membership (depends on T004, T023, T041, T042)
-- [ ] T045 [P] 在 `services/api/app/infrastructure/line/identity_verification_adapter.py` 實作 `LineIdentityVerifierPort` 的 LINE Token／ID Token 驗證、可信 `line_user_id` 取得與安全錯誤轉換並通過 T041／T042 (depends on T023, T041, T042)
-- [ ] T046 在 `services/api/app/persistence/repositories/authentication_repository.py` 建立 Session、Refresh Token、User、Membership 與 Active Context 的 scoped Repository (depends on T034, T037, T039)
+- [x] T043 [P] 在 `services/api/app/infrastructure/auth/password_hasher.py` 使用 `argon2-cffi` 實作 `PasswordHasherPort` 的 Argon2id PHC encoded hash、每筆密碼唯一 salt、基準參數、驗證與低於基準時 rehash；不得使用 pepper 或可逆加密 (depends on T004, T041, T042)
+- [x] T044 [P] 在 `services/api/app/infrastructure/auth/access_token_adapter.py` 使用 `PyJWT[crypto]`／`cryptography` 實作 `AccessTokenPort` 的 RSA 2048-bit 以上 RS256 JWT、15 分鐘 TTL、`typ`／`kid`、必要 Claims、current／previous key rotation，並在 15 分鐘 TTL 加 30 秒 clock skew 窗口內驗證兩代公鑰；僅允許 RS256 的 algorithm allowlist、固定 `AUTH_JWT_ISSUER`／`AUTH_JWT_AUDIENCE` 與時間驗證，並拒絕 `alg none` 或 algorithm confusion；不得放入 `org_id`、角色或 Membership (depends on T004, T023, T041, T042)
+- [x] T045 [P] 在 `services/api/app/infrastructure/line/identity_verification_adapter.py` 實作 `LineIdentityVerifierPort` 的 LINE Token／ID Token 驗證、可信 `line_user_id` 取得與安全錯誤轉換並通過 T041／T042 (depends on T023, T041, T042)
+- [x] T046 在 `services/api/app/persistence/repositories/authentication_repository.py` 建立 Session、Refresh Token、User、Membership 與 Active Context 的 scoped Repository (depends on T034, T037, T039)
 - [ ] T047 在 `services/api/app/application/authentication/session_service.py` 只透過 T040 Ports 實作 Login、Refresh rotation／replay 防護、Logout、LIFF Identity Exchange、立即撤銷與 Current User 流程 (depends on T036, T039, T043-T046)
-- [ ] T048 在 `services/api/app/application/authentication/context_service.py` 實作 Active Shelter Context 查詢／明確切換、Membership 重驗證與 Audit 協調 (depends on T036, T046)
-- [ ] T049 在 `services/api/app/api/authentication.py` 實作 OpenAPI 定義的七項 Authentication API 與一致錯誤 (depends on T038, T047, T048)
-- [ ] T050 在 `services/api/app/api/authorization.py` 建立 `PLATFORM_ADMIN` 平台級 Scope、Shelter Admin、Staff、Volunteer 角色政策與受保護 Request 即時重驗證 (depends on T036, T047)
+- [x] T048 在 `services/api/app/application/authentication/context_service.py` 實作 Active Shelter Context 查詢／明確切換、Membership 重驗證與 Audit 協調 (depends on T036, T046)
+- [x] T049 在 `services/api/app/api/authentication.py` 實作 OpenAPI 定義的七項 Authentication API 與一致錯誤 (depends on T038, T047, T048)
+- [x] T050 在 `services/api/app/api/authorization.py` 建立 `PLATFORM_ADMIN` 平台級 Scope、Shelter Admin、Staff、Volunteer 角色政策與受保護 Request 即時重驗證 (depends on T036, T047)
 
 ### LINE Binding、Webhook Session 與 Event 基礎模型
 
-- [ ] T051 在 `services/api/app/persistence/models/line_identity.py` 建立 LINE User Binding、Webhook Session 與 LINE Webhook Event SQLAlchemy Model (depends on T026, T033)
-- [ ] T052 在 `services/api/migrations/versions/0004_line_identity_and_events.py` 建立 T051 對應資料表、`webhook_event_id` Unique Constraint、必要 Index 與可回復 Migration (depends on T034, T051)
-- [ ] T053 在 `services/api/app/persistence/repositories/line_identity_repository.py` 建立 Binding、唯一 Webhook Session、Event 冪等狀態與最小 Metadata Repository (depends on T037, T052)
-- [ ] T054 在 `services/api/app/application/authentication/line_identity_service.py` 只透過 `LineIdentityVerifierPort` 取得可信 `line_user_id`，並對應既有 User／Membership、唯一 Context 與多候選要求 LIFF 的流程 (depends on T045, T047, T053)
+- [x] T051 在 `services/api/app/persistence/models/line_identity.py` 建立 LINE User Binding、Webhook Session 與 LINE Webhook Event SQLAlchemy Model (depends on T026, T033)
+- [x] T052 在 `services/api/migrations/versions/0004_line_identity_and_events.py` 建立 T051 對應資料表、`webhook_event_id` Unique Constraint、必要 Index 與可回復 Migration (depends on T034, T051)
+- [x] T053 在 `services/api/app/persistence/repositories/line_identity_repository.py` 建立 Binding、唯一 Webhook Session、Event 冪等狀態與最小 Metadata Repository (depends on T037, T052)
+- [x] T054 在 `services/api/app/application/authentication/line_identity_service.py` 只透過 `LineIdentityVerifierPort` 取得可信 `line_user_id`，並對應既有 User／Membership、唯一 Context 與多候選要求 LIFF 的流程 (depends on T045, T047, T053)
 
 ### Audit 基礎
 
-- [ ] T055 在 `services/api/app/persistence/models/audit.py` 建立不可由一般使用者修改的 Audit Record SQLAlchemy Model (depends on T026, T033)
-- [ ] T056 在 `services/api/migrations/versions/0005_audit_records.py` 建立 T055 對應資料表、Index、RLS 與可回復 Migration (depends on T035, T055)
+- [x] T055 在 `services/api/app/persistence/models/audit.py` 建立不可由一般使用者修改的 Audit Record SQLAlchemy Model (depends on T026, T033)
+- [x] T056 在 `services/api/migrations/versions/0005_audit_records.py` 建立 T055 對應資料表、Index、RLS 與可回復 Migration (depends on T035, T055)
 - [ ] T057 在 `services/api/app/application/audit_service.py` 實作跨租戶操作、Scope 切換、拒絕、Correction、Archive 與來源通道 Audit 寫入 (depends on T024, T037, T056)
 
 ### Observation Vocabulary 基礎
 
 - [ ] T058 在 `tests/integration/test_observation_vocabulary_foundation.py` 逐一驗證 FR-017～FR-022 與標準回報完成狀態的最低 Code 集合，包含 `care_completion.completed`、`care_completion.partially_completed`、`care_completion.not_provided`、`care_completion.not_observed`、`care_completion.uncertain`、`walk_completion.completed`、`walk_completion.partially_completed`、`walk_completion.not_done`、`walk_completion.not_observed`、`walk_completion.uncertain`，並確認 `walk_completion.*` 與散步反應 `walk.*` 不混用；同時驗證進食、飲水、活動、排泄、護食／資源防衛、人際互動、動物互動、情緒、散步反應、外觀與特殊狀態最低 Code、`not_observed`／`uncertain` 語意區分、`other` 文字要求、Platform Default、Organization Effective Options、停用後歷史顯示與跨租戶拒絕 (depends on T035)
-- [ ] T059 在 `services/api/app/persistence/models/observation.py` 建立 Observation Category、Observation Option 與 Organization Extension SQLAlchemy Model (depends on T026, T033)
-- [ ] T060 在 `services/api/migrations/versions/0006_observation_vocabulary.py` 建立 T059 對應資料表、Code／Scope Constraint、Index、RLS 與可回復 Migration (depends on T035, T059)
-- [ ] T061 在 `scripts/seed_observation_vocabulary.py` 建立完整符合 FR-017～FR-022 與標準回報必填題目的非診斷性 Platform Default Category／Option Seed，明確包含 `care_completion.completed`、`care_completion.partially_completed`、`care_completion.not_provided`、`care_completion.not_observed`、`care_completion.uncertain`、`walk_completion.completed`、`walk_completion.partially_completed`、`walk_completion.not_done`、`walk_completion.not_observed`、`walk_completion.uncertain`，以及 `emotion.usual`、`emotion.calm`、`emotion.alert`、`emotion.excited`、`emotion.tense`、`emotion.withdrawn`、`emotion.seeking_interaction`、`emotion.not_observed`、`emotion.uncertain`、`emotion.other`、`walk.usual`、`walk.willing`、`walk.exploring`、`walk.reluctant`、`walk.slow_or_stopping`、`walk.tries_to_return`、`walk.human_reaction`、`walk.animal_reaction`、`walk.not_done`、`walk.not_observed`、`walk.uncertain`、`walk.other`；`walk_completion.*` 必須與 `walk.*` 分屬不同類別，Code 不依顯示名稱，`other` 需補充文字 (depends on T060)
-- [ ] T062 在 `services/api/app/persistence/repositories/observation_repository.py` 建立 Platform Default、Organization Extension、Effective Options 與歷史停用 Option 的 scoped Repository (depends on T037, T058, T060)
-- [ ] T063 在 `services/api/app/application/effective_observation_service.py` 實作 Bot／LIFF／Care Report 共用的有效 Option 查詢與 Code 驗證，保留 13 個標準答案所需的有效 Code、不得讓停用 Organization Option 阻擋 `care_completion.*`／`walk_completion.*` 必填題目，並拒絕把 `walk.*` 當成 `walk_completion.*` (depends on T058, T061, T062)
+- [x] T059 在 `services/api/app/persistence/models/observation.py` 建立 Observation Category、Observation Option 與 Organization Extension SQLAlchemy Model (depends on T026, T033)
+- [x] T060 在 `services/api/migrations/versions/0006_observation_vocabulary.py` 建立 T059 對應資料表、Code／Scope Constraint、Index、RLS 與可回復 Migration (depends on T035, T059)
+- [x] T061 在 `scripts/seed_observation_vocabulary.py` 建立完整符合 FR-017～FR-022 與標準回報必填題目的非診斷性 Platform Default Category／Option Seed，明確包含 `care_completion.completed`、`care_completion.partially_completed`、`care_completion.not_provided`、`care_completion.not_observed`、`care_completion.uncertain`、`walk_completion.completed`、`walk_completion.partially_completed`、`walk_completion.not_done`、`walk_completion.not_observed`、`walk_completion.uncertain`，以及 `emotion.usual`、`emotion.calm`、`emotion.alert`、`emotion.excited`、`emotion.tense`、`emotion.withdrawn`、`emotion.seeking_interaction`、`emotion.not_observed`、`emotion.uncertain`、`emotion.other`、`walk.usual`、`walk.willing`、`walk.exploring`、`walk.reluctant`、`walk.slow_or_stopping`、`walk.tries_to_return`、`walk.human_reaction`、`walk.animal_reaction`、`walk.not_done`、`walk.not_observed`、`walk.uncertain`、`walk.other`；`walk_completion.*` 必須與 `walk.*` 分屬不同類別，Code 不依顯示名稱，`other` 需補充文字 (depends on T060)
+- [x] T062 在 `services/api/app/persistence/repositories/observation_repository.py` 建立 Platform Default、Organization Extension、Effective Options 與歷史停用 Option 的 scoped Repository (depends on T037, T058, T060)
+- [x] T063 在 `services/api/app/application/effective_observation_service.py` 實作 Bot／LIFF／Care Report 共用的有效 Option 查詢與 Code 驗證，保留 13 個標準答案所需的有效 Code、不得讓停用 Organization Option 阻擋 `care_completion.*`／`walk_completion.*` 必填題目，並拒絕把 `walk.*` 當成 `walk_completion.*` (depends on T058, T061, T062)
 
 ### AI Job Persistence 基礎
 
 - [ ] T064 在 `tests/integration/test_ai_job_persistence_foundation.py` 建立版本欄位非空、Organization-scoped target reference、冪等關係、dispatch 狀態與 reconciliation 的失敗優先 Test (depends on T035)
-- [ ] T065 在 `services/api/app/persistence/models/ai_job.py` 建立 AI Processing Job、版本、狀態、時間、retry、Organization 與 target reference SQLAlchemy Model，不提前依賴尚未建立的 Care Report table (depends on T026, T033)
-- [ ] T066 在 `services/api/migrations/versions/0007_ai_jobs.py` 建立 T065 對應資料表、版本非空、target 冪等 Unique Constraint、Index、RLS 與可回復 Migration；Care Report Composite FK 由建立 Report table 的後續 Migration 補上 (depends on T035, T065)
-- [ ] T067 在 `services/api/app/persistence/repositories/ai_job_repository.py` 建立 Organization-scoped Job create／read、冪等建立與待 reconciliation 查詢 (depends on T037, T064, T066)
-- [ ] T068 在 `services/api/app/application/ai_job_dispatch.py` 建立 Report commit 後獨立 transaction 的 Job dispatch、`pending_enqueue`／`enqueue_failed` 與 reconciliation 協調 (depends on T029, T064, T067)
+- [x] T065 在 `services/api/app/persistence/models/ai_job.py` 建立 AI Processing Job、版本、狀態、時間、retry、Organization 與 target reference SQLAlchemy Model，不提前依賴尚未建立的 Care Report table (depends on T026, T033)
+- [x] T066 在 `services/api/migrations/versions/0007_ai_jobs.py` 建立 T065 對應資料表、版本非空、target 冪等 Unique Constraint、Index、RLS 與可回復 Migration；Care Report Composite FK 由建立 Report table 的後續 Migration 補上 (depends on T035, T065)
+- [x] T067 在 `services/api/app/persistence/repositories/ai_job_repository.py` 建立 Organization-scoped Job create／read、冪等建立與待 reconciliation 查詢 (depends on T037, T064, T066)
+- [x] T068 在 `services/api/app/application/ai_job_dispatch.py` 建立 Report commit 後獨立 transaction 的 Job dispatch、`pending_enqueue`／`enqueue_failed` 與 reconciliation 協調 (depends on T029, T064, T067)
 
 ### Object Storage 與正式 LINE Adapter
 
-- [ ] T069 [P] 在 `services/api/app/infrastructure/storage/ports.py` 建立共通 Object Storage Interface、Object Key、Metadata、Scope、Temporary Object 與 Signed URL 契約
-- [ ] T070 在 `tests/contract/test_storage_adapter_contract.py` 建立 MinIO、GCS 與 InMemory 共用的 Private Object、清理後位元、Scope、Signed URL 與失敗語意 Contract Test (depends on T069)
-- [ ] T071 [P] 在 `services/api/app/infrastructure/storage/minio.py` 實作本機 `MinioStorageAdapter` 並通過 T070 (depends on T070)
-- [ ] T072 [P] 在 `services/api/app/infrastructure/storage/gcs.py` 實作可使用 Fake Transport 驗證的完整 `GcsStorageAdapter`、Private Object、Signed URL 與錯誤轉換，不等待 GCP 部署 (depends on T070)
-- [ ] T073 [P] 在 `services/api/app/infrastructure/storage/memory.py` 實作 `InMemoryStorageFake` 與 Organization 隔離並通過 T070 (depends on T070)
-- [ ] T074 [P] 在 `services/api/app/application/ports/line_messaging.py` 建立 Reply、受控 Push、Image Content 與 Rich Menu 管理的 `LineMessagingPort`
-- [ ] T075 在 `tests/contract/test_line_adapter_contract.py` 建立 Mock／正式 LINE Adapter 的 Reply、Image Content、Rich Menu、錯誤轉換與 Secret 不洩漏 Contract Test (depends on T074)
-- [ ] T076 [P] 在 `services/api/app/infrastructure/line/mock_adapter.py` 實作不連線真實 LINE API 的 `MockLineAdapter` (depends on T010, T075)
-- [ ] T077 [P] 在 `services/api/app/infrastructure/line/messaging_api_adapter.py` 實作正式 `LineMessagingApiAdapter` 的 Reply、受控 Push、Image Content、Rich Menu 與安全錯誤轉換 (depends on T023, T075)
-- [ ] T078 在 `services/api/app/application/line_message_presenter.py` 建立由 Effective Observation Options 產生 Quick Reply／Postback payload 的 Presenter，禁止第二套硬編碼選項 (depends on T063, T074)
+- [x] T069 [P] 在 `services/api/app/infrastructure/storage/ports.py` 建立共通 Object Storage Interface、Object Key、Metadata、Scope、Temporary Object 與 Signed URL 契約
+- [x] T070 在 `tests/contract/test_storage_adapter_contract.py` 建立 MinIO、GCS 與 InMemory 共用的 Private Object、清理後位元、Scope、Signed URL 與失敗語意 Contract Test (depends on T069)
+- [x] T071 [P] 在 `services/api/app/infrastructure/storage/minio.py` 實作本機 `MinioStorageAdapter` 並通過 T070 (depends on T070)
+- [x] T072 [P] 在 `services/api/app/infrastructure/storage/gcs.py` 實作可使用 Fake Transport 驗證的完整 `GcsStorageAdapter`、Private Object、Signed URL 與錯誤轉換，不等待 GCP 部署 (depends on T070)
+- [x] T073 [P] 在 `services/api/app/infrastructure/storage/memory.py` 實作 `InMemoryStorageFake` 與 Organization 隔離並通過 T070 (depends on T070)
+- [x] T074 [P] 在 `services/api/app/application/ports/line_messaging.py` 建立 Reply、受控 Push、Image Content 與 Rich Menu 管理的 `LineMessagingPort`
+- [x] T075 在 `tests/contract/test_line_adapter_contract.py` 建立 Mock／正式 LINE Adapter 的 Reply、Image Content、Rich Menu、錯誤轉換與 Secret 不洩漏 Contract Test (depends on T074)
+- [x] T076 [P] 在 `services/api/app/infrastructure/line/mock_adapter.py` 實作不連線真實 LINE API 的 `MockLineAdapter` (depends on T010, T075)
+- [x] T077 [P] 在 `services/api/app/infrastructure/line/messaging_api_adapter.py` 實作正式 `LineMessagingApiAdapter` 的 Reply、受控 Push、Image Content、Rich Menu 與安全錯誤轉換 (depends on T023, T075)
+- [x] T078 在 `services/api/app/application/line_message_presenter.py` 建立由 Effective Observation Options 產生 Quick Reply／Postback payload 的 Presenter，禁止第二套硬編碼選項 (depends on T063, T074)
 
 ### Foundational Security 與 Checkpoint
 
@@ -182,10 +182,10 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Repository、Service、API 與 UI
 
-- [ ] T090 [US0] 在 `services/api/app/persistence/repositories/organization_repository.py` 建立 Platform Scope 與 Shelter Scope 的 Organization／Membership／Status Repository (depends on T037, T083)
+- [x] T090 [US0] 在 `services/api/app/persistence/repositories/organization_repository.py` 建立 Platform Scope 與 Shelter Scope 的 Organization／Membership／Status Repository (depends on T037, T083)
 - [ ] T091 [US0] 在 `services/api/app/persistence/repositories/shelter_area_repository.py` 建立 Organization-scoped Cage／Area Repository (depends on T037, T089)
-- [ ] T092 [US0] 在 `services/api/app/application/organization_management.py` 實作必要欄位、預設未啟用、Initial Admin、Membership、停用與 Audit 流程 (depends on T083-T087, T090)
-- [ ] T093 [US0] 在 `services/api/app/application/authentication/context_service.py` 完成 Active Shelter Context 明確切換、重驗證、Draft 固定與 Audit 規則 (depends on T086, T092)
+- [x] T092 [US0] 在 `services/api/app/application/organization_management.py` 實作必要欄位、預設未啟用、Initial Admin、Membership、停用與 Audit 流程 (depends on T083-T087, T090)
+- [x] T093 [US0] 在 `services/api/app/application/authentication/context_service.py` 完成 Active Shelter Context 明確切換、重驗證、Draft 固定與 Audit 規則 (depends on T086, T092)
 - [ ] T094 [US0] 在 `services/api/app/api/organization_management.py` 實作 Organization、Membership、Cage／Area、Status 與 Initial Admin API (depends on T082, T089, T091-T093)
 - [ ] T095 [P] [US0] 在 `apps/web/app/(management)/shelters/page.tsx` 建立平台／收容所管理畫面及授權錯誤狀態 (depends on T022, T082, T094)
 - [ ] T096 [P] [US0] 在 `apps/web/features/shelter-context/ActiveShelterContext.tsx` 建立目前 Shelter 顯示、明確切換及 Context 不一致提示 (depends on T022, T093, T094)
@@ -221,10 +221,10 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Repository、Service、API 與 LIFF
 
-- [ ] T110 [US1] 在 `services/api/app/persistence/repositories/animal_repository.py` 建立 scoped Animal List、Shelter Number Search、多筆結果與識別快照查詢 (depends on T037, T105)
-- [ ] T111 [US1] 在 `services/api/app/persistence/repositories/qr_code_repository.py` 建立 QR Token create／resolve／revoke 與 Organization Scope Repository (depends on T037, T107)
+- [x] T110 [US1] 在 `services/api/app/persistence/repositories/animal_repository.py` 建立 scoped Animal List、Shelter Number Search、多筆結果與識別快照查詢 (depends on T037, T105)
+- [x] T111 [US1] 在 `services/api/app/persistence/repositories/qr_code_repository.py` 建立 QR Token create／resolve／revoke 與 Organization Scope Repository (depends on T037, T107)
 - [ ] T112 [US1] 在 `services/api/app/persistence/repositories/reportable_scope_repository.py` 建立個別 Animal、Cage／Area、Volunteer 與有效期間查詢 (depends on T037, T109)
-- [ ] T113 [US1] 在 `services/api/app/application/qr_token_service.py` 實作非祕密 Token 產生、撤銷、唯一解析及 QR／Actor／Animal Organization 三方驗證 (depends on T100, T111)
+- [x] T113 [US1] 在 `services/api/app/application/qr_token_service.py` 實作非祕密 Token 產生、撤銷、唯一解析及 QR／Actor／Animal Organization 三方驗證 (depends on T100, T111)
 - [ ] T114 [US1] 在 `services/api/app/application/reportable_scope_service.py` 實作今日範圍查詢與送出前重驗證 (depends on T101, T112)
 - [ ] T115 [US1] 在 `services/api/app/application/animal_selection.py` 實作今日清單、搜尋、QR Resolve、Animal Confirmation 及確認後 Draft 入口 (depends on T098, T110, T113, T114)
 - [ ] T116 [US1] 在 `services/api/app/api/animal_selection.py` 實作 OpenAPI 的 List、Search、QR Resolve、Confirmation 與一致拒絕 API (depends on T098, T115)
@@ -246,15 +246,15 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 ### Tests First
 
 - [ ] T121 [US2] 在 `tests/contract/test_line_care_report_contract.py` 建立 Webhook、Rich Menu Context、Draft、Resume、Cancel、Media、Summary、Submit、Correction 與 Archive 的失敗優先 Contract Test，明確驗證 Draft 的 `answers` 使用可部分完成的 `DraftAnswers`、正式送出使用完整的 `CareReportAnswers`，並要求 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction`、`appearance_special_status` 13 個欄位全部存在 (depends on T020, T120)
-- [ ] T122 [P] [US2] 在 `tests/security/test_line_webhook_signature.py` 建立合法／缺少／錯誤 `X-Line-Signature` 且非法事件零業務寫入 Test (depends on T023, T121)
-- [ ] T123 [P] [US2] 在 `tests/integration/test_line_webhook_idempotency.py` 建立 `webhookEventId` 重送不重複 Draft、Answer、Media、Report、Job 或 Audit Test (depends on T052, T121)
-- [ ] T124 [P] [US2] 在 `tests/unit/test_line_care_report_state_machine.py` 建立所有 Draft State、合法／無效轉移、`answering_completion`、照護完成與散步完成依序提問、Back、Cancel、Expire、不信任傳入 `step`，以及任一 13 個標準答案缺少時不得進入 `reviewing`／`submitting` 的 Test (depends on T121)
+- [x] T122 [P] [US2] 在 `tests/security/test_line_webhook_signature.py` 建立合法／缺少／錯誤 `X-Line-Signature` 且非法事件零業務寫入 Test (depends on T023, T121)
+- [x] T123 [P] [US2] 在 `tests/integration/test_line_webhook_idempotency.py` 建立 `webhookEventId` 重送不重複 Draft、Answer、Media、Report、Job 或 Audit Test (depends on T052, T121)
+- [x] T124 [P] [US2] 在 `tests/unit/test_line_care_report_state_machine.py` 建立所有 Draft State、合法／無效轉移、`answering_completion`、照護完成與散步完成依序提問、Back、Cancel、Expire、不信任傳入 `step`，以及任一 13 個標準答案缺少時不得進入 `reviewing`／`submitting` 的 Test (depends on T121)
 - [ ] T125 [US2] 在 `tests/integration/test_line_postback_flow.py` 建立 Rich Menu → Animal Confirmation → `answering_completion` → 13 個標準 Quick Reply 答案 → Summary 的流程，以及送出前重新選擇 Animal、答案／心得待重新確認、照片不沿用與跨 Organization 拒絕的 Integration Test (depends on T123, T124)
-- [ ] T126 [P] [US2] 在 `tests/security/test_line_cross_tenant_postback.py` 建立 A 使用 B Draft Token、Animal、QR、Postback、Media 或 `org_id` 的拒絕 Test (depends on T080, T124)
+- [x] T126 [P] [US2] 在 `tests/security/test_line_cross_tenant_postback.py` 建立 A 使用 B Draft Token、Animal、QR、Postback、Media 或 `org_id` 的拒絕 Test (depends on T080, T124)
 - [ ] T127 [P] [US2] 在 `tests/integration/test_line_draft_resume.py` 建立中斷、Resume、單 Organization 單一 active Draft、放棄與 TTL 到期 Test (depends on T124)
 - [ ] T128 [P] [US2] 在 `tests/integration/test_line_duplicate_submit.py` 建立重複點擊、Postback Redelivery 及相同 Idempotency Key 只建立一筆 Report Test (depends on T123, T125)
 - [ ] T129 [P] [US2] 在 `tests/integration/test_line_unbound_user.py` 建立無效 Binding、唯一／多個 Webhook Session、唯一／多個 Context 與停用 Membership／Organization Test (depends on T054, T122)
-- [ ] T130 [P] [US2] 在 `tests/integration/test_line_image_message.py` 建立 Image Content 及時取得、Draft 關聯、大小／MIME／格式、EXIF、重新編碼、Checksum 與失敗略過 Test (depends on T070, T077, T122)
+- [x] T130 [P] [US2] 在 `tests/integration/test_line_image_message.py` 建立 Image Content 及時取得、Draft 關聯、大小／MIME／格式、EXIF、重新編碼、Checksum 與失敗略過 Test (depends on T070, T077, T122)
 - [ ] T131 [US2] 在 `tests/integration/test_media_validation.py` 建立 MinIO／GCS 相同清理政策、原始檔不保留、Temporary 清理及 AI 只讀清理後圖片 Test (depends on T130)
 - [ ] T132 [P] [US2] 在 `tests/integration/test_report_submission_revalidation.py` 建立 Session、Membership、Organization、Animal、Scope、Option、Media 與 Draft 送出時重驗證 Test，並驗證 Draft 的 `DraftAnswers` 可逐題保存但正式送出必須轉換為完整 `CareReportAnswers`；缺少任一 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction` 或 `appearance_special_status` 時阻擋正式寫入 (depends on T063, T124)
 - [ ] T133 [P] [US2] 在 `tests/integration/test_multiple_care_reports.py` 建立同日多筆、多人回報、原始值與 transaction rollback Test (depends on T121)
@@ -275,24 +275,24 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [ ] T142 [US2] 在 `services/api/app/persistence/repositories/line_webhook_repository.py` 建立 Event claim、冪等狀態、Redelivery、Binding 與 Webhook Session Repository (depends on T053, T123, T129)
 - [ ] T143 [US2] 在 `services/api/app/persistence/repositories/care_report_draft_repository.py` 建立 scoped Draft、候選 Animal、Answer 重新確認、Media、Resume、Cancel 與 Expire Repository (depends on T037, T139)
 - [ ] T144 [US2] 在 `services/api/app/persistence/repositories/care_report_repository.py` 建立 scoped Report、Observation、Note、Media、Idempotency、Correction 與 Archive Repository (depends on T037, T141)
-- [ ] T145 [US2] 在 `services/api/app/domain/line_webhook_security.py` 實作未修改 raw Body 簽章、Event Idempotency、安全重試與零業務寫入拒絕 (depends on T122, T123, T142)
-- [ ] T146 [US2] 在 `services/api/app/domain/line_care_report_state.py` 實作 Server-side Draft State Machine、`DraftAnswers`／`CareReportAnswers` 驗證、穩定 Code、合法轉移與 TTL；明確實作 `answering_completion`，依序取得照護完成與散步完成答案，要求 13 個標準答案全部存在，並在缺答時拒絕進入 `reviewing`／`submitting`，且將 `care_completion.*` 與 `walk_completion.*` 和 `walk.*` 分開驗證 (depends on T124, T138, T143)
+- [x] T145 [US2] 在 `services/api/app/domain/line_webhook_security.py` 實作未修改 raw Body 簽章、Event Idempotency、安全重試與零業務寫入拒絕 (depends on T122, T123, T142)
+- [x] T146 [US2] 在 `services/api/app/domain/line_care_report_state.py` 實作 Server-side Draft State Machine、`DraftAnswers`／`CareReportAnswers` 驗證、穩定 Code、合法轉移與 TTL；明確實作 `answering_completion`，依序取得照護完成與散步完成答案，要求 13 個標準答案全部存在，並在缺答時拒絕進入 `reviewing`／`submitting`，且將 `care_completion.*` 與 `walk_completion.*` 和 `walk.*` 分開驗證 (depends on T124, T138, T143)
 - [ ] T147 [US2] 在 `services/api/app/application/line_webhook_session.py` 實作 Binding → system user → 唯一 Session／Context → Membership 重驗證流程 (depends on T129, T142)
 - [ ] T148 [US2] 在 `services/api/app/application/line_draft_service.py` 實作 Draft Create／Resume／Cancel／Expire、單一 active Draft，以及重新選擇 Animal 的內容保留預覽、Scope 重驗證、答案／心得待重新確認與 Media 不沿用規則 (depends on T125, T127, T143, T146, T147)
-- [ ] T149 [US2] 在 `services/api/app/application/line_postback_service.py` 實作 Rich Menu Action、單題 Quick Reply、`answering_completion`、13 個標準答案逐題保存、Back、Other、Summary、Modify、Animal Reselect、保留內容逐項確認與 Final Confirm；不得以 Postback 的 `step` 跳過必要答案，Summary 只在 `CareReportAnswers` 完整時允許送出 (depends on T078, T125, T146, T148)
-- [ ] T150 [US2] 在 `services/api/app/application/media_service.py` 實作大小／MIME／格式／解碼、EXIF 移除、重新編碼、Checksum、Temporary 與正式 Media 生命週期 (depends on T131, T141)
-- [ ] T151 [US2] 在 `services/api/app/application/line_image_service.py` 實作 Image Event 驗證、正式 LINE Adapter Content 取得、Media Sanitization、Draft Media 關聯與失敗略過 (depends on T130, T143, T145, T150)
-- [ ] T152 [US2] 在 `services/api/app/application/report_submission.py` 實作只接受完整 `CareReportAnswers` 的 Report／Observation／Media／Audit／Draft／Idempotency 正式 transaction；缺少 13 個標準答案或混用 `walk.*` 與 `walk_completion.*` 時拒絕並保留 Draft，不建立或呼叫 AI (depends on T128, T132-T134, T144, T149-T151)
-- [ ] T153 [US2] 在 `services/api/app/application/report_job_dispatch.py` 實作 Report commit 後獨立 transaction 的 AI Job dispatch、失敗狀態及 reconciliation 入口 (depends on T068, T135, T152)
-- [ ] T154 [US2] 在 `services/api/app/application/report_correction.py` 實作志工 24 小時內容修改、授權人員 Animal Correction、Archive 與完整 Audit (depends on T137, T144, T152)
+- [x] T149 [US2] 在 `services/api/app/application/line_postback_service.py` 實作 Rich Menu Action、單題 Quick Reply、`answering_completion`、13 個標準答案逐題保存、Back、Other、Summary、Modify、Animal Reselect、保留內容逐項確認與 Final Confirm；不得以 Postback 的 `step` 跳過必要答案，Summary 只在 `CareReportAnswers` 完整時允許送出 (depends on T078, T125, T146, T148)
+- [x] T150 [US2] 在 `services/api/app/application/media_service.py` 實作大小／MIME／格式／解碼、EXIF 移除、重新編碼、Checksum、Temporary 與正式 Media 生命週期 (depends on T131, T141)
+- [x] T151 [US2] 在 `services/api/app/application/line_image_service.py` 實作 Image Event 驗證、正式 LINE Adapter Content 取得、Media Sanitization、Draft Media 關聯與失敗略過 (depends on T130, T143, T145, T150)
+- [x] T152 [US2] 在 `services/api/app/application/report_submission.py` 實作只接受完整 `CareReportAnswers` 的 Report／Observation／Media／Audit／Draft／Idempotency 正式 transaction；缺少 13 個標準答案或混用 `walk.*` 與 `walk_completion.*` 時拒絕並保留 Draft，不建立或呼叫 AI (depends on T128, T132-T134, T144, T149-T151)
+- [x] T153 [US2] 在 `services/api/app/application/report_job_dispatch.py` 實作 Report commit 後獨立 transaction 的 AI Job dispatch、失敗狀態及 reconciliation 入口 (depends on T068, T135, T152)
+- [x] T154 [US2] 在 `services/api/app/application/report_correction.py` 實作志工 24 小時內容修改、授權人員 Animal Correction、Archive 與完整 Audit (depends on T137, T144, T152)
 
 ### API、Rich Menu 與 LIFF
 
-- [ ] T155 [US2] 在 `services/api/app/api/line_webhook.py` 實作 `/v1/line/webhook` 的 raw Body 簽章前置、Event Dispatch、Postback／Image／Text Handler 與一致回應 (depends on T121, T145, T147, T149, T151)
-- [ ] T156 [US2] 在 `services/api/app/api/line_binding.py` 實作 `/v1/line/bind`、既有 User／Membership 對應及未綁定引導 (depends on T054, T121)
-- [ ] T157 [US2] 在 `services/api/app/api/line_drafts.py` 實作 Rich Menu Context、Current Draft、Resume、Cancel 及要求 LIFF 明確選擇 API (depends on T121, T148, T155)
-- [ ] T158 [US2] 在 `services/api/app/api/care_reports.py` 實作 Draft／Media／Report／Correction／Archive API、Authentication、Idempotency 與 Scope；Draft API 使用 `DraftAnswers`，Care Report Create／Read 使用完整 `CareReportAnswers`，缺少必要欄位時回傳統一驗證錯誤且不得建立正式資料 (depends on T121, T152-T154)
-- [ ] T159 [US2] 在 `scripts/sync_line_rich_menu.py` 建立正式 Adapter 的 Rich Menu Validate／Create／Upload／Bind、環境版本及安全重跑流程 (depends on T011, T077, T149)
+- [x] T155 [US2] 在 `services/api/app/api/line_webhook.py` 實作 `/v1/line/webhook` 的 raw Body 簽章前置、Event Dispatch、Postback／Image／Text Handler 與一致回應 (depends on T121, T145, T147, T149, T151)
+- [x] T156 [US2] 在 `services/api/app/api/line_binding.py` 實作 `/v1/line/bind`、既有 User／Membership 對應及未綁定引導 (depends on T054, T121)
+- [x] T157 [US2] 在 `services/api/app/api/line_drafts.py` 實作 Rich Menu Context、Current Draft、Resume、Cancel 及要求 LIFF 明確選擇 API (depends on T121, T148, T155)
+- [x] T158 [US2] 在 `services/api/app/api/care_reports.py` 實作 Draft／Media／Report／Correction／Archive API、Authentication、Idempotency 與 Scope；Draft API 使用 `DraftAnswers`，Care Report Create／Read 使用完整 `CareReportAnswers`，缺少必要欄位時回傳統一驗證錯誤且不得建立正式資料 (depends on T121, T152-T154)
+- [x] T159 [US2] 在 `scripts/sync_line_rich_menu.py` 建立正式 Adapter 的 Rich Menu Validate／Create／Upload／Bind、環境版本及安全重跑流程 (depends on T011, T077, T149)
 - [ ] T160 [P] [US2] 在 `apps/web/features/line-bot/LiffFallback.tsx` 建立長文字、批次修改、Animal Reselect 保留預覽／答案重新確認／照片重新附加、完整確認與 Bot 備援介面 (depends on T136, T157, T158)
 - [ ] T161 [P] [US2] 在 `apps/web/app/(volunteer)/care-report/page.tsx` 建立 LIFF Draft Resume、Media 狀態、網路中斷、Summary 與保存成功輔助頁 (depends on T136, T157, T158)
 - [ ] T162 [US2] 在 `tests/integration/test_line_adapter_real_boundary.py` 驗證正式 Adapter HTTP request、Reply Token、Image Content、Rich Menu 與錯誤補償，不呼叫正式 LINE 環境 (depends on T075, T077, T151, T159)
@@ -320,11 +320,11 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Migration、Repository、Service、API 與 UI
 
-- [ ] T171 [US3] 在 `services/api/migrations/versions/0014_timeline_query_indexes.py` 建立 Timeline 日期、Animal／Organization、Report 與 Media 查詢 Index 的可回復 Migration (depends on T141, T165, T169)
-- [ ] T172 [US3] 在 `services/api/app/persistence/repositories/timeline_repository.py` 建立 Organization-scoped Report／Observation／Note／Media／Correction Timeline Query (depends on T037, T165, T171)
-- [ ] T173 [US3] 在 `services/api/app/application/timeline_query.py` 實作 14 日序列補齊、Daily Summary、No-report、逐筆 DTO、Filter 與 Date Range 驗證 (depends on T164-T169, T172)
-- [ ] T174 [US3] 在 `services/api/app/application/media_access.py` 實作角色、Organization、到期與一致拒絕的 Signed Media URL Service (depends on T070, T166, T173)
-- [ ] T175 [US3] 在 `services/api/app/api/animal_timeline.py` 實作 Recent、Date Range、Daily Summary、No-report 與受控 Media API (depends on T164, T173, T174)
+- [x] T171 [US3] 在 `services/api/migrations/versions/0014_timeline_query_indexes.py` 建立 Timeline 日期、Animal／Organization、Report 與 Media 查詢 Index 的可回復 Migration (depends on T141, T165, T169)
+- [x] T172 [US3] 在 `services/api/app/persistence/repositories/timeline_repository.py` 建立 Organization-scoped Report／Observation／Note／Media／Correction Timeline Query (depends on T037, T165, T171)
+- [x] T173 [US3] 在 `services/api/app/application/timeline_query.py` 實作 14 日序列補齊、Daily Summary、No-report、逐筆 DTO、Filter 與 Date Range 驗證 (depends on T164-T169, T172)
+- [x] T174 [US3] 在 `services/api/app/application/media_access.py` 實作角色、Organization、到期與一致拒絕的 Signed Media URL Service (depends on T070, T166, T173)
+- [x] T175 [US3] 在 `services/api/app/api/animal_timeline.py` 實作 Recent、Date Range、Daily Summary、No-report 與受控 Media API (depends on T164, T173, T174)
 - [ ] T176 [P] [US3] 在 `apps/web/features/animal-timeline/AnimalTimeline.tsx` 建立 14 日摘要、No-report、同日多筆、原始／AI／人工分區 (depends on T170, T175)
 - [ ] T177 [P] [US3] 在 `apps/web/features/animal-timeline/TimelineFilters.tsx` 建立日期、區間、類型、Loading、Empty 與 Error State (depends on T170, T175)
 - [ ] T178 [US3] 在 `apps/web/app/(management)/animals/[animalId]/timeline/page.tsx` 建立 Staff Timeline 入口、展開、照片及權限拒絕流程 (depends on T176, T177)
@@ -364,8 +364,8 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Service、API 與 UI
 
-- [ ] T192 [US4] 在 `services/api/app/application/observation_option_service.py` 實作 Organization Extension Create／Update／Reorder／Disable、禁止 Hard Delete 與 Audit (depends on T057, T062, T188-T190)
-- [ ] T193 [US4] 在 `services/api/app/api/observation_options.py` 實作 Effective List 與 Organization Option 管理 API (depends on T187, T192)
+- [x] T192 [US4] 在 `services/api/app/application/observation_option_service.py` 實作 Organization Extension Create／Update／Reorder／Disable、禁止 Hard Delete 與 Audit (depends on T057, T062, T188-T190)
+- [x] T193 [US4] 在 `services/api/app/api/observation_options.py` 實作 Effective List 與 Organization Option 管理 API (depends on T187, T192)
 - [ ] T194 [US4] 在 `apps/web/app/(management)/settings/observation-options/page.tsx` 建立管理頁、來源、排序、停用及權限處理 (depends on T191, T193)
 - [ ] T195 [US4] 在 `tests/integration/test_bot_observation_vocabulary_regression.py` 驗證 Bot Presenter 與管理語彙共用同一 Code／Effective Options，沒有硬編碼副本 (depends on T078, T190, T192)
 - [ ] T196 [US4] 在 `tests/e2e/test_us4_observation_options.py` 執行 US4 Independent Test、Option Acceptance、SC-026 及 US2／US3 歷史回歸 (depends on T179, T193-T195)
@@ -393,20 +393,20 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Model 與 Migration
 
-- [ ] T205 [US5] 在 `services/api/app/persistence/models/ai_observation.py` 建立 AI Observation、AI Call Log、Validated Result 與 Human Review SQLAlchemy Model (depends on T197, T201)
-- [ ] T206 [US5] 在 `services/api/migrations/versions/0015_ai_observations.py` 建立 T205 對應資料表、Source／Organization Composite Constraint、Index、RLS 與可回復 Migration (depends on T066, T205)
+- [x] T205 [US5] 在 `services/api/app/persistence/models/ai_observation.py` 建立 AI Observation、AI Call Log、Validated Result 與 Human Review SQLAlchemy Model (depends on T197, T201)
+- [x] T206 [US5] 在 `services/api/migrations/versions/0015_ai_observations.py` 建立 T205 對應資料表、Source／Organization Composite Constraint、Index、RLS 與可回復 Migration (depends on T066, T205)
 
 ### Worker、Review、API 與 UI
 
-- [ ] T207 [US5] 在 `services/worker/app/persistence/job_repository.py` 建立 Job claim／lock／retry／crash recovery 與 Organization Scope Repository (depends on T028, T067, T199)
-- [ ] T208 [US5] 在 `services/api/app/persistence/repositories/ai_observation_repository.py` 建立 raw／validated／human 分離及來源追溯 Repository (depends on T037, T206)
-- [ ] T209 [P] [US5] 在 `services/worker/app/infrastructure/ai_port.py` 建立指定 Provider／Model／Prompt／Schema Version 的 AI Client Port (depends on T198)
-- [ ] T210 [P] [US5] 在 `services/worker/app/infrastructure/mock_ai_adapter.py` 實作成功、逾時、Invalid JSON、診斷語意與中斷的 Mock AI Adapter (depends on T209)
+- [x] T207 [US5] 在 `services/worker/app/persistence/job_repository.py` 建立 Job claim／lock／retry／crash recovery 與 Organization Scope Repository (depends on T028, T067, T199)
+- [x] T208 [US5] 在 `services/api/app/persistence/repositories/ai_observation_repository.py` 建立 raw／validated／human 分離及來源追溯 Repository (depends on T037, T206)
+- [x] T209 [P] [US5] 在 `services/worker/app/infrastructure/ai_port.py` 建立指定 Provider／Model／Prompt／Schema Version 的 AI Client Port (depends on T198)
+- [x] T210 [P] [US5] 在 `services/worker/app/infrastructure/mock_ai_adapter.py` 實作成功、逾時、Invalid JSON、診斷語意與中斷的 Mock AI Adapter (depends on T209)
 - [ ] T211 [US5] 在 `services/worker/app/infrastructure/ai_adapter.py` 實作正式 AI Adapter、指定版本、Timeout 與不洩漏 Secret 的錯誤轉換 (depends on T209, T210)
-- [ ] T212 [US5] 在 `services/worker/app/handlers/ai_validation.py` 實作 Structured Output、Effective Option 白名單、禁用詞及禁止正式決定 Validator (depends on T200, T211)
+- [x] T212 [US5] 在 `services/worker/app/handlers/ai_validation.py` 實作 Structured Output、Effective Option 白名單、禁用詞及禁止正式決定 Validator (depends on T200, T211)
 - [ ] T213 [US5] 在 `services/worker/app/handlers/ai_handler.py` 實作 Job／Report／Organization／Media 重驗證、清理後輸入、raw 保存、validation 與失敗狀態 (depends on T199, T201-T203, T207, T208, T212)
-- [ ] T214 [US5] 在 `services/api/app/application/ai_review.py` 實作 Confirm／Reject／Correct、來源、Audit 及原始輸出不可覆蓋 (depends on T057, T201, T208, T213)
-- [ ] T215 [US5] 在 `services/api/app/api/ai_observations.py` 實作 AI Status、Observation List、Confirm、Reject 與 Correct API (depends on T197, T214)
+- [x] T214 [US5] 在 `services/api/app/application/ai_review.py` 實作 Confirm／Reject／Correct、來源、Audit 及原始輸出不可覆蓋 (depends on T057, T201, T208, T213)
+- [x] T215 [US5] 在 `services/api/app/api/ai_observations.py` 實作 AI Status、Observation List、Confirm、Reject 與 Correct API (depends on T197, T214)
 - [ ] T216 [US5] 在 `apps/web/features/ai-observation/AIObservationPanel.tsx` 建立 AI 標示、狀態、來源及人工結果 UI (depends on T204, T215)
 - [ ] T217 [US5] 在 `tests/e2e/test_us5_ai_observation.py` 執行 US5 Independent Test、Acceptance Scenarios 36～42、SC-008／SC-009、版本／原始輸出及 US2／US3 回歸 (depends on T163, T179, T213, T215, T216)
 
@@ -595,21 +595,21 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 
 ## Requirement Traceability
 
-| 規格範圍 | 主要實作任務 | 主要驗證任務 |
-|---|---|---|
-| Authentication、Session、Active Shelter Context | T033～T054、T090～T096 | T038～T042、T082～T087、T097 |
-| Database Scope Setter、RLS、Constitution XI | T032、T035～T037、各 scoped Repository | T031、T080、T084、T126、T134、T166、T181、T219 |
-| US0、FR-045～FR-064 | T088～T096 | T082～T087、T097 |
-| US1、FR-001～FR-014、FR-059、FR-065 | T104～T119 | T098～T103、T120 |
+| 規格範圍                                                         | 主要實作任務                            | 主要驗證任務                                         |
+| ---------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------- |
+| Authentication、Session、Active Shelter Context                  | T033～T054、T090～T096                  | T038～T042、T082～T087、T097                         |
+| Database Scope Setter、RLS、Constitution XI                      | T032、T035～T037、各 scoped Repository  | T031、T080、T084、T126、T134、T166、T181、T219       |
+| US0、FR-045～FR-064                                              | T088～T096                              | T082～T087、T097                                     |
+| US1、FR-001～FR-014、FR-059、FR-065                              | T104～T119                              | T098～T103、T120                                     |
 | US2、FR-015～FR-029、FR-065～FR-075、13 個標準必填答案與完成狀態 | T138～T162（含 T146、T149、T152、T158） | T020、T058、T061、T063、T121～T137、T163、T253～T254 |
-| US3、FR-030～FR-035 | T171～T178 | T164～T170、T179、T253、T255 |
-| US4、FR-036～FR-038、FR-066 | T059～T063、T192～T195 | T058、T187～T191、T196 |
-| US5、FR-039～FR-044 | T065～T068、T205～T216 | T064、T197～T204、T217 |
-| SC-001／SC-002／SC-006／SC-014 真人驗收 | T253 | T248、T254～T255 |
-| OpenAPI 與 Contract Types | T019、T022 | T020～T021、T185、T222 |
-| Object Storage、EXIF、GCS Gate | T069、T071～T073、T150～T151 | T070、T130～T131、T221、T224、T238、T243 |
-| 正式 LINE Adapter／Webhook | T074～T078、T142、T145、T155～T159 | T075、T122～T129、T162～T163 |
-| 本機 MVP 與 GCP Demo | T180～T186、T225～T244 | T180～T186、T218～T224、T236～T238、T243～T244 |
+| US3、FR-030～FR-035                                              | T171～T178                              | T164～T170、T179、T253、T255                         |
+| US4、FR-036～FR-038、FR-066                                      | T059～T063、T192～T195                  | T058、T187～T191、T196                               |
+| US5、FR-039～FR-044                                              | T065～T068、T205～T216                  | T064、T197～T204、T217                               |
+| SC-001／SC-002／SC-006／SC-014 真人驗收                          | T253                                    | T248、T254～T255                                     |
+| OpenAPI 與 Contract Types                                        | T019、T022                              | T020～T021、T185、T222                               |
+| Object Storage、EXIF、GCS Gate                                   | T069、T071～T073、T150～T151            | T070、T130～T131、T221、T224、T238、T243             |
+| 正式 LINE Adapter／Webhook                                       | T074～T078、T142、T145、T155～T159      | T075、T122～T129、T162～T163                         |
+| 本機 MVP 與 GCP Demo                                             | T180～T186、T225～T244                  | T180～T186、T218～T224、T236～T238、T243～T244       |
 
 所有核心 FR 都至少對應一項實作與一項驗證任務；後續 FR 變更必須同步更新本表。
 
@@ -617,6 +617,8 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 
 - **tasks.md 路徑**：`specs/001-volunteer-care-report/tasks.md`
 - **總任務數**：256（T001～T256）
+- **本輪已完成任務**：108（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
+- **尚未完成任務**：148；Feature 尚未達到完成條件，不能視為可部署產品。
 - **Setup 任務數**：18（T001～T018）
 - **Foundational 任務數**：63（T019～T081）
 - **US0 任務數**：16（T082～T097）
@@ -630,7 +632,8 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **GCP Demo 準備／Gate 任務數**：14（T225～T238）
 - **GCP Demo 部署／驗證任務數**：6（T239～T244）
 - **Polish 任務數**：12（T245～T256）
-- **測試與驗證任務數**：87 項以 `tests/` 為主要路徑，另有 2 項真人 Usability Evidence、Setup／Foundational／MVP／Deployment Gate Script 與 Evidence 任務。
+- **目前自動化驗證證據**：Python `pytest` 86 項通過；前端 3 項 Vitest 通過；Next.js production build、TypeScript typecheck、Prettier、Contract Types、Alembic offline SQL（含新增 Draft／Media migrations）與 Ruff 皆已通過。
+- **未完成測試範圍**：仍缺少真實 PostgreSQL／RLS／Scope Setter Integration、完整 Bot／LIFF E2E、完整 Timeline／US0～US5 Independent Test、GCP Smoke Test 與真人 Usability Evidence。
 - **Security／Isolation Test 任務數**：14 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑。
 - **可平行任務數**：90 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
 - **阻擋實作的未決事項**：無產品未決事項；仍須執行 `$speckit-analyze` 並達到 `CRITICAL = 0`、`HIGH = 0`。
@@ -639,4 +642,5 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **建議 MVP**：T001～T186，包含 US0＋US1＋US2＋US3；US4／US5 不阻擋。
 - **建議第一批任務**：T001～T018；Setup 通過後執行 T019～T081。
 - **範圍外檢查**：未加入醫療、關注排序、領養、公開頁面、Notification、Export、跨收容所共享、Kubernetes、Redis、Pub/Sub 或其他未核准能力。
-- **下一步**：先執行 `$speckit-analyze`；通過前不得執行 `$speckit-implement`。
+- **本輪實作限制**：Docker／可用 PostgreSQL／MinIO 執行環境未提供，因此未宣稱真實資料庫、RLS、物件儲存或 GCP 已驗證；GCP 資源未建立。
+- **下一步**：補齊尚未完成任務後執行 `$speckit-analyze`；目前仍不得將 Feature 標記為完成或直接部署。

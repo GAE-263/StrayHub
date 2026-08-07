@@ -77,6 +77,7 @@ flowchart TD
 
     J --> M
 ```
+
 - **Active Shelter Context**：`active_org_id` 必須來自有效 Membership、由後端驗證、綁定目前 Session 並透過明確操作切換；QR Code 不得自動切換。系統不以 GPS、IP、裝置、時間重疊或地理距離推測志工地點。Draft、Animal、QR Token、Reportable Scope 與 Active Context 的 Organization 不一致時，阻擋送出並保留 Draft。
 - **LINE Bot／LIFF 邊界**：LINE Bot 是日常回報的主要操作介面，透過 Rich Menu、Quick Reply、Postback、文字訊息、圖片訊息與 LINE Messaging API Webhook 完成受控狀態機；LIFF 僅作為第一次身分綁定、QR／Deep Link 識別、完整動物確認、答案修改、長文字與 Bot 備援介面。FastAPI 仍是唯一正式 Authentication、Authorization、租戶隔離與 CRM 業務邊界。
 - **Webhook 安全**：每個 Webhook Request 必須先以原始 Request Body 與 `X-Line-Signature` 完成簽章驗證，再解析及處理事件；每個事件依 `webhookEventId` 冪等處理，非法簽章不得查詢或修改 CRM。
@@ -441,32 +442,33 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 
 第一階段平台預設語彙 MUST 至少提供下列穩定 Code。Code 是正式業務值，顯示名稱與說明可由授權管理員維護；停用或改名不得改變既有 Code，也不得破壞歷史紀錄。下列描述只要求志工記錄可直接觀察的現象，不要求推測動物的心理或醫療狀態。
 
-| 類別 | 穩定 Code | 預設顯示名稱 | 可觀察說明 |
-| --- | --- | --- | --- |
-| 情緒 | `emotion.usual` | 情緒表現與平常相近 | 回應、姿勢或互動表現與平常相近 |
-| 情緒 | `emotion.calm` | 平靜或放鬆 | 動作或互動呈現平靜、放鬆 |
-| 情緒 | `emotion.alert` | 警覺 | 對聲音、人或環境保持警覺 |
-| 情緒 | `emotion.excited` | 興奮 | 活動或互動反應較為興奮 |
-| 情緒 | `emotion.tense` | 緊張或不安 | 出現身體緊繃、躲避或不安反應 |
-| 情緒 | `emotion.withdrawn` | 退縮或避免互動 | 主動退縮或避免互動 |
-| 情緒 | `emotion.seeking_interaction` | 主動尋求互動 | 主動靠近或尋求互動 |
-| 情緒 | `emotion.not_observed` | 未觀察 | 本次沒有觀察此項目 |
-| 情緒 | `emotion.uncertain` | 無法判斷 | 有接觸或資訊不足，但無法判斷 |
-| 情緒 | `emotion.other` | 其他 | 需要補充文字描述的其他可觀察現象 |
-| 散步反應 | `walk.usual` | 散步反應與平常相近 | 散步時的反應與平常相近 |
-| 散步反應 | `walk.willing` | 願意出門 | 願意離開原所在位置開始散步 |
-| 散步反應 | `walk.exploring` | 願意探索環境 | 主動嗅聞、探索或觀察環境 |
-| 散步反應 | `walk.reluctant` | 不願出門 | 不願離開原所在位置開始散步 |
-| 散步反應 | `walk.slow_or_stopping` | 步伐較慢或頻繁停下 | 步伐較平常慢或頻繁停下 |
-| 散步反應 | `walk.tries_to_return` | 嘗試返回或避免前進 | 嘗試返回原處或避免繼續前進 |
-| 散步反應 | `walk.human_reaction` | 對人有明顯反應 | 遇到人時出現可描述的反應，需視需要補充文字 |
-| 散步反應 | `walk.animal_reaction` | 對其他動物有明顯反應 | 遇到其他動物時出現可描述的反應，需視需要補充文字 |
-| 散步反應 | `walk.not_done` | 未進行散步 | 本次沒有進行散步 |
-| 散步反應 | `walk.not_observed` | 未觀察 | 本次沒有觀察散步反應 |
-| 散步反應 | `walk.uncertain` | 無法判斷 | 有散步或相關資訊，但無法判斷 |
-| 散步反應 | `walk.other` | 其他 | 需要補充文字描述的其他可觀察現象 |
+| 類別     | 穩定 Code                     | 預設顯示名稱         | 可觀察說明                                       |
+| -------- | ----------------------------- | -------------------- | ------------------------------------------------ |
+| 情緒     | `emotion.usual`               | 情緒表現與平常相近   | 回應、姿勢或互動表現與平常相近                   |
+| 情緒     | `emotion.calm`                | 平靜或放鬆           | 動作或互動呈現平靜、放鬆                         |
+| 情緒     | `emotion.alert`               | 警覺                 | 對聲音、人或環境保持警覺                         |
+| 情緒     | `emotion.excited`             | 興奮                 | 活動或互動反應較為興奮                           |
+| 情緒     | `emotion.tense`               | 緊張或不安           | 出現身體緊繃、躲避或不安反應                     |
+| 情緒     | `emotion.withdrawn`           | 退縮或避免互動       | 主動退縮或避免互動                               |
+| 情緒     | `emotion.seeking_interaction` | 主動尋求互動         | 主動靠近或尋求互動                               |
+| 情緒     | `emotion.not_observed`        | 未觀察               | 本次沒有觀察此項目                               |
+| 情緒     | `emotion.uncertain`           | 無法判斷             | 有接觸或資訊不足，但無法判斷                     |
+| 情緒     | `emotion.other`               | 其他                 | 需要補充文字描述的其他可觀察現象                 |
+| 散步反應 | `walk.usual`                  | 散步反應與平常相近   | 散步時的反應與平常相近                           |
+| 散步反應 | `walk.willing`                | 願意出門             | 願意離開原所在位置開始散步                       |
+| 散步反應 | `walk.exploring`              | 願意探索環境         | 主動嗅聞、探索或觀察環境                         |
+| 散步反應 | `walk.reluctant`              | 不願出門             | 不願離開原所在位置開始散步                       |
+| 散步反應 | `walk.slow_or_stopping`       | 步伐較慢或頻繁停下   | 步伐較平常慢或頻繁停下                           |
+| 散步反應 | `walk.tries_to_return`        | 嘗試返回或避免前進   | 嘗試返回原處或避免繼續前進                       |
+| 散步反應 | `walk.human_reaction`         | 對人有明顯反應       | 遇到人時出現可描述的反應，需視需要補充文字       |
+| 散步反應 | `walk.animal_reaction`        | 對其他動物有明顯反應 | 遇到其他動物時出現可描述的反應，需視需要補充文字 |
+| 散步反應 | `walk.not_done`               | 未進行散步           | 本次沒有進行散步                                 |
+| 散步反應 | `walk.not_observed`           | 未觀察               | 本次沒有觀察散步反應                             |
+| 散步反應 | `walk.uncertain`              | 無法判斷             | 有散步或相關資訊，但無法判斷                     |
+| 散步反應 | `walk.other`                  | 其他                 | 需要補充文字描述的其他可觀察現象                 |
 
 `emotion.not_observed`、`emotion.uncertain`、`walk.not_observed` 與 `walk.uncertain` 不得被解讀為平靜、正常或沒有特殊訊號；選擇 `emotion.other` 或 `walk.other` 時 MUST 依文字補充規則要求說明。上述列舉是有效觀察語彙的最低集合，不代表每次 Quick Reply 必須同時顯示全部選項；Bot 仍須依單題操作規則提供可操作的選項與替代回覆。
+
 - **FR-022**：外觀與特殊狀態 MUST 能記錄毛髮或外觀差異、持續抓咬某部位、可見紅色區塊、局部毛髮減少、長時間趴臥、行走狀態差異、其他特殊狀況、未觀察到明顯訊號與無法判斷。
 - **FR-023**：系統 MUST 接收來自 LINE 相機、相簿或圖片訊息的一張或多張照片，標示照片用途並保存原始心得；照片與心得均為選填，沒有照片或心得時，只要結構化答案有效仍可送出；「其他」或被設定為需補充的選項才要求文字或開啟 LIFF。
 - **FR-024**：系統 MUST 在志工預覽或確認後送出前保留原始輸入，送出成功後立即告知原始回報已保存；AI 或其他外部服務不可用不得阻止保存人工回報。
@@ -660,7 +662,6 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 ## Clarification Items
 
 本次高影響待釐清事項均已完成。照片、排泄照片與心得均採選填；標準回報的必填結構化題目、照護完成狀態與散步完成狀態已於 Session 2026-08-07 定義；有效的「未觀察」、「無法判斷」及「未進行散步」答案可完成對應題目。每名志工在單一 Organization 同時間只保留一筆 active Draft，Draft 有效期限由設定控制，建立新回報時提示繼續或放棄既有 Draft；跨裝置恢復與重複送出文案由實作依同一 CRM Draft／Idempotency 規則處理。正式 Care Report 的 Archive、Draft／Temporary Media 刪除政策已由實作前決策紀錄確定。公開頁面、批次 Export 與 Notification 不屬本 Feature。
-
 
 ## Constitution Compliance Notes
 

@@ -1,0 +1,16 @@
+.git/
+.gitignore
+.env*
+!.env.example
+node_modules/
+**/node_modules/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+coverage/
+*.log
+*.tmp
+*.swp
+

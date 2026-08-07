@@ -1,0 +1,1 @@
+"""FastAPI CRM application package."""
