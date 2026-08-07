@@ -269,6 +269,7 @@ async def create_care_report(
     if set(payload.observations) != set(REQUIRED_ANSWER_KEYS):
         raise DomainError("incomplete_answers", "缺少必要回報答案", 422)
     draft.answers = payload.observations
+    draft.current_step = "reviewing"
     options = await ObservationRepository(session, context.organization_id).effective_options(
         include_disabled_history=False
     )

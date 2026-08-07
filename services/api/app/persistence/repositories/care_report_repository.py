@@ -96,6 +96,29 @@ class CareReportRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_for_volunteer(self, volunteer_user_id: UUID) -> list[CareReport]:
+        result = await self.session.execute(
+            select(CareReport)
+            .where(
+                CareReport.organization_id == self.organization_id,
+                CareReport.volunteer_user_id == volunteer_user_id,
+            )
+            .order_by(CareReport.submitted_at.desc())
+        )
+        return list(result.scalars())
+
+    async def archive(self, report: CareReport, *, actor_user_id: UUID, reason: str) -> CareReport:
+        if report.organization_id != self.organization_id:
+            raise DomainError("cross_tenant_access", "無法存取其他收容所資料", 404)
+        report.status = "archived"
+        report.archived_by = actor_user_id
+        report.archive_reason = reason
+        from datetime import datetime, timezone
+
+        report.archived_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return report
+
     async def add_correction(self, correction: CareReportCorrection) -> CareReportCorrection:
         if correction.organization_id != self.organization_id:
             raise DomainError("cross_tenant_access", "無法存取其他收容所資料", 404)

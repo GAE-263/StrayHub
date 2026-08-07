@@ -19,7 +19,12 @@ class LineDraftService:
         self.ttl_seconds = ttl_seconds
 
     async def create(
-        self, *, volunteer_user_id: UUID, membership_id: UUID, animal_id: UUID
+        self,
+        *,
+        volunteer_user_id: UUID,
+        membership_id: UUID,
+        animal_id: UUID,
+        source_event_id: str | None = None,
     ) -> tuple[CareReportDraft, str]:
         existing = await self.repository.get_active_for_volunteer(volunteer_user_id)
         if existing is not None:
@@ -35,6 +40,8 @@ class LineDraftService:
             candidate_animal_id=None,
             current_step=DraftState.CONFIRMING_ANIMAL.value,
             answers={},
+            answer_source_event_id=source_event_id,
+            modification_summary={},
             reconfirmation_keys=[],
             status="active",
             last_interaction_at=now,
@@ -43,12 +50,24 @@ class LineDraftService:
         return await self.repository.add(draft), raw_token
 
     async def begin_reselection(
-        self, draft_id: UUID, *, candidate_animal_id: UUID
+        self,
+        draft_id: UUID,
+        *,
+        candidate_animal_id: UUID,
+        source_event_id: str | None = None,
     ) -> CareReportDraft:
         draft = await self._active(draft_id)
         if candidate_animal_id == draft.animal_id:
             raise DomainError("same_animal", "請選擇不同的動物", 422)
         draft.candidate_animal_id = candidate_animal_id
+        draft.answer_source_event_id = source_event_id
+        draft.modification_summary = {
+            "reselection": True,
+            "previous_animal_id": str(draft.animal_id),
+            "candidate_animal_id": str(candidate_animal_id),
+            "answers_reconfirm": list(draft.reconfirmation_keys or []),
+            "media_reused": False,
+        }
         draft.current_step = DraftState.CONFIRMING_ANIMAL.value
         draft.last_interaction_at = datetime.now(timezone.utc)
         return draft
@@ -59,11 +78,20 @@ class LineDraftService:
             raise DomainError("candidate_animal_required", "尚未選擇要更換的動物", 409)
         draft.animal_id = draft.candidate_animal_id
         draft.candidate_animal_id = None
+        clear_media = getattr(self.repository, "clear_media", None)
+        if clear_media is not None:
+            await clear_media(draft.id)
         draft.reconfirmation_keys = [
             key for key in REQUIRED_ANSWER_KEYS if key in (draft.answers or {})
         ]
         draft.current_step = DraftState.ANSWERING_COMPLETION.value
         draft.last_interaction_at = datetime.now(timezone.utc)
+        return draft
+
+    async def resume(self, draft_id: UUID, *, volunteer_user_id: UUID) -> CareReportDraft:
+        draft = await self._active(draft_id)
+        if draft.volunteer_user_id != volunteer_user_id:
+            raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
         return draft
 
     async def cancel(self, draft_id: UUID) -> CareReportDraft:

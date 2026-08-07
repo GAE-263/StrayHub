@@ -56,6 +56,8 @@ class ReportSubmissionService:
                 return existing_report
         if draft.status != "active":
             raise DomainError("draft_not_found", "草稿不存在或無法存取", 404)
+        if draft.current_step not in {"reviewing", "submitting"}:
+            raise DomainError("invalid_draft_step", "完成摘要確認後才能送出回報", 409)
         if (
             draft.organization_id != self.reports.organization_id
             or animal.organization_id != draft.organization_id
