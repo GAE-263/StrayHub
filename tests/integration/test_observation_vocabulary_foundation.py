@@ -40,3 +40,33 @@ def test_platform_seed_contains_standard_required_vocabulary() -> None:
     assert required <= actual
     assert set(PLATFORM_OPTIONS["care_completion"]).isdisjoint(PLATFORM_OPTIONS["walk_completion"])
     assert set(PLATFORM_OPTIONS["walk_completion"]).isdisjoint(PLATFORM_OPTIONS["walk"])
+
+
+def test_platform_seed_has_all_standard_answer_categories_and_other_requires_note() -> None:
+    expected_categories = {
+        "care_completion",
+        "walk_completion",
+        "feeding",
+        "water",
+        "activity",
+        "urination",
+        "defecation",
+        "resource_guarding",
+        "human_interaction",
+        "animal_interaction",
+        "emotion",
+        "walk",
+        "appearance_special_status",
+    }
+    assert expected_categories == set(PLATFORM_OPTIONS)
+    for codes in PLATFORM_OPTIONS.values():
+        for code in codes:
+            if code.endswith(".other"):
+                assert code.split(".", 1)[0] in {
+                    "resource_guarding",
+                    "human_interaction",
+                    "animal_interaction",
+                    "emotion",
+                    "walk",
+                    "appearance",
+                }

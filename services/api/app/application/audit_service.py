@@ -26,6 +26,10 @@ class AuditService:
         after: Any = None,
         reason: str | None = None,
     ) -> AuditRecord:
+        if not action or not resource_type or not source_channel:
+            raise ValueError("audit action, resource_type and source_channel are required")
+        if organization_id is None and resource_type not in {"organization", "platform"}:
+            raise ValueError("tenant business audit records require an organization scope")
         record = AuditRecord(
             organization_id=organization_id,
             actor_user_id=actor_user_id,
@@ -40,3 +44,79 @@ class AuditService:
         self.session.add(record)
         await self.session.flush()
         return record
+
+    async def record_scope_switch(
+        self, *, actor_user_id: UUID, organization_id: UUID, reason: str | None = None
+    ) -> AuditRecord:
+        return await self.record(
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            action="scope_switch",
+            resource_type="shelter_context",
+            source_channel="api",
+            reason=reason,
+        )
+
+    async def record_denial(
+        self,
+        *,
+        organization_id: UUID | None,
+        actor_user_id: UUID | None,
+        resource_type: str,
+        resource_id: UUID | None = None,
+        source_channel: str = "api",
+        reason: str | None = None,
+    ) -> AuditRecord:
+        return await self.record(
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            action="access_denied",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            source_channel=source_channel,
+            reason=reason,
+        )
+
+    async def record_correction(
+        self,
+        *,
+        organization_id: UUID,
+        actor_user_id: UUID,
+        resource_type: str,
+        resource_id: UUID,
+        before: Any,
+        after: Any,
+        source_channel: str = "api",
+        reason: str | None = None,
+    ) -> AuditRecord:
+        return await self.record(
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            action="correction",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            source_channel=source_channel,
+            before=before,
+            after=after,
+            reason=reason,
+        )
+
+    async def record_archive(
+        self,
+        *,
+        organization_id: UUID,
+        actor_user_id: UUID,
+        resource_type: str,
+        resource_id: UUID,
+        source_channel: str = "api",
+        reason: str | None = None,
+    ) -> AuditRecord:
+        return await self.record(
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            action="archive",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            source_channel=source_channel,
+            reason=reason,
+        )

@@ -7,7 +7,7 @@ from services.api.app.api.errors import DomainError
 
 
 async def set_organization_scope(session: AsyncSession, organization_id: UUID) -> None:
-    if not organization_id:
+    if not isinstance(organization_id, UUID):
         raise DomainError("organization_scope_required", "缺少收容所資料範圍", 403)
     await session.execute(
         text("SELECT set_config('app.current_org_id', :organization_id, true)"),

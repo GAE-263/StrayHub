@@ -58,6 +58,12 @@ class AuthenticationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def refresh_tokens_for_session(self, session_id: UUID) -> list[RefreshTokenRecord]:
+        result = await self.session.execute(
+            select(RefreshTokenRecord).where(RefreshTokenRecord.session_id == session_id)
+        )
+        return list(result.scalars())
+
     async def get_line_binding(self, line_user_id: str) -> LineUserBinding | None:
         result = await self.session.execute(
             select(LineUserBinding).where(

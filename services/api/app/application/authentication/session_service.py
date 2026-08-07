@@ -73,6 +73,12 @@ class SessionService:
         session = await self.repository.get_session(session_id)
         if session:
             session.status = "revoked"
+            # Revoking the server-side session must also invalidate every refresh
+            # token family attached to it; access tokens are checked against this
+            # record on every protected request.
+            records = await self.repository.refresh_tokens_for_session(session_id)
+            for record in records:
+                record.status = "revoked"
 
     async def current_user(self, *, session_id: UUID) -> dict:
         session = await self.repository.get_session(session_id)
