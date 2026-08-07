@@ -4,7 +4,7 @@ from __future__ import annotations
 # shape; E501 is suppressed for those literal payloads only.
 # ruff: noqa: E501
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from services.api.app.application.line_draft_conversation import (
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
 from services.api.app.application.line_message_presenter import quick_reply_for_options
+from services.api.app.application.line_webhook_session import LineWebhookSessionService
 from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
@@ -33,8 +34,6 @@ from services.api.app.domain.line_webhook_security import verify_line_signature
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.database.engine import session_factory
-from services.api.app.persistence.models.care_report_draft import DraftMediaAsset
-from services.api.app.persistence.models.identity import WebhookSession
 from services.api.app.persistence.models.shelter_area import ShelterArea
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
@@ -43,48 +42,24 @@ from services.api.app.persistence.repositories.authentication_repository import 
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
 )
-from services.api.app.persistence.repositories.line_identity_repository import (
-    LineIdentityRepository,
-)
+from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
     ReportableScopeRepository,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
 
 
 async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID]:
-    identity = LineIdentityRepository(session)
-    binding = await identity.binding(line_user_id)
-    if binding is None:
-        raise DomainError("line_binding_required", "請先完成 LINE 身分綁定", 403)
+    identity = LineWebhookRepository(session)
     authentication = AuthenticationRepository(session)
-    user = await authentication.get_user(binding.user_id)
-    if user is None or user.status != "active":
-        raise DomainError("line_binding_invalid", "LINE 身分綁定無效", 403)
-    memberships = await authentication.memberships(user.id, active_only=True)
-    sessions = await identity.sessions(user.id)
-    if len(sessions) > 1 or len(memberships) != 1:
-        raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
-    membership = memberships[0]
-    organization = await authentication.get_organization(membership.organization_id)
-    if organization is None or organization.status != "active":
-        raise DomainError("organization_disabled", "收容所目前停用", 403)
-    if sessions:
-        webhook_session = sessions[0]
-        if webhook_session.organization_id != organization.id:
-            raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
-    else:
-        webhook_session = WebhookSession(
-            user_id=user.id,
-            organization_id=organization.id,
-            status="active",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
-        )
-        await identity.add(webhook_session)
-    return user.id, organization.id, membership.id
+    webhook_session = await LineWebhookSessionService(identity, authentication).resolve(
+        line_user_id
+    )
+    membership = (await authentication.memberships(webhook_session.user_id, active_only=True))[0]
+    return webhook_session.user_id, webhook_session.organization_id, membership.id
 
 
 async def _reply(line: LineMessagingPort, event: dict, messages: list[dict]) -> None:
@@ -465,9 +440,7 @@ async def _handle_postback(
                 raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
             await draft_service.begin_reselection(draft.id, candidate_animal_id=animal.id)
             await draft_service.confirm_reselection(draft.id)
-            await session.execute(
-                delete(DraftMediaAsset).where(DraftMediaAsset.draft_id == draft.id)
-            )
+            await CareReportDraftRepository(session, organization_id).clear_media(draft.id)
             raw_token = token
             message = f"已更換為 {animal.name}；原有答案需重新確認，照片不會沿用。"
         else:
@@ -592,7 +565,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                 continue
             report_id_to_dispatch = None
             async with session.begin():
-                identity = LineIdentityRepository(session)
+                identity = LineWebhookRepository(session)
                 stored_event, claimed = await identity.claim_event(
                     webhook_event_id=event_id,
                     event_type=event.get("type", "unknown"),

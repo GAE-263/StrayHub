@@ -39,6 +39,33 @@ class ReportJobDispatchService:
             await self._mark_failed(organization_id=organization_id, report_id=report_id)
             return False
 
+    async def reconcile(self, *, organization_id: UUID, report_id: UUID) -> bool:
+        """Retry an enqueue without recreating the already-saved report."""
+        try:
+            async with self.session_factory() as session:
+                async with session.begin():
+                    result = await session.execute(
+                        select(CareReport).where(
+                            CareReport.id == report_id,
+                            CareReport.organization_id == organization_id,
+                        )
+                    )
+                    report = result.scalar_one_or_none()
+                    if report is None:
+                        return False
+                    if report.ai_job_status == "enqueued":
+                        return True
+                    await create_ai_job(
+                        AIJobRepository(session, organization_id),
+                        target_type="care_report",
+                        target_id=report.id,
+                    )
+                    report.ai_job_status = "enqueued"
+            return True
+        except Exception:
+            await self._mark_failed(organization_id=organization_id, report_id=report_id)
+            return False
+
     async def _mark_failed(self, *, organization_id: UUID, report_id: UUID) -> None:
         try:
             async with self.session_factory() as session:

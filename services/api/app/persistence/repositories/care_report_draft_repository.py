@@ -3,7 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
@@ -66,3 +66,26 @@ class CareReportDraftRepository:
             )
         )
         return list(result.scalars())
+
+    async def list_for_volunteer(self, volunteer_user_id: UUID) -> list[CareReportDraft]:
+        result = await self.session.execute(
+            select(CareReportDraft)
+            .where(
+                CareReportDraft.organization_id == self.organization_id,
+                CareReportDraft.volunteer_user_id == volunteer_user_id,
+            )
+            .order_by(CareReportDraft.last_interaction_at.desc())
+        )
+        return list(result.scalars())
+
+    async def clear_media(self, draft_id: UUID) -> None:
+        await self.session.execute(
+            delete(DraftMediaAsset).where(DraftMediaAsset.draft_id == draft_id)
+        )
+        await self.session.flush()
+
+    async def update(self, draft: CareReportDraft) -> CareReportDraft:
+        if draft.organization_id != self.organization_id:
+            raise DomainError("cross_tenant_access", "無法存取其他收容所資料", 404)
+        await self.session.flush()
+        return draft
