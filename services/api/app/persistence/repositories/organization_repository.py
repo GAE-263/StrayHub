@@ -38,6 +38,10 @@ class OrganizationRepository:
     async def user(self, user_id: UUID) -> User | None:
         return await self.session.get(User, user_id)
 
+    async def user_by_username(self, username: str) -> User | None:
+        result = await self.session.execute(select(User).where(User.username == username))
+        return result.scalar_one_or_none()
+
     async def memberships(self, organization_id: UUID) -> list[OrganizationMembership]:
         result = await self.session.execute(
             select(OrganizationMembership)

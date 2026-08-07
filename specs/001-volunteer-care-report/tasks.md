@@ -168,28 +168,28 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Tests First
 
-- [ ] T082 [US0] 在 `tests/contract/test_organization_management_contract.py` 建立 Organization、Initial Admin、Membership、Status 與 Active Shelter Context API 的失敗優先 Contract Test (depends on T020, T081)
-- [ ] T083 [P] [US0] 在 `tests/integration/test_organization_management.py` 建立 Platform Admin 建立 Shelter／Initial Admin 及 Shelter Admin 建立 Staff／Volunteer Test (depends on T081)
-- [ ] T084 [P] [US0] 在 `tests/isolation/test_organization_management_isolation.py` 建立 A 使用者以識別碼、網址、搜尋或 `org_id` 存取 B 的拒絕與不存在性防護 Test (depends on T081)
-- [ ] T085 [P] [US0] 在 `tests/integration/test_shelter_status_and_membership.py` 建立 Organization、Membership、User 停用後立即拒絕 Login／Read／Create Test (depends on T039, T081)
-- [ ] T086 [P] [US0] 在 `tests/integration/test_active_shelter_context.py` 建立多 Membership、明確切換、Draft 不移動及 QR／GPS／IP 不自動切換 Test (depends on T039, T081)
-- [ ] T087 [US0] 在 `tests/unit/test_platform_scope_audit.py` 建立 `PLATFORM_ADMIN` 不需 Shelter Membership、可跨 Organization 且每次操作留 Audit 的 Unit Test (depends on T057)
+- [x] T082 [US0] 在 `tests/contract/test_organization_management_contract.py` 建立 Organization、Initial Admin、Membership、Status 與 Active Shelter Context API 的失敗優先 Contract Test (depends on T020, T081)
+- [x] T083 [P] [US0] 在 `tests/integration/test_organization_management.py` 建立 Platform Admin 建立 Shelter／Initial Admin 及 Shelter Admin 建立 Staff／Volunteer Test (depends on T081)
+- [x] T084 [P] [US0] 在 `tests/isolation/test_organization_management_isolation.py` 建立 A 使用者以識別碼、網址、搜尋或 `org_id` 存取 B 的拒絕與不存在性防護 Test (depends on T081)
+- [x] T085 [P] [US0] 在 `tests/integration/test_shelter_status_and_membership.py` 建立 Organization、Membership、User 停用後立即拒絕 Login／Read／Create Test (depends on T039, T081)
+- [x] T086 [P] [US0] 在 `tests/integration/test_active_shelter_context.py` 建立多 Membership、明確切換、Draft 不移動及 QR／GPS／IP 不自動切換 Test (depends on T039, T081)
+- [x] T087 [US0] 在 `tests/unit/test_platform_scope_audit.py` 建立 `PLATFORM_ADMIN` 不需 Shelter Membership、可跨 Organization 且每次操作留 Audit 的 Unit Test (depends on T057)
 
 ### Model 與 Migration
 
-- [ ] T088 [US0] 在 `services/api/app/persistence/models/shelter_area.py` 建立 Cage／Area SQLAlchemy Model 與 Organization 關聯 (depends on T083)
-- [ ] T089 [US0] 在 `services/api/migrations/versions/0008_shelter_areas.py` 建立 T088 對應資料表、Composite Constraint、Index、RLS 與可回復 Migration (depends on T081, T088)
+- [x] T088 [US0] 在 `services/api/app/persistence/models/shelter_area.py` 建立 Cage／Area SQLAlchemy Model 與 Organization 關聯 (depends on T083)
+- [x] T089 [US0] 在 `services/api/migrations/versions/0008_shelter_areas.py` 建立 T088 對應資料表、Composite Constraint、Index、RLS 與可回復 Migration (depends on T081, T088)
 
 ### Repository、Service、API 與 UI
 
 - [x] T090 [US0] 在 `services/api/app/persistence/repositories/organization_repository.py` 建立 Platform Scope 與 Shelter Scope 的 Organization／Membership／Status Repository (depends on T037, T083)
-- [ ] T091 [US0] 在 `services/api/app/persistence/repositories/shelter_area_repository.py` 建立 Organization-scoped Cage／Area Repository (depends on T037, T089)
+- [x] T091 [US0] 在 `services/api/app/persistence/repositories/shelter_area_repository.py` 建立 Organization-scoped Cage／Area Repository (depends on T037, T089)
 - [x] T092 [US0] 在 `services/api/app/application/organization_management.py` 實作必要欄位、預設未啟用、Initial Admin、Membership、停用與 Audit 流程 (depends on T083-T087, T090)
 - [x] T093 [US0] 在 `services/api/app/application/authentication/context_service.py` 完成 Active Shelter Context 明確切換、重驗證、Draft 固定與 Audit 規則 (depends on T086, T092)
-- [ ] T094 [US0] 在 `services/api/app/api/organization_management.py` 實作 Organization、Membership、Cage／Area、Status 與 Initial Admin API (depends on T082, T089, T091-T093)
-- [ ] T095 [P] [US0] 在 `apps/web/app/(management)/shelters/page.tsx` 建立平台／收容所管理畫面及授權錯誤狀態 (depends on T022, T082, T094)
-- [ ] T096 [P] [US0] 在 `apps/web/features/shelter-context/ActiveShelterContext.tsx` 建立目前 Shelter 顯示、明確切換及 Context 不一致提示 (depends on T022, T093, T094)
-- [ ] T097 [US0] 在 `tests/e2e/test_us0_shelter_isolation.py` 執行 US0 Independent Test、Acceptance Scenarios、API／Repository／RLS 與 Audit 回歸 (depends on T084, T085, T087, T094-T096)
+- [x] T094 [US0] 在 `services/api/app/api/organization_management.py` 實作 Organization、Membership、Cage／Area、Status 與 Initial Admin API (depends on T082, T089, T091-T093)
+- [x] T095 [P] [US0] 在 `apps/web/app/(management)/shelters/page.tsx` 建立平台／收容所管理畫面及授權錯誤狀態 (depends on T022, T082, T094)
+- [x] T096 [P] [US0] 在 `apps/web/features/shelter-context/ActiveShelterContext.tsx` 建立目前 Shelter 顯示、明確切換及 Context 不一致提示 (depends on T022, T093, T094)
+- [x] T097 [US0] 在 `tests/e2e/test_us0_shelter_isolation.py` 執行 US0 Independent Test、Acceptance Scenarios、API／Repository／RLS 與 Audit 回歸 (depends on T084, T085, T087, T094-T096)
 
 **Story Checkpoint**：T097 通過後，US0 可獨立展示 Organization、帳號、停用、A／B 隔離、平台最高權限與 Active Shelter Context。
 

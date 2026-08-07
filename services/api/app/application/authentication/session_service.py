@@ -45,6 +45,11 @@ class SessionService:
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
         if not self.password_hasher.verify(password, user.password_hash):
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
+        await self.repository.set_authentication_user_scope(user.id)
+        if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
+            user.id
+        ):
+            raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
         if self.password_hasher.needs_rehash(user.password_hash):
             user.password_hash = self.password_hasher.hash(password)
         session = SessionRecord(
@@ -66,8 +71,20 @@ class SessionService:
         user = session and await self.repository.get_user(session.user_id)
         if session is None or user is None or session.status != "active" or user.status != "active":
             raise DomainError("invalid_session", "Session 無效", 401)
+        await self.repository.set_authentication_user_scope(user.id)
+        if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
+            user.id
+        ):
+            raise DomainError("invalid_session", "Session 無效", 401)
         record.status = "rotated"
         return await self._issue_session(user.id, session, family_id=record.family_id)
+
+    async def _has_active_shelter_access(self, user_id: UUID) -> bool:
+        for membership in await self.repository.memberships(user_id, active_only=True):
+            organization = await self.repository.get_organization(membership.organization_id)
+            if organization is not None and organization.status == "active":
+                return True
+        return False
 
     async def logout(self, *, session_id: UUID) -> None:
         session = await self.repository.get_session(session_id)
@@ -120,6 +137,7 @@ class SessionService:
         user = await self.repository.get_user(binding.user_id)
         if user is None or user.status != "active":
             raise DomainError("line_binding_invalid", "LINE 身分綁定無效", 403)
+        await self.repository.set_authentication_user_scope(user.id)
         memberships = await self.repository.memberships(user.id, active_only=True)
         if len(memberships) != 1:
             raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)

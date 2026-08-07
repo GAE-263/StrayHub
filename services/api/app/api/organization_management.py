@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from services.api.app.api.dependencies import (
     RequestContext,
     current_request_context,
@@ -14,7 +15,9 @@ from services.api.app.application.audit_service import AuditService
 from services.api.app.application.organization_management import OrganizationManagementService
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership
+from services.api.app.persistence.models.shelter_area import ShelterArea
 from services.api.app.persistence.repositories.organization_repository import OrganizationRepository
+from services.api.app.persistence.repositories.shelter_area_repository import ShelterAreaRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Organizations"])
@@ -35,7 +38,9 @@ class OrganizationResponse(BaseModel):
 class OrganizationCreateRequest(BaseModel):
     code: str
     name: str
-    initial_admin_user_id: UUID | None = None
+    status: Literal["pending_setup"] = Field(...)
+    initial_admin_username: str = Field(..., min_length=1)
+    initial_admin_temporary_password: str = Field(..., min_length=1)
     address: str | None = None
     service_area: str | None = None
     contact: str | None = None
@@ -46,7 +51,7 @@ class OrganizationUpdateRequest(BaseModel):
     address: str | None = None
     service_area: str | None = None
     contact: str | None = None
-    status: str | None = None
+    status: Literal["pending_setup", "active", "suspended"] | None = None
 
 
 class InitialAdminCreateRequest(BaseModel):
@@ -74,6 +79,37 @@ class MembershipUpdateRequest(BaseModel):
     status: str | None = None
 
 
+class AccountCreateRequest(BaseModel):
+    username: str
+    display_name: str
+    temporary_password: str
+    role: Literal["SHELTER_ADMIN", "STAFF", "VOLUNTEER"]
+
+
+class ShelterAreaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    name: str
+    area_type: str
+    parent_id: UUID | None
+    status: str
+
+
+class ShelterAreaCreateRequest(BaseModel):
+    name: str
+    area_type: str = "area"
+    parent_id: UUID | None = None
+
+
+class ShelterAreaUpdateRequest(BaseModel):
+    name: str | None = None
+    area_type: str | None = None
+    parent_id: UUID | None = None
+    status: str | None = None
+
+
 def _require_platform(context: RequestContext) -> None:
     if context.role != "PLATFORM_ADMIN" and not context.platform_scope:
         raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
@@ -85,6 +121,18 @@ def _response(organization: Organization) -> OrganizationResponse:
 
 def _membership_response(membership: OrganizationMembership) -> MembershipResponse:
     return MembershipResponse.model_validate(membership, from_attributes=True)
+
+
+def _area_response(area: ShelterArea) -> ShelterAreaResponse:
+    return ShelterAreaResponse.model_validate(area, from_attributes=True)
+
+
+def _require_active_organization(organization: Organization | None) -> Organization:
+    if organization is None:
+        raise DomainError("organization_not_found", "收容所不存在", 404)
+    if organization.status != "active":
+        raise DomainError("organization_not_active", "收容所尚未啟用或已停用", 409)
+    return organization
 
 
 def _require_membership_admin(context: RequestContext, organization_id: UUID) -> None:
@@ -122,14 +170,22 @@ async def create_organization(
 ) -> OrganizationResponse:
     _require_platform(context)
     repository = OrganizationRepository(session)
-    organization = await OrganizationManagementService(repository, Argon2PasswordHasher()).create(
+    service = OrganizationManagementService(repository, Argon2PasswordHasher())
+    organization = await service.create(
         code=payload.code,
         name=payload.name,
-        initial_admin_user_id=payload.initial_admin_user_id,
     )
     organization.address = payload.address
     organization.service_area = payload.service_area
     organization.contact = payload.contact
+    initial_admin = await service.create_initial_admin(
+        organization_id=organization.id,
+        username=payload.initial_admin_username,
+        temporary_password=payload.initial_admin_temporary_password,
+    )
+    membership = await repository.membership(initial_admin.id, organization.id)
+    if membership is None:
+        raise DomainError("membership_not_created", "初始管理員 Membership 建立失敗", 500)
     await AuditService(session).record(
         organization_id=organization.id,
         actor_user_id=context.user_id,
@@ -138,6 +194,15 @@ async def create_organization(
         resource_id=organization.id,
         source_channel="api",
         after={"code": organization.code, "name": organization.name},
+    )
+    await AuditService(session).record(
+        organization_id=organization.id,
+        actor_user_id=context.user_id,
+        action="membership.created",
+        resource_type="organization_membership",
+        resource_id=membership.id,
+        source_channel="api",
+        after={"user_id": initial_admin.id, "role": membership.role},
     )
     await session.commit()
     return _response(organization)
@@ -226,7 +291,6 @@ async def create_initial_admin(
         username=payload.username,
         temporary_password=payload.temporary_password,
     )
-    await session.commit()
     membership = await OrganizationRepository(session).membership(user.id, organizationId)
     if membership is None:
         raise DomainError("membership_not_created", "初始管理員 Membership 建立失敗", 500)
@@ -289,6 +353,48 @@ async def create_membership(
     return _membership_response(membership)
 
 
+@router.post(
+    "/v1/organizations/{organizationId}/accounts",
+    response_model=MembershipResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_account(
+    organizationId: UUID,  # noqa: N803
+    payload: AccountCreateRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> MembershipResponse:
+    _require_membership_admin(context, organizationId)
+    service = OrganizationManagementService(OrganizationRepository(session), Argon2PasswordHasher())
+    user, membership = await service.create_account(
+        organization_id=organizationId,
+        username=payload.username,
+        display_name=payload.display_name,
+        temporary_password=payload.temporary_password,
+        role=payload.role,
+    )
+    await AuditService(session).record(
+        organization_id=organizationId,
+        actor_user_id=context.user_id,
+        action="user.created",
+        resource_type="user",
+        resource_id=user.id,
+        source_channel="api",
+        after={"username": user.username, "display_name": user.display_name},
+    )
+    await AuditService(session).record(
+        organization_id=organizationId,
+        actor_user_id=context.user_id,
+        action="membership.created",
+        resource_type="organization_membership",
+        resource_id=membership.id,
+        source_channel="api",
+        after={"user_id": user.id, "role": membership.role},
+    )
+    await session.commit()
+    return _membership_response(membership)
+
+
 @router.patch(
     "/v1/organizations/{organizationId}/memberships/{membershipId}",
     response_model=MembershipResponse,
@@ -323,3 +429,73 @@ async def update_membership(
     )
     await session.commit()
     return _membership_response(membership)
+
+
+@router.get("/v1/organizations/{organizationId}/areas", response_model=dict)
+async def list_shelter_areas(
+    organizationId: UUID,  # noqa: N803
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    _require_membership_admin(context, organizationId)
+    _require_active_organization(await OrganizationRepository(session).get(organizationId))
+    areas = await ShelterAreaRepository(session, organizationId).list()
+    return {"items": [_area_response(area) for area in areas]}
+
+
+@router.post(
+    "/v1/organizations/{organizationId}/areas",
+    response_model=ShelterAreaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_shelter_area(
+    organizationId: UUID,  # noqa: N803
+    payload: ShelterAreaCreateRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> ShelterAreaResponse:
+    _require_membership_admin(context, organizationId)
+    _require_active_organization(await OrganizationRepository(session).get(organizationId))
+    area = await ShelterAreaRepository(session, organizationId).add(
+        name=payload.name, area_type=payload.area_type, parent_id=payload.parent_id
+    )
+    await AuditService(session).record(
+        organization_id=organizationId,
+        actor_user_id=context.user_id,
+        action="shelter_area.created",
+        resource_type="shelter_area",
+        resource_id=area.id,
+        source_channel="api",
+        after={"name": area.name, "area_type": area.area_type},
+    )
+    await session.commit()
+    return _area_response(area)
+
+
+@router.patch(
+    "/v1/organizations/{organizationId}/areas/{areaId}",
+    response_model=ShelterAreaResponse,
+)
+async def update_shelter_area(
+    organizationId: UUID,  # noqa: N803
+    areaId: UUID,  # noqa: N803
+    payload: ShelterAreaUpdateRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> ShelterAreaResponse:
+    _require_membership_admin(context, organizationId)
+    _require_active_organization(await OrganizationRepository(session).get(organizationId))
+    area = await ShelterAreaRepository(session, organizationId).update(
+        areaId, **payload.model_dump(exclude_none=True)
+    )
+    await AuditService(session).record(
+        organization_id=organizationId,
+        actor_user_id=context.user_id,
+        action="shelter_area.updated",
+        resource_type="shelter_area",
+        resource_id=area.id,
+        source_channel="api",
+        after=payload.model_dump(exclude_none=True),
+    )
+    await session.commit()
+    return _area_response(area)

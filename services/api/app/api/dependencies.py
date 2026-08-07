@@ -9,6 +9,7 @@ from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.persistence.database.engine import get_session
 from services.api.app.persistence.database.scope import (
+    set_authentication_user_scope,
     set_organization_scope,
     set_platform_scope,
 )
@@ -107,6 +108,10 @@ async def _load_request_context(
         raise DomainError("invalid_access_token", "Access Token 無效", 401)
 
     platform_scope = user.platform_role == "PLATFORM_ADMIN"
+    if platform_scope:
+        await set_platform_scope(session)
+    else:
+        await set_authentication_user_scope(session, user.id)
     organization_id = session_record.active_organization_id
     membership_id = None
     role = user.platform_role or ""
@@ -124,9 +129,7 @@ async def _load_request_context(
     elif not platform_scope:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
 
-    if platform_scope:
-        await set_platform_scope(session)
-    else:
+    if not platform_scope:
         await set_organization_scope(session, organization_id)
     return RequestContext(
         user_id=user.id,

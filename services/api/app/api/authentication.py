@@ -74,16 +74,22 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
 async def login(
     payload: LoginRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:  # noqa: B008
-    return await service.login(username=payload.username, password=payload.password)
+    result = await service.login(username=payload.username, password=payload.password)
+    await session.commit()
+    return result
 
 
 @router.post("/refresh", status_code=status.HTTP_200_OK)
 async def refresh(
     payload: RefreshRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:  # noqa: B008
-    return await service.refresh(refresh_token=payload.refresh_token)
+    result = await service.refresh(refresh_token=payload.refresh_token)
+    await session.commit()
+    return result
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -101,8 +107,11 @@ async def logout(
 async def liff_exchange(
     payload: LiffExchangeRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    return await service.exchange_line_identity(id_token=payload.id_token)
+    result = await service.exchange_line_identity(id_token=payload.id_token)
+    await session.commit()
+    return result
 
 
 @router.get("/me")

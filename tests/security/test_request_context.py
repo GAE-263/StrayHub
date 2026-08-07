@@ -46,11 +46,15 @@ class _AuthRepository:
     async def get_membership(self, _user_id, _organization_id):
         return self.membership
 
+    async def set_authentication_user_scope(self, _user_id):
+        return None
+
 
 @pytest.mark.asyncio
 async def test_request_context_uses_server_session_membership(monkeypatch) -> None:
     repository = _AuthRepository()
     monkeypatch.setattr(dependencies, "AuthenticationRepository", lambda _session: repository)
+    monkeypatch.setattr(dependencies, "set_authentication_user_scope", _noop_scope)
     monkeypatch.setattr(dependencies, "set_organization_scope", _noop_scope)
 
     context = await dependencies._load_request_context(
@@ -86,6 +90,7 @@ async def test_platform_admin_does_not_need_membership(monkeypatch) -> None:
 async def test_disabled_membership_is_rejected_immediately(monkeypatch) -> None:
     repository = _AuthRepository(membership_status="disabled")
     monkeypatch.setattr(dependencies, "AuthenticationRepository", lambda _session: repository)
+    monkeypatch.setattr(dependencies, "set_authentication_user_scope", _noop_scope)
     monkeypatch.setattr(dependencies, "set_organization_scope", _noop_scope)
 
     with pytest.raises(DomainError, match="無法存取此收容所資料"):

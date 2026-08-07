@@ -218,6 +218,24 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/organizations/{organizationId}/accounts:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    post:
+      tags: [Memberships]
+      operationId: createOrganizationAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountCreateRequest" }
+      responses:
+        "201":
+          description: 收容所帳號與 Membership 已建立
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/organizations/{organizationId}/memberships/{membershipId}:
     parameters:
       - $ref: "#/components/parameters/OrganizationId"
@@ -236,6 +254,55 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/organizations/{organizationId}/areas:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Organizations]
+      operationId: listShelterAreas
+      responses:
+        "200":
+          description: 收容所 Cage/Area 清單
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShelterAreaListResponse" }
+    post:
+      tags: [Organizations]
+      operationId: createShelterArea
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShelterAreaCreateRequest" }
+      responses:
+        "201":
+          description: Cage/Area 已建立
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShelterArea" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/organizations/{organizationId}/areas/{areaId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - name: areaId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Organizations]
+      operationId: updateShelterArea
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShelterAreaUpdateRequest" }
+      responses:
+        "200":
+          description: Cage/Area 已更新
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShelterArea" }
         "403": { $ref: "#/components/responses/Forbidden" }
   /v1/animals:
     get:
@@ -1027,11 +1094,13 @@ components:
         status: { type: string, enum: [pending_setup, active, suspended] }
     OrganizationCreateRequest:
       type: object
-      required: [code, name, initial_admin_user_id]
+      required: [code, name, status, initial_admin_username, initial_admin_temporary_password]
       properties:
         code: { type: string }
         name: { type: string }
-        initial_admin_user_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending_setup] }
+        initial_admin_username: { type: string, minLength: 1 }
+        initial_admin_temporary_password: { type: string, format: password, minLength: 1 }
         address: { type: string }
         service_area: { type: string }
         contact: { type: string }
@@ -1081,6 +1150,43 @@ components:
       properties:
         items:
           { type: array, items: { $ref: "#/components/schemas/Membership" } }
+    AccountCreateRequest:
+      type: object
+      required: [username, display_name, temporary_password, role]
+      properties:
+        username: { type: string, minLength: 1 }
+        display_name: { type: string, minLength: 1 }
+        temporary_password: { type: string, format: password, minLength: 1 }
+        role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
+    ShelterArea:
+      type: object
+      required: [id, organization_id, name, area_type, status]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        name: { type: string }
+        area_type: { type: string, enum: [area, cage] }
+        parent_id: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [active, inactive] }
+    ShelterAreaCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        area_type: { type: string, enum: [area, cage], default: area }
+        parent_id: { type: [string, "null"], format: uuid }
+    ShelterAreaUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        area_type: { type: string, enum: [area, cage] }
+        parent_id: { type: [string, "null"], format: uuid }
+        status: { type: string, enum: [active, inactive] }
+    ShelterAreaListResponse:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ShelterArea" } }
     AnimalCandidate:
       type: object
       required: [id, name, organization_id, can_report]

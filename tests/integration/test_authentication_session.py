@@ -38,6 +38,9 @@ class FakeAuthRepository:
     async def find_user_by_username(self, username):
         return self.user if username == self.user.username else None
 
+    async def set_authentication_user_scope(self, _user_id):
+        return None
+
     async def add(self, value):
         if getattr(value, "id", None) is None:
             value.id = uuid4()
@@ -147,6 +150,29 @@ async def test_logout_revokes_session_refresh_tokens() -> None:
 
     assert repository.sessions[issued["session_id"]].status == "revoked"
     assert all(record.status == "revoked" for record in repository.refresh.values())
+
+
+@pytest.mark.asyncio
+async def test_login_rejects_disabled_membership_or_suspended_shelter() -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="disabled-staff",
+        display_name="Disabled Staff",
+        password_hash=hasher.hash("password"),
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+
+    repository.membership.status = "disabled"
+    with pytest.raises(DomainError, match="帳號或密碼錯誤"):
+        await service.login(username=user.username, password="password")
+
+    repository.membership.status = "active"
+    repository.organization.status = "suspended"
+    with pytest.raises(DomainError, match="帳號或密碼錯誤"):
+        await service.login(username=user.username, password="password")
 
 
 @pytest.mark.asyncio
