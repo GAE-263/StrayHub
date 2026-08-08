@@ -310,13 +310,13 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Tests First
 
-- [ ] T164 [US3] 在 `tests/contract/test_animal_timeline_contract.py` 建立 Recent、Date Range、Daily Summary、No-report、逐筆展開與權限錯誤的失敗優先 Contract Test (depends on T020, T163)
-- [ ] T165 [P] [US3] 在 `tests/integration/test_animal_timeline.py` 建立 14 個曆日補齊、指定日期、同日多筆、較早歷史及停用 Option Snapshot Test (depends on T163)
-- [ ] T166 [P] [US3] 在 `tests/isolation/test_timeline_and_media_isolation.py` 建立 A Staff 無法取得 B Timeline、Note、Media 或 Signed URL 的 Test (depends on T080, T163)
-- [ ] T167 [P] [US3] 在 `tests/integration/test_timeline_correction_history.py` 建立原始 Report、Correction、Animal Binding、Archive 與 Audit 分離 Test (depends on T154, T163)
-- [ ] T168 [P] [US3] 在 `tests/unit/test_timeline_date_sequence.py` 建立日期序列、時區、No-report 與日期區間驗證 Unit Test (depends on T164)
-- [ ] T169 [P] [US3] 在 `tests/integration/test_timeline_query_count.py` 建立 Timeline N+1 防護與可接受 Query Count Test (depends on T165)
-- [ ] T170 [P] [US3] 在 `tests/frontend/test_animal_timeline.tsx` 建立每日摘要、No-report、同日展開、原始心得、照片、AI 預留區及 Loading／Empty／Error Test (depends on T022, T164)
+- [x] T164 [US3] 在 `tests/contract/test_animal_timeline_contract.py` 建立 Recent、Date Range、Daily Summary、No-report、逐筆展開與權限錯誤的失敗優先 Contract Test (depends on T020, T163)
+- [x] T165 [P] [US3] 在 `tests/integration/test_animal_timeline.py` 建立 14 個曆日補齊、指定日期、同日多筆、較早歷史及停用 Option Snapshot Test (depends on T163)
+- [x] T166 [P] [US3] 在 `tests/isolation/test_timeline_and_media_isolation.py` 建立 A Staff 無法取得 B Timeline、Note、Media 或 Signed URL 的 Test (depends on T080, T163)
+- [x] T167 [P] [US3] 在 `tests/integration/test_timeline_correction_history.py` 建立原始 Report、Correction、Animal Binding、Archive 與 Audit 分離 Test (depends on T154, T163)
+- [x] T168 [P] [US3] 在 `tests/unit/test_timeline_date_sequence.py` 建立日期序列、時區、No-report 與日期區間驗證 Unit Test (depends on T164)
+- [x] T169 [P] [US3] 在 `tests/integration/test_timeline_query_count.py` 建立 Timeline N+1 防護與可接受 Query Count Test (depends on T165)
+- [x] T170 [P] [US3] 在 `tests/frontend/test_animal_timeline.tsx` 建立每日摘要、No-report、同日展開、原始心得、照片、AI 預留區及 Loading／Empty／Error Test (depends on T022, T164)
 
 ### Migration、Repository、Service、API 與 UI
 

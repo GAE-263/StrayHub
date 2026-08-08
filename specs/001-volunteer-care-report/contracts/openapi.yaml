@@ -549,6 +549,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TimelineResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/observation-categories:
     get:
       tags: [Observation Vocabulary]
@@ -915,6 +920,13 @@ components:
         }
     Conflict:
       description: Idempotency 或資料狀態衝突
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ErrorResponse" } },
+        }
+    UnprocessableEntity:
+      description: 日期區間或欄位驗證失敗
       content:
         {
           application/json:
@@ -1498,8 +1510,40 @@ components:
               reports:
                 {
                   type: array,
-                  items: { $ref: "#/components/schemas/CareReport" },
+                  items: { $ref: "#/components/schemas/TimelineReport" },
                 }
+    TimelineReport:
+      type: object
+      required:
+        [
+          id,
+          submitted_at,
+          volunteer_user_id,
+          animal_name_snapshot,
+          status,
+          ai_job_status,
+          observations,
+          observation_snapshots,
+          media_ids,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        submitted_at: { type: string, format: date-time }
+        volunteer_user_id: { type: string, format: uuid }
+        animal_name_snapshot: { type: string }
+        shelter_number_snapshot: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+        observations: { type: object, additionalProperties: { type: string } }
+        observation_snapshots:
+          type: [object, "null"]
+          additionalProperties:
+            type: object
+            additionalProperties: { type: string }
+        status: { type: string, enum: [saved, amended, archived] }
+        ai_job_status: { type: string }
+        media_ids:
+          type: array
+          items: { type: string, format: uuid }
     ObservationCategoryListResponse:
       type: object
       required: [items]

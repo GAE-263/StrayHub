@@ -1087,8 +1087,31 @@ export interface components {
                 report_count: number;
                 /** @example 當日無回報 */
                 no_report_label?: string | null;
-                reports?: components["schemas"]["CareReport"][];
+                reports?: components["schemas"]["TimelineReport"][];
             }[];
+        };
+        TimelineReport: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            submitted_at: string;
+            /** Format: uuid */
+            volunteer_user_id: string;
+            animal_name_snapshot: string;
+            shelter_number_snapshot?: string | null;
+            note?: string | null;
+            observations: {
+                [key: string]: string;
+            };
+            observation_snapshots: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
+            /** @enum {string} */
+            status: "saved" | "amended" | "archived";
+            ai_job_status: string;
+            media_ids: string[];
         };
         ObservationCategoryListResponse: {
             items: components["schemas"]["ObservationCategory"][];
@@ -1250,6 +1273,15 @@ export interface components {
         };
         /** @description Idempotency 或資料狀態衝突 */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description 日期區間或欄位驗證失敗 */
+        UnprocessableEntity: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2164,6 +2196,11 @@ export interface operations {
                     "application/json": components["schemas"]["TimelineResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listObservationCategories: {
