@@ -356,19 +356,19 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Tests First
 
-- [ ] T187 [US4] 在 `tests/contract/test_observation_options_contract.py` 建立 Category／Option List、Create、Update、Reorder、Disable 與權限的失敗優先 Contract Test (depends on T020, T186)
-- [ ] T188 [P] [US4] 在 `tests/integration/test_observation_options.py` 建立 Platform Default、Organization Extension、Code Unique、Disable 新選擇拒絕及歷史顯示 Test (depends on T063, T186)
-- [ ] T189 [P] [US4] 在 `tests/isolation/test_observation_option_isolation.py` 建立 A／B Option 管理隔離、Volunteer 拒絕及 Shelter Admin 允許 Test (depends on T080)
-- [ ] T190 [P] [US4] 在 `tests/unit/test_bot_option_mapping.py` 建立 Quick Reply 顯示名稱／穩定 Code、有效白名單、Other 補充與停用拒絕 Test (depends on T063, T078)
-- [ ] T191 [P] [US4] 在 `tests/frontend/test_observation_admin.tsx` 建立來源、建立、改名、排序、停用、權限錯誤與歷史狀態 Test (depends on T022, T187)
+- [x] T187 [US4] 在 `tests/contract/test_observation_options_contract.py` 建立 Category／Option List、Create、Update、Reorder、Disable 與權限的失敗優先 Contract Test (depends on T020, T186)
+- [x] T188 [P] [US4] 在 `tests/integration/test_observation_options.py` 建立 Platform Default、Organization Extension、Code Unique、Disable 新選擇拒絕及歷史顯示 Test (depends on T063, T186)
+- [x] T189 [P] [US4] 在 `tests/isolation/test_observation_option_isolation.py` 建立 A／B Option 管理隔離、Volunteer 拒絕及 Shelter Admin 允許 Test (depends on T080)
+- [x] T190 [P] [US4] 在 `tests/unit/test_bot_option_mapping.py` 建立 Quick Reply 顯示名稱／穩定 Code、有效白名單、Other 補充與停用拒絕 Test (depends on T063, T078)
+- [x] T191 [P] [US4] 在 `tests/frontend/test_observation_admin.tsx` 建立來源、建立、改名、排序、停用、權限錯誤與歷史狀態 Test (depends on T022, T187)
 
 ### Service、API 與 UI
 
 - [x] T192 [US4] 在 `services/api/app/application/observation_option_service.py` 實作 Organization Extension Create／Update／Reorder／Disable、禁止 Hard Delete 與 Audit (depends on T057, T062, T188-T190)
 - [x] T193 [US4] 在 `services/api/app/api/observation_options.py` 實作 Effective List 與 Organization Option 管理 API (depends on T187, T192)
-- [ ] T194 [US4] 在 `apps/web/app/(management)/settings/observation-options/page.tsx` 建立管理頁、來源、排序、停用及權限處理 (depends on T191, T193)
-- [ ] T195 [US4] 在 `tests/integration/test_bot_observation_vocabulary_regression.py` 驗證 Bot Presenter 與管理語彙共用同一 Code／Effective Options，沒有硬編碼副本 (depends on T078, T190, T192)
-- [ ] T196 [US4] 在 `tests/e2e/test_us4_observation_options.py` 執行 US4 Independent Test、Option Acceptance、SC-026 及 US2／US3 歷史回歸 (depends on T179, T193-T195)
+- [x] T194 [US4] 在 `apps/web/app/(management)/settings/observation-options/page.tsx` 建立管理頁、來源、排序、停用及權限處理 (depends on T191, T193)
+- [x] T195 [US4] 在 `tests/integration/test_bot_observation_vocabulary_regression.py` 驗證 Bot Presenter 與管理語彙共用同一 Code／Effective Options，沒有硬編碼副本 (depends on T078, T190, T192)
+- [x] T196 [US4] 在 `tests/e2e/test_us4_observation_options.py` 執行 US4 Independent Test、Option Acceptance、SC-026 及 US2／US3 歷史回歸 (depends on T179, T193-T195)
 
 **Story Checkpoint**：T196 通過後，Observation 基礎資料仍由 Foundational 提供，US4 只增加可維護管理能力且不破壞歷史。
 

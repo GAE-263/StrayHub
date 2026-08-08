@@ -33,6 +33,7 @@ def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
                 "shelter_number_snapshot": report.shelter_number_snapshot,
                 "note": report.note,
                 "observations": report.answers,
+                "observation_snapshots": report.answer_snapshots,
                 "status": report.status,
                 "ai_job_status": report.ai_job_status,
                 "media_ids": [

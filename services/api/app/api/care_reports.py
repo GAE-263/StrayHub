@@ -84,6 +84,7 @@ class CareReportResponse(BaseModel):
     animal_id: UUID
     status: str
     observations: dict
+    observation_snapshots: dict | None = None
     created_at: datetime
 
 
@@ -109,6 +110,7 @@ def _report_response(report: CareReport) -> CareReportResponse:
         animal_id=report.animal_id,
         status=report.status,
         observations=report.answers,
+        observation_snapshots=report.answer_snapshots,
         created_at=report.created_at,
     )
 
@@ -273,7 +275,7 @@ async def create_care_report(
     options = await ObservationRepository(session, context.organization_id).effective_options(
         include_disabled_history=False
     )
-    validator = EffectiveObservationService(
+    observation_service = EffectiveObservationService(
         {
             option.code: EffectiveOption(
                 code=option.code,
@@ -284,7 +286,16 @@ async def create_care_report(
             )
             for option in options
         }
-    ).validate_answer
+    )
+    validator = observation_service.validate_answer
+    answer_snapshots = {
+        field: {
+            "code": code,
+            "display_name": observation_service.options[code].display_name,
+        }
+        for field, code in payload.observations.items()
+        if code in observation_service.options
+    }
     animal = await AnimalRepository(session, context.organization_id).get(draft.animal_id)
     if animal is None:
         raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
@@ -301,6 +312,7 @@ async def create_care_report(
         ),
         audit=AuditService(session),
         note_validator=await _effective_note_validator(session, context.organization_id),
+        answer_snapshots=answer_snapshots,
     ).submit(
         draft_id=draft.id,
         volunteer_user_id=context.user_id,

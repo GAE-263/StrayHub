@@ -524,6 +524,22 @@ export interface paths {
         patch: operations["updateObservationOption"];
         trace?: never;
     };
+    "/v1/observation-options/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reorderObservationOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/care-reports/{reportId}/ai-observations": {
         parameters: {
             query?: never;
@@ -1039,6 +1055,11 @@ export interface components {
             /** @enum {string} */
             status: "saved" | "amended" | "archived";
             observations: components["schemas"]["CareReportAnswers"];
+            observation_snapshots?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -1054,30 +1075,66 @@ export interface components {
             }[];
         };
         ObservationCategoryListResponse: {
-            items: {
-                [key: string]: unknown;
-            }[];
+            items: components["schemas"]["ObservationCategory"][];
+        };
+        ObservationCategory: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id?: string | null;
+            code: string;
+            display_name: string;
+            description?: string;
+            /** @enum {string} */
+            status: "active" | "disabled";
+            display_order: number;
+            /** @enum {string} */
+            source: "platform_default" | "organization_extension";
         };
         ObservationOption: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            category_id: string;
+            /** Format: uuid */
+            organization_id?: string | null;
             code: string;
             display_name: string;
             description?: string;
+            /** @enum {string} */
+            status: "active" | "disabled";
             enabled: boolean;
             display_order: number;
+            requires_note?: boolean;
+            /** @enum {string} */
+            source: "platform_default" | "organization_extension";
+            editable: boolean;
         };
         ObservationOptionCreateRequest: {
+            /** Format: uuid */
+            category_id: string;
             code: string;
             display_name: string;
+            /** @default  */
             description: string;
+            /** @default 0 */
             display_order: number;
+            /** @default false */
+            requires_note: boolean;
         };
         ObservationOptionUpdateRequest: {
             display_name?: string;
             description?: string;
             display_order?: number;
             enabled?: boolean;
+        };
+        ObservationOptionReorderItem: {
+            /** Format: uuid */
+            option_id: string;
+            display_order: number;
+        };
+        ObservationOptionReorderRequest: {
+            items: components["schemas"]["ObservationOptionReorderItem"][];
         };
         ObservationOptionListResponse: {
             items: components["schemas"]["ObservationOption"][];
@@ -2095,6 +2152,8 @@ export interface operations {
                     "application/json": components["schemas"]["ObservationCategoryListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listObservationOptions: {
@@ -2115,6 +2174,8 @@ export interface operations {
                     "application/json": components["schemas"]["ObservationOptionListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createObservationOption: {
@@ -2139,6 +2200,9 @@ export interface operations {
                     "application/json": components["schemas"]["ObservationOption"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateObservationOption: {
@@ -2165,6 +2229,36 @@ export interface operations {
                     "application/json": components["schemas"]["ObservationOption"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    reorderObservationOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservationOptionReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Observation Option 順序已更新 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationOptionListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
         };
     };
     listAiObservations: {

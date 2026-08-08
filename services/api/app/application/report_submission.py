@@ -24,6 +24,7 @@ class ReportSubmissionService:
         scope_validator: Callable[[UUID], Awaitable[bool]] | None = None,
         audit=None,
         note_validator: Callable[[dict[str, str], str | None], None] | None = None,
+        answer_snapshots: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self.drafts = drafts
         self.reports = reports
@@ -31,6 +32,7 @@ class ReportSubmissionService:
         self.scope_validator = scope_validator
         self.audit = audit
         self.note_validator = note_validator
+        self.answer_snapshots = answer_snapshots
 
     async def submit(
         self,
@@ -85,6 +87,7 @@ class ReportSubmissionService:
                 volunteer_user_id=volunteer_user_id,
                 membership_id=draft.membership_id,
                 answers=dict(draft.answers),
+                answer_snapshots=self.answer_snapshots,
                 animal_name_snapshot=animal.name,
                 shelter_number_snapshot=animal.shelter_number,
                 note=note if note is not None else draft.note,

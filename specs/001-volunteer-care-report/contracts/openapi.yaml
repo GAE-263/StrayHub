@@ -560,6 +560,8 @@ paths:
             application/json:
               schema:
                 { $ref: "#/components/schemas/ObservationCategoryListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/observation-options:
     get:
       tags: [Observation Vocabulary]
@@ -571,6 +573,8 @@ paths:
             application/json:
               schema:
                 { $ref: "#/components/schemas/ObservationOptionListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [Observation Vocabulary]
       operationId: createObservationOption
@@ -586,6 +590,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ObservationOption" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/observation-options/{optionId}:
     parameters:
       - $ref: "#/components/parameters/OptionId"
@@ -604,6 +611,28 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ObservationOption" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+  /v1/observation-options/reorder:
+    post:
+      tags: [Observation Vocabulary]
+      operationId: reorderObservationOptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: "#/components/schemas/ObservationOptionReorderRequest" }
+      responses:
+        "200":
+          description: Observation Option 順序已更新
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservationOptionListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
   /v1/care-reports/{reportId}/ai-observations:
     get:
       tags: [AI]
@@ -1424,6 +1453,11 @@ components:
         status: { type: string, enum: [saved, amended, archived] }
         observations:
           $ref: "#/components/schemas/CareReportAnswers"
+        observation_snapshots:
+          type: [object, "null"]
+          additionalProperties:
+            type: object
+            additionalProperties: { type: string }
         created_at: { type: string, format: date-time }
     TimelineResponse:
       type: object
@@ -1449,32 +1483,80 @@ components:
       required: [items]
       properties:
         items:
-          { type: array, items: { type: object, additionalProperties: true } }
-    ObservationOption:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ObservationCategory" },
+          }
+    ObservationCategory:
       type: object
-      required: [id, code, display_name, enabled, display_order]
+      required: [id, code, display_name, status, display_order, source]
       properties:
         id: { type: string, format: uuid }
+        organization_id: { type: [string, "null"], format: uuid }
         code: { type: string }
         display_name: { type: string }
         description: { type: string }
+        status: { type: string, enum: [active, disabled] }
+        display_order: { type: integer, minimum: 0 }
+        source: { type: string, enum: [platform_default, organization_extension] }
+    ObservationOption:
+      type: object
+      required:
+        [
+          id,
+          category_id,
+          code,
+          display_name,
+          status,
+          enabled,
+          display_order,
+          source,
+          editable,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        organization_id: { type: [string, "null"], format: uuid }
+        code: { type: string }
+        display_name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, disabled] }
         enabled: { type: boolean }
-        display_order: { type: integer }
+        display_order: { type: integer, minimum: 0 }
+        requires_note: { type: boolean }
+        source: { type: string, enum: [platform_default, organization_extension] }
+        editable: { type: boolean }
     ObservationOptionCreateRequest:
       type: object
-      required: [code, display_name, description, display_order]
+      required: [category_id, code, display_name]
       properties:
+        category_id: { type: string, format: uuid }
         code: { type: string }
         display_name: { type: string }
-        description: { type: string }
-        display_order: { type: integer }
+        description: { type: string, default: "" }
+        display_order: { type: integer, minimum: 0, default: 0 }
+        requires_note: { type: boolean, default: false }
     ObservationOptionUpdateRequest:
       type: object
       properties:
         display_name: { type: string }
         description: { type: string }
-        display_order: { type: integer }
+        display_order: { type: integer, minimum: 0 }
         enabled: { type: boolean }
+    ObservationOptionReorderItem:
+      type: object
+      required: [option_id, display_order]
+      properties:
+        option_id: { type: string, format: uuid }
+        display_order: { type: integer, minimum: 0 }
+    ObservationOptionReorderRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ObservationOptionReorderItem" }
     ObservationOptionListResponse:
       type: object
       required: [items]

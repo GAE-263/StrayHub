@@ -32,6 +32,7 @@ class CareReport(IdentityMixin, AuditMixin, Base):
         ForeignKey("organization_memberships.id"), index=True
     )
     answers: Mapped[dict] = mapped_column(JSON)
+    answer_snapshots: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     animal_name_snapshot: Mapped[str] = mapped_column(String(200))
     shelter_number_snapshot: Mapped[str | None] = mapped_column(String(120), nullable=True)
     note: Mapped[str | None] = mapped_column(String(5000), nullable=True)

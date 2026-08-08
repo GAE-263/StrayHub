@@ -30,7 +30,10 @@ class ObservationRepository:
         )
         return list(result.scalars())
 
-    async def categories(self) -> list[ObservationCategory]:
+    async def categories(self, *, include_disabled: bool = False) -> list[ObservationCategory]:
+        status_clause = (
+            True if include_disabled else ObservationCategory.status == "active"
+        )
         result = await self.session.execute(
             select(ObservationCategory)
             .where(
@@ -38,11 +41,38 @@ class ObservationRepository:
                     ObservationCategory.organization_id.is_(None),
                     ObservationCategory.organization_id == self.organization_id,
                 ),
-                ObservationCategory.status == "active",
+                status_clause,
             )
             .order_by(ObservationCategory.display_order)
         )
         return list(result.scalars())
+
+    async def get_category(self, category_id: UUID) -> ObservationCategory | None:
+        result = await self.session.execute(
+            select(ObservationCategory).where(
+                ObservationCategory.id == category_id,
+                or_(
+                    ObservationCategory.organization_id.is_(None),
+                    ObservationCategory.organization_id == self.organization_id,
+                ),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def option_code_exists(self, code: str) -> bool:
+        """Stable Codes are unique across the effective tenant vocabulary."""
+        result = await self.session.execute(
+            select(ObservationOption.id)
+            .where(
+                ObservationOption.code == code,
+                or_(
+                    ObservationOption.organization_id.is_(None),
+                    ObservationOption.organization_id == self.organization_id,
+                ),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def add_option(self, option: ObservationOption) -> ObservationOption:
         if option.organization_id != self.organization_id:

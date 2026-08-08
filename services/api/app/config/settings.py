@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     app_env: str = "local"
     app_name: str = "strayhub"
-    database_url: str = "postgresql+asyncpg://strayhub:strayhub@localhost:5432/strayhub"
+    database_url: str = "postgresql+asyncpg://strayhub:strayhub@localhost:65432/strayhub"
     database_migration_url: str | None = None
     minio_endpoint: str = "http://localhost:9000"
     minio_access_key: str = "local-access-key"

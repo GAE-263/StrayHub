@@ -25,6 +25,15 @@ class ObservationOptionService:
         requires_note: bool = False,
         actor_user_id: UUID | None = None,
     ) -> ObservationOption:
+        code = code.strip()
+        display_name = display_name.strip()
+        if not code or not display_name:
+            raise DomainError("invalid_observation_option", "Code 與顯示名稱不可為空", 422)
+        category = await self.repository.get_category(category_id)
+        if category is None or category.status != "active":
+            raise DomainError("category_not_found", "觀察類別不存在或已停用", 404)
+        if await self.repository.option_code_exists(code):
+            raise DomainError("option_code_conflict", "觀察選項 Code 已存在", 409)
         option = await self.repository.add_option(
             ObservationOption(
                 category_id=category_id,
@@ -61,8 +70,19 @@ class ObservationOptionService:
         option = await self.repository.get_option(option_id)
         if option is None:
             raise DomainError("option_not_found", "觀察選項不存在或無法存取", 404)
+        before = {
+            "code": option.code,
+            "display_name": option.display_name,
+            "description": option.description,
+            "display_order": option.display_order,
+            "status": option.status,
+        }
+        if display_name is not None and not display_name.strip():
+            raise DomainError("invalid_observation_option", "顯示名稱不可為空", 422)
+        if display_order is not None and display_order < 0:
+            raise DomainError("invalid_observation_option", "排序不可小於 0", 422)
         if display_name is not None:
-            option.display_name = display_name
+            option.display_name = display_name.strip()
         if description is not None:
             option.description = description
         if display_order is not None:
@@ -77,6 +97,7 @@ class ObservationOptionService:
                 resource_type="ObservationOption",
                 resource_id=option.id,
                 source_channel="api",
+                before=before,
                 after={
                     "display_name": option.display_name,
                     "description": option.description,
@@ -104,3 +125,33 @@ class ObservationOptionService:
                 after={"status": option.status},
             )
         return option
+
+    async def reorder(
+        self,
+        option_ids: list[UUID],
+        *,
+        actor_user_id: UUID | None = None,
+    ) -> list[ObservationOption]:
+        if not option_ids or len(option_ids) != len(set(option_ids)):
+            raise DomainError("invalid_observation_order", "排序清單不可為空或包含重複選項", 422)
+        options = []
+        for option_id in option_ids:
+            option = await self.repository.get_option(option_id)
+            if option is None:
+                raise DomainError("option_not_found", "觀察選項不存在或無法存取", 404)
+            options.append(option)
+        for display_order, option in enumerate(options):
+            before = option.display_order
+            option.display_order = display_order
+            if self.audit is not None:
+                await self.audit.record(
+                    organization_id=option.organization_id,
+                    actor_user_id=actor_user_id,
+                    action="observation_option.reordered",
+                    resource_type="ObservationOption",
+                    resource_id=option.id,
+                    source_channel="api",
+                    before={"display_order": before},
+                    after={"display_order": display_order},
+                )
+        return options
