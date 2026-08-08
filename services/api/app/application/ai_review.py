@@ -24,6 +24,7 @@ class AIReviewService:
         actor_user_id: UUID,
         action: str,
         result: dict | None = None,
+        reason: str | None = None,
     ):
         if action not in {"confirm", "reject", "correct"}:
             raise DomainError("invalid_ai_review", "人工覆核動作無效", 422)
@@ -32,8 +33,12 @@ class AIReviewService:
         observation = await self.repository.get(observation_id)
         if observation is None:
             raise DomainError("observation_not_found", "AI Observation 不存在或無法存取", 404)
+        if observation.status in {"failed", "invalid"}:
+            raise DomainError("ai_review_unavailable", "目前 AI 結果不可覆核", 409)
         before = {
             "status": observation.status,
+            "raw_ai_output": observation.raw_ai_output,
+            "validated_ai_observation": observation.validated_ai_observation,
             "human_review_result": observation.human_review_result,
         }
         observation.status = {
@@ -41,7 +46,11 @@ class AIReviewService:
             "reject": "rejected",
             "correct": "corrected",
         }[action]
-        observation.human_review_result = result or {"action": action}
+        observation.human_review_result = {
+            "action": action,
+            "reason": reason,
+            "result": result,
+        }
         observation.reviewed_by = actor_user_id
         observation.reviewed_at = datetime.now(timezone.utc)
         if self.audit is not None:
@@ -57,5 +66,6 @@ class AIReviewService:
                     "status": observation.status,
                     "human_review_result": observation.human_review_result,
                 },
+                reason=reason,
             )
         return observation

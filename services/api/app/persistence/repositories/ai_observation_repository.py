@@ -4,8 +4,10 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from services.api.app.api.errors import DomainError
+from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AIObservation
 
 
@@ -19,7 +21,7 @@ class AIObservationRepository:
             select(AIObservation).where(
                 AIObservation.id == observation_id,
                 AIObservation.organization_id == self.organization_id,
-            )
+            ).options(joinedload(AIObservation.job))
         )
         return result.scalar_one_or_none()
 
@@ -48,6 +50,21 @@ class AIObservationRepository:
                 AIObservation.organization_id == self.organization_id,
                 AIObservation.source_id == source_id,
             )
+            .order_by(AIObservation.created_at)
+        )
+        return list(result.scalars())
+
+    async def list_for_report(self, report_id: UUID) -> list[AIObservation]:
+        result = await self.session.execute(
+            select(AIObservation)
+            .join(AIProcessingJob, AIProcessingJob.id == AIObservation.job_id)
+            .where(
+                AIObservation.organization_id == self.organization_id,
+                AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.target_type == "care_report",
+                AIProcessingJob.target_id == report_id,
+            )
+            .options(joinedload(AIObservation.job))
             .order_by(AIObservation.created_at)
         )
         return list(result.scalars())

@@ -11,6 +11,7 @@ class AIRequestVersion:
     model_version: str
     prompt_version: str
     output_schema_version: str
+    prompt_template_id: str = "care-observation"
 
 
 class AIClientPort(Protocol):
@@ -20,4 +21,4 @@ class AIClientPort(Protocol):
         note: str | None,
         image_bytes: list[bytes],
         version: AIRequestVersion,
-    ) -> dict: ...
+    ) -> object: ...

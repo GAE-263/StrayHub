@@ -382,14 +382,14 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 ### Tests First
 
-- [ ] T197 [US5] 在 `tests/contract/test_ai_observation_contract.py` 建立 Status、Version、Source、Confirm／Reject／Correct 與錯誤的失敗優先 Contract Test；只依賴 US2 正式 Report 與 Foundational Job／Effective Options，不依賴 US4 管理 UI (depends on T020, T063, T068, T163)
-- [ ] T198 [P] [US5] 在 `tests/integration/test_ai_job_version_trace.py` 建立 Job 建立／呼叫時 Provider、Model、Snapshot、Prompt、Schema、時間及 Retry Count Test (depends on T064-T068)
-- [ ] T199 [P] [US5] 在 `tests/integration/test_ai_worker_lifecycle.py` 建立 Claim、Idempotency、Crash Recovery、Retry、Timeout、Invalid JSON 與 Organization Scope Test (depends on T067)
-- [ ] T200 [P] [US5] 在 `tests/unit/test_ai_output_validation.py` 建立 Structured Output、Effective Option 白名單、醫療禁用詞、禁止 `animal_id`／分數／等級／狀態 Test (depends on T063, T197)
-- [ ] T201 [P] [US5] 在 `tests/integration/test_ai_raw_output_preservation.py` 建立成功／失敗保存 raw output、版本、validation result 及人工修正不覆蓋 Test (depends on T198, T200)
-- [ ] T202 [P] [US5] 在 `tests/integration/test_ai_failure_timeline_status.py` 建立逾時／中斷／無效內容時 Report 與 Timeline 保留且不顯示正常 Test (depends on T179, T199)
-- [ ] T203 [P] [US5] 在 `tests/security/test_ai_cross_tenant_and_source.py` 建立 AI 不跨 Organization、不讀原始 EXIF、只讀清理後 Media 及來源可追溯 Test (depends on T080, T131)
-- [ ] T204 [P] [US5] 在 `tests/frontend/test_ai_observation_review.tsx` 建立 AI 標示、pending／failed、來源、Confirm／Reject／Correct 與原始資料分區 Test (depends on T022, T197)
+- [x] T197 [US5] 在 `tests/contract/test_ai_observation_contract.py` 建立 Status、Version、Source、Confirm／Reject／Correct 與錯誤的失敗優先 Contract Test；只依賴 US2 正式 Report 與 Foundational Job／Effective Options，不依賴 US4 管理 UI (depends on T020, T063, T068, T163)
+- [x] T198 [P] [US5] 在 `tests/integration/test_ai_job_version_trace.py` 建立 Job 建立／呼叫時 Provider、Model、Snapshot、Prompt、Schema、時間及 Retry Count Test (depends on T064-T068)
+- [x] T199 [P] [US5] 在 `tests/integration/test_ai_worker_lifecycle.py` 建立 Claim、Idempotency、Crash Recovery、Retry、Timeout、Invalid JSON 與 Organization Scope Test (depends on T067)
+- [x] T200 [P] [US5] 在 `tests/unit/test_ai_output_validation.py` 建立 Structured Output、Effective Option 白名單、醫療禁用詞、禁止 `animal_id`／分數／等級／狀態 Test (depends on T063, T197)
+- [x] T201 [P] [US5] 在 `tests/integration/test_ai_raw_output_preservation.py` 建立成功／失敗保存 raw output、版本、validation result 及人工修正不覆蓋 Test (depends on T198, T200)
+- [x] T202 [P] [US5] 在 `tests/integration/test_ai_failure_timeline_status.py` 建立逾時／中斷／無效內容時 Report 與 Timeline 保留且不顯示正常 Test (depends on T179, T199)
+- [x] T203 [P] [US5] 在 `tests/security/test_ai_cross_tenant_and_source.py` 建立 AI 不跨 Organization、不讀原始 EXIF、只讀清理後 Media 及來源可追溯 Test (depends on T080, T131)
+- [x] T204 [P] [US5] 在 `tests/frontend/test_ai_observation_review.tsx` 建立 AI 標示、pending／failed、來源、Confirm／Reject／Correct 與原始資料分區 Test (depends on T022, T197)
 
 ### Model 與 Migration
 
@@ -402,13 +402,13 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T208 [US5] 在 `services/api/app/persistence/repositories/ai_observation_repository.py` 建立 raw／validated／human 分離及來源追溯 Repository (depends on T037, T206)
 - [x] T209 [P] [US5] 在 `services/worker/app/infrastructure/ai_port.py` 建立指定 Provider／Model／Prompt／Schema Version 的 AI Client Port (depends on T198)
 - [x] T210 [P] [US5] 在 `services/worker/app/infrastructure/mock_ai_adapter.py` 實作成功、逾時、Invalid JSON、診斷語意與中斷的 Mock AI Adapter (depends on T209)
-- [ ] T211 [US5] 在 `services/worker/app/infrastructure/ai_adapter.py` 實作正式 AI Adapter、指定版本、Timeout 與不洩漏 Secret 的錯誤轉換 (depends on T209, T210)
+- [x] T211 [US5] 在 `services/worker/app/infrastructure/ai_adapter.py` 實作正式 AI Adapter、指定版本、Timeout 與不洩漏 Secret 的錯誤轉換 (depends on T209, T210)
 - [x] T212 [US5] 在 `services/worker/app/handlers/ai_validation.py` 實作 Structured Output、Effective Option 白名單、禁用詞及禁止正式決定 Validator (depends on T200, T211)
-- [ ] T213 [US5] 在 `services/worker/app/handlers/ai_handler.py` 實作 Job／Report／Organization／Media 重驗證、清理後輸入、raw 保存、validation 與失敗狀態 (depends on T199, T201-T203, T207, T208, T212)
+- [x] T213 [US5] 在 `services/worker/app/handlers/ai_handler.py` 實作 Job／Report／Organization／Media 重驗證、清理後輸入、raw 保存、validation 與失敗狀態 (depends on T199, T201-T203, T207, T208, T212)
 - [x] T214 [US5] 在 `services/api/app/application/ai_review.py` 實作 Confirm／Reject／Correct、來源、Audit 及原始輸出不可覆蓋 (depends on T057, T201, T208, T213)
 - [x] T215 [US5] 在 `services/api/app/api/ai_observations.py` 實作 AI Status、Observation List、Confirm、Reject 與 Correct API (depends on T197, T214)
-- [ ] T216 [US5] 在 `apps/web/features/ai-observation/AIObservationPanel.tsx` 建立 AI 標示、狀態、來源及人工結果 UI (depends on T204, T215)
-- [ ] T217 [US5] 在 `tests/e2e/test_us5_ai_observation.py` 執行 US5 Independent Test、Acceptance Scenarios 36～42、SC-008／SC-009、版本／原始輸出及 US2／US3 回歸 (depends on T163, T179, T213, T215, T216)
+- [x] T216 [US5] 在 `apps/web/features/ai-observation/AIObservationPanel.tsx` 建立 AI 標示、狀態、來源及人工結果 UI (depends on T204, T215)
+- [x] T217 [US5] 在 `tests/e2e/test_us5_ai_observation.py` 執行 US5 Independent Test、Acceptance Scenarios 36～42、SC-008／SC-009、版本／原始輸出及 US2／US3 回歸 (depends on T163, T179, T213, T215, T216)
 
 **Story Checkpoint**：T217 通過後，AI 僅提供可追溯描述性衍生結果；原始 Report、Media、Note 與人工結果保持獨立。
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from uuid import UUID
 
 from services.api.app.config.settings import get_settings
@@ -51,6 +52,9 @@ async def create_ai_job(
             prompt_version=version.prompt_version,
             output_schema_version=version.output_schema_version,
             status="pending_enqueue",
+            retry_count=0,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
     )
 

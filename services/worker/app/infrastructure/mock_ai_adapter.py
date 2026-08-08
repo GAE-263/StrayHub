@@ -4,8 +4,8 @@ from services.worker.app.infrastructure.ai_port import AIRequestVersion
 
 
 class MockAIAdapter:
-    def __init__(self, *, result: dict | None = None, error: Exception | None = None) -> None:
-        self.result = result or {"observations": []}
+    def __init__(self, *, result: object | None = None, error: BaseException | None = None) -> None:
+        self.result = {"observations": []} if result is None else result
         self.error = error
         self.requests: list[AIRequestVersion] = []
 
@@ -15,7 +15,7 @@ class MockAIAdapter:
         note: str | None,
         image_bytes: list[bytes],
         version: AIRequestVersion,
-    ) -> dict:
+    ) -> object:
         self.requests.append(version)
         if self.error:
             raise self.error

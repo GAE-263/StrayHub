@@ -1,10 +1,14 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
+
+if TYPE_CHECKING:
+    from services.api.app.persistence.models.ai_job import AIProcessingJob
 
 
 class AIObservation(IdentityMixin, AuditMixin, Base):
@@ -20,6 +24,7 @@ class AIObservation(IdentityMixin, AuditMixin, Base):
     human_review_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     reviewed_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    job: Mapped["AIProcessingJob"] = relationship("AIProcessingJob", lazy="joined")
 
 
 class AICallLog(IdentityMixin, AuditMixin, Base):

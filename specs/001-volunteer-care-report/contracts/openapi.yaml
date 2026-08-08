@@ -645,6 +645,24 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AiObservationListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+  /v1/ai-observations/{observationId}:
+    get:
+      tags: [AI]
+      operationId: getAiObservation
+      parameters:
+        - $ref: "#/components/parameters/ObservationId"
+      responses:
+        "200":
+          description: AI Observation 與來源、版本及覆核狀態
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiObservation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
   /v1/ai-observations/{observationId}/review:
     post:
       tags: [AI]
@@ -662,6 +680,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AiObservation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "422": { $ref: "#/components/responses/BadRequest" }
 
   /v1/line/webhook:
     post:
@@ -1571,16 +1593,27 @@ components:
       required:
         [
           id,
+          job_id,
           status,
+          source_type,
+          source_id,
           provider,
           model_name,
           model_version,
           prompt_template_id,
           prompt_version,
-          schema_version,
+          output_schema_version,
+          raw_ai_output,
+          validation_result,
+          failure_reason,
+          validated_ai_observation,
+          human_review_result,
         ]
       properties:
         id: { type: string, format: uuid }
+        job_id: { type: string, format: uuid }
+        source_type: { type: string, enum: [note, photo] }
+        source_id: { type: [string, "null"], format: uuid }
         status:
           {
             type: string,
@@ -1601,9 +1634,16 @@ components:
         model_version: { type: string, minLength: 1 }
         prompt_template_id: { type: string, minLength: 1 }
         prompt_version: { type: string, minLength: 1 }
-        schema_version: { type: string, minLength: 1 }
-        raw_ai_output: { type: object, additionalProperties: true }
-        validation_result: { type: object, additionalProperties: true }
+        output_schema_version: { type: string, minLength: 1 }
+        raw_ai_output:
+          { type: [object, array, string, "null"], additionalProperties: true }
+        validation_result: { type: [object, "null"], additionalProperties: true }
+        validated_ai_observation:
+          { type: [object, "null"], additionalProperties: true }
+        human_review_result:
+          { type: [object, "null"], additionalProperties: true }
+        reviewed_by: { type: [string, "null"], format: uuid }
+        reviewed_at: { type: [string, "null"], format: date-time }
         failure_reason: { type: [string, "null"] }
     AiObservationListResponse:
       type: object
@@ -1616,5 +1656,5 @@ components:
       required: [action, reason]
       properties:
         action: { type: string, enum: [confirm, reject, correct] }
-        reason: { type: string }
+        reason: { type: string, minLength: 1, maxLength: 500 }
         corrected_observation: { type: object, additionalProperties: true }

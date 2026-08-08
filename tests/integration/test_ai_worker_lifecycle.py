@@ -36,6 +36,21 @@ async def test_worker_preserves_raw_output_and_uses_job_versions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_does_not_call_provider_again_after_success() -> None:
+    adapter = MockAIAdapter(result={"observations": []})
+    ai_job = job()
+
+    await AIJobHandler(adapter).handle(
+        ai_job, note="觀察", cleaned_images=[], allowed_codes=set()
+    )
+    await AIJobHandler(adapter).handle(
+        ai_job, note="觀察", cleaned_images=[], allowed_codes=set()
+    )
+
+    assert len(adapter.requests) == 1
+
+
+@pytest.mark.asyncio
 async def test_ai_failure_does_not_remove_original_report_data() -> None:
     adapter = MockAIAdapter(error=TimeoutError())
     processed = await AIJobHandler(adapter).handle(
@@ -44,6 +59,7 @@ async def test_ai_failure_does_not_remove_original_report_data() -> None:
 
     assert processed.status == "failed"
     assert processed.failure_reason == "TimeoutError"
+    assert processed.retry_count == 1
 
 
 @pytest.mark.asyncio
@@ -94,3 +110,14 @@ async def test_worker_rejects_cross_tenant_or_unclean_media() -> None:
             report=report,
             media_assets=[media],
         )
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_invalid_json_without_formal_observation() -> None:
+    processed = await AIJobHandler(MockAIAdapter(result="not-json")).handle(
+        job(), note="觀察", cleaned_images=[], allowed_codes=set()
+    )
+
+    assert processed.status == "invalid"
+    assert processed.raw_ai_output == "not-json"
+    assert processed.validation_result["status"] == "invalid"

@@ -12,6 +12,20 @@ def test_ai_output_requires_allowed_descriptive_codes() -> None:
     assert result["observations"][0]["code"] == "appearance.changed"
 
 
+def test_ai_output_requires_structured_observation_fields() -> None:
+    with pytest.raises(DomainError):
+        validate_ai_output(
+            {"observations": [{"code": "appearance.changed", "description": 123}]},
+            allowed_codes={"appearance.changed"},
+        )
+
+
+@pytest.mark.parametrize("key", ["score", "level", "status", "formal_status", "animal_id"])
+def test_ai_output_cannot_produce_decision_or_identity_fields(key: str) -> None:
+    with pytest.raises(DomainError):
+        validate_ai_output({key: "forbidden", "observations": []}, allowed_codes=set())
+
+
 @pytest.mark.parametrize(
     "output",
     [

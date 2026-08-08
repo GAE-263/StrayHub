@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from services.api.app.api.errors import DomainError
@@ -22,7 +23,11 @@ class AIJobHandler:
         organization_id: object | None = None,
         report: object | None = None,
         media_assets: list[object] | None = None,
+        source_type: str | None = None,
+        source_id: object | None = None,
     ) -> object:
+        if getattr(job, "status", None) in {"succeeded", "invalid"}:
+            return job
         self._validate_context(
             job,
             organization_id=organization_id,
@@ -37,6 +42,15 @@ class AIJobHandler:
             model_version=job.model_version,
             prompt_version=job.prompt_version,
             output_schema_version=job.output_schema_version,
+            prompt_template_id=getattr(job, "prompt_template_id", "care-observation"),
+        )
+        self._set_source_trace(
+            observation,
+            source_type=source_type,
+            source_id=source_id,
+            note=note,
+            report=report,
+            media_assets=media_assets or [],
         )
         try:
             output = await self.client.analyze(
@@ -50,20 +64,86 @@ class AIJobHandler:
             if observation is not None:
                 observation.raw_ai_output = output
                 observation.validated_ai_observation = validated
-                observation.status = "ready_for_review"
+                observation.status = "succeeded"
             job.status = "succeeded"
+            if report is not None and hasattr(report, "ai_job_status"):
+                report.ai_job_status = "succeeded"
+        except DomainError as error:
+            # Validation failures retain the provider payload for authorized review,
+            # but never promote it to a formal observation.
+            if getattr(job, "raw_ai_output", None) is None:
+                job.raw_ai_output = output if "output" in locals() else None
+            job.validation_result = {"status": "invalid", "error_code": error.code}
+            job.failure_reason = error.code
+            job.status = "invalid"
+            job.retry_count = (getattr(job, "retry_count", 0) or 0) + 1
+            if observation is not None:
+                observation.raw_ai_output = job.raw_ai_output
+                observation.validated_ai_observation = None
+                observation.status = "invalid"
+            if report is not None and hasattr(report, "ai_job_status"):
+                report.ai_job_status = "invalid"
+        except asyncio.CancelledError:
+            self._mark_failure(job, observation, report, "ai_interrupted")
         except Exception as error:
             # Preserve a safe error code, not provider response or source content.
-            if getattr(job, "raw_ai_output", None) is None:
-                job.raw_ai_output = None
-            job.validation_result = {"status": "invalid"}
-            job.failure_reason = type(error).__name__
-            job.status = "failed"
-            job.retry_count = getattr(job, "retry_count", 0) + 1
-            if observation is not None:
-                observation.status = "failed"
+            failure_reason = getattr(error, "code", None) or {
+                TimeoutError: "TimeoutError",
+                ConnectionError: "ConnectionError",
+            }.get(type(error), "ai_provider_error")
+            self._mark_failure(job, observation, report, failure_reason)
         job.completed_at = datetime.now(timezone.utc)
         return job
+
+    @staticmethod
+    def _mark_failure(job, observation, report, failure_reason: str) -> None:
+        job.raw_ai_output = getattr(job, "raw_ai_output", None)
+        job.validation_result = {"status": "failed", "error_code": failure_reason}
+        job.failure_reason = failure_reason
+        job.status = "failed"
+        job.retry_count = (getattr(job, "retry_count", 0) or 0) + 1
+        if observation is not None:
+            observation.status = "failed"
+        if report is not None and hasattr(report, "ai_job_status"):
+            report.ai_job_status = "failed"
+
+    @staticmethod
+    def _set_source_trace(
+        observation,
+        *,
+        source_type: str | None,
+        source_id: object | None,
+        note: str | None,
+        report: object | None,
+        media_assets: list[object],
+    ) -> None:
+        if observation is None:
+            return
+        if source_type is not None:
+            observation.source_type = source_type
+            observation.source_id = source_id
+            return
+        current_source = getattr(observation, "source_type", None)
+        if current_source == "photo" and getattr(observation, "source_id", None) is None:
+            if media_assets and getattr(media_assets[0], "id", None) is not None:
+                observation.source_id = media_assets[0].id
+            return
+        if current_source == "note" and getattr(observation, "source_id", None) is None:
+            if report is not None and getattr(report, "id", None) is not None:
+                observation.source_id = report.id
+            return
+        if current_source in {"note", "photo"}:
+            return
+        if current_source == "care_report" and note and report is not None:
+            observation.source_type = "note"
+            observation.source_id = report.id
+            return
+        if media_assets and getattr(media_assets[0], "id", None) is not None:
+            observation.source_type = "photo"
+            observation.source_id = media_assets[0].id
+        elif note and report is not None and getattr(report, "id", None) is not None:
+            observation.source_type = "note"
+            observation.source_id = report.id
 
     @staticmethod
     def _validate_context(

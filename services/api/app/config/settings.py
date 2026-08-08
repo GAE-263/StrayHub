@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     ai_prompt_template_id: str = "care-observation"
     ai_prompt_version: str = "local-v1"
     ai_output_schema_version: str = "v1"
+    ai_endpoint: str | None = None
+    ai_api_key: str | None = None
+    ai_timeout_seconds: float = Field(default=30.0, gt=0)
 
 
 @lru_cache(maxsize=1)
