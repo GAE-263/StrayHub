@@ -1,0 +1,128 @@
+# 浪浪森友會
+
+志工日常照護回報與動物近期歷程的本機優先 MVP。正式資料由 FastAPI／PostgreSQL CRM 保存；Next.js 是管理與 LIFF 介面，LINE Bot 與 Worker 透過既定 Application 邊界操作資料。
+
+## 本機需求
+
+- Docker Desktop／Docker Compose
+- Python 3.11+（由 `uv` 管理執行環境）
+- `uv`
+- Node.js 與 npm
+- 本機可用的 `openssl`（首次展示且 JWT 金鑰尚未設定時使用）
+
+PostgreSQL 固定使用 `127.0.0.1:65432`，MinIO API 使用 `9000`，MinIO Console 使用 `9001`。這些值與 [`.env.example`](.env.example) 保持一致。
+
+## 快速啟動
+
+```bash
+cp .env.example .env
+docker compose -f infra/local/docker-compose.yml up -d postgres minio
+uv run alembic upgrade head
+uv run python -m scripts.seed_local
+```
+
+若 `.env` 的 `AUTH_JWT_ACTIVE_PRIVATE_KEY` 與 `AUTH_JWT_ACTIVE_PUBLIC_KEY` 為空，請先產生本機限定金鑰並填入 `.env`；不可將這些金鑰用於正式環境：
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/strayhub-private.pem
+openssl pkey -in /tmp/strayhub-private.pem -pubout -out /tmp/strayhub-public.pem
+```
+
+把兩個檔案內容分別填入 `AUTH_JWT_ACTIVE_PRIVATE_KEY` 與 `AUTH_JWT_ACTIVE_PUBLIC_KEY`。Shell 直接展示可使用 `./scripts/demo.sh`，它會在環境變數未提供時使用短期 process-local 金鑰。
+
+## 啟動服務
+
+分別開啟三個終端機：
+
+```bash
+# FastAPI
+uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8000
+
+# Next.js
+npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
+
+# Worker
+uv run python services/worker/worker.py
+```
+
+- API health check：<http://127.0.0.1:8000/healthz>
+- 管理前端：<http://127.0.0.1:3000>
+- Swagger：<http://127.0.0.1:8000/docs>
+- 本機資料帳號：`local-staff-a`、`local-volunteer-a`，密碼都是 `local-only-password`
+- 另一個租戶帳號：`local-staff-b`、`local-volunteer-b`
+
+Seed 只建立虛構的 `ORG-A`／`ORG-B`，兩邊可以使用相同 Shelter Number，供租戶隔離展示。完成測試後可安全移除這組資料：
+
+```bash
+uv run python -m scripts.reset_local --yes
+```
+
+## 一鍵本機展示
+
+```bash
+# 執行 Migration、Seed、US0～US3 與 AI 失敗降級 smoke，完成後啟動三個本機服務
+./scripts/demo.sh
+
+# 只執行展示前驗證，不啟動長駐服務
+./scripts/demo.sh check
+```
+
+展示流程會驗證收容所／帳號隔離、動物／QR 選擇、LINE Bot Draft／Report、Timeline 與 AI 服務中斷時人工回報仍可保存。`DEMO_SKIP_DOCKER=1` 可在服務已由其他 Compose project 啟動時略過 `docker compose up`。
+
+## 品質命令
+
+Python：
+
+```bash
+uv run pytest -q
+uv run pytest tests/test_feature_quality.py -q
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+```
+
+目前 `mypy` 先固定檢查 domain、observability 與 database setup 的 typed boundary；既有 application／repository SQLAlchemy 型別會依序收斂，不以關閉檢查換取通過。
+
+Frontend：
+
+```bash
+npm --prefix apps/web run quality
+npm --prefix apps/web run test:mobile
+npm --prefix apps/web run test:a11y
+npm --prefix apps/web run build
+```
+
+Contract Types：
+
+```bash
+npm --prefix packages/contracts run check
+```
+
+完整本機 Gate：
+
+```bash
+./scripts/verify_local.sh
+```
+
+Gate 會執行 Migration、空資料庫 Bootstrap、完整 Python／Frontend 測試、Ruff、TypeScript、Next build、OpenAPI generated types、MinIO／GCS adapter contract 與 Secret scan。沒有 Dockerfile 時，Docker build 會明確顯示為 skipped；這不代表 GCP 已部署。
+
+## API／Contract／LINE 邊界
+
+- HTTP 唯一契約：[OpenAPI](specs/001-volunteer-care-report/contracts/openapi.yaml)；TypeScript 型別由 `openapi-typescript` 產生，不能手動修改。
+- OpenAPI 產生型別位於 [`packages/contracts/src/openapi.ts`](packages/contracts/src/openapi.ts)。
+- LINE Webhook 必須先驗證原始 Body 與 `X-Line-Signature`，再依 `webhookEventId` 冪等處理。
+- 本機 LINE 流程使用 Mock Adapter／虛構事件，不呼叫正式 LINE API。
+- PostgreSQL transaction 必須設定已驗證的 Organization Scope；前端傳入的 Organization、Animal、Draft、QR 或 Object Key 不能取代後端授權。
+- MinIO 是本機 Object Storage；GCS 只在 GCP Demo Gate 後驗證，不能把本機通過結果當成 GCP 部署證據。
+
+## GCP Demo 邊界
+
+GCP Demo 必須在本機品質 Gate 與 Terraform／GCS／IAM Gate 通過後才可進行。Terraform 唯一來源是 `infra/gcp-demo/terraform/`；本機開發不需要 GCP credentials，也不會由 `scripts/demo.sh` 建立雲端資源。
+
+## 相關文件
+
+- [Feature Specification](specs/001-volunteer-care-report/spec.md)
+- [Implementation Plan](specs/001-volunteer-care-report/plan.md)
+- [Task List](specs/001-volunteer-care-report/tasks.md)
+- [Quickstart](specs/001-volunteer-care-report/quickstart.md)
+- [Contract Index](specs/001-volunteer-care-report/contracts/README.md)

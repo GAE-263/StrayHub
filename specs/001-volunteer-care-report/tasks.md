@@ -464,14 +464,14 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 **目的**：只完成 spec／plan 已要求的跨 Story 品質、效能、可用性、安全與文件收尾，不增加範圍外功能。
 
-- [ ] T245 在 `pyproject.toml` 清理 Ruff、Type Check、Pytest marker、AsyncSession 與測試命令設定；本機品質收尾不依賴 GCP Demo (depends on T224)
-- [ ] T246 在 `tests/test_feature_quality.py` 執行完整 Pytest、Migration、Scope Setter、Authentication Adapters、Webhook、State Machine、EXIF、Job dispatch、跨租戶及無未說明 Skip 檢查 (depends on T217, T224)
-- [ ] T247 在 `apps/web/package.json` 固化 Frontend Test、Type Check、Mobile／LIFF Viewport 與 Accessibility 命令；本機品質收尾不依賴 GCP Demo (depends on T224)
-- [ ] T248 在 `tests/integration/test_performance_targets.py` 驗證 Bot 與 Timeline 計時埋點、固定標準路徑、Timeline 兩秒摘要、No-report 資料狀態與 Query Count；不得以自動化結果代替真人完成率或辨識率 (depends on T179, T224)
-- [ ] T249 在 `tests/e2e/test_draft_interruption_matrix.py` 執行至少 15 組 SC-023 中斷案例，驗證有效 Draft 100% 恢復已保存內容且取消／過期不建立 Report (depends on T163, T224)
-- [ ] T250 在 `services/api/app/observability/logging.py` 完成 Error Message、Security／Audit Event 遮罩與 Secret／Token／Signed URL 不進 Log 的最終檢查 (depends on T217, T224)
-- [ ] T251 在 `README.md` 更新本機 Setup、Authentication、Contract Types、LINE Bot、GCS Gate、GCP Demo 與品質命令 (depends on T245-T250)
-- [ ] T252 在 `scripts/demo.sh` 建立虛構資料 Demo Script，涵蓋 US0、US1、US2、US3 及 AI 失敗仍完成 MVP (depends on T186, T251)
+- [x] T245 在 `pyproject.toml` 清理 Ruff、Type Check、Pytest marker、AsyncSession 與測試命令設定；本機品質收尾不依賴 GCP Demo (depends on T224)
+- [x] T246 在 `tests/test_feature_quality.py` 執行完整 Pytest、Migration、Scope Setter、Authentication Adapters、Webhook、State Machine、EXIF、Job dispatch、跨租戶及無未說明 Skip 檢查 (depends on T217, T224)
+- [x] T247 在 `apps/web/package.json` 固化 Frontend Test、Type Check、Mobile／LIFF Viewport 與 Accessibility 命令；本機品質收尾不依賴 GCP Demo (depends on T224)
+- [x] T248 在 `tests/integration/test_performance_targets.py` 驗證 Bot 與 Timeline 計時埋點、固定標準路徑、Timeline 兩秒摘要、No-report 資料狀態與 Query Count；不得以自動化結果代替真人完成率或辨識率 (depends on T179, T224)
+- [x] T249 在 `tests/e2e/test_draft_interruption_matrix.py` 執行至少 15 組 SC-023 中斷案例，驗證有效 Draft 100% 恢復已保存內容且取消／過期不建立 Report (depends on T163, T224)
+- [x] T250 在 `services/api/app/observability/logging.py` 完成 Error Message、Security／Audit Event 遮罩與 Secret／Token／Signed URL 不進 Log 的最終檢查 (depends on T217, T224)
+- [x] T251 在 `README.md` 更新本機 Setup、Authentication、Contract Types、LINE Bot、GCS Gate、GCP Demo 與品質命令 (depends on T245-T250)
+- [x] T252 在 `scripts/demo.sh` 建立虛構資料 Demo Script，涵蓋 US0、US1、US2、US3 及 AI 失敗仍完成 MVP (depends on T186, T251)
 - [ ] T253 在 `specs/001-volunteer-care-report/validation/usability-test-plan.md` 建立固定真人腳本、至少 10 名志工／10 名工作人員樣本、主要操作定義、去識別化欄位、計時方式與失敗樣本保留規則 (depends on T186)
 - [ ] T254 [P] 在 `specs/001-volunteer-care-report/validation/volunteer-usability-evidence.md` 執行並記錄 SC-001／SC-002 至少 10 名志工透過 LINE Bot 完成標準照護回報的去識別化證據，驗證至少 8 人獨立完成且至少 8 人於 90 秒內完成 (depends on T163, T248, T253)
 - [ ] T255 [P] 在 `specs/001-volunteer-care-report/validation/staff-usability-evidence.md` 執行並記錄 SC-006／SC-014 至少 10 名工作人員的去識別化證據，驗證至少 9 人於三次主要操作內進入 Timeline 並正確辨識四種狀態 (depends on T179, T248, T253)
@@ -617,8 +617,8 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 
 - **tasks.md 路徑**：`specs/001-volunteer-care-report/tasks.md`
 - **總任務數**：256（T001～T256）
-- **本輪已完成任務**：121（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
-- **尚未完成任務**：135；Feature 尚未達到完成條件，不能視為可部署產品。
+- **本輪已完成任務**：232（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
+- **尚未完成任務**：24；Feature 尚未達到完成條件，不能視為可部署產品。
 - **Setup 任務數**：18（T001～T018）
 - **Foundational 任務數**：63（T019～T081，本輪 13 項基礎安全／租戶隔離任務均已完成）
 - **US0 任務數**：16（T082～T097）
@@ -632,8 +632,8 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **GCP Demo 準備／Gate 任務數**：14（T225～T238）
 - **GCP Demo 部署／驗證任務數**：6（T239～T244）
 - **Polish 任務數**：12（T245～T256）
-- **目前自動化驗證證據**：Python `pytest` 86 項通過；前端 3 項 Vitest 通過；Next.js production build、TypeScript typecheck、Prettier、Contract Types、Alembic offline SQL（含新增 Draft／Media migrations）與 Ruff 皆已通過。
-- **未完成測試範圍**：仍缺少真實 PostgreSQL／RLS／Scope Setter Integration、完整 Bot／LIFF E2E、完整 Timeline／US0～US5 Independent Test、GCP Smoke Test 與真人 Usability Evidence。
+- **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 244 項、前端 18 項 Vitest 通過；`mypy`、Ruff、Prettier、Next.js production build、Contract Types 與完整 `scripts/verify_local.sh` Gate 皆已通過。
+- **未完成測試範圍**：仍缺少 GCP Smoke Test 與真人 Usability Evidence；本機 Gate 不代表正式 GCP 資源或正式 LINE／LIFF 服務已驗證。
 - **Security／Isolation Test 任務數**：14 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑。
 - **可平行任務數**：90 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
 - **阻擋實作的未決事項**：無產品未決事項；仍須執行 `$speckit-analyze` 並達到 `CRITICAL = 0`、`HIGH = 0`。
@@ -642,5 +642,5 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **建議 MVP**：T001～T186，包含 US0＋US1＋US2＋US3；US4／US5 不阻擋。
 - **建議第一批任務**：T001～T018；Setup 通過後執行 T019～T081。
 - **範圍外檢查**：未加入醫療、關注排序、領養、公開頁面、Notification、Export、跨收容所共享、Kubernetes、Redis、Pub/Sub 或其他未核准能力。
-- **本輪實作限制**：Docker／可用 PostgreSQL／MinIO 執行環境未提供，因此未宣稱真實資料庫、RLS、物件儲存或 GCP 已驗證；GCP 資源未建立。
+- **本輪實作限制**：本輪已使用本機 65432 PostgreSQL 完成 Migration／Seed／MVP smoke 與完整 Gate；未建立 GCP 資源，也未宣稱正式 GCS、LINE／LIFF 或真人可用性已驗證。
 - **下一步**：補齊其他尚未完成任務後執行 `$speckit-analyze`；目前仍不得將 Feature 標記為完成或直接部署。

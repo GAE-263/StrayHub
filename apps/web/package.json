@@ -6,7 +6,10 @@
     "build": "next build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "format:check": "prettier --check ."
+    "test:mobile": "vitest run --environment jsdom",
+    "test:a11y": "vitest run --environment jsdom",
+    "format:check": "prettier --check .",
+    "quality": "npm run test && npm run typecheck && npm run test:mobile && npm run test:a11y && npm run format:check"
   },
   "dependencies": {
     "next": "^15.1.0",

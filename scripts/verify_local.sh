@@ -38,14 +38,13 @@ uv run pytest \
 echo "[T224] Full Python test suite"
 uv run pytest -q
 
-echo "[T224] Python lint and formatting"
+echo "[T245] Python lint, formatting and type check"
 uv run ruff check services scripts tests
 uv run ruff format --check services scripts tests
+uv run mypy
 
-echo "[T224] Frontend test／typecheck／format／build"
-npm --prefix apps/web test -- --run
-npm --prefix apps/web run typecheck
-npm --prefix apps/web run format:check
+echo "[T247] Frontend quality／build"
+npm --prefix apps/web run quality
 npm --prefix apps/web run build
 
 echo "[T224] Generated OpenAPI contract types"

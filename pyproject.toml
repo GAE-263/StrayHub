@@ -2,7 +2,7 @@
 name = "strayhub"
 version = "0.1.0"
 description = "浪浪森友會志工日常照護回報與動物近期歷程"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
   "alembic>=1.13,<2",
   "argon2-cffi>=23.1,<26",
@@ -25,6 +25,7 @@ dev = [
   "pytest>=8.3,<9",
   "pytest-asyncio>=0.24,<1",
   "pytest-cov>=6,<7",
+  "mypy>=1.13,<2",
   "ruff>=0.8,<1",
 ]
 
@@ -33,7 +34,7 @@ default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py311"
 src = ["services", "scripts", "tests"]
 
 [tool.ruff.lint]
@@ -42,5 +43,26 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-ra"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
 pythonpath = ["."]
+markers = [
+  "contract: validates external or generated contracts",
+  "e2e: validates a cross-boundary user journey",
+  "integration: validates multiple application or infrastructure boundaries",
+  "isolation: validates tenant and scope isolation",
+  "quality: validates the complete local feature quality matrix",
+  "security: validates a focused security control",
+  "unit: validates a pure domain or application unit",
+]
+
+[tool.mypy]
+python_version = "3.11"
+# The current typed boundary covers domain, observability and database setup;
+# repository/application SQLAlchemy result typing remains an incremental follow-up.
+files = ["services/api/app/domain", "services/api/app/observability", "services/api/app/persistence/database"]
+ignore_missing_imports = true
+follow_imports = "skip"
+check_untyped_defs = true
+no_implicit_optional = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
