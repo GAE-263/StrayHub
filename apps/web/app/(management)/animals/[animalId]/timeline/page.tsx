@@ -61,12 +61,16 @@ export default function AnimalTimelinePage({ params }: Props) {
       if (nextRange.end) query.set("end_date", nextRange.end);
       try {
         const suffix = query.toString() ? `?${query.toString()}` : "";
-        const response = await fetch(`/v1/animals/${animalId}/timeline${suffix}`);
+        const response = await fetch(
+          `/v1/animals/${animalId}/timeline${suffix}`,
+        );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = (await response.json()) as { days: ApiDay[] };
         setDays(mapDays(data.days));
       } catch (requestError) {
-        setError(requestError instanceof Error ? requestError.message : "無法載入");
+        setError(
+          requestError instanceof Error ? requestError.message : "無法載入",
+        );
       } finally {
         setLoading(false);
       }

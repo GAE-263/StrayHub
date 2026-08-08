@@ -12,7 +12,9 @@ describe("AnimalTimeline", () => {
           date: "2026-08-07",
           hasReport: true,
           reportCount: 1,
-          reports: [{ id: "report-1", note: "原始心得", aiJobStatus: "pending" }],
+          reports: [
+            { id: "report-1", note: "原始心得", aiJobStatus: "pending" },
+          ],
         },
       ],
     });
@@ -23,10 +25,14 @@ describe("AnimalTimeline", () => {
 
   it("has explicit loading and error branches", () => {
     expect(
-      renderToStaticMarkup(React.createElement(AnimalTimeline, { days: [], loading: true })),
+      renderToStaticMarkup(
+        React.createElement(AnimalTimeline, { days: [], loading: true }),
+      ),
     ).toContain("正在載入");
     expect(
-      renderToStaticMarkup(React.createElement(AnimalTimeline, { days: [], error: "403" })),
+      renderToStaticMarkup(
+        React.createElement(AnimalTimeline, { days: [], error: "403" }),
+      ),
     ).toContain("歷程載入失敗");
   });
 });

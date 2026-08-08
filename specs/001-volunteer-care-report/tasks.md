@@ -416,13 +416,13 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 **目的**：在建立任何 GCP 資源前完成全部 Story、Storage Adapter、Worker、Contract Types、Migration 與跨租戶本機驗證。
 
-- [ ] T218 在 `tests/e2e/test_full_local_flow.py` 執行 Shelter、Staff／Volunteer、Animal、QR、Bot、Image、MinIO、Report、Job、Timeline、Option 與 AI Review 完整流程 (depends on T186, T196, T217)
-- [ ] T219 [P] 在 `tests/isolation/test_full_cross_tenant_matrix.py` 直接驗證 Organization、Membership、Animal、Search、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、AI Observation、Option 與 Audit Log 矩陣 (depends on T181, T196, T217)
-- [ ] T220 [P] 在 `tests/integration/test_full_local_failure_matrix.py` 執行 Authentication 撤銷、非法 Signature、Redelivery、Tampering、圖片失敗、Job enqueue／AI 失敗與資格失效 (depends on T183, T202, T217)
-- [ ] T221 [P] 在 `tests/contract/test_all_adapters.py` 執行 MinIO、完整 GCS Fake Transport、InMemory、Mock／正式 LINE 與 Mock／正式 AI Adapter Contract Test (depends on T070-T077, T162, T211)
-- [ ] T222 在 `tests/contract/test_contract_documents.py` 驗證 OpenAPI、Generated Types、所有 Markdown Contract、data-model、plan 與 quickstart 一致 (depends on T185, T218)
-- [ ] T223 在 `specs/001-volunteer-care-report/quickstart.md` 記錄本機 Authentication、Scope Setter、Bot、MinIO、GCS Contract、AI 降級與排查驗證結果 (depends on T218-T222)
-- [ ] T224 在 `scripts/verify_local.sh` 建立空 Migration、Seed、Ruff、Pytest、Frontend、E2E、Contract Types、Isolation、MinIO／GCS Adapter、Secret Scan 與 Docker Build 的完整本機 Gate (depends on T218-T223)
+- [x] T218 在 `tests/e2e/test_full_local_flow.py` 執行 Shelter、Staff／Volunteer、Animal、QR、Bot、Image、MinIO、Report、Job、Timeline、Option 與 AI Review 完整流程 (depends on T186, T196, T217)
+- [x] T219 [P] 在 `tests/isolation/test_full_cross_tenant_matrix.py` 直接驗證 Organization、Membership、Animal、Search、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、AI Observation、Option 與 Audit Log 矩陣 (depends on T181, T196, T217)
+- [x] T220 [P] 在 `tests/integration/test_full_local_failure_matrix.py` 執行 Authentication 撤銷、非法 Signature、Redelivery、Tampering、圖片失敗、Job enqueue／AI 失敗與資格失效 (depends on T183, T202, T217)
+- [x] T221 [P] 在 `tests/contract/test_all_adapters.py` 執行 MinIO、完整 GCS Fake Transport、InMemory、Mock／正式 LINE 與 Mock／正式 AI Adapter Contract Test (depends on T070-T077, T162, T211)
+- [x] T222 在 `tests/contract/test_contract_documents.py` 驗證 OpenAPI、Generated Types、所有 Markdown Contract、data-model、plan 與 quickstart 一致 (depends on T185, T218)
+- [x] T223 在 `specs/001-volunteer-care-report/quickstart.md` 記錄本機 Authentication、Scope Setter、Bot、MinIO、GCS Contract、AI 降級與排查驗證結果 (depends on T218-T222)
+- [x] T224 在 `scripts/verify_local.sh` 建立空 Migration、Seed、Ruff、Pytest、Frontend、E2E、Contract Types、Isolation、MinIO／GCS Adapter、Secret Scan 與 Docker Build 的完整本機 Gate (depends on T218-T223)
 
 **Local Integration Checkpoint**：T224 必須通過後才能準備 GCP Demo。此 Gate 已執行完整 `GcsStorageAdapter` Contract Test，但真實 GCS IAM／Signed URL 仍須部署後驗證。
 

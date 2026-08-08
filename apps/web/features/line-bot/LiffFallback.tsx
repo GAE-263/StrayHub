@@ -60,7 +60,10 @@ export function LiffFallback({
               value={answers[key] ?? ""}
               onChange={(event) => {
                 setSaved(false);
-                setAnswers((current) => ({ ...current, [key]: event.target.value }));
+                setAnswers((current) => ({
+                  ...current,
+                  [key]: event.target.value,
+                }));
               }}
             />
           </label>
@@ -68,14 +71,26 @@ export function LiffFallback({
       </div>
       <label>
         補充心得（選填）
-        <textarea value={note} maxLength={5000} onChange={(event) => setNote(event.target.value)} />
+        <textarea
+          value={note}
+          maxLength={5000}
+          onChange={(event) => setNote(event.target.value)}
+        />
       </label>
       <p aria-live="polite">{note.length} 字</p>
       <div>
-        <button type="button" onClick={save}>儲存並繼續</button>
-        <button type="button" onClick={onRetryMedia}>重新附加照片</button>
-        <button type="button" onClick={onReselectAnimal}>重新選擇動物</button>
-        <button type="button" onClick={onReturnToBot}>回到 LINE Bot</button>
+        <button type="button" onClick={save}>
+          儲存並繼續
+        </button>
+        <button type="button" onClick={onRetryMedia}>
+          重新附加照片
+        </button>
+        <button type="button" onClick={onReselectAnimal}>
+          重新選擇動物
+        </button>
+        <button type="button" onClick={onReturnToBot}>
+          回到 LINE Bot
+        </button>
       </div>
       {saved && <p role="status">草稿已保存，可回到 LINE Bot 繼續。</p>}
     </section>

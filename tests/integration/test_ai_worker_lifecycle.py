@@ -40,12 +40,8 @@ async def test_worker_does_not_call_provider_again_after_success() -> None:
     adapter = MockAIAdapter(result={"observations": []})
     ai_job = job()
 
-    await AIJobHandler(adapter).handle(
-        ai_job, note="觀察", cleaned_images=[], allowed_codes=set()
-    )
-    await AIJobHandler(adapter).handle(
-        ai_job, note="觀察", cleaned_images=[], allowed_codes=set()
-    )
+    await AIJobHandler(adapter).handle(ai_job, note="觀察", cleaned_images=[], allowed_codes=set())
+    await AIJobHandler(adapter).handle(ai_job, note="觀察", cleaned_images=[], allowed_codes=set())
 
     assert len(adapter.requests) == 1
 

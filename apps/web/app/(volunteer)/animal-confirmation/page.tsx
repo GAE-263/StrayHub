@@ -87,10 +87,13 @@ export default function AnimalConfirmationPage() {
   const resolveQr = async (event: FormEvent) => {
     event.preventDefault();
     await run(async () => {
-      const candidate = await request<AnimalCandidate>("/v1/qr-tokens/resolve", {
-        method: "POST",
-        body: JSON.stringify({ qr_token: qrToken }),
-      });
+      const candidate = await request<AnimalCandidate>(
+        "/v1/qr-tokens/resolve",
+        {
+          method: "POST",
+          body: JSON.stringify({ qr_token: qrToken }),
+        },
+      );
       setCandidates([candidate]);
       setSelected(null);
       setMessage("QR Code 已解析，請確認動物身分。");

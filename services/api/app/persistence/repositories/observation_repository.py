@@ -31,9 +31,7 @@ class ObservationRepository:
         return list(result.scalars())
 
     async def categories(self, *, include_disabled: bool = False) -> list[ObservationCategory]:
-        status_clause = (
-            True if include_disabled else ObservationCategory.status == "active"
-        )
+        status_clause = True if include_disabled else ObservationCategory.status == "active"
         result = await self.session.execute(
             select(ObservationCategory)
             .where(

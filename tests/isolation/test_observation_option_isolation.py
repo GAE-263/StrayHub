@@ -97,12 +97,13 @@ async def test_a_and_b_only_see_and_update_their_own_extension() -> None:
             option_a,
             option_b,
         )
-        assert [(row["id"], row["display_name"]) for row in visible_a] == [
-            (option_a, "A/B A")
-        ]
-        assert await connection.execute(
-            "UPDATE observation_options SET display_name = '越權' WHERE id = $1", option_b
-        ) == "UPDATE 0"
+        assert [(row["id"], row["display_name"]) for row in visible_a] == [(option_a, "A/B A")]
+        assert (
+            await connection.execute(
+                "UPDATE observation_options SET display_name = '越權' WHERE id = $1", option_b
+            )
+            == "UPDATE 0"
+        )
 
         with pytest.raises(DomainError, match="無法管理觀察選項"):
             _require_option_manager(_context(organization_a, "VOLUNTEER"))

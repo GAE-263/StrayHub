@@ -103,9 +103,9 @@ async def list_ai_observations(
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
     if context.role not in MANAGEMENT_ROLES:
         raise DomainError("ai_observation_denied", "無法查看 AI Observation", 403)
-    items = await AIObservationRepository(
-        session, context.organization_id
-    ).list_for_report(reportId)
+    items = await AIObservationRepository(session, context.organization_id).list_for_report(
+        reportId
+    )
     return {"items": [_response(item) for item in items]}
 
 

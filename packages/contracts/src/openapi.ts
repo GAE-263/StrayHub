@@ -556,6 +556,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai-observations/{observationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAiObservation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai-observations/{observationId}/review": {
         parameters: {
             query?: never;
@@ -1142,6 +1158,12 @@ export interface components {
         AiObservation: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            job_id: string;
+            /** @enum {string} */
+            source_type: "note" | "photo";
+            /** Format: uuid */
+            source_id: string | null;
             /** @enum {string} */
             status: "pending" | "running" | "succeeded" | "failed" | "invalid" | "confirmed" | "rejected" | "corrected";
             provider: string;
@@ -1149,14 +1171,24 @@ export interface components {
             model_version: string;
             prompt_template_id: string;
             prompt_version: string;
-            schema_version: string;
-            raw_ai_output?: {
+            output_schema_version: string;
+            raw_ai_output: {
                 [key: string]: unknown;
-            };
-            validation_result?: {
+            } | unknown[] | string | null;
+            validation_result: {
                 [key: string]: unknown;
-            };
-            failure_reason?: string | null;
+            } | null;
+            validated_ai_observation: {
+                [key: string]: unknown;
+            } | null;
+            human_review_result: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: uuid */
+            reviewed_by?: string | null;
+            /** Format: date-time */
+            reviewed_at?: string | null;
+            failure_reason: string | null;
         };
         AiObservationListResponse: {
             items: components["schemas"]["AiObservation"][];
@@ -2281,6 +2313,34 @@ export interface operations {
                     "application/json": components["schemas"]["AiObservationListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    getAiObservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                observationId: components["parameters"]["ObservationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI Observation 與來源、版本及覆核狀態 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiObservation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
         };
     };
     reviewAiObservation: {
@@ -2307,6 +2367,10 @@ export interface operations {
                     "application/json": components["schemas"]["AiObservation"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            422: components["responses"]["BadRequest"];
         };
     };
     receiveLineWebhook: {

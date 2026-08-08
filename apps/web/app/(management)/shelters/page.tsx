@@ -24,11 +24,6 @@ type Area = {
   status: "active" | "inactive";
 };
 
-type Props = {
-  apiBaseUrl?: string;
-  accessToken?: string;
-};
-
 async function responseData<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = "操作失敗";
@@ -45,10 +40,9 @@ async function responseData<T>(response: Response): Promise<T> {
     : (response.json() as Promise<T>);
 }
 
-export default function SheltersManagementPage({
-  apiBaseUrl = "",
-  accessToken,
-}: Props) {
+export default function SheltersManagementPage() {
+  const apiBaseUrl = "";
+  const accessToken = undefined;
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [selectedShelterId, setSelectedShelterId] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);

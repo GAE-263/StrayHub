@@ -223,6 +223,23 @@ npm --prefix packages/contracts run check
 
 以上命令與 Frontend 測試必須通過，且空資料庫 migration、關鍵本機流程、Shelter A／B 隔離與 MinIO Adapter 測試都必須有成功結果，才可進入 GCP Demo。
 
+### 13.1 T218-T224 本機完整 Gate
+
+完成 T218-T223 後，使用單一入口執行本機完整驗證：
+
+```bash
+bash scripts/verify_local.sh
+```
+
+Gate 會依序執行 Docker Compose PostgreSQL／MinIO、空資料庫 Migration、虛構 Seed、Python 完整測試與
+格式檢查、Shelter A／B 隔離、完整 Bot／Image／Report／Timeline／AI Review 流程、失敗降級、LINE／AI／
+MinIO／GCS Adapter Contract、Frontend Test／Typecheck／Build、OpenAPI Generated Types 與 Secret Scan。
+測試只使用 `ORG-A`／`ORG-B` 與本機 Mock／Fake Provider；不會呼叫正式 LINE 或 AI 服務。
+
+目前 repository 尚未提供 API／Worker／Frontend Dockerfile，因此 Docker Build phase 會明確輸出
+`Docker build skipped: no Dockerfiles configured`；這不代表 GCP Demo 已完成。若新增 Dockerfile，Gate
+會自動逐一執行本機 build。任何其他 phase 失敗都會停止 Gate，並保留失敗命令作為修正入口。
+
 ## 14. GCP Demo 部署後驗證
 
 部署前先驗證唯一 Terraform 來源：

@@ -13,7 +13,9 @@ describe("AIObservationPanel", () => {
           sourceType: "photo",
           sourceId: "media-1",
           rawAiOutput: { observations: [{ code: "appearance.changed" }] },
-          validatedAiObservation: { observations: [{ code: "appearance.changed" }] },
+          validatedAiObservation: {
+            observations: [{ code: "appearance.changed" }],
+          },
           humanReviewResult: null,
         },
       }),

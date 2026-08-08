@@ -53,7 +53,8 @@ function formatValue(value: unknown): string {
 export function AIObservationPanel({ observation, onReview }: Props) {
   const [correction, setCorrection] = useState("");
   const canReview = observation.status === "succeeded";
-  const sourceLabel = observation.sourceType === "photo" ? "清理後照片" : "志工心得";
+  const sourceLabel =
+    observation.sourceType === "photo" ? "清理後照片" : "志工心得";
 
   const review = (action: ReviewAction) => {
     if (!onReview) return;
@@ -84,7 +85,9 @@ export function AIObservationPanel({ observation, onReview }: Props) {
         {observation.status === "failed" || observation.status === "invalid" ? (
           <p role="alert">
             {statusLabels[observation.status]}
-            {observation.failureReason ? `：${observation.failureReason}` : "。"}
+            {observation.failureReason
+              ? `：${observation.failureReason}`
+              : "。"}
           </p>
         ) : (
           <pre>{formatValue(observation.validatedAiObservation)}</pre>
@@ -109,7 +112,11 @@ export function AIObservationPanel({ observation, onReview }: Props) {
                 onChange={(event) => setCorrection(event.target.value)}
               />
             </label>
-            <button type="button" onClick={() => review("correct")} disabled={!correction}>
+            <button
+              type="button"
+              onClick={() => review("correct")}
+              disabled={!correction}
+            >
               修正
             </button>
           </div>

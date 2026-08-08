@@ -174,9 +174,7 @@ async def reorder_observation_options(
     _require_option_manager(context)
     options = await ObservationOptionService(
         ObservationRepository(session, context.organization_id), audit=AuditService(session)
-    ).reorder(
-        [item.option_id for item in payload.items], actor_user_id=context.user_id
-    )
+    ).reorder([item.option_id for item in payload.items], actor_user_id=context.user_id)
     await session.commit()
     return {"items": [_option_response(option) for option in options]}
 

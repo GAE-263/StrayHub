@@ -101,6 +101,7 @@ async def test_human_correction_does_not_overwrite_raw_output() -> None:
     )
 
     original = observation.raw_ai_output
+
     class Repository:
         async def get(self, observation_id):
             return observation if observation_id == observation.id else None

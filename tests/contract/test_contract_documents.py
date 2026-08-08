@@ -20,6 +20,10 @@ def test_contract_documents_reference_the_same_local_mvp_boundaries() -> None:
     for relative in (
         "specs/001-volunteer-care-report/data-model.md",
         "specs/001-volunteer-care-report/quickstart.md",
+        "specs/001-volunteer-care-report/plan.md",
+        "specs/001-volunteer-care-report/contracts/generated-types.md",
+        "specs/001-volunteer-care-report/contracts/object-storage.md",
+        "specs/001-volunteer-care-report/contracts/async-ai.md",
         "services/api/app/application/ports/line_messaging.py",
         "services/api/app/infrastructure/storage/ports.py",
         "services/api/app/persistence/models/ai_job.py",
@@ -34,3 +38,16 @@ def test_quickstart_and_local_commands_use_the_configured_postgres_port() -> Non
     assert '"65432:5432"' in compose
     assert "scripts.seed_local" in quickstart
     assert "tests/e2e/test_line_bot_mvp.py" in quickstart
+
+
+def test_complete_local_gate_is_documented_across_contract_and_task_artifacts() -> None:
+    quickstart = (ROOT / "specs/001-volunteer-care-report/quickstart.md").read_text()
+    tasks = (ROOT / "specs/001-volunteer-care-report/tasks.md").read_text()
+    gate = ROOT / "scripts/verify_local.sh"
+
+    assert gate.exists()
+    assert "scripts/verify_local.sh" in quickstart
+    assert "T218" in quickstart and "T224" in quickstart
+    assert all(f"T{task}" in tasks for task in ("218", "219", "220", "221", "222", "223", "224"))
+    for marker in ("pytest", "ruff", "MinIO", "GCS", "Secret Scan", "Docker Build"):
+        assert marker.lower() in gate.read_text().lower()

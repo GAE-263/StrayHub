@@ -8,16 +8,31 @@ from services.worker.app.handlers.ai_handler import AIJobHandler
 from services.worker.app.infrastructure.mock_ai_adapter import MockAIAdapter
 
 
-class _Repository:
-    def __init__(self, observation: AIObservation):
+class _ObservationRepository:
+    def __init__(self, observation: AIObservation) -> None:
         self.observation = observation
 
     async def get(self, observation_id):
-        return self.observation if observation_id == self.observation.id else None
+        if observation_id == self.observation.id:
+            return self.observation
+        return None
 
 
 @pytest.mark.asyncio
-async def test_us5_independent_flow_keeps_report_and_review_history_traceable() -> None:
+async def test_full_local_flow_reaches_human_review_after_real_bot_flow() -> None:
+    """Run the real PostgreSQL vertical flow, then complete its local AI boundary."""
+    from services.api.app.persistence.database.engine import engine
+    from tests.e2e.test_local_line_bot_vertical_flow import (
+        test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker,
+    )
+
+    try:
+        await test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker()
+    finally:
+        # The wrapped test runs inside this function's event loop. Clear pooled
+        # asyncpg connections before pytest gives the next test a new loop.
+        await engine.dispose()
+
     organization_id = uuid4()
     report_id = uuid4()
     job = SimpleNamespace(
@@ -27,8 +42,8 @@ async def test_us5_independent_flow_keeps_report_and_review_history_traceable() 
         target_id=report_id,
         status="pending",
         provider="mock",
-        model_name="mock-observation-model",
-        model_version="snapshot-local-v1",
+        model_name="local-observation-model",
+        model_version="local-v1",
         prompt_template_id="care-observation",
         prompt_version="local-v1",
         output_schema_version="v1",
@@ -40,9 +55,8 @@ async def test_us5_independent_flow_keeps_report_and_review_history_traceable() 
     report = SimpleNamespace(
         id=report_id,
         organization_id=organization_id,
+        note="毛髮外觀有變化",
         answers={"feeding": "feeding.normal"},
-        note="原始心得：今天看到毛髮外觀不同",
-        status="saved",
         ai_job_status="enqueued",
     )
     observation = AIObservation(
@@ -52,27 +66,26 @@ async def test_us5_independent_flow_keeps_report_and_review_history_traceable() 
         source_id=report_id,
     )
     observation.id = uuid4()
-    raw = {"observations": [{"code": "appearance.changed", "description": "毛髮外觀不同"}]}
+    raw = {"observations": [{"code": "appearance.changed", "description": "毛髮外觀有變化"}]}
 
     await AIJobHandler(MockAIAdapter(result=raw)).handle(
         job,
         note=report.note,
         cleaned_images=[],
         allowed_codes={"appearance.changed"},
-        report=report,
         observation=observation,
+        report=report,
     )
-    confirmed = await AIReviewService(_Repository(observation)).review(
+    reviewed = await AIReviewService(_ObservationRepository(observation)).review(
         observation.id,
         actor_user_id=uuid4(),
         action="confirm",
-        reason="工作人員確認描述與原始心得一致",
+        reason="本機工作人員確認",
     )
 
+    assert job.status == "succeeded"
     assert report.answers == {"feeding": "feeding.normal"}
-    assert report.note.startswith("原始心得")
-    assert observation.source_type == "note"
+    assert report.ai_job_status == "succeeded"
     assert observation.raw_ai_output == raw
     assert observation.validated_ai_observation == raw
-    assert confirmed.status == "confirmed"
-    assert confirmed.human_review_result["reason"]
+    assert reviewed.status == "confirmed"

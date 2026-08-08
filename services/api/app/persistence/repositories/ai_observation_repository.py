@@ -18,10 +18,12 @@ class AIObservationRepository:
 
     async def get(self, observation_id: UUID) -> AIObservation | None:
         result = await self.session.execute(
-            select(AIObservation).where(
+            select(AIObservation)
+            .where(
                 AIObservation.id == observation_id,
                 AIObservation.organization_id == self.organization_id,
-            ).options(joinedload(AIObservation.job))
+            )
+            .options(joinedload(AIObservation.job))
         )
         return result.scalar_one_or_none()
 

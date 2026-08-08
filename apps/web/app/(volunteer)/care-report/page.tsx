@@ -47,7 +47,9 @@ export default function CareReportPage() {
     <main>
       <h1>照護回報備援介面</h1>
       {loading && <p>正在恢復回報草稿…</p>}
-      {offline && <p role="alert">目前無法連線；已保留本頁內容，請稍後重試。</p>}
+      {offline && (
+        <p role="alert">目前無法連線；已保留本頁內容，請稍後重試。</p>
+      )}
       {!loading && !draft && <p>目前沒有可恢復的照護回報。</p>}
       {draft && (
         <>

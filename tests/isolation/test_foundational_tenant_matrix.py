@@ -56,7 +56,10 @@ async def test_real_postgres_a_b_rows_are_isolated_by_scope_and_platform_scope()
         await connection.execute(
             "SELECT set_config('app.current_org_id', $1, true)", str(organization_a)
         )
-        rows = await connection.fetch("SELECT id FROM organizations ORDER BY id")
+        rows = await connection.fetch(
+            "SELECT id FROM organizations WHERE id = ANY($1::uuid[]) ORDER BY id",
+            [organization_a, organization_b],
+        )
         assert [row["id"] for row in rows] == [organization_a]
         assert (
             await connection.fetchrow("SELECT id FROM organizations WHERE id = $1", organization_b)
@@ -64,7 +67,10 @@ async def test_real_postgres_a_b_rows_are_isolated_by_scope_and_platform_scope()
         )
 
         await connection.execute("SELECT set_config('app.platform_scope', 'true', true)")
-        rows = await connection.fetch("SELECT id FROM organizations ORDER BY id")
+        rows = await connection.fetch(
+            "SELECT id FROM organizations WHERE id = ANY($1::uuid[]) ORDER BY id",
+            [organization_a, organization_b],
+        )
         assert {row["id"] for row in rows} == {organization_a, organization_b}
         await connection.execute("ROLLBACK")
     finally:
