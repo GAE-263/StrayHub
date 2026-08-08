@@ -3,7 +3,6 @@
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "0021_us2_draft_integrity"
 down_revision = "0020_authentication_scope"
 branch_labels = None
@@ -13,7 +12,12 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "care_report_drafts",
-        sa.Column("answer_validation_version", sa.String(length=40), nullable=False, server_default="v1"),
+        sa.Column(
+            "answer_validation_version",
+            sa.String(length=40),
+            nullable=False,
+            server_default="v1",
+        ),
     )
     op.add_column(
         "care_report_drafts",

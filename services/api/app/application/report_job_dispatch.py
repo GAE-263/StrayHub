@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from services.api.app.application.ai_job_dispatch import create_ai_job
+from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
 
@@ -19,6 +20,7 @@ class ReportJobDispatchService:
         try:
             async with self.session_factory() as session:
                 async with session.begin():
+                    await set_organization_scope(session, organization_id)
                     result = await session.execute(
                         select(CareReport).where(
                             CareReport.id == report_id,
@@ -44,6 +46,7 @@ class ReportJobDispatchService:
         try:
             async with self.session_factory() as session:
                 async with session.begin():
+                    await set_organization_scope(session, organization_id)
                     result = await session.execute(
                         select(CareReport).where(
                             CareReport.id == report_id,
@@ -70,6 +73,7 @@ class ReportJobDispatchService:
         try:
             async with self.session_factory() as session:
                 async with session.begin():
+                    await set_organization_scope(session, organization_id)
                     result = await session.execute(
                         select(CareReport).where(
                             CareReport.id == report_id,

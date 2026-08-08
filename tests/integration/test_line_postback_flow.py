@@ -79,19 +79,25 @@ def test_postback_redelivery_is_idempotent_and_cross_organization_is_denied() ->
             organization_id, volunteer_id, DraftStateMachine(DraftState.CONFIRMING_ANIMAL)
         ),
     )
-    assert service.handle(
-        event_id="same-event",
-        line_user_id=str(volunteer_id),
-        draft_token="draft-token",
-        action="confirm",
-        organization_id=organization_id,
-    ) == "processed"
-    assert service.handle(
-        event_id="same-event",
-        line_user_id=str(volunteer_id),
-        draft_token="draft-token",
-        action="confirm",
-        organization_id=organization_id,
-    ) == "duplicate_ignored"
+    assert (
+        service.handle(
+            event_id="same-event",
+            line_user_id=str(volunteer_id),
+            draft_token="draft-token",
+            action="confirm",
+            organization_id=organization_id,
+        )
+        == "processed"
+    )
+    assert (
+        service.handle(
+            event_id="same-event",
+            line_user_id=str(volunteer_id),
+            draft_token="draft-token",
+            action="confirm",
+            organization_id=organization_id,
+        )
+        == "duplicate_ignored"
+    )
     with pytest.raises(DomainError, match="草稿不存在"):
         service.current_state("draft-token", organization_id=uuid4())

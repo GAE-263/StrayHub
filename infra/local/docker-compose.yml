@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: strayhub
       POSTGRES_PASSWORD: strayhub
     ports:
-      - "5432:5432"
+      - "65432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U strayhub -d strayhub"]
       interval: 5s

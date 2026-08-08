@@ -26,8 +26,20 @@ class LineMessagingApiAdapter:
         except httpx.HTTPError as exc:
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
+    async def _post(self, url: str, **kwargs):
+        try:
+            return await self.client.post(url, **kwargs)
+        except httpx.HTTPError as exc:
+            raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
+
+    async def _get(self, url: str, **kwargs):
+        try:
+            return await self.client.get(url, **kwargs)
+        except httpx.HTTPError as exc:
+            raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
+
     async def reply(self, *, reply_token: str, messages: list[dict]) -> None:
-        response = await self.client.post(
+        response = await self._post(
             f"{self.api_base}/v2/bot/message/reply",
             headers=self._headers,
             json={"replyToken": reply_token, "messages": messages},
@@ -35,7 +47,7 @@ class LineMessagingApiAdapter:
         self._raise_for_status(response)
 
     async def get_image_content(self, *, message_id: str) -> LineImageContent:
-        response = await self.client.get(
+        response = await self._get(
             f"{self.data_base}/v2/bot/message/{message_id}/content",
             headers=self._headers,
         )
@@ -52,7 +64,7 @@ class LineMessagingApiAdapter:
 
     async def create_rich_menu(self, *, rich_menu: dict) -> str:
         await self.validate_rich_menu(rich_menu=rich_menu)
-        response = await self.client.post(
+        response = await self._post(
             f"{self.api_base}/v2/bot/richmenu",
             headers={**self._headers, "Content-Type": "application/json"},
             json=rich_menu,
@@ -61,7 +73,7 @@ class LineMessagingApiAdapter:
         return response.json()["richMenuId"]
 
     async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
-        response = await self.client.post(
+        response = await self._post(
             f"{self.api_base}/v2/bot/richmenu/{rich_menu_id}/content",
             headers={**self._headers, "Content-Type": "image/png"},
             content=content,
@@ -74,5 +86,5 @@ class LineMessagingApiAdapter:
             if user_id
             else f"/v2/bot/user/all/richmenu/{rich_menu_id}"
         )
-        response = await self.client.post(f"{self.api_base}{path}", headers=self._headers)
+        response = await self._post(f"{self.api_base}{path}", headers=self._headers)
         self._raise_for_status(response)

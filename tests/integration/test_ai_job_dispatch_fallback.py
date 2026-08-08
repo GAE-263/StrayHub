@@ -26,7 +26,7 @@ async def test_reconciliation_retries_enqueue_failed_report_without_new_report(m
         def begin(self):
             return self
 
-        async def execute(self, _statement):
+        async def execute(self, _statement, *_args, **_kwargs):
             return SimpleNamespace(scalar_one_or_none=lambda: self.report)
 
     async def fake_create(*_args, **_kwargs):

@@ -28,7 +28,7 @@ class _Session:
     def begin(self):
         return _Transaction()
 
-    async def execute(self, _statement):
+    async def execute(self, _statement, *_args, **_kwargs):
         return SimpleNamespace(scalar_one_or_none=lambda: self.report)
 
     def add(self, value):

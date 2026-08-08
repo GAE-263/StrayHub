@@ -28,7 +28,7 @@ def test_platform_scope_can_be_used_only_by_explicit_platform_context() -> None:
 def _database_url() -> str:
     return os.getenv(
         "STRAYHUB_TEST_DATABASE_URL",
-        "postgresql://strayhub:strayhub@127.0.0.1:56432/strayhub",
+        "postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub",
     )
 
 

@@ -325,10 +325,10 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T173 [US3] 在 `services/api/app/application/timeline_query.py` 實作 14 日序列補齊、Daily Summary、No-report、逐筆 DTO、Filter 與 Date Range 驗證 (depends on T164-T169, T172)
 - [x] T174 [US3] 在 `services/api/app/application/media_access.py` 實作角色、Organization、到期與一致拒絕的 Signed Media URL Service (depends on T070, T166, T173)
 - [x] T175 [US3] 在 `services/api/app/api/animal_timeline.py` 實作 Recent、Date Range、Daily Summary、No-report 與受控 Media API (depends on T164, T173, T174)
-- [ ] T176 [P] [US3] 在 `apps/web/features/animal-timeline/AnimalTimeline.tsx` 建立 14 日摘要、No-report、同日多筆、原始／AI／人工分區 (depends on T170, T175)
-- [ ] T177 [P] [US3] 在 `apps/web/features/animal-timeline/TimelineFilters.tsx` 建立日期、區間、類型、Loading、Empty 與 Error State (depends on T170, T175)
-- [ ] T178 [US3] 在 `apps/web/app/(management)/animals/[animalId]/timeline/page.tsx` 建立 Staff Timeline 入口、展開、照片及權限拒絕流程 (depends on T176, T177)
-- [ ] T179 [US3] 在 `tests/e2e/test_us3_animal_timeline.py` 執行 US3 Independent Test、Acceptance Scenarios 30～35、SC-006／SC-007／SC-014 與 US1／US2 回歸 (depends on T163, T175, T178)
+- [x] T176 [P] [US3] 在 `apps/web/features/animal-timeline/AnimalTimeline.tsx` 建立 14 日摘要、No-report、同日多筆、原始／AI／人工分區 (depends on T170, T175)
+- [x] T177 [P] [US3] 在 `apps/web/features/animal-timeline/TimelineFilters.tsx` 建立日期、區間、類型、Loading、Empty 與 Error State (depends on T170, T175)
+- [x] T178 [US3] 在 `apps/web/app/(management)/animals/[animalId]/timeline/page.tsx` 建立 Staff Timeline 入口、展開、照片及權限拒絕流程 (depends on T176, T177)
+- [x] T179 [US3] 在 `tests/e2e/test_us3_animal_timeline.py` 執行 US3 Independent Test、Acceptance Scenarios 30～35、SC-006／SC-007／SC-014 與 US1／US2 回歸 (depends on T163, T175, T178)
 
 **Story Checkpoint**：T179 通過後，工作人員可查看完整近 14 天序列；No-report 不會顯示為正常、未觀察或 AI 未發現問題。
 
@@ -336,13 +336,13 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 **目的**：US0＋US1＋US2＋US3 形成第一個可展示垂直 MVP；US4 管理頁與 US5 AI 處理不得阻擋。
 
-- [ ] T180 在 `tests/integration/test_empty_database_bootstrap.py` 從空 PostgreSQL 執行 0001～0014 Migration、Seed、Reset 與升級／回復策略驗證 (depends on T179)
-- [ ] T181 [P] 在 `tests/isolation/test_cross_tenant_resource_matrix.py` 驗證 Organization、Membership、Animal、Shelter Number、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、Option 與 Audit A／B 矩陣 (depends on T080, T179)
-- [ ] T182 [P] 在 `tests/e2e/test_local_line_bot_vertical_flow.py` 執行 Shelter → User → Animal → QR → Bot Draft → Quick Reply → Image → Report → Timeline 完整流程 (depends on T097, T120, T163, T179)
-- [ ] T183 [P] 在 `tests/integration/test_local_failure_degradation.py` 執行非法 Signature、Redelivery、網路中斷、圖片清理失敗、AI Job enqueue 失敗、停用 Scope 與資格失效 (depends on T135, T163, T179)
-- [ ] T184 [P] 在 `tests/frontend/test_local_bot_mvp.tsx` 使用 Mock LINE／LIFF 驗證 Animal Confirmation、Draft Resume、LIFF 備援、Summary 與保存成功 (depends on T120, T136, T161)
-- [ ] T185 在 `tests/contract/test_contract_documents.py` 驗證 OpenAPI、Contract Types、LINE、Storage、AI、data-model 與 quickstart 的路徑／狀態／命令一致 (depends on T019-T022, T182)
-- [ ] T186 在 `scripts/verify_local_mvp.sh` 建立 Docker Compose、Migration、Seed、Mock LINE E2E、Ruff、Pytest、Frontend、Contract Types、MinIO／GCS Contract 與 MVP Gate (depends on T180-T185)
+- [x] T180 在 `tests/integration/test_empty_database_bootstrap.py` 從空 PostgreSQL 執行 0001～0014 Migration、Seed、Reset 與升級／回復策略驗證 (depends on T179)
+- [x] T181 [P] 在 `tests/isolation/test_cross_tenant_resource_matrix.py` 驗證 Organization、Membership、Animal、Shelter Number、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、Option 與 Audit A／B 矩陣 (depends on T080, T179)
+- [x] T182 [P] 在 `tests/e2e/test_local_line_bot_vertical_flow.py` 執行 Shelter → User → Animal → QR → Bot Draft → Quick Reply → Image → Report → Timeline 完整流程 (depends on T097, T120, T163, T179)
+- [x] T183 [P] 在 `tests/integration/test_local_failure_degradation.py` 執行非法 Signature、Redelivery、網路中斷、圖片清理失敗、AI Job enqueue 失敗、停用 Scope 與資格失效 (depends on T135, T163, T179)
+- [x] T184 [P] 在 `tests/frontend/test_local_bot_mvp.tsx` 使用 Mock LINE／LIFF 驗證 Animal Confirmation、Draft Resume、LIFF 備援、Summary 與保存成功 (depends on T120, T136, T161)
+- [x] T185 在 `tests/contract/test_contract_documents.py` 驗證 OpenAPI、Contract Types、LINE、Storage、AI、data-model 與 quickstart 的路徑／狀態／命令一致 (depends on T019-T022, T182)
+- [x] T186 在 `scripts/verify_local_mvp.sh` 建立 Docker Compose、Migration、Seed、Mock LINE E2E、Ruff、Pytest、Frontend、Contract Types、MinIO／GCS Contract 與 MVP Gate (depends on T180-T185)
 
 **本機 MVP Checkpoint**：T186 通過後，US0＋US1＋US2＋US3 可在 AI Worker 未完成或 AI 完全失敗時本機展示。
 

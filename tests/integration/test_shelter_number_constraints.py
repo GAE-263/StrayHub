@@ -9,7 +9,7 @@ from services.api.app.persistence.models.animal import Animal
 def _database_url() -> str:
     return os.getenv(
         "STRAYHUB_TEST_DATABASE_URL",
-        "postgresql://strayhub:strayhub@127.0.0.1:56432/strayhub",
+        "postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub",
     )
 
 

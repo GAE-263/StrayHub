@@ -75,9 +75,7 @@ async def test_submission_rejects_missing_answer_before_creating_report() -> Non
     draft = _draft(organization_id, volunteer_id, animal_id, _complete_answers())
     draft.answers.pop("emotion")
     with pytest.raises(DomainError, match="缺少必要"):
-        await ReportSubmissionService(
-            Drafts(draft), Reports(organization_id)
-        ).submit(
+        await ReportSubmissionService(Drafts(draft), Reports(organization_id)).submit(
             draft_id=draft.id,
             volunteer_user_id=volunteer_id,
             animal=Animal(

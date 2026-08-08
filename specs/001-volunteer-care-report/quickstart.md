@@ -18,6 +18,8 @@
 docker compose -f infra/local/docker-compose.yml up -d postgres minio
 ```
 
+本機 PostgreSQL 對外使用 port `65432`（container 內仍使用 `5432`）。
+
 啟動 FastAPI、Next.js 與 Background Worker 的開發模式：
 
 ```bash
@@ -76,6 +78,14 @@ npm --prefix packages/contracts run check
 - `packages/contracts/src/openapi.ts` 由 `openapi.yaml` 產生且無漂移；生成檔沒有手動業務規則。
 
 ## 5. 建立虛構 Seed Data
+
+本機 MVP 可使用下列命令載入可重複的 ORG-A／ORG-B 虛構資料；QR Token、帳號與 Session
+資訊會以 JSON 輸出：
+
+```bash
+uv run python -m scripts.seed_local
+uv run python -m scripts.reset_local --yes
+```
 
 建立兩個互相隔離的 Shelter：
 
