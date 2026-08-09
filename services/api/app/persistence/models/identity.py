@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
+from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin, utc_now
 
 
 class Organization(IdentityMixin, AuditMixin, Base):
@@ -84,6 +84,6 @@ class LineWebhookEvent(IdentityMixin, Base):
     event_type: Mapped[str] = mapped_column(String(50))
     processing_status: Mapped[str] = mapped_column(String(30), default="received")
     redelivery: Mapped[bool] = mapped_column(Boolean, default=False)
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)

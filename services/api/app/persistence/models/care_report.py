@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
+from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin, utc_now
 
 
 class MediaAsset(IdentityMixin, AuditMixin, Base):
@@ -78,4 +78,4 @@ class CareReportCorrection(IdentityMixin, Base):
     before_data: Mapped[dict] = mapped_column(JSON)
     after_data: Mapped[dict] = mapped_column(JSON)
     reason: Mapped[str] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
