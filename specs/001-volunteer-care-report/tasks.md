@@ -632,7 +632,7 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **GCP Demo 準備／Gate 任務數**：14（T225～T238）
 - **GCP Demo 部署／驗證任務數**：6（T239～T244）
 - **Polish 任務數**：12（T245～T256）
-- **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 248 項、前端 18 項 Vitest 通過；`mypy`、Ruff、Prettier、Next.js production build、Contract Types、Terraform `fmt/init/validate`、三個 Docker image build 與 T237/T238 Deployment Gate 皆已通過。
+- **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 248 項、前端 22 項 Vitest 通過；`mypy`、Ruff、Prettier、Next.js production build、Contract Types、Terraform `fmt/init/validate`、三個 Docker image build 與 T237/T238 Deployment Gate 皆已通過。
 - **未完成測試範圍**：仍缺少 GCP Smoke Test 與真人 Usability Evidence；本機 Gate 不代表正式 GCP 資源或正式 LINE／LIFF 服務已驗證。
 - **Security／Isolation Test 任務數**：14 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑。
 - **可平行任務數**：90 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
