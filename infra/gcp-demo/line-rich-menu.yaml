@@ -1,0 +1,21 @@
+version: 1
+environment: gcp-demo
+name: strayhub-gcp-demo-volunteer-care
+liff_url_reference: ${LIFF_BASE_URL}
+webhook_url_reference: ${API_BASE_URL}/v1/line/webhook
+actions:
+  - label: 開始照護回報
+    type: postback
+    data: action=start_care_report
+  - label: 掃描 QR Code
+    type: uri
+    uri: ${LIFF_BASE_URL}/animal-confirmation
+  - label: 今日照護毛孩
+    type: postback
+    data: action=list_reportable_animals
+  - label: 繼續未完成回報
+    type: postback
+    data: action=resume_draft
+  - label: 開啟管理入口
+    type: uri
+    uri: ${LIFF_BASE_URL}/care-report

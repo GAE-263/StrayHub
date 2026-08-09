@@ -430,20 +430,20 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 **目的**：只建立可審查的 Demo IaC、映像建置、設定與 Gate；T238 通過前不得建立或修改任何 GCP 資源。
 
-- [ ] T225 在 `infra/gcp-demo/project.md` 建立 Project、Region、虛構資料、LINE Channel、Service 清單、Secret 與禁止正式個資規則 (depends on T224)
-- [ ] T226 在 `infra/gcp-demo/terraform/main.tf` 建立 Terraform Provider、Backend 約束及必要 GCP Service API 宣告 (depends on T225)
-- [ ] T227 在 `infra/gcp-demo/terraform/variables.tf` 建立 Project／Region、Image、Database、Bucket、Domain 與 Secret Reference 輸入驗證 (depends on T226)
-- [ ] T228 在 `infra/gcp-demo/terraform/iam.tf` 建立 Next.js／FastAPI／Worker Service Account、最小 IAM 與 GitHub OIDC (depends on T226, T227)
-- [ ] T229 [P] 在 `infra/gcp-demo/terraform/observability.tf` 建立 Artifact Registry、Cloud Logging 與不含 Secret 的 Log 設定 (depends on T226, T227)
-- [ ] T230 [P] 在 `infra/gcp-demo/terraform/cloud-sql.tf` 建立 Cloud SQL、Database、Runtime／Migration Role 與連線防護宣告 (depends on T226-T228)
-- [ ] T231 [P] 在 `infra/gcp-demo/terraform/storage.tf` 建立 Private GCS Bucket、Temporary Object TTL、正式物件與 Signed URL IAM 宣告 (depends on T226-T228)
-- [ ] T232 在 `infra/gcp-demo/terraform/cloud-run.tf` 建立 Next.js、FastAPI、Worker／Job、Service Account、Cloud SQL／GCS／Secret 關聯宣告 (depends on T228-T231)
-- [ ] T233 在 `infra/gcp-demo/terraform/outputs.tf` 建立 Deployment、Migration、Webhook HTTPS 與 Rich Menu 所需輸出，敏感值標記 `sensitive` (depends on T229-T232)
-- [ ] T234 [P] 在 `infra/gcp-demo/line-rich-menu.yaml` 建立 Demo Rich Menu Action、Webhook／LIFF URL Reference 與環境版本範本 (depends on T225)
-- [ ] T235 在 `.github/workflows/demo-build.yml` 建立 Secret Scan、Next.js／FastAPI／Worker Docker Build、Artifact metadata 與不執行 Terraform apply 的 Build Workflow (depends on T017, T225)
-- [ ] T236 在 `tests/contract/test_gcp_iac_contract.py` 驗證 Terraform format／validate、Private GCS、IAM 最小權限、Cloud SQL Role、Secret Reference 與無 `cloud-run-*.yaml` 部署來源 (depends on T226-T235)
-- [ ] T237 在 `infra/gcp-demo/deploy-gate.sh` 固化 Ruff、Pytest、Frontend、E2E、Contract Types、Migration、Isolation、MinIO、完整 GCS Adapter Contract、LINE Adapter Contract、Secret Scan、Docker Build 與 Terraform validate Gate (depends on T224, T236)
-- [ ] T238 在 `infra/gcp-demo/gate-evidence.md` 執行 T237 並記錄全部通過證據、版本與虛構資料檢查；任何失敗皆阻擋 T239 (depends on T237)
+- [x] T225 在 `infra/gcp-demo/project.md` 建立 Project、Region、虛構資料、LINE Channel、Service 清單、Secret 與禁止正式個資規則 (depends on T224)
+- [x] T226 在 `infra/gcp-demo/terraform/main.tf` 建立 Terraform Provider、Backend 約束及必要 GCP Service API 宣告 (depends on T225)
+- [x] T227 在 `infra/gcp-demo/terraform/variables.tf` 建立 Project／Region、Image、Database、Bucket、Domain 與 Secret Reference 輸入驗證 (depends on T226)
+- [x] T228 在 `infra/gcp-demo/terraform/iam.tf` 建立 Next.js／FastAPI／Worker Service Account、最小 IAM 與 GitHub OIDC (depends on T226, T227)
+- [x] T229 [P] 在 `infra/gcp-demo/terraform/observability.tf` 建立 Artifact Registry、Cloud Logging 與不含 Secret 的 Log 設定 (depends on T226, T227)
+- [x] T230 [P] 在 `infra/gcp-demo/terraform/cloud-sql.tf` 建立 Cloud SQL、Database、Runtime／Migration Role 與連線防護宣告 (depends on T226-T228)
+- [x] T231 [P] 在 `infra/gcp-demo/terraform/storage.tf` 建立 Private GCS Bucket、Temporary Object TTL、正式物件與 Signed URL IAM 宣告 (depends on T226-T228)
+- [x] T232 在 `infra/gcp-demo/terraform/cloud-run.tf` 建立 Next.js、FastAPI、Worker／Job、Service Account、Cloud SQL／GCS／Secret 關聯宣告 (depends on T228-T231)
+- [x] T233 在 `infra/gcp-demo/terraform/outputs.tf` 建立 Deployment、Migration、Webhook HTTPS 與 Rich Menu 所需輸出，敏感值標記 `sensitive` (depends on T229-T232)
+- [x] T234 [P] 在 `infra/gcp-demo/line-rich-menu.yaml` 建立 Demo Rich Menu Action、Webhook／LIFF URL Reference 與環境版本範本 (depends on T225)
+- [x] T235 在 `.github/workflows/demo-build.yml` 建立 Secret Scan、Next.js／FastAPI／Worker Docker Build、Artifact metadata 與不執行 Terraform apply 的 Build Workflow (depends on T017, T225)
+- [x] T236 在 `tests/contract/test_gcp_iac_contract.py` 驗證 Terraform format／validate、Private GCS、IAM 最小權限、Cloud SQL Role、Secret Reference 與無 `cloud-run-*.yaml` 部署來源 (depends on T226-T235)
+- [x] T237 在 `infra/gcp-demo/deploy-gate.sh` 固化 Ruff、Pytest、Frontend、E2E、Contract Types、Migration、Isolation、MinIO、完整 GCS Adapter Contract、LINE Adapter Contract、Secret Scan、Docker Build 與 Terraform validate Gate (depends on T224, T236)
+- [x] T238 在 `infra/gcp-demo/gate-evidence.md` 執行 T237 並記錄全部通過證據、版本與虛構資料檢查；任何失敗皆阻擋 T239 (depends on T237)
 
 **GCP Deployment Gate**：T238 是第一個 GCP 資源異動前的硬 Gate。尤其 `GcsStorageAdapter` 與 `tests/contract/test_storage_adapter_contract.py`／`test_all_adapters.py` 必須在此通過；不得部署後才補做 Contract Test。
 
@@ -617,8 +617,8 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 
 - **tasks.md 路徑**：`specs/001-volunteer-care-report/tasks.md`
 - **總任務數**：256（T001～T256）
-- **本輪已完成任務**：232（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
-- **尚未完成任務**：24；Feature 尚未達到完成條件，不能視為可部署產品。
+- **本輪已完成任務**：246（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
+- **尚未完成任務**：10；Feature 尚未達到完成條件，不能視為可部署產品。
 - **Setup 任務數**：18（T001～T018）
 - **Foundational 任務數**：63（T019～T081，本輪 13 項基礎安全／租戶隔離任務均已完成）
 - **US0 任務數**：16（T082～T097）
@@ -632,7 +632,7 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **GCP Demo 準備／Gate 任務數**：14（T225～T238）
 - **GCP Demo 部署／驗證任務數**：6（T239～T244）
 - **Polish 任務數**：12（T245～T256）
-- **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 244 項、前端 18 項 Vitest 通過；`mypy`、Ruff、Prettier、Next.js production build、Contract Types 與完整 `scripts/verify_local.sh` Gate 皆已通過。
+- **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 248 項、前端 18 項 Vitest 通過；`mypy`、Ruff、Prettier、Next.js production build、Contract Types、Terraform `fmt/init/validate`、三個 Docker image build 與 T237/T238 Deployment Gate 皆已通過。
 - **未完成測試範圍**：仍缺少 GCP Smoke Test 與真人 Usability Evidence；本機 Gate 不代表正式 GCP 資源或正式 LINE／LIFF 服務已驗證。
 - **Security／Isolation Test 任務數**：14 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑。
 - **可平行任務數**：90 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
@@ -642,5 +642,5 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **建議 MVP**：T001～T186，包含 US0＋US1＋US2＋US3；US4／US5 不阻擋。
 - **建議第一批任務**：T001～T018；Setup 通過後執行 T019～T081。
 - **範圍外檢查**：未加入醫療、關注排序、領養、公開頁面、Notification、Export、跨收容所共享、Kubernetes、Redis、Pub/Sub 或其他未核准能力。
-- **本輪實作限制**：本輪已使用本機 65432 PostgreSQL 完成 Migration／Seed／MVP smoke 與完整 Gate；未建立 GCP 資源，也未宣稱正式 GCS、LINE／LIFF 或真人可用性已驗證。
+- **本輪實作限制**：本輪已使用本機 65432 PostgreSQL、Terraform provider 與 Docker Desktop 完成 T225～T238；未建立 GCP 資源，也未宣稱正式 GCS IAM／Signed URL、LINE／LIFF 或真人可用性已驗證。
 - **下一步**：補齊其他尚未完成任務後執行 `$speckit-analyze`；目前仍不得將 Feature 標記為完成或直接部署。

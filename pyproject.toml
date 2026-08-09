@@ -39,6 +39,9 @@ src = ["services", "scripts", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# Existing UTC-aware code remains intentionally explicit as `timezone.utc`;
+# a repository-wide datetime API migration is outside T225-T238.
+ignore = ["UP017"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
