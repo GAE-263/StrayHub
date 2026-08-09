@@ -58,7 +58,9 @@ class SessionService:
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
         )
         await self.repository.add(session)
-        return await self._issue_session(user.id, session)
+        result = await self._issue_session(user.id, session)
+        result["organizations"] = await self._available_organizations(user.id)
+        return result
 
     async def refresh(self, *, refresh_token: str) -> dict:
         record = await self.repository.get_refresh_token(_refresh_digest(refresh_token))
@@ -85,6 +87,22 @@ class SessionService:
             if organization is not None and organization.status == "active":
                 return True
         return False
+
+    async def _available_organizations(self, user_id: UUID) -> list[dict]:
+        organizations = []
+        for membership in await self.repository.memberships(user_id, active_only=True):
+            organization = await self.repository.get_organization(membership.organization_id)
+            if organization is None or organization.status != "active":
+                continue
+            organizations.append(
+                {
+                    "id": organization.id,
+                    "code": organization.code,
+                    "name": organization.name,
+                    "role": membership.role,
+                }
+            )
+        return organizations
 
     async def logout(self, *, session_id: UUID) -> None:
         session = await self.repository.get_session(session_id)

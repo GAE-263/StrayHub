@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel
 from services.api.app.api.dependencies import (
     RequestContext,
+    authenticated_request_context,
     current_request_context,
     request_session,
 )
@@ -140,7 +141,7 @@ async def active_context(
 @router.put("/active-shelter-context")
 async def switch_context(
     payload: ShelterContextSwitchRequest,
-    request_context: RequestContext = Depends(current_request_context),  # noqa: B008
+    request_context: RequestContext = Depends(authenticated_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
     if request_context.session_id is None:

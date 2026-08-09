@@ -224,6 +224,51 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 **Alternatives considered**：只以自動化測試模擬真人操作；拒絕，因無法驗證學習成本與語意辨識。只記錄百分比而不保存去識別化證據；拒絕，因無法重現或稽核驗收結果。
 
+## 決策 26：先建立整體管理工作台，再交付模組頁
+
+**Decision**：Next.js 管理入口先建立共通 App Shell、角色導航、Active Shelter Context、
+Session lifecycle、共通 API client、Breadcrumb、Status／Loading／Empty／Forbidden 狀態，
+再將 Dashboard、Animal、Report、Timeline、Shelter Operations、AI Review 與 Audit 模組
+依工作流交付。既有獨立頁面只能作為模組內容，不再各自擁有登入、Token、Context 或錯誤
+處理邏輯。
+
+**Rationale**：目前直接進入 Timeline 的入口可以驗證單一路徑，但使用者無法發現其他
+功能，也會造成每頁重複處理 Session、Context 與權限。工作台先於模組可同時解決可發現性、
+角色導航、多租戶 Context 顯示與 SC-006 的三次主要操作要求。
+
+**Alternatives considered**：逐頁新增 `/shelters`、`/settings` 或 `/reports`；拒絕，因會
+持續產生孤立頁面、重複 API client 與不一致的失效行為。只在前端增加連結；拒絕，因後端
+仍需先提供管理清單、回報收件匣與範圍設定等完整契約。
+
+## 決策 27：`ORG-A` 僅保留為本機 Demo 預設值
+
+**Decision**：本機 Seed 可讓登入頁預選 `ORG-A`，但產品流程必須以登入回應的有效
+Membership／Organization 清單建立 Context 選擇器。多個 Membership 時不得默默選擇；只有
+本機 Demo 的明確單一候選或使用者確認後才可進入工作台。
+
+**Rationale**：Organization UUID 每次 Seed 可能不同，且規格要求志工可服務多個 Shelter、
+同一 Session 只能有一個明確 Active Context。將 `ORG-A` 寫入產品邏輯會把 Demo 假設誤當成
+正式授權規則。
+
+**Alternatives considered**：永遠把 ORG-A 當作登入後 Context；拒絕，因會造成跨租戶誤用與
+無法支援多收容所帳號。登入後直接跳第一隻 Animal；拒絕，因降低工作人員查找目標動物的
+可發現性，且不符合整體管理工作台入口。
+
+## 決策 28：先補管理工作流所需的 API 契約
+
+**Decision**：Dashboard summary、管理用 Animal list／detail、Report inbox、Reportable
+Scope、Animal／Cage／Area／QR management、AI review queue 與 Audit query 先列入 OpenAPI
+設計與角色／隔離測試，再由前端接入。現有單筆 Timeline、Observation Options、Organization
+與 Draft API 直接重用，不建立 Next.js 的正式資料副本。
+
+**Rationale**：現有 API 已能支撐部分頁面，但不足以讓工作人員從首頁發現、搜尋、處理與
+追蹤完整工作；先固定 contract 可避免 UI 依賴未定義的資料格式或以多次低階請求拼出錯誤
+的跨租戶結果。
+
+**Alternatives considered**：先做完整前端再由 API 追趕；拒絕，因權限與資料隔離是後端
+邊界，且會產生不可驗收的假資料狀態。把頁面狀態寫入瀏覽器作為工作資料；拒絕，因 CRM
+仍是唯一事實來源。
+
 ## 研究完成檢查
 
 - 本機與 GCP 的儲存差異已由 Object Storage Interface 隔離。

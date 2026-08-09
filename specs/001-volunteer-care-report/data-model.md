@@ -253,3 +253,59 @@ Shelter
 6. Repository 以 `AsyncSession` 執行資料存取；Transaction 邊界必須涵蓋 Scope 驗證與正式資料寫入，避免驗證後範圍被替換。
 7. Pydantic Request／Response Model 不得直接被當作 SQLAlchemy 持久化 Model；兩者轉換由 Application／Domain 邊界負責。
 8. 每個租戶 transaction 必須在第一次租戶資料查詢前由 Database Scope Setter 設定 transaction-local scope；未設定、跨 scope、transaction 結束後重用 connection 或 Worker 嘗試平台 scope 都必須拒絕。
+
+## 管理工作台呈現模型
+
+管理工作台不新增第二套正式 CRM 實體；以下是由既有 Session、Membership、Organization、
+Animal、Report、AI Job／Observation 與 Audit Record 組合出的前端 View Model。
+
+### ManagementSessionView
+
+- `user`：目前使用者與平台角色。
+- `memberships`：可用 Organization、Membership role、status。
+- `active_context`：目前 Session 綁定的 Organization，或平台級 `PLATFORM` Scope。
+- `expires_at`／`session_status`：只供畫面顯示與失效處理，不能取代後端驗證。
+
+驗證規則：Context 切換必須由後端以有效 Membership 重驗證；切換後清除前端舊租戶查詢
+狀態。多個候選 Context 不得默默選擇；`ORG-A` 只能是本機 Demo 預設候選。
+
+### ManagementNavigationView
+
+- `section`：Dashboard、Animals、Reports、Shelter Operations、Settings、AI／Audit。
+- `route`：Next.js 路由。
+- `required_roles`：只作導航可見性提示。
+- `required_scope`：`PLATFORM` 或目前 Organization Scope。
+- `availability`：enabled、loading、forbidden、unavailable。
+
+此 View Model 不保存正式業務資料；直接 URL 請求仍由 FastAPI 再次授權。
+
+### DashboardSummaryView
+
+- 今日可回報動物數與範圍摘要。
+- 最近照護回報與需要查看的動物。
+- Pending／Failed／Invalid AI Job 摘要。
+- 未完成 Draft、資料異常、停用選項或權限提示。
+
+所有數量、狀態與連結都必須由目前 Scope 的 CRM 查詢產生；空資料以「沒有資料」呈現，
+不得把查詢失敗或沒有回報當作正常狀態。
+
+### AnimalWorkspaceView
+
+- `animal_summary`：CRM Animal、Shelter Number snapshot、Cage／Area、status、photo。
+- `timeline_summary`：每日日期、has_report、report_count、主要狀態。
+- `report_links`：同日多筆 Report 的可追蹤連結。
+- `ai_summary`：衍生狀態，明確標示 AI 與人工結果。
+
+此 View 只能由同一 Organization Scope 的正式資料重建，不得在瀏覽器建立或持久化另一份
+Animal／Timeline。
+
+### WorkItemView
+
+工作台待辦只是一個聚合呈現，不是新的業務資料表。每個項目包含：
+
+- `kind`：report_review、ai_review、scope_exception、draft_resume、data_quality。
+- `resource_id` 與 `resource_type`。
+- `organization_id`、`status`、`created_at`。
+- `target_route`：點擊後進入對應的既有 CRM 工作頁。
+
+後端應以角色與 Scope 過濾 WorkItem；前端不得自行將多個租戶資料合併成總數。

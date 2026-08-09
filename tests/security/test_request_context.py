@@ -87,6 +87,25 @@ async def test_platform_admin_does_not_need_membership(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unscoped_authenticated_context_allows_initial_shelter_switch(monkeypatch) -> None:
+    repository = _AuthRepository()
+    repository.session.active_organization_id = None
+    monkeypatch.setattr(dependencies, "AuthenticationRepository", lambda _session: repository)
+    monkeypatch.setattr(dependencies, "set_authentication_user_scope", _noop_scope)
+
+    context = await dependencies._load_request_context(
+        object(),
+        authorization=None,
+        session_id=repository.session_id,
+        require_organization=False,
+    )
+
+    assert context.user_id == repository.user_id
+    assert context.organization_id is None
+    assert context.role == ""
+
+
+@pytest.mark.asyncio
 async def test_disabled_membership_is_rejected_immediately(monkeypatch) -> None:
     repository = _AuthRepository(membership_status="disabled")
     monkeypatch.setattr(dependencies, "AuthenticationRepository", lambda _session: repository)

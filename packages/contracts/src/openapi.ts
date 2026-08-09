@@ -779,7 +779,17 @@ export interface components {
             expires_in: number;
             /** Format: uuid */
             session_id: string;
+            /** @description 登入帳號可選擇的有效收容所，供前端建立 Active Context。 */
+            organizations?: components["schemas"]["LoginOrganization"][];
             user: components["schemas"]["User"];
+        };
+        LoginOrganization: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            /** @enum {string} */
+            role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
         };
         AccessScope: {
             /** @enum {string} */

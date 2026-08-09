@@ -6,6 +6,7 @@ import {
   TimelineDay,
 } from "../../../../../features/animal-timeline/AnimalTimeline";
 import { TimelineFilters } from "../../../../../features/animal-timeline/TimelineFilters";
+import { authFetch } from "../../../../../lib/auth";
 import {
   mapDays,
   type ApiDay,
@@ -31,7 +32,7 @@ export default function AnimalTimelinePage({ params }: Props) {
       if (nextRange.end) query.set("end_date", nextRange.end);
       try {
         const suffix = query.toString() ? `?${query.toString()}` : "";
-        const response = await fetch(
+        const response = await authFetch(
           `/v1/animals/${animalId}/timeline${suffix}`,
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);

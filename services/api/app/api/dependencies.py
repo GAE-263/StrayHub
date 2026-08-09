@@ -49,6 +49,27 @@ async def current_request_context(
             session,
             authorization=authorization,
             session_id=x_session_id,
+            require_organization=True,
+        )
+        request.state.auth_context = context
+    return context
+
+
+async def authenticated_request_context(
+    request: Request,
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+    authorization: str | None = Header(default=None),  # noqa: B008
+    x_session_id: UUID | None = Header(default=None),  # noqa: B008
+) -> RequestContext:
+    """建立已驗證的使用者 Context，但允許尚未選定收容所的 Session。"""
+
+    context = getattr(request.state, "auth_context", None)
+    if not isinstance(context, RequestContext):
+        context = await _load_request_context(
+            session,
+            authorization=authorization,
+            session_id=x_session_id,
+            require_organization=False,
         )
         request.state.auth_context = context
     return context
@@ -59,6 +80,7 @@ async def _load_request_context(
     *,
     authorization: str | None,
     session_id: UUID | None,
+    require_organization: bool = True,
 ) -> RequestContext:
     if authorization:
         scheme, _, token = authorization.partition(" ")
@@ -126,10 +148,10 @@ async def _load_request_context(
                 role = membership.role
         elif not platform_scope:
             raise DomainError("organization_access_denied", "無法存取此收容所資料", 404)
-    elif not platform_scope:
+    elif not platform_scope and require_organization:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
 
-    if not platform_scope:
+    if not platform_scope and organization_id is not None:
         await set_organization_scope(session, organization_id)
     return RequestContext(
         user_id=user.id,

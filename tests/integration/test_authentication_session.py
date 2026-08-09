@@ -124,6 +124,7 @@ async def test_login_refresh_rotation_and_family_replay() -> None:
     )
 
     first = await service.login(username="staff", password="password")
+    assert first["organizations"][0]["code"] == "SHELTER"
     second = await service.refresh(refresh_token=first["refresh_token"])
     assert first["refresh_token"] != second["refresh_token"]
 

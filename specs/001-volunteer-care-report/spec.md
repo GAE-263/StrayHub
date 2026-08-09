@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-05
 
-**Status**: Ready for Implementation — 完成狀態、標準回報必填題目與 Tasks 已同步；最新 Analyze 結果為 CRITICAL = 0、HIGH = 0
+**Status**: In Progress — 247/308 項任務已完成，尚有 61 項未完成；最新 Analyze 結果為 CRITICAL = 0、HIGH = 0。Feature 尚未達到 Feature Completion；GCP Demo Deployment 另有 T239～T244 部署分支尚未完成，不能視為可部署產品。
 
 **Input**: User description: 建立「浪浪森友會」第一個功能規格：志工日常照護回報與動物近期歷程。
 
@@ -536,6 +536,15 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - **FR-074**：LINE Bot 事件、LIFF 與 Next.js MUST 共用 CRM 的使用者、Organization、Animal、Observation Option、Draft 與 Care Report 業務規則，不得建立通道專屬正式副本。
 - **FR-075**：LINE Webhook 依 `line_user_id` 處理事件時 MUST 先解析有效 LINE Binding；Binding 無效不得建立正式資料。Binding 有效但有多個可用 Webhook Session，或沒有 Session 且有多個有效 Shelter Context 時，系統 MUST 不自動選擇並要求透過 LIFF 明確選擇；只有唯一有效 Session 或唯一有效 Shelter Context 且 Membership 與權限通過重新驗證時，才可開始回報。
 
+#### 管理工作台
+
+- **FR-076**：完成身分驗證的 `PLATFORM_ADMIN`、`SHELTER_ADMIN` 與 `STAFF` MUST 進入依角色產生的管理工作台 Dashboard；Dashboard MUST 依目前有效的 Active Shelter Context 回傳今日可回報動物數、最近回報、未完成 Draft、AI 待處理與異常提醒等可見摘要；沒有有效 Context 時 MUST 要求明確選擇或顯示一致的 Context required 結果，不得以第一隻 Animal 或固定 `ORG-A` 作為正式首頁資料來源。
+- **FR-077**：所有管理工作台路由 MUST 使用共通 Shell，至少包含目前 Organization／Role、Context 選擇、角色導航、Breadcrumb、Loading／Empty／Error／Forbidden／Session expired 狀態與登出；導航隱藏不得取代後端授權，直接輸入受限網址時後端 MUST 重新驗證 Session、Membership、Role 與 Organization Scope，Context 切換後 MUST 清除舊租戶的動物、回報、照片與選項畫面資料。
+- **FR-078**：有權限的工作人員與管理員 MUST 能從管理動物清單依名稱、完整或部分收容編號、Cage／Area、狀態與最近活動搜尋或篩選，開啟單一 Animal 檔案並進入其 Timeline；從 Dashboard 到指定 Animal Timeline 的主要操作 MUST 不超過三次，且管理清單不得誤用志工可回報候選名單或跨 Organization 資料。
+- **FR-079**：有權限的管理員與工作人員 MUST 能在 Report Inbox 依日期、Animal 與狀態查詢回報並開啟 Detail，查看 CRM 原始回答、心得、照片、AI 狀態與 Audit；Correction 與 Archive MUST 要求原因、保留前後內容與操作者資訊，正式 Care Report MUST 不得 Hard Delete，AI 或 Media 失敗不得阻擋原始回報查詢。
+- **FR-080**：有權限的 `PLATFORM_ADMIN`、`SHELTER_ADMIN` 與被授權 `STAFF` MUST 能在管理工作台維護 Membership、Cage／Area、QR Code、Daily Reportable Scope 與 Observation Vocabulary；每項建立、修改、停用、撤銷或重新產生操作 MUST 依後端 Organization／Role Policy 重新驗證並留下 Audit，QR Code 只能作候選查詢，不得成為授權憑證。
+- **FR-081**：有權限的管理員與工作人員 MUST 能查看 AI Review Queue 的待處理、失敗、無效與已覆核項目，並執行受控的 confirm／reject／correct；AI 原始輸出、驗證結果與人工結果 MUST 分開保存，人工操作不得修改原始回報或正式狀態；Audit Query MUST 為依 Scope、操作者、資源、時間與 Action 的只讀查詢，不得提供修改或刪除。
+
 ## Key Entities
 
 - **Shelter / Tenant**：平台中的獨立收容所或中途機構資料範圍；所有非公開業務資料都必須歸屬至一個 Shelter。
@@ -618,6 +627,24 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 - 公開島民檔案、領養申請、志工智慧排班或其他後續功能。
 - 以政府公告頁面作為正式回報資料庫。
 - 公開動物頁面、批次 Export、Notification 或公開欄位 Allowlist。
+
+## Completion Gates
+
+本 Feature 的完成判定與 GCP Demo 部署判定是兩個獨立 Gate，不互相取代。
+
+### Feature Completion
+
+只有以下三類條件與證據全部通過，才能將本 Feature 標記為完成：
+
+- **本機品質 Gate**：本機整合與品質檢查、跨租戶隔離、Contract、Storage Adapter、Migration、Frontend 與相關測試通過（對應 T224、T245～T252，並由 T256 彙整基線與證據）。
+- **管理工作台 Gate**：管理工作台的 API／Contract、角色與 Active Shelter Context、共通 Shell、Dashboard、動物／回報／設定／AI／Audit 工作流，以及品質與 A／B Context Isolation 通過（對應 T257～T308；T308 為整體證據 Gate）。
+- **真人驗收 Gate**：固定 Protocol 與去識別化驗收證據完成，且志工與工作人員的 Success Criteria 達標（對應 T253～T255）。
+
+Feature Completion 不以 GCP 資源是否建立為必要條件；但未通過上述任一 Gate，不得宣稱 Feature 完成。
+
+### GCP Demo Deployment
+
+GCP Demo 是獨立的部署分支，對應 T239～T244，且必須先通過 T238 的部署前硬 Gate。T239～T244 通過只代表以虛構資料完成 GCP Demo 的建立、Migration、Seed、LINE 設定與環境 Smoke Test；不得取代本機品質、管理工作台或真人驗收，也不得因此將 Feature 標記為完成。反之，Feature Completion 通過也不代表已完成 GCP Demo Deployment；真實 GCP IAM、Signed URL、Cloud SQL、HTTPS 與 LINE 行為仍須依 T239～T244 驗證。
 
 ## Out of Scope
 

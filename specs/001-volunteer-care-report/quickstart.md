@@ -240,7 +240,27 @@ MinIO／GCS Adapter Contract、Frontend Test／Typecheck／Build、OpenAPI Gener
 `Docker build skipped: no Dockerfiles configured`；這不代表 GCP Demo 已完成。若新增 Dockerfile，Gate
 會自動逐一執行本機 build。任何其他 phase 失敗都會停止 Gate，並保留失敗命令作為修正入口。
 
-## 14. GCP Demo 部署後驗證
+## 14. 管理工作台整體驗證
+
+管理入口驗證不以直接輸入單一深層網址作為完成條件。依
+[`management-workbench-plan.md`](management-workbench-plan.md) 執行以下固定路徑：
+
+1. 以 `local-staff-a` 登入 `/login`，確認登入後可看見目前 `ORG-A` Context、角色與工作台導航。
+2. 從工作台首頁進入動物清單，使用收容編號或名稱搜尋，開啟指定動物檔案，再進入 Timeline；
+   量測不超過三次主要操作。
+3. 從同一個動物工作區展開近 14 日、無回報日、同日多筆回報、原始 Note／Photo、AI 狀態與
+   人工修正狀態；不得把 AI 失敗或未觀察顯示成正常。
+4. 以 `SHELTER_ADMIN`／`STAFF` 測試帳號確認導航依角色顯示；直接輸入無權限路由仍由 API 拒絕。
+5. 在 Context 選擇器切換 A／B 後，確認舊租戶的動物、回報、照片、選項與 Dashboard 數量不殘留。
+6. 驗證管理員可從工作台進入帳號、Cage／Area、QR、Reportable Scope 與 Observation Vocabulary；
+   每個異動都能看到成功／失敗與 Audit 入口。
+7. 驗證工作台的 Dashboard、Report inbox、AI review 與 Audit query 在空資料、載入中、403、
+   409 Context、401 Session 過期與 API 失敗時都有可理解的狀態。
+
+工作台 Gate：角色導航、Context 顯示與 API 授權一致；工作人員可在三次主要操作內進入指定
+Timeline；A／B 租戶資料不混用；所有正式資料仍由 CRM 讀取；未完成時不得宣稱管理入口完成。
+
+## 15. GCP Demo 部署後驗證
 
 部署前先驗證唯一 Terraform 來源：
 

@@ -47,6 +47,7 @@ uv run python services/worker/worker.py
 
 - API health check：<http://127.0.0.1:8000/healthz>
 - 管理前端：<http://127.0.0.1:3000>
+- 管理登入頁：<http://127.0.0.1:3000/login>
 - Swagger：<http://127.0.0.1:8000/docs>
 - 本機資料帳號：`local-staff-a`、`local-volunteer-a`，密碼都是 `local-only-password`
 - 另一個租戶帳號：`local-staff-b`、`local-volunteer-b`
@@ -56,6 +57,8 @@ Seed 只建立虛構的 `ORG-A`／`ORG-B`，兩邊可以使用相同 Shelter Num
 ```bash
 uv run python -m scripts.reset_local --yes
 ```
+
+登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8000/v1/*`，再以登入帳號的 `ORG-A` Membership 設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
 
 ## 一鍵本機展示
 

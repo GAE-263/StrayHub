@@ -12,6 +12,26 @@
 
 GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Cloud Run、Cloud SQL for PostgreSQL、Cloud Storage、Secret Manager、Artifact Registry 與 Cloud Logging；MinIO 僅供本機開發與整合測試使用。正式部署不在本 feature 的交付範圍內。
 
+## 管理工作台整體設計基線
+
+本次管理入口不採逐頁補功能的方式，而是先建立共通的 Management App Shell，再將既有
+Timeline、收容所管理與觀察語彙頁面納入同一個工作流。完整資訊架構、角色導航矩陣、
+API 缺口、交付階段與完成定義記錄於
+[management-workbench-plan.md](management-workbench-plan.md)。
+
+整體入口的決策如下：
+
+- `/` 是角色感知的工作台首頁，顯示今日摘要、待處理事項與快速入口；不再以第一隻
+  動物作為正式首頁行為。
+- `/animals` → `/animals/:animalId` → `/animals/:animalId/timeline` 是工作人員的主要
+  動物工作流；志工的 `/animal-confirmation` 與 `/care-report` 保持手機優先的獨立流程。
+- Login、Refresh、Logout、Active Shelter Context、角色導覽、API client、錯誤狀態與
+  Session 失效處理由共通 Shell 管理，不由每個頁面重複實作。
+- `ORG-A` 僅是本機 Seed 的預設展示 Context；正式產品必須依登入帳號的有效 Membership
+  讓使用者明確選擇 Context。
+- 在 Dashboard、動物管理、回報收件匣、Reportable Scope、QR／Cage／Area、AI 覆核與
+  Audit 查詢所需的 API 契約完成前，不以多個低階 endpoint 拼成看似完整的孤立 UI。
+
 ## 技術脈絡
 
 **語言／版本**：Next.js 使用 TypeScript；FastAPI 與 Background Worker 使用 Python。Python 專案命令與環境管理採用 `uv`；Python 與 Node.js 的精確版本在實作階段依專案工具鏈鎖定，但必須可在本機與 Demo 環境重現。
@@ -48,11 +68,11 @@ GCP 只在本機品質門檻全部通過後建立 Demo 環境。Demo 使用 Clou
 - **X. 正體中文與 Python 品質門檻：通過。** 本計畫與產物使用台灣正體中文；Python 品質門檻為 `ruff check .`、`ruff format --check .` 與 `pytest`。
 - **XI. 多收容所資料隔離：通過。** 所有 query、command、圖片存取與修改都在後端依 Shelter 授權範圍強制判定；本 Feature 不提供批次匯出；A／B 隔離測試為 Demo 門檻。
 
-**Gate 結論**：D-001～D-010 與本輪 LINE Bot、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS、Database Scope Setter、Authentication API、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform 與 `uv` 決策已同步至本計畫與 Phase 1 設計方向。重新產生 `tasks.md` 與執行 `/speckit-analyze` 是本計畫完成後的必要步驟；本文件不預先宣稱尚未執行的 Analyze 結果。沒有以降低 Constitution 要求方式處理的例外。
+**Gate 結論**：D-001～D-010 與本輪 LINE Bot、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS、Database Scope Setter、Authentication API、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform 與 `uv` 決策已同步至本計畫與 Phase 1 設計方向。`tasks.md` 已依管理工作台規劃重產，US3 優先級已與 spec 一致為 P3；最新 Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`。本文件沒有以降低 Constitution 要求方式處理的例外。
 
 ### Gate：Phase 1 後
 
-**重新檢查結果：通過。** Phase 1 設計已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS／Database Scope Setter、Authentication API、`Argon2id` Password Hash、`RS256` JWT Access Token、Refresh Token digest／rotation、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform、`uv`、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive。下一步仍須依更新後文件重新產生 `tasks.md` 並執行 `/speckit-analyze`；在 Analyze 通過前不得開始實作。
+**重新檢查結果：通過。** Phase 1 設計已同步 LINE Bot／LIFF 邊界、Webhook Signature、Event Idempotency、Bot State Machine、圖片訊息、平台級 `PLATFORM_ADMIN` Scope、Webhook Session 解析、PostgreSQL RLS／Database Scope Setter、Authentication API、`Argon2id` Password Hash、`RS256` JWT Access Token、Refresh Token digest／rotation、正式 LINE Adapter、Observation／Job Foundational 邊界、OpenAPI Contract Types、測試目錄、Terraform、`uv`、AI 版本追溯、EXIF 清理、Draft／Media 刪除與 Care Report Archive。`tasks.md` 已依管理工作台規劃重產，US3 優先級已與 spec 一致為 P3；最新 Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`，可繼續執行剩餘實作任務，但尚未達到 Feature Completion。
 
 ## Database Access
 
@@ -228,9 +248,9 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 
 一般 LIFF 與 Bot 流程開發使用 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、`MockLineAdapter`、Postback／Image／Redelivery Fixture。需要驗證真正 LINE 身分、Webhook、Rich Menu、LIFF URL 或 LIFF Browser 行為時，才啟用 `LineMessagingApiAdapter` 並使用 LINE 官方建議的 HTTPS 本機開發環境或受控 Demo 入口。Webhook 事件處理不得在一般單元測試呼叫真實 LINE API；圖片內容取得、Reply Token、Push Message 與 Rich Menu API 以 Adapter／Contract Test 隔離。不得要求所有日常前端開發都透過已部署的 GCP 環境進行。
 
-### Demo 部署門檻
+### Demo 部署門檻（GCP Demo Deployment Gate）
 
-只有在以下條件全部滿足後，才部署至 GCP Demo：
+以下條件屬於 GCP Demo Deployment Gate，不代表 Feature Completion；只有全部滿足後，才部署至 GCP Demo：
 
 - `ruff check .` 通過。
 - `ruff format --check .` 通過。
@@ -273,6 +293,24 @@ Demo 前才建立：
 
 本機測試通過不代表 GCP 整合已完成；GCP 專屬的 IAM、Signed URL、Cloud SQL 連線及 Service Account 行為必須在 Demo 環境另外驗證。
 
+## Completion Gate 分層
+
+本 Feature 的完成 Gate 與 GCP Demo Deployment Gate 必須分開判定：
+
+### Feature Completion Gate
+
+Feature Completion 必須同時具備：
+
+- 本機品質與整合 Gate：T224、T245～T252，以及由 T256 彙整的本機基線、品質與阻擋事項證據。
+- 管理工作台 Gate：T257～T308，包含 API／Contract、角色／Context、共通 Shell、所有管理工作流、品質、A／B Isolation 與 T308 整體證據。
+- 真人驗收 Gate：T253 Protocol、T254 志工證據與 T255 工作人員證據，且 Success Criteria 達標。
+
+以上任一項未通過，都不得將 Feature 標記為完成。Feature Completion 可在本機優先流程驗證，不以 T239～T244 的 GCP 資源或環境驗證取代。
+
+### GCP Demo Deployment Gate
+
+GCP Demo Deployment 是獨立部署分支：T238 是建立資源前的硬 Gate，T239～T244 負責受控 Terraform 部署、Migration、虛構資料 Seed、LINE 設定、環境 Smoke Test 與部署證據。T244 通過只證明 GCP Demo 可用，不證明 Feature Completion；Feature Completion 通過也不會跳過 T238～T244 的 GCP 專屬驗證。
+
 ## 專案結構
 
 ### 本功能文件
@@ -282,6 +320,7 @@ specs/001-volunteer-care-report/
 ├── plan.md              # 本文件
 ├── research.md          # Phase 0 研究與決策
 ├── data-model.md        # Phase 1 業務資料模型與驗證規則
+├── management-workbench-plan.md # 管理工作台資訊架構、角色導航與交付 Gate
 ├── quickstart.md        # 本機與 Demo 驗證指南
 ├── contracts/           # CRM、租戶、儲存、LINE Bot／LIFF／Webhook 與 AI 邊界契約
 │   └── openapi.yaml     # 前後端正式 API Contract
@@ -368,3 +407,16 @@ specs/001-volunteer-care-report/validation/
 ## 複雜度追蹤
 
 無。上述分離是由多收容所隔離、前端／後端／Worker 獨立生命週期、本機 MinIO 與 GCP Cloud Storage 差異，以及 Constitution 的 CRM 與非同步邊界所要求；不構成未合理化的 Constitution 例外。
+
+## 管理工作台 Phase Gate
+
+管理工作台另依下列順序交付：
+
+1. Shell／Authentication／Context／Role Navigation。
+2. Dashboard／Animal List／Animal Profile／Timeline 串接。
+3. Report Inbox／Report Detail／AI 狀態／Correction／Archive。
+4. Shelter Operations：Membership、Cage／Area、QR、Reportable Scope、Observation Vocabulary。
+5. AI Review／Audit Query 與真人 Usability 驗收。
+
+每一階段都必須先補齊對應 API Contract、權限／隔離測試與前端錯誤狀態，才進入下一階段；
+不得把「可以手動輸入深層網址」視為管理工作台完成。

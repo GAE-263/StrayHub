@@ -1,20 +1,21 @@
-# Tasks：志工日常照護回報與動物近期歷程
+# Tasks：志工日常照護回報、動物歷程與管理工作台
 
 ## 輸入文件
 
 - [constitution.md](../../.specify/memory/constitution.md)：CRM 唯一事實來源、原始資料保存、LINE 後端邊界、AI 治理、Python 品質門檻與多收容所資料隔離。
-- [spec.md](./spec.md)：US0～US5、FR-001～FR-075、Acceptance Scenarios、Edge Cases、SC-001～SC-026 與最新 Clarification。
+- [spec.md](./spec.md)：US0～US5、FR-001～FR-081、Acceptance Scenarios、Edge Cases、SC-001～SC-026 與最新 Clarification。
 - [plan.md](./plan.md)：Next.js、FastAPI、SQLAlchemy 2.x、Alembic、`asyncpg`、Authentication API、Database Scope Setter、正式 LINE Adapter、Observation／Job Foundational 邊界、Contract Types、本機優先及 GCP Demo Gate。
 - [research.md](./research.md)：Authentication、LINE Messaging API、PostgreSQL RLS、`set_config(..., true)`、Job dispatch、`openapi-typescript` 與測試目錄決策。
 - [data-model.md](./data-model.md)：Organization、Session、LINE Binding、Webhook Event、Animal、Draft、Care Report、Observation、Job、Media、Timeline 與 Audit 關係。
 - [contracts/](./contracts/)：OpenAPI、Contract Types、CRM Scope、LINE／LIFF、Object Storage、AI Job 與 GCP Demo 契約。
 - [quickstart.md](./quickstart.md)：本機 Authentication、Database Scope、Mock LINE Bot、MinIO、AI 降級、A／B 隔離與 GCP Demo 驗證流程。
+- [management-workbench-plan.md](./management-workbench-plan.md)：共通 Management Shell、角色導航、Dashboard、動物／回報／設定／AI／Audit 工作流與五階段交付 Gate。
 
 ## 阻擋實作的未決事項
 
 目前沒有尚待產品決策且會阻擋 Schema、Authentication、Tenant Isolation、API Contract、Storage Security、交易邊界、Job Processing 或正式資料正確性的事項。
 
-Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。不得在 Analyze 出現 `CRITICAL` 或 `HIGH` 結果時開始 `$speckit-implement`。
+Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`。US3 優先級已在 spec 與 tasks 一致為 P3。尚有 61 項未完成任務，Feature 尚未達到 Feature Completion；GCP Demo Deployment 另依 T238～T244 判定，仍不能視為可部署產品。
 
 ## 任務格式說明
 
@@ -34,6 +35,12 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - 13 個標準必填答案：T121、T124、T132、T138、T140、T146、T149、T152、T158、T163 明確涵蓋 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction`、`appearance_special_status`。
 - 缺答不得進入 `reviewing`／`submitting`：T124、T132、T146、T149、T152、T158、T163 明確涵蓋 State Machine、Application Service、API 與 E2E 拒絕驗證。
 - `DraftAnswers` 與 `CareReportAnswers`：T020、T121、T132、T138、T146、T152、T158、T163 明確區分草稿部分答案與正式回報完整答案。
+
+## 本次重產範圍
+
+- T001～T256 保留既有已完成／未完成狀態，作為已建立的 CRM、LINE、Timeline、AI、GCP Gate 與真人驗收基線。
+- T257～T308 新增並整合 `management-workbench-plan.md` 的五個交付階段；不是把單一功能頁孤立追加，而是以 Contract → 權限／隔離測試 → 共通 Shell → 垂直工作流 → 整體 Gate 排列。
+- 管理工作台任務全部以實際路徑、角色邊界與獨立測試定義；未完成的工作台任務仍以 `[ ]` 標記，不因目前已有 `/login` 或 Timeline 雛形而宣稱整體完成。
 
 ## Phase 1：Setup
 
@@ -189,7 +196,7 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T094 [US0] 在 `services/api/app/api/organization_management.py` 實作 Organization、Membership、Cage／Area、Status 與 Initial Admin API (depends on T082, T089, T091-T093)
 - [x] T095 [P] [US0] 在 `apps/web/app/(management)/shelters/page.tsx` 建立平台／收容所管理畫面及授權錯誤狀態 (depends on T022, T082, T094)
 - [x] T096 [P] [US0] 在 `apps/web/features/shelter-context/ActiveShelterContext.tsx` 建立目前 Shelter 顯示、明確切換及 Context 不一致提示 (depends on T022, T093, T094)
-- [x] T097 [US0] 在 `tests/e2e/test_us0_shelter_isolation.py` 執行 US0 Independent Test、Acceptance Scenarios、API／Repository／RLS 與 Audit 回歸 (depends on T084, T085, T087, T094-T096)
+- [x] T097 [US0] 在 `tests/e2e/test_us0_shelter_isolation.py` 執行 US0 Independent Test、Acceptance Scenarios、API／Repository／RLS 與 Audit 回歸，涵蓋 SC-015～SC-020 (depends on T084, T085, T087, T094-T096)
 
 **Story Checkpoint**：T097 通過後，US0 可獨立展示 Organization、帳號、停用、A／B 隔離、平台最高權限與 Active Shelter Context。
 
@@ -231,7 +238,7 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T117 [P] [US1] 在 `apps/web/features/animal-selection/AnimalConfirmationCard.tsx` 建立照片、名稱、完整 Shelter Number、Cage／Area、狀態與明確確認 (depends on T102, T116)
 - [x] T118 [P] [US1] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 建立 QR Deep Link、Shelter Number Search、重新掃描與 LIFF 輔助確認頁 (depends on T103, T116)
 - [x] T119 [US1] 在 `services/api/app/application/create_report_draft.py` 建立確認後才產生 Server-side Draft Token 的入口並固定 Animal／Organization (depends on T115)
-- [x] T120 [US1] 在 `tests/e2e/test_us1_animal_selection.py` 執行 US1 Independent Test、Acceptance Scenarios 1～17、SC-003～SC-005 與跨租戶回歸 (depends on T097, T116-T119)
+- [x] T120 [US1] 在 `tests/e2e/test_us1_animal_selection.py` 執行 US1 Independent Test、Acceptance Scenarios 1～17、SC-003／SC-004／SC-005／SC-012／SC-017／SC-018 與跨租戶回歸 (depends on T097, T116-T119)
 
 **Story Checkpoint**：T120 通過後，可完成 Rich Menu／今日名單／QR／Shelter Number／LIFF → 確認卡 → Draft，且 QR 只識別候選 Animal，不是授權憑證。
 
@@ -296,7 +303,7 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T160 [P] [US2] 在 `apps/web/features/line-bot/LiffFallback.tsx` 建立長文字、批次修改、Animal Reselect 保留預覽／答案重新確認／照片重新附加、完整確認與 Bot 備援介面 (depends on T136, T157, T158)
 - [x] T161 [P] [US2] 在 `apps/web/app/(volunteer)/care-report/page.tsx` 建立 LIFF Draft Resume、Media 狀態、網路中斷、Summary 與保存成功輔助頁 (depends on T136, T157, T158)
 - [x] T162 [US2] 在 `tests/integration/test_line_adapter_real_boundary.py` 驗證正式 Adapter HTTP request、Reply Token、Image Content、Rich Menu 與錯誤補償，不呼叫正式 LINE 環境 (depends on T075, T077, T151, T159)
-- [x] T163 [US2] 在 `tests/e2e/test_us2_line_bot_report.py` 執行 US2 Independent Test、Acceptance Scenarios 18～29／65～74、SC-001／SC-002／SC-022～SC-026、AI 降級與跨租戶回歸；標準流程必須通過 `answering_completion`、13 個必填答案、`DraftAnswers` 到 `CareReportAnswers` 完整轉換，缺答不得進入 `reviewing`／`submitting`，且照片與心得可略過 (depends on T120, T135, T155-T162)
+- [x] T163 [US2] 在 `tests/e2e/test_us2_line_bot_report.py` 執行 US2 Independent Test、Acceptance Scenarios 18～29／65～74、SC-001／SC-002／SC-011／SC-022／SC-023／SC-024／SC-025／SC-026、AI 降級與跨租戶回歸；標準流程必須通過 `answering_completion`、13 個必填答案、`DraftAnswers` 到 `CareReportAnswers` 完整轉換，缺答不得進入 `reviewing`／`submitting`，且照片與心得可略過 (depends on T120, T135, T155-T162)
 
 **Story Checkpoint**：T163 通過後，標準流程除心得／Other 外文字輸入為 0，不需完整 LIFF 表單；最終確認前沒有 Care Report，AI／LINE 回覆失敗不破壞已保存原始資料。
 
@@ -312,8 +319,8 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 - [x] T164 [US3] 在 `tests/contract/test_animal_timeline_contract.py` 建立 Recent、Date Range、Daily Summary、No-report、逐筆展開與權限錯誤的失敗優先 Contract Test (depends on T020, T163)
 - [x] T165 [P] [US3] 在 `tests/integration/test_animal_timeline.py` 建立 14 個曆日補齊、指定日期、同日多筆、較早歷史及停用 Option Snapshot Test (depends on T163)
-- [x] T166 [P] [US3] 在 `tests/isolation/test_timeline_and_media_isolation.py` 建立 A Staff 無法取得 B Timeline、Note、Media 或 Signed URL 的 Test (depends on T080, T163)
-- [x] T167 [P] [US3] 在 `tests/integration/test_timeline_correction_history.py` 建立原始 Report、Correction、Animal Binding、Archive 與 Audit 分離 Test (depends on T154, T163)
+- [x] T166 [P] [US3] 在 `tests/isolation/test_timeline_and_media_isolation.py` 建立 A Staff 無法取得 B Timeline、Note、Media 或 Signed URL 的 Test，涵蓋 SC-013／SC-017 (depends on T080, T163)
+- [x] T167 [P] [US3] 在 `tests/integration/test_timeline_correction_history.py` 建立原始 Report、Correction、Animal Binding、Archive 與 Audit 分離 Test，涵蓋 SC-010／SC-015 (depends on T154, T163)
 - [x] T168 [P] [US3] 在 `tests/unit/test_timeline_date_sequence.py` 建立日期序列、時區、No-report 與日期區間驗證 Unit Test (depends on T164)
 - [x] T169 [P] [US3] 在 `tests/integration/test_timeline_query_count.py` 建立 Timeline N+1 防護與可接受 Query Count Test (depends on T165)
 - [x] T170 [P] [US3] 在 `tests/frontend/test_animal_timeline.tsx` 建立每日摘要、No-report、同日展開、原始心得、照片、AI 預留區及 Loading／Empty／Error Test (depends on T022, T164)
@@ -328,7 +335,7 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T176 [P] [US3] 在 `apps/web/features/animal-timeline/AnimalTimeline.tsx` 建立 14 日摘要、No-report、同日多筆、原始／AI／人工分區 (depends on T170, T175)
 - [x] T177 [P] [US3] 在 `apps/web/features/animal-timeline/TimelineFilters.tsx` 建立日期、區間、類型、Loading、Empty 與 Error State (depends on T170, T175)
 - [x] T178 [US3] 在 `apps/web/app/(management)/animals/[animalId]/timeline/page.tsx` 建立 Staff Timeline 入口、展開、照片及權限拒絕流程 (depends on T176, T177)
-- [x] T179 [US3] 在 `tests/e2e/test_us3_animal_timeline.py` 執行 US3 Independent Test、Acceptance Scenarios 30～35、SC-006／SC-007／SC-014 與 US1／US2 回歸 (depends on T163, T175, T178)
+- [x] T179 [US3] 在 `tests/e2e/test_us3_animal_timeline.py` 執行 US3 Independent Test、Acceptance Scenarios 30～35、SC-006／SC-007／SC-010／SC-013／SC-014 與 US1／US2 回歸 (depends on T163, T175, T178)
 
 **Story Checkpoint**：T179 通過後，工作人員可查看完整近 14 天序列；No-report 不會顯示為正常、未觀察或 AI 未發現問題。
 
@@ -337,9 +344,9 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 **目的**：US0＋US1＋US2＋US3 形成第一個可展示垂直 MVP；US4 管理頁與 US5 AI 處理不得阻擋。
 
 - [x] T180 在 `tests/integration/test_empty_database_bootstrap.py` 從空 PostgreSQL 執行 0001～0014 Migration、Seed、Reset 與升級／回復策略驗證 (depends on T179)
-- [x] T181 [P] 在 `tests/isolation/test_cross_tenant_resource_matrix.py` 驗證 Organization、Membership、Animal、Shelter Number、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、Option 與 Audit A／B 矩陣 (depends on T080, T179)
+- [x] T181 [P] 在 `tests/isolation/test_cross_tenant_resource_matrix.py` 驗證 Organization、Membership、Animal、Shelter Number、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、Option 與 Audit A／B 矩陣，涵蓋 SC-011／SC-013／SC-016～SC-020 (depends on T080, T179)
 - [x] T182 [P] 在 `tests/e2e/test_local_line_bot_vertical_flow.py` 執行 Shelter → User → Animal → QR → Bot Draft → Quick Reply → Image → Report → Timeline 完整流程 (depends on T097, T120, T163, T179)
-- [x] T183 [P] 在 `tests/integration/test_local_failure_degradation.py` 執行非法 Signature、Redelivery、網路中斷、圖片清理失敗、AI Job enqueue 失敗、停用 Scope 與資格失效 (depends on T135, T163, T179)
+- [x] T183 [P] 在 `tests/integration/test_local_failure_degradation.py` 執行非法 Signature、Redelivery、網路中斷、圖片清理失敗、AI Job enqueue 失敗、停用 Scope 與資格失效，涵蓋 SC-012／SC-020／SC-024 (depends on T135, T163, T179)
 - [x] T184 [P] 在 `tests/frontend/test_local_bot_mvp.tsx` 使用 Mock LINE／LIFF 驗證 Animal Confirmation、Draft Resume、LIFF 備援、Summary 與保存成功 (depends on T120, T136, T161)
 - [x] T185 在 `tests/contract/test_contract_documents.py` 驗證 OpenAPI、Contract Types、LINE、Storage、AI、data-model 與 quickstart 的路徑／狀態／命令一致 (depends on T019-T022, T182)
 - [x] T186 在 `scripts/verify_local_mvp.sh` 建立 Docker Compose、Migration、Seed、Mock LINE E2E、Ruff、Pytest、Frontend、Contract Types、MinIO／GCS Contract 與 MVP Gate (depends on T180-T185)
@@ -416,8 +423,8 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 
 **目的**：在建立任何 GCP 資源前完成全部 Story、Storage Adapter、Worker、Contract Types、Migration 與跨租戶本機驗證。
 
-- [x] T218 在 `tests/e2e/test_full_local_flow.py` 執行 Shelter、Staff／Volunteer、Animal、QR、Bot、Image、MinIO、Report、Job、Timeline、Option 與 AI Review 完整流程 (depends on T186, T196, T217)
-- [x] T219 [P] 在 `tests/isolation/test_full_cross_tenant_matrix.py` 直接驗證 Organization、Membership、Animal、Search、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、AI Observation、Option 與 Audit Log 矩陣 (depends on T181, T196, T217)
+- [x] T218 在 `tests/e2e/test_full_local_flow.py` 執行 Shelter、Staff／Volunteer、Animal、QR、Bot、Image、MinIO、Report、Job、Timeline、Option 與 AI Review 完整流程，涵蓋 SC-011／SC-019 (depends on T186, T196, T217)
+- [x] T219 [P] 在 `tests/isolation/test_full_cross_tenant_matrix.py` 直接驗證 Organization、Membership、Animal、Search、QR、Scope、Draft、Report、Timeline、Media、Signed URL、Job、AI Observation、Option 與 Audit Log 矩陣，涵蓋 SC-016～SC-019 (depends on T181, T196, T217)
 - [x] T220 [P] 在 `tests/integration/test_full_local_failure_matrix.py` 執行 Authentication 撤銷、非法 Signature、Redelivery、Tampering、圖片失敗、Job enqueue／AI 失敗與資格失效 (depends on T183, T202, T217)
 - [x] T221 [P] 在 `tests/contract/test_all_adapters.py` 執行 MinIO、完整 GCS Fake Transport、InMemory、Mock／正式 LINE 與 Mock／正式 AI Adapter Contract Test (depends on T070-T077, T162, T211)
 - [x] T222 在 `tests/contract/test_contract_documents.py` 驗證 OpenAPI、Generated Types、所有 Markdown Contract、data-model、plan 與 quickstart 一致 (depends on T185, T218)
@@ -458,7 +465,7 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [ ] T243 在 `tests/integration/test_gcp_demo_smoke.py` 執行真實 Cloud SQL Migration、GCS IAM／Signed URL、正式 LINE Adapter／Webhook HTTPS、QR、A／B 隔離與 AI 降級 Smoke Test (depends on T239-T242)
 - [ ] T244 在 `infra/gcp-demo/deployment-evidence.md` 記錄 Terraform、Migration、GCS、LINE、Isolation、AI 降級與 Cloud Logging 驗證結果 (depends on T243)
 
-**GCP Demo Checkpoint**：T244 通過只代表虛構資料 Demo 完成，不代表正式環境部署完成。
+**GCP Demo Checkpoint**：T244 通過只代表以虛構資料完成 GCP Demo Deployment，不代表 Feature Completion，也不代表正式環境部署完成。
 
 ## Final Phase：Polish 與 Cross-Cutting
 
@@ -472,10 +479,162 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - [x] T250 在 `services/api/app/observability/logging.py` 完成 Error Message、Security／Audit Event 遮罩與 Secret／Token／Signed URL 不進 Log 的最終檢查 (depends on T217, T224)
 - [x] T251 在 `README.md` 更新本機 Setup、Authentication、Contract Types、LINE Bot、GCS Gate、GCP Demo 與品質命令 (depends on T245-T250)
 - [x] T252 在 `scripts/demo.sh` 建立虛構資料 Demo Script，涵蓋 US0、US1、US2、US3 及 AI 失敗仍完成 MVP (depends on T186, T251)
-- [ ] T253 在 `specs/001-volunteer-care-report/validation/usability-test-plan.md` 建立固定真人腳本、至少 10 名志工／10 名工作人員樣本、主要操作定義、去識別化欄位、計時方式與失敗樣本保留規則 (depends on T186)
+- [x] T253 在 `specs/001-volunteer-care-report/validation/usability-test-plan.md` 建立固定真人腳本、至少 10 名志工／10 名工作人員樣本、主要操作定義、去識別化欄位、計時方式與失敗樣本保留規則 (depends on T186)
 - [ ] T254 [P] 在 `specs/001-volunteer-care-report/validation/volunteer-usability-evidence.md` 執行並記錄 SC-001／SC-002 至少 10 名志工透過 LINE Bot 完成標準照護回報的去識別化證據，驗證至少 8 人獨立完成且至少 8 人於 90 秒內完成 (depends on T163, T248, T253)
 - [ ] T255 [P] 在 `specs/001-volunteer-care-report/validation/staff-usability-evidence.md` 執行並記錄 SC-006／SC-014 至少 10 名工作人員的去識別化證據，驗證至少 9 人於三次主要操作內進入 Timeline 並正確辨識四種狀態 (depends on T179, T248, T253)
-- [ ] T256 在 `specs/001-volunteer-care-report/tasks.md` 記錄所有 Checkpoint、命令、真人驗收證據、阻擋事項、未完成範圍與 Completion Evidence (depends on T245-T255)
+- [ ] T256 在 `specs/001-volunteer-care-report/tasks.md` 記錄既有 Checkpoint、命令、GCP／真人驗收證據、阻擋事項與目前不可部署範圍；管理工作台證據由 T308 另行整合 (depends on T245-T255)
+
+## Phase 13：管理工作台 API／Contract 基礎
+
+**目的**：先建立支撐整體工作台的正式 API 邊界、角色矩陣與權限測試，再進入共通 Shell；不得以 Next.js 拼接多個低階 endpoint 充當正式管理功能。
+
+- [ ] T257 在 `specs/001-volunteer-care-report/contracts/openapi.yaml` 補齊 Dashboard Summary、管理動物清單／檔案、Report Inbox、Reportable Scope、QR／Cage／Area 管理、AI Review Queue 與 Audit Query 的 Request／Response、分頁、狀態與 401／403／409 錯誤契約 (depends on T019, T022, T224, management-workbench-plan.md)
+- [ ] T258 [P] 在 `tests/contract/test_management_workbench_contract.py` 建立上述 API 的失敗優先 Contract Test，驗證角色矩陣、Context required、跨租戶資源不可枚舉、Correction／Archive 不 Hard Delete 與 Audit 只讀規則 (depends on T257)
+- [ ] T259 [P] 在 `tests/security/test_management_workbench_authorization.py` 建立 PLATFORM_ADMIN、SHELTER_ADMIN、STAFF、VOLUNTEER 的 API／直接 URL 授權矩陣與 A／B Scope 隔離 Test (depends on T257, T258)
+- [ ] T260 在 `services/api/app/api/management_access.py` 建立共用管理工作台角色、Active Shelter Context、平台 Scope 與一致拒絕錯誤的後端 Policy Helper；所有新 API 必須使用此邊界 (depends on T259)
+- [ ] T261 在 `services/api/app/api/dashboard.py`、`services/api/app/application/dashboard_service.py` 與 `services/api/app/main.py` 實作並掛載目前 Scope 的 Dashboard Summary 查詢，回傳今日可回報數、最近回報、未完成 Draft、AI 待處理與異常提醒，且不得把跨租戶資料聚合到回應 (depends on T260)
+- [ ] T262 重新產生 `packages/contracts/src/openapi.ts`，並在 `tests/contract/test_generated_contract_types.py` 固化新增工作台 Contract 與 OpenAPI 的漂移檢查 (depends on T257, T261)
+
+**Phase 13 Checkpoint**：T258～T262 通過後，API 契約、角色／Scope 拒絕行為與 Dashboard 資料來源固定，才可開始共通前端 Shell。
+
+## Phase 14：User Story 0－共通 Management Shell、登入與 Context（Priority: P1）🎯 MVP
+
+**目標**：讓所有管理路由共用同一個登入、Context、角色導航、狀態與 API client，首頁是角色感知 Dashboard，不再導向第一隻動物。
+
+**獨立測試**：使用 A／B Seed 帳號登入，確認 Context、角色導航、Dashboard 與 401／409 行為一致；切換 Context 後畫面不得殘留另一租戶資料，直接輸入受限網址仍由後端拒絕。
+
+### Tests First
+
+- [ ] T263 [P] [US0] 在 `apps/web/components/management/management-shell.test.tsx` 建立 Shell、Header、Sidebar、Breadcrumb、Loading／Empty／Error／Forbidden／Stale Context 狀態的失敗優先前端測試 (depends on T257, T258)
+- [ ] T264 [P] [US0] 在 `tests/e2e/test_management_shell.py` 建立登入、Context 選擇、角色導航、登出、401／409 導向與 A／B 不交叉的失敗優先 E2E Test (depends on T259)
+
+### Implementation
+
+- [ ] T265 [US0] 在 `apps/web/components/management/ManagementLayout.tsx` 建立所有 `(management)` 路由共用的 App Shell 版型與 main content slot，禁止頁面自行重複 Token／登入檢查 (depends on T263)
+- [ ] T266 [P] [US0] 在 `apps/web/components/management/AppHeader.tsx` 與 `apps/web/components/management/AppSidebar.tsx` 實作品牌、目前 Organization／Role、Context 選擇器、登出與依角色產生的工作台導航 (depends on T265)
+- [ ] T267 [P] [US0] 在 `apps/web/components/management/StatusBanner.tsx`、`apps/web/components/management/StateViews.tsx` 建立共用權限、Context、網路、Offline、Loading、Empty、Error 與 Forbidden 狀態元件 (depends on T265)
+- [ ] T268 [US0] 在 `apps/web/lib/auth.ts` 與 `apps/web/lib/api.ts` 完成 AuthProvider、Session／Refresh／Logout、Bearer API client、401／409 Context required 處理，以及 Context 切換後清除舊租戶查詢快取 (depends on T260, T265)
+- [ ] T269 [US0] 在 `apps/web/app/login/page.tsx` 將 ORG-A 從正式流程移除，依 Login 回傳的有效 Membership 顯示 Context 選擇／確認；只有本機單一 Seed 才可顯示預選，並將選定 Context 綁定後端 Session (depends on T262, T268)
+- [ ] T270 [US0] 在 `apps/web/app/layout.tsx` 與 `apps/web/app/(management)/layout.tsx` 接入 ManagementLayout，保留 `(volunteer)` 手機入口的獨立導覽與 mobile-first 邊界 (depends on T265-T269)
+- [ ] T271 [US0] 在 `apps/web/app/page.tsx`、`apps/web/app/management-home.tsx` 將 `/` 改為 Dashboard Summary、待處理事項與快速入口，移除「取得第一隻 Animal 後 replace Timeline」行為 (depends on T261, T270)
+- [ ] T272 [US0] 執行 `tests/e2e/test_management_shell.py` 與 `apps/web/components/management/management-shell.test.tsx` 的獨立驗收，確認三種管理角色與一個無管理權限角色的可發現性、拒絕行為及 Context cache 清除證據 (depends on T264, T266-T271)
+
+**US0 Checkpoint**：管理工作台首頁、Context、Role Navigation 與共通錯誤狀態可獨立使用；未通過 T272 不得宣稱後續模組已整合。
+
+## Phase 15：User Story 3－動物清單、檔案與 Timeline 工作流（Priority: P3）
+
+**目標**：把工作人員從首頁到指定動物 Timeline 的流程固定為 `/animals` → `/animals/:animalId` → `/animals/:animalId/timeline`，支援名稱、收容編號、Cage／Area、狀態與最近活動搜尋。
+
+**獨立測試**：工作人員從 Dashboard 開始，在最多三次主要操作內進入指定動物 Timeline，並能辨識近 14 日、同日多筆、無回報與 AI 失敗四種狀態；A／B 相同收容編號不可互見。
+
+### Tests First
+
+- [ ] T273 [P] [US3] 在 `apps/web/app/(management)/animals/page.test.tsx`、`apps/web/app/(management)/animals/[animalId]/page.test.tsx` 與 `apps/web/app/(management)/animals/[animalId]/timeline/page.test.tsx` 建立清單、檔案、Breadcrumb、快速入口與四種 Timeline 狀態的失敗優先前端測試 (depends on T272)
+- [ ] T274 [P] [US3] 在 `tests/integration/test_management_animals.py` 建立管理清單／檔案 API 的 Scope、搜尋、分頁、Cage／Area 篩選、未授權動物與空資料整合 Test (depends on T258, T259, T272)
+
+### Implementation
+
+- [ ] T275 [US3] 在 `services/api/app/api/management_animals.py`、`services/api/app/application/management_animal_service.py` 與 `services/api/app/main.py` 實作並掛載管理用 Animal list／detail 查詢，區分工作人員完整名冊與志工可回報候選，沿用受控 Repository 與目前 Scope (depends on T260, T274)
+- [ ] T276 [US3] 在 `apps/web/app/(management)/animals/page.tsx` 實作管理動物清單、名稱／收容編號搜尋、Cage／Area／狀態篩選、分頁與空／錯誤狀態 (depends on T265-T268, T275)
+- [ ] T277 [US3] 在 `apps/web/app/(management)/animals/[animalId]/page.tsx` 實作動物檔案、基本資料、QR／區域摘要與進入 Timeline 的主要操作 (depends on T276, T275)
+- [ ] T278 [US3] 更新 `apps/web/app/(management)/animals/[animalId]/timeline/page.tsx` 接入 ManagementLayout、Breadcrumb、日期範圍／分頁、原始回報、照片、AI 狀態與無回報提示，保留既有 Timeline CRM 查詢 (depends on T277)
+- [ ] T279 [US3] 在 `apps/web/app/management-home.tsx`、`apps/web/app/(management)/animals/page.tsx` 與 Timeline 頁面加入 Dashboard 待辦、最近活動、搜尋結果與深層連結的互相導向，不寫死第一隻 Animal 或 ORG-A (depends on T271, T276-T278)
+- [ ] T280 [US3] 在 `tests/e2e/test_staff_animal_workflow.py` 實作工作人員三次主要操作、指定 Animal、四種 Timeline 狀態、A／B 同號隔離與 401／409 狀態的垂直 E2E Test (depends on T274-T279)
+- [ ] T281 [US3] 執行 US3 獨立驗收並將操作數、Timeline 摘要時間、空／錯誤／AI 失敗狀態與未通過原因記錄於 `specs/001-volunteer-care-report/validation/staff-usability-evidence.md` 的工作台段落 (depends on T280)
+
+**US3 Checkpoint**：工作人員不需知道深層 URL 即可由 Dashboard 發現並進入指定 Timeline；T281 未通過時維持不可部署。
+
+## Phase 16：User Story 2－回報收件匣、Detail、Correction 與 Archive（Priority: P2）
+
+**目標**：在同一個 Shell 內完成回報查找、原始資料與照片檢視、AI 狀態查看、人工修正、封存與 Audit 追溯；不建立前端正式資料副本。
+
+**獨立測試**：管理員或授權工作人員可依日期／動物／狀態找到一筆回報，看到原始答案與照片／AI 狀態，修正或封存後仍可追溯原始內容、操作者、原因與時間；AI／Media 失敗不阻擋原始回報。
+
+### Tests First
+
+- [ ] T282 [P] [US2] 在 `apps/web/app/(management)/reports/page.test.tsx` 與 `apps/web/app/(management)/reports/[reportId]/page.test.tsx` 建立 Report Inbox／Detail、原始資料、AI／Media failure、Correction／Archive 與角色顯示的失敗優先前端測試 (depends on T272)
+- [ ] T283 [P] [US2] 在 `tests/integration/test_management_report_inbox.py` 建立回報列表／Detail 的日期、Animal、狀態篩選、Scope、原始資料保存、Correction／Archive 與 Audit 整合 Test (depends on T258, T259, T272)
+
+### Implementation
+
+- [ ] T284 [US2] 在 `services/api/app/api/report_inbox.py`、`services/api/app/application/report_inbox_service.py` 與 `services/api/app/main.py` 實作並掛載管理用 Report Inbox／Detail 查詢，沿用 `CareReportRepository`、Media access、AI status 與一致的 Context／Role Policy (depends on T260, T283)
+- [ ] T285 [US2] 在 `apps/web/app/(management)/reports/page.tsx` 實作回報收件匣、日期／動物／狀態篩選、分頁、待處理標示與空／錯誤／Forbidden 狀態 (depends on T265-T268, T284)
+- [ ] T286 [US2] 在 `apps/web/app/(management)/reports/[reportId]/page.tsx` 實作原始回答、志工心得、照片 Signed URL 狀態、AI 狀態／失敗原因與 Timeline 回鏈 (depends on T278, T284-T285)
+- [ ] T287 [US2] 在 `apps/web/app/(management)/reports/[reportId]/page.tsx` 接入 Correction／Archive mutation、原因欄位、重複送出防護、成功／衝突／權限錯誤提示與 Audit link；不得 Hard Delete 正式回報 (depends on T286)
+- [ ] T288 [US2] 在 `tests/e2e/test_management_report_workflow.py` 實作回報收件匣到 Detail、AI／Media 失敗降級、Correction／Archive 後追溯與跨租戶拒絕的垂直 E2E Test (depends on T283-T287)
+- [ ] T289 [US2] 執行 US2 獨立驗收，確認人工資料先保存、AI／Media 不阻塞、修正／封存可追溯，並將結果記錄於 `specs/001-volunteer-care-report/validation/staff-usability-evidence.md` (depends on T288)
+
+**US2 Checkpoint**：回報工作流與 Timeline 共用 CRM 原始資料；T289 未通過時不得進入完整工作台完成 Gate。
+
+## Phase 17：User Story 0／4－收容所營運設定（Priority: P1/P4）
+
+**目標**：在同一個 Shell 內整合 Membership、Cage／Area、QR、Daily Reportable Scope 與 Observation Vocabulary，依角色顯示可操作欄位並對每次異動留下 Audit。
+
+**獨立測試**：SHELTER_ADMIN 只能管理所屬 Shelter；PLATFORM_ADMIN 可在平台 Scope 管理目標 Shelter；STAFF 依授權可操作範圍；VOLUNTEER 不可進入設定頁，直接輸入 URL 與 API 均一致拒絕。
+
+### Tests First
+
+- [ ] T290 [P] [US0] 在 `apps/web/app/(management)/settings/management-settings.test.tsx` 建立 Membership、Cage／Area、QR、Reportable Scope、Observation Vocabulary 的角色可見性與 mutation 狀態失敗優先前端測試 (depends on T272)
+- [ ] T291 [P] [US0] 在 `tests/integration/test_management_settings_authorization.py` 建立設定 API 的 Shelter／Platform Scope、STAFF 授權、VOLUNTEER 拒絕、重複資料、停用／撤銷與 Audit 整合 Test (depends on T258, T259, T272)
+
+### Implementation
+
+- [ ] T292 [US0] 在 `services/api/app/api/reportable_scope.py`、`services/api/app/application/reportable_scope_service.py` 與 `services/api/app/main.py` 補齊並掛載個別 Animal、Cage／Area、指定 Volunteer 的建立、修改、停用與目前有效範圍查詢 API，並在 mutation 後重新驗證 (depends on T260, T291)
+- [ ] T293 [US0] 在 `services/api/app/api/organization_management.py`、`services/api/app/api/qr_codes.py`、`services/api/app/main.py` 與對應 Service／Repository 補齊並掛載 Cage／Area／QR 建立、撤銷、重新產生與列印資料契約；QR 只作候選查詢，不作授權憑證 (depends on T260, T291)
+- [ ] T294 [US0] 更新 `apps/web/app/(management)/shelters/page.tsx` 接入 ManagementLayout、Membership、帳號、Cage／Area、平台／Shelter 權限與每次操作的成功／失敗／Audit link 狀態 (depends on T270, T292-T293)
+- [ ] T295 [US0] 在 `apps/web/app/(management)/settings/reportable-scope/page.tsx` 實作每日可回報範圍的 Animal／Cage／Area／Volunteer 維護、停用與重新載入 (depends on T292, T294)
+- [ ] T296 [US0] 在 `apps/web/app/(management)/settings/qr-codes/page.tsx` 實作 QR 建立、撤銷、重新產生、列印資料與失效提示；畫面不得把 QR token 當成授權資訊 (depends on T293, T294)
+- [ ] T297 [US4] 更新 `apps/web/app/(management)/settings/observation-options/page.tsx` 接入共通 Shell、Context、有效／歷史選項、排序、停用與錯誤狀態，保留歷史回報的 snapshot 顯示 (depends on T270, T291)
+- [ ] T298 [US0] 執行設定模組獨立驗收，確認 A／B 不交叉、Platform／Shelter／Staff／Volunteer 權限矩陣、Audit link 與 QR 不升權，並記錄於 `specs/001-volunteer-care-report/validation/staff-usability-evidence.md` (depends on T290-T297)
+
+**Settings Checkpoint**：所有管理設定頁都從導航可發現且使用同一 Shell；直接輸入 URL 不得繞過後端授權。
+
+## Phase 18：User Story 5－AI Review Queue 與 Audit Query（Priority: P5）
+
+**目標**：在工作台中查看 AI Job／Observation 待處理、失敗、無效與已覆核狀態，執行人工確認／拒絕／修正，並以只讀 Audit 查詢追溯操作者、資源、Scope、時間與原因。
+
+**獨立測試**：管理員或授權工作人員可處理 AI 結果且不改寫原始回報；無權限角色不可見也不可直接呼叫；每次人工決定與跨機構平台操作都有 Audit Record。
+
+### Tests First
+
+- [ ] T299 [P] [US5] 在 `apps/web/app/(management)/ai-review/page.test.tsx` 與 `apps/web/app/(management)/settings/audit/page.test.tsx` 建立 AI queue、failure、invalid、review action、Audit filters 與只讀限制的失敗優先前端測試 (depends on T289, T298)
+- [ ] T300 [P] [US5] 在 `tests/integration/test_ai_review_audit_workbench.py` 建立 AI review／Audit query 的 Role、Scope、原始輸出保留、人工修正追溯與跨租戶隔離 Test (depends on T259, T289, T298)
+
+### Implementation
+
+- [ ] T301 [US5] 在 `services/api/app/api/ai_observations.py`、`services/api/app/application/ai_review.py`、`services/api/app/api/audit.py` 與 `services/api/app/main.py` 補齊並掛載 AI Review Queue、失敗／無效篩選與只讀 Audit Query，所有人工決定保留原始 AI output 並寫入 Audit (depends on T260, T300)
+- [ ] T302 [US5] 在 `apps/web/app/(management)/ai-review/page.tsx` 實作待覆核／失敗／無效／已覆核清單、原始資料連結、confirm／reject／correct 操作與狀態提示 (depends on T301, T299)
+- [ ] T303 [US5] 在 `apps/web/app/(management)/settings/audit/page.tsx` 實作依操作者、資源、時間、Scope、Action 的只讀查詢、分頁與 Audit detail，不提供修改／刪除操作 (depends on T301)
+- [ ] T304 [US5] 在 `tests/e2e/test_ai_review_audit_workbench.py` 實作 AI 成功／逾時／失敗／無效、人工覆核、原始資料不變、Audit 追溯與角色拒絕的垂直 E2E Test (depends on T300-T303)
+- [ ] T305 [US5] 執行 US5 獨立驗收，確認 AI 永不阻塞人工回報、不診斷／計分／排序／改寫正式狀態，並將結果記錄於 `specs/001-volunteer-care-report/validation/staff-usability-evidence.md` (depends on T304)
+
+**US5 Checkpoint**：AI／Audit 模組可在同一工作台追溯，但不改變 CRM 原始回報與權限邊界。
+
+## Phase 19：管理工作台整體 Gate 與真人驗收準備
+
+**目的**：驗證五階段整合後的響應式、可及性、Context 隔離、錯誤狀態與完整可發現性，作為再次 Analyze、真人驗收與部署判定的前置證據。
+
+- [ ] T306 [P] 在 `apps/web/components/management/management-workbench-quality.test.tsx` 與 `apps/web/package.json` 補齊桌面／手機 viewport、鍵盤操作、ARIA、loading／empty／403／409／401／offline 與 Prettier／TypeScript／Build 品質 Gate (depends on T272, T289, T298, T305)
+- [ ] T307 [P] 在 `tests/isolation/test_management_workbench_context.py` 執行完整 A／B Context 切換矩陣，驗證 Dashboard、Animals、Timeline、Reports、Settings、AI、Audit 的查詢快取、畫面資料與 API response 均不交叉 (depends on T272, T281, T289, T298, T305)
+- [ ] T308 在 `specs/001-volunteer-care-report/validation/management-workbench-evidence.md` 執行並記錄完整管理工作台 Gate、角色／Context／可發現性／錯誤狀態與未完成範圍；至少執行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`npm --prefix apps/web run quality`、`npm --prefix apps/web run build`、`npm --prefix packages/contracts run check` 與 T307，且只有 T254、T255、T256、T306、T307 與本文件證據都通過才可評估 Feature Completion (depends on T254, T255, T256, T281, T289, T298, T305-T307)
+
+## Completion Gate 分層
+
+本 Feature 的完成判定與 GCP Demo Deployment 判定是兩個獨立 Gate，不互相取代。
+
+### Feature Completion Gate
+
+Feature Completion 必須同時通過以下三類 Gate：
+
+- **本機品質 Gate**：T224、T245～T252 的本機整合、品質、Contract、Migration、Storage、Frontend、隔離與相關測試通過；T256 彙整既有基線、驗收證據與不可部署範圍。
+- **管理工作台 Gate**：T257～T308 的 API／Contract、角色／Active Shelter Context、共通 Shell、Dashboard、動物／回報／設定／AI／Audit 工作流、品質與 A／B Context Isolation 通過；T308 是整體證據 Gate。
+- **真人驗收 Gate**：T253 Protocol、T254 志工去識別化證據與 T255 工作人員去識別化證據完成，且對應 Success Criteria 達標。
+
+以上任一 Gate 未通過，不得將 Feature 標記為完成。Feature Completion 可依本機優先流程驗證，不以 GCP Demo Deployment 的結果取代本機、工作台或真人 Gate。
+
+### GCP Demo Deployment Gate
+
+GCP Demo 是獨立部署分支：T238 是任何 GCP 資源異動前的硬 Gate；T239～T244 負責受控部署、Migration、虛構資料 Seed、LINE 設定、環境 Smoke Test 與部署證據。T244 通過只代表 GCP Demo Deployment 完成，不代表 Feature Completion；Feature Completion 通過也不代表已完成 T239～T244 的 GCP 專屬驗證。
 
 ## Dependencies & Execution Order
 
@@ -488,9 +647,11 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 5. US2 T121～T163 建立 Bot Draft、Webhook、Image、Report 與 post-commit Job dispatch；不依賴 AI Worker。
 6. US3 T164～T179 建立 Timeline；T180～T186 隨即驗證本機 MVP。
 7. US4 T187～T196 與 US5 T197～T217 不阻擋 MVP；兩者在 US2 完成後可平行，US5 使用 Foundational Effective Options 與 Job persistence，不依賴 T196 或 US4 管理 UI。
-8. 完整本機整合 T218～T224 通過後才能開始 GCP 準備。
-9. GCP IaC／設定 T225～T237 不建立資源；T238 Gate 通過後，T239～T244 才能部署與驗證。
-10. Polish T245～T256 在 T224 後即可執行，明確不依賴 T239～T244 的 GCP Demo；GCP Demo 是通過 T238 後的獨立可選部署分支，若執行則將其證據一併納入 T256。
+8. 完整本機整合 T218～T224 通過後，GCP 準備、Polish 與管理工作台 API 基礎可以分支執行。
+9. GCP IaC／設定 T225～T237 不建立資源；T238 Gate 通過後，T239～T244 才能部署與驗證；GCP 分支不取代管理工作台 Gate。
+10. Polish T245～T255 在 T224 後即可執行，明確不依賴 T239～T244 的 GCP Demo；T254／T255 真人證據必須等 T253 Protocol 與既有 MVP／Timeline 驗收。
+11. 管理工作台 API／Contract T257～T262 依賴 T224 與 Foundational Contract／Scope；完成後按 Shell T263～T272、動物 T273～T281、回報 T282～T289、設定 T290～T298、AI／Audit T299～T305 依序交付。
+12. T306 與 T307 可在各工作流 Checkpoint 通過後平行；T256 先記錄既有 Feature 基線，T308 再整合全部工作台、真人與品質證據，作為 Completion Evidence。
 
 ### User Story Dependencies
 
@@ -500,6 +661,11 @@ Feature 仍維持 `Blocked`，直到本清單重新通過 `$speckit-analyze`。�
 - **US3（P3）**：依賴 US2 正式 Report／Media／Note；不依賴 AI 成功。
 - **US4（P4）**：依賴 Foundational Observation model／migration／repository；可在 MVP 後獨立加入管理能力。
 - **US5（P5）**：依賴 US2 原始資料與 Foundational Job／Effective Options；不需等待 US4 UI。
+- **管理工作台 US0 Shell（T257～T272）**：依賴 T224、既有 Authentication／Context 與管理工作台 API Contract；是所有管理 UI 的前置。
+- **管理工作台 US3 動物流（T273～T281）**：依賴 Shell T272 與既有 US3 Timeline T179；可與管理回報流 T282～T289 平行。
+- **管理工作台 US2 回報流（T282～T289）**：依賴 Shell T272、既有 US2 Report T163 與 Media／AI status；不依賴 AI review UI。
+- **管理工作台 US0／US4 設定（T290～T298）**：依賴 Shell T272、既有 US0／US4 API 與 Audit；可與動物／回報頁平行，但 mutation 仍須先通過後端權限測試。
+- **管理工作台 US5 AI／Audit（T299～T305）**：依賴回報流 T289、既有 US5 T217 與 AI Review Contract；不改寫原始回報。
 
 ### 每個 User Story 內的執行順序
 
@@ -525,6 +691,17 @@ graph TD
     GP --> GG[GCS／Deployment Gate]
     GG --> GD[GCP Demo 部署]
     L --> P[Polish 與真人驗收]
+    L --> W[Workbench API／Contract]
+    W --> WS[共通 Shell／Context]
+    WS --> WA[動物工作流]
+    WS --> WR[回報工作流]
+    WS --> WO[收容所營運設定]
+    WR --> WI[AI Review／Audit]
+    WA --> WG[Workbench Gate]
+    WR --> WG
+    WO --> WG
+    WI --> WG
+    WG --> P2[Completion Evidence]
 ```
 
 ### Parallel Opportunities
@@ -535,6 +712,9 @@ graph TD
 - US0／US1／US2 各 Story 的 `[P]` Test 可先行平行撰寫；Repository、Service 與 API 仍按資料依賴合併。
 - 本機 MVP 通過後，US4 管理能力與 US5 Worker／AI 可由不同工作流平行，但不得同時修改 Foundational Observation／Job Model。
 - GCP 準備中的 T229～T231 可平行；T232～T238 必須依序整合。任何 Terraform apply 都等待 T238。
+- T258 與 T259 在 T257 後可平行；T263 與 T264、T266 與 T267、T273 與 T274、T282 與 T283、T290 與 T291、T299 與 T300、T306 與 T307 皆可由不同工作流平行。
+- Shell T272 通過後，動物 T273～T281、回報 T282～T289、設定 T290～T298 可按檔案邊界平行；T299～T305 依回報 Checkpoint 後開始。
+- T292 與 T293、T302 與 T303 不共用主要檔案，可平行；但所有後端 API 必須先通過 T258～T260 的共通 Contract／Policy。
 
 ### 阻擋任務
 
@@ -548,8 +728,12 @@ graph TD
 - T224：完整 Local Integration Gate。
 - T238：GCP Deployment Gate；未通過不得執行 T239。
 - T253～T255：真人 Usability Protocol 與證據，阻擋 Feature Completion Evidence，但不依賴 GCP Demo。
+- T257～T262：管理工作台 API／Contract 與 Scope Policy，阻擋前端逐頁拼接。
+- T272：共通 Shell、登入／Context／Role Navigation 與 Dashboard，阻擋所有管理工作台頁面。
+- T281、T289、T298、T305：各管理工作流的 Independent Test，阻擋完整工作台 Gate。
+- T306～T308：工作台品質、A／B Context Isolation 與 Feature Completion Evidence；T256 需等待 T308，未通過時不得標記 Feature Completion。GCP Deployment 仍另依 T238～T244 判定。
 
-### GCP Deployment Gate
+### GCP Demo Deployment Gate
 
 T238 必須記錄以下全部通過：
 
@@ -610,15 +794,21 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 | Object Storage、EXIF、GCS Gate                                   | T069、T071～T073、T150～T151            | T070、T130～T131、T221、T224、T238、T243             |
 | 正式 LINE Adapter／Webhook                                       | T074～T078、T142、T145、T155～T159      | T075、T122～T129、T162～T163                         |
 | 本機 MVP 與 GCP Demo                                             | T180～T186、T225～T244                  | T180～T186、T218～T224、T236～T238、T243～T244       |
+| FR-076～FR-081 管理工作台 API／Contract、Role／Context Boundary  | T257～T262                              | T258～T260、T274、T283、T291、T300、T307           |
+| FR-076～FR-077 管理工作台 Shell、Dashboard、登入與 Context      | T265～T271                              | T263～T264、T272、T306～T307                        |
+| FR-078 管理動物清單／檔案／Timeline 工作流                       | T275～T279                              | T273～T274、T280～T281                             |
+| FR-079 管理回報 Inbox／Detail／Correction／Archive                | T284～T287                              | T282～T283、T288～T289                             |
+| FR-080 Membership、Cage／Area、QR、Reportable Scope、Observation  | T292～T297                              | T290～T291、T298                                  |
+| FR-081 AI Review Queue 與 Audit Query                             | T301～T303                              | T299～T300、T304～T305                             |
 
 所有核心 FR 都至少對應一項實作與一項驗證任務；後續 FR 變更必須同步更新本表。
 
 ## Completion Summary
 
 - **tasks.md 路徑**：`specs/001-volunteer-care-report/tasks.md`
-- **總任務數**：256（T001～T256）
-- **本輪已完成任務**：246（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
-- **尚未完成任務**：10；Feature 尚未達到完成條件，不能視為可部署產品。
+- **總任務數**：308（T001～T308；本次新增管理工作台整體任務 T257～T308）
+- **本輪已完成任務**：247（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
+- **尚未完成任務**：61（既有 9 項 + 管理工作台 52 項）；Feature 尚未達到 Feature Completion，GCP Demo Deployment 亦仍有 T239～T244 未完成，兩者分別判定。
 - **Setup 任務數**：18（T001～T018）
 - **Foundational 任務數**：63（T019～T081，本輪 13 項基礎安全／租戶隔離任務均已完成）
 - **US0 任務數**：16（T082～T097）
@@ -632,15 +822,23 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **GCP Demo 準備／Gate 任務數**：14（T225～T238）
 - **GCP Demo 部署／驗證任務數**：6（T239～T244）
 - **Polish 任務數**：12（T245～T256）
+- **管理工作台 API／Contract 基礎**：6（T257～T262）
+- **管理工作台 US0 Shell／Dashboard**：10（T263～T272）
+- **管理工作台 US3 動物工作流**：9（T273～T281）
+- **管理工作台 US2 回報工作流**：8（T282～T289）
+- **管理工作台 US0／US4 設定**：9（T290～T298）
+- **管理工作台 US5 AI／Audit**：7（T299～T305）
+- **管理工作台整體 Gate**：3（T306～T308）
 - **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 250 項、前端 22 項 Vitest 通過；`mypy`、Ruff、Prettier、Next.js production build、Contract Types、Terraform `fmt/init/validate`、三個 Docker image build 與 T237/T238 Deployment Gate 皆已通過。
-- **未完成測試範圍**：仍缺少 GCP Smoke Test 與真人 Usability Evidence；本機 Gate 不代表正式 GCP 資源或正式 LINE／LIFF 服務已驗證。
-- **Security／Isolation Test 任務數**：14 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑。
-- **可平行任務數**：90 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
-- **阻擋實作的未決事項**：無產品未決事項；仍須執行 `$speckit-analyze` 並達到 `CRITICAL = 0`、`HIGH = 0`。
-- **Independent Tests**：US0 T097、US1 T120、US2 T163、US3 T179、US4 T196、US5 T217。
+- **未完成測試範圍**：Feature Completion 仍缺少真人 Usability Evidence 與管理工作台五階段／整體 Gate；GCP Demo Deployment 另缺少 T239～T244 的 GCP Smoke Test 與部署證據。本機 Gate 不代表正式 GCP 資源或正式 LINE／LIFF 服務已驗證。
+- **Security／Isolation Test 任務數**：至少 16 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑，另有管理工作台 integration／E2E 角色測試。
+- **Success Criteria 覆蓋**：25/25 個 SC ID 均可在任務中追溯；FR-001～FR-081 由 Requirement Traceability 的既有 Story／Foundational／工作台任務覆蓋。
+- **可平行任務數**：106 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
+- **阻擋實作的未決事項**：無文件一致性阻擋事項；最新 `$speckit-analyze` 已達到 `CRITICAL = 0`、`HIGH = 0`。尚未完成任務仍阻擋 Feature Completion；GCP Demo Deployment 仍依其獨立 T238～T244 Gate 判定。
+- **Independent Tests**：既有 US0 T097、US1 T120、US2 T163、US3 T179、US4 T196、US5 T217；管理工作台為 T272、T281、T289、T298、T305，整體 Gate 為 T308。
 - **真人 Usability Validation**：T253 定義固定 Protocol；T254 驗證 SC-001／SC-002；T255 驗證 SC-006／SC-014。
-- **建議 MVP**：T001～T186，包含 US0＋US1＋US2＋US3；US4／US5 不阻擋。
+- **建議 MVP**：後端／志工 MVP 為 T001～T186；管理工作台 MVP 為 T257～T281（API／Contract、共通 Shell、Dashboard、動物清單／檔案／Timeline）。完整 Feature 仍需 T282～T308、T254～T256。
 - **建議第一批任務**：T001～T018；Setup 通過後執行 T019～T081。
 - **範圍外檢查**：未加入醫療、關注排序、領養、公開頁面、Notification、Export、跨收容所共享、Kubernetes、Redis、Pub/Sub 或其他未核准能力。
 - **本輪實作限制**：本輪已使用本機 65432 PostgreSQL、Terraform provider 與 Docker Desktop 完成 T225～T238；未建立 GCP 資源，也未宣稱正式 GCS IAM／Signed URL、LINE／LIFF 或真人可用性已驗證。
-- **下一步**：補齊其他尚未完成任務後執行 `$speckit-analyze`；目前仍不得將 Feature 標記為完成或直接部署。
+- **下一步**：Analyze 已通過；依 T257 起的依賴繼續實作。Feature Completion 須補齊 T254～T256 與 T257～T308；GCP Demo Deployment 則須在 T238 後完成 T239～T244，兩種 Gate 不得互相替代。

@@ -1093,7 +1093,19 @@ components:
         access_token: { type: string }
         expires_in: { type: integer, example: 900 }
         session_id: { type: string, format: uuid }
+        organizations:
+          type: array
+          description: 登入帳號可選擇的有效收容所，供前端建立 Active Context。
+          items: { $ref: "#/components/schemas/LoginOrganization" }
         user: { $ref: "#/components/schemas/User" }
+    LoginOrganization:
+      type: object
+      required: [id, code, name, role]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
     AccessScope:
       type: object
       required: [type]
