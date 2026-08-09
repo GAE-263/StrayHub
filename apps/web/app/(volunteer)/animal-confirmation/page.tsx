@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useState } from "react";
 import { AnimalConfirmationCard } from "../../../features/animal-selection/AnimalConfirmationCard";
 
 type AnimalCandidate = {
@@ -133,7 +133,10 @@ export default function AnimalConfirmationPage() {
 
       <section aria-labelledby="qr-search-title">
         <h2 id="qr-search-title">QR Code</h2>
-        <form onSubmit={(event) => void resolveQr(event)}>
+        <form
+          aria-label="qr-search-form"
+          onSubmit={(event) => void resolveQr(event)}
+        >
           <label htmlFor="qr-token">QR Token</label>
           <input
             id="qr-token"
@@ -147,7 +150,10 @@ export default function AnimalConfirmationPage() {
 
       <section aria-labelledby="shelter-number-search-title">
         <h2 id="shelter-number-search-title">收容編號搜尋</h2>
-        <form onSubmit={(event) => void search(event)}>
+        <form
+          aria-label="shelter-number-search-form"
+          onSubmit={(event) => void search(event)}
+        >
           <label htmlFor="shelter-number-query">完整或部分收容編號</label>
           <input
             id="shelter-number-query"
