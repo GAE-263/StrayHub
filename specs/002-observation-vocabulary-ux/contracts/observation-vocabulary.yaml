@@ -1,0 +1,355 @@
+openapi: 3.1.0
+info:
+  title: StrayHub Observation Vocabulary Management Contract
+  version: 0.2.0
+  description: >-
+    觀察詞彙管理頁面的既有 HTTP 路徑與本 Feature 新增的摘要、狀態、歷史使用與稽核語意。
+    正式整合時同步回 specs/001-volunteer-care-report/contracts/openapi.yaml。
+servers:
+  - url: http://localhost:8000
+    description: 本機開發
+security:
+  - bearerAuth: []
+tags:
+  - name: Observation Vocabulary
+paths:
+  /v1/observation-categories:
+    get:
+      tags: [Observation Vocabulary]
+      operationId: listObservationCategories
+      summary: 取得目前收容所可見的觀察類別
+      responses:
+        "200":
+          description: 觀察類別與來源、排序、狀態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationCategoryListResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/observation-options:
+    get:
+      tags: [Observation Vocabulary]
+      operationId: listObservationOptions
+      summary: 取得目前收容所的觀察選項與摘要
+      description: >-
+        Admin-level settings context 可讀取有效與歷史狀態；Staff 只回傳啟用中的可用詞彙。
+        回應必須只包含 platform default 與目前 organization 的 organization extension。
+      responses:
+        "200":
+          description: 選項、類別計數與未篩選摘要
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOptionListResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Observation Vocabulary]
+      operationId: createObservationOption
+      summary: 新增收容所自訂觀察選項
+      description: 平台預設不可由此操作建立或複製；新增資料只屬於目前收容所。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ObservationOptionCreateRequest"
+      responses:
+        "201":
+          description: 選項已建立且為 active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOption"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+  /v1/observation-options/{optionId}:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    patch:
+      tags: [Observation Vocabulary]
+      operationId: updateObservationOption
+      summary: 修改收容所自訂觀察選項
+      description: >-
+        可修改中文名稱、說明、排序、是否需要補充說明；stable code 只有在沒有歷史使用時可修改。
+        平台預設與其他收容所 option 一律視為不可存取或不可修改。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ObservationOptionUpdateRequest"
+      responses:
+        "200":
+          description: 選項已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOption"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+  /v1/observation-options/{optionId}/disable:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    post:
+      tags: [Observation Vocabulary]
+      operationId: disableObservationOption
+      summary: 停用收容所自訂觀察選項
+      description: 停用不會出現在新的回報表單，歷史回報與快照仍保留。
+      responses:
+        "200":
+          description: 選項已變為 disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOption"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/observation-options/{optionId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    post:
+      tags: [Observation Vocabulary]
+      operationId: restoreObservationOption
+      summary: 恢復收容所自訂觀察選項
+      description: 將 disabled 或 archived 自訂選項恢復為 active；stable code 與歷史快照不變。
+      responses:
+        "200":
+          description: 選項已變為 active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOption"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/observation-options/{optionId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    post:
+      tags: [Observation Vocabulary]
+      operationId: archiveObservationOption
+      summary: 封存收容所自訂觀察選項
+      description: 封存不會出現在新的回報表單，歷史回報、snapshot 與 audit 保留。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ObservationLifecycleRequest"
+      responses:
+        "200":
+          description: 選項已變為 archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOption"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/observation-options/reorder:
+    post:
+      tags: [Observation Vocabulary]
+      operationId: reorderObservationOptions
+      summary: 更新收容所自訂選項順序
+      description: 只允許目前收容所同一類別的自訂 options；平台預設順序不被改寫。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ObservationOptionReorderRequest"
+      responses:
+        "200":
+          description: 排序已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationOptionListResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    OptionId:
+      name: optionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ObservationCategory:
+      type: object
+      required: [id, code, display_name, description, status, display_order, source]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, maxLength: 80 }
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500 }
+        status: { type: string, enum: [active, disabled] }
+        display_order: { type: integer, minimum: 0 }
+        source: { type: string, enum: [platform_default, organization_extension] }
+    ObservationCategoryCount:
+      type: object
+      required: [category_id, active_count, custom_count, inactive_count]
+      properties:
+        category_id: { type: string, format: uuid }
+        active_count: { type: integer, minimum: 0 }
+        custom_count: { type: integer, minimum: 0 }
+        inactive_count: { type: integer, minimum: 0 }
+    ObservationOption:
+      type: object
+      required:
+        [id, category_id, code, display_name, description, status, enabled, display_order,
+         requires_note, source, editable, has_historical_usage, last_modified_at]
+      properties:
+        id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid, nullable: true }
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[a-z][a-z0-9_.]*$"
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500 }
+        status: { type: string, enum: [active, disabled, archived] }
+        enabled: { type: boolean }
+        display_order: { type: integer, minimum: 0 }
+        requires_note: { type: boolean }
+        source: { type: string, enum: [platform_default, organization_extension] }
+        editable: { type: boolean }
+        has_historical_usage: { type: boolean }
+        historical_usage_count: { type: integer, minimum: 0 }
+        last_modified_at: { type: string, format: date-time }
+        last_modified_by: { type: string, nullable: true }
+    ObservationOptionSummary:
+      type: object
+      required: [category_count, active_option_count, custom_option_count, inactive_option_count]
+      properties:
+        category_count: { type: integer, minimum: 0 }
+        active_option_count: { type: integer, minimum: 0 }
+        custom_option_count: { type: integer, minimum: 0 }
+        inactive_option_count: { type: integer, minimum: 0 }
+    ObservationCategoryListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ObservationCategory" }
+    ObservationOptionListResponse:
+      type: object
+      required: [items, summary, category_counts, matched_option_count]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ObservationOption" }
+        summary: { $ref: "#/components/schemas/ObservationOptionSummary" }
+        category_counts:
+          type: array
+          items: { $ref: "#/components/schemas/ObservationCategoryCount" }
+        matched_option_count: { type: integer, minimum: 0 }
+    ObservationOptionCreateRequest:
+      type: object
+      required: [category_id, code, display_name]
+      additionalProperties: false
+      properties:
+        category_id: { type: string, format: uuid }
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[a-z][a-z0-9_.]*$"
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500, default: "" }
+        display_order: { type: integer, minimum: 0, default: 0 }
+        requires_note: { type: boolean, default: false }
+    ObservationOptionUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[a-z][a-z0-9_.]*$"
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500 }
+        display_order: { type: integer, minimum: 0 }
+        requires_note: { type: boolean }
+    ObservationLifecycleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 500 }
+    ObservationOptionReorderItem:
+      type: object
+      required: [option_id, display_order]
+      properties:
+        option_id: { type: string, format: uuid }
+        display_order: { type: integer, minimum: 0 }
+    ObservationOptionReorderRequest:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ObservationOptionReorderItem" }
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    Unauthorized:
+      description: 未通過身分驗證
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: 無權限或無法存取，不洩漏資源存在性
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFoundOrForbidden:
+      description: 不存在或未授權的一致結果
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: stable code 重複、狀態衝突或資料已被更新
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    UnprocessableEntity:
+      description: 欄位格式或業務規則驗證失敗
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
