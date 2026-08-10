@@ -25,6 +25,11 @@ tags:
   - name: Timeline
   - name: Observation Vocabulary
   - name: AI
+  - name: Management Workbench
+  - name: Management Animals
+  - name: Management Reports
+  - name: Management Settings
+  - name: Management Audit
   - name: LINE Bot
 security:
   - bearerAuth: []
@@ -361,7 +366,8 @@ paths:
           description: 已確認的 Animal
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/AnimalConfirmationResponse" }
+              schema:
+                { $ref: "#/components/schemas/AnimalConfirmationResponse" }
         "403": { $ref: "#/components/responses/Forbidden" }
   /v1/care-report-drafts:
     post:
@@ -634,7 +640,8 @@ paths:
           description: Observation Option 順序已更新
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ObservationOptionListResponse" }
+              schema:
+                { $ref: "#/components/schemas/ObservationOptionListResponse" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
@@ -793,6 +800,337 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Draft" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/management/dashboard:
+    get:
+      tags: [Management Workbench]
+      operationId: getManagementDashboard
+      responses:
+        "200":
+          description: 角色感知管理工作台摘要
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementDashboard" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/animals:
+    get:
+      tags: [Management Animals]
+      operationId: listManagementAnimals
+      parameters:
+        - { name: query, in: query, schema: { type: string } }
+        - { name: area_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, default: active } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Active Shelter Context 內的動物清單
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ManagementAnimalListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/animals/{animalId}:
+    get:
+      tags: [Management Animals]
+      operationId: getManagementAnimal
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      responses:
+        "200":
+          description: 動物檔案摘要
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementAnimal" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/reports:
+    get:
+      tags: [Management Reports]
+      operationId: listManagementReports
+      parameters:
+        - { name: from_date, in: query, schema: { type: string, format: date } }
+        - { name: to_date, in: query, schema: { type: string, format: date } }
+        - { name: animal_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Report Inbox
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ManagementReportListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/reports/{reportId}:
+    get:
+      tags: [Management Reports]
+      operationId: getManagementReport
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "200":
+          description: 報告明細與 AI 提示摘要
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/reports/{reportId}/correction:
+    post:
+      tags: [Management Reports]
+      operationId: correctManagementReport
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: "#/components/schemas/ManagementReportCorrectionRequest" }
+      responses:
+        "200":
+          description: 已建立修正紀錄
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/reports/{reportId}/archive:
+    post:
+      tags: [Management Reports]
+      operationId: archiveManagementReport
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ManagementArchiveRequest" }
+      responses:
+        "200":
+          description: 已封存報告
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/reportable-scopes:
+    get:
+      tags: [Management Settings]
+      operationId: listManagementReportableScopes
+      parameters:
+        - {
+            name: include_inactive,
+            in: query,
+            schema: { type: boolean, default: false },
+          }
+      responses:
+        "200":
+          description: 可回報範圍
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ManagementReportableScopeList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    post:
+      tags: [Management Settings]
+      operationId: createManagementReportableScope
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: "#/components/schemas/ManagementReportableScopeRequest" }
+      responses:
+        "201":
+          description: 已建立可回報範圍
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementReportableScope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/reportable-scopes/{scopeId}:
+    patch:
+      tags: [Management Settings]
+      operationId: updateManagementReportableScope
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "#/components/schemas/ManagementReportableScopeUpdateRequest",
+              }
+      responses:
+        "200":
+          description: 已更新可回報範圍
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementReportableScope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/qr-codes:
+    get:
+      tags: [Management Settings]
+      operationId: listManagementQrCodes
+      responses:
+        "200":
+          description: 動物 QR 綁定清單
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementQrCodeList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    post:
+      tags: [Management Settings]
+      operationId: createManagementQrCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ManagementQrCodeRequest" }
+      responses:
+        "201":
+          description: 已建立 QR；token 僅於此回應顯示一次
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementQrCode" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+  /v1/management/qr-codes/{qrId}/revoke:
+    post:
+      tags: [Management Settings]
+      operationId: revokeManagementQrCode
+      parameters:
+        - $ref: "#/components/parameters/QrCodeId"
+      responses:
+        "200":
+          description: QR 已撤銷
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementQrCode" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+  /v1/management/qr-codes/{qrId}/regenerate:
+    post:
+      tags: [Settings]
+      operationId: regenerateManagementQrCode
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/QrCodeId"
+      responses:
+        "200":
+          description: QR Token 已重新產生；舊 Token 立即失效
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementQrCode" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/ai-review:
+    get:
+      tags: [Management Workbench]
+      operationId: listManagementAiReviewQueue
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+      responses:
+        "200":
+          description: AI Review Queue
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiObservationListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/ai-review/{observationId}/review:
+    post:
+      tags: [Management Workbench]
+      operationId: reviewManagementAiObservation
+      parameters:
+        - $ref: "#/components/parameters/ObservationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiReviewRequest" }
+      responses:
+        "200":
+          description: AI 判讀已完成真人審核
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiObservation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/audit:
+    get:
+      tags: [Management Audit]
+      operationId: queryManagementAudit
+      parameters:
+        - {
+            name: actor_user_id,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - { name: resource_type, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - {
+            name: from_time,
+            in: query,
+            schema: { type: string, format: date-time },
+          }
+        - {
+            name: to_time,
+            in: query,
+            schema: { type: string, format: date-time },
+          }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 200, default: 100 },
+          }
+      responses:
+        "200":
+          description: 唯讀 Audit Query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementAuditList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
 components:
   securitySchemes:
@@ -854,6 +1192,20 @@ components:
     ObservationId:
       {
         name: observationId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    ScopeId:
+      {
+        name: scopeId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
+    QrCodeId:
+      {
+        name: qrId,
         in: path,
         required: true,
         schema: { type: string, format: uuid },
@@ -941,6 +1293,173 @@ components:
         message: { type: string }
         request_id: { type: string }
         details: { type: object, additionalProperties: true }
+    ManagementDashboard:
+      type: object
+      required: [organization_id, role, summary, recent_reports]
+      properties:
+        organization_id: { type: string, format: uuid }
+        role: { type: string }
+        summary:
+          type: object
+          required:
+            [
+              reportable_animal_count,
+              today_report_count,
+              active_draft_count,
+              pending_ai_count,
+              alerts,
+            ]
+          properties:
+            reportable_animal_count: { type: integer, minimum: 0 }
+            today_report_count: { type: integer, minimum: 0 }
+            active_draft_count: { type: integer, minimum: 0 }
+            pending_ai_count: { type: integer, minimum: 0 }
+            alerts: { type: array, items: { type: string } }
+        recent_reports:
+          type: array
+          items: { $ref: "#/components/schemas/ManagementReport" }
+    ManagementAnimal:
+      type: object
+      required: [id, name, shelter_number, status, area]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        shelter_number: { type: string }
+        status: { type: string }
+        current_photo_key: { type: [string, "null"] }
+        area: { type: [string, "null"] }
+    ManagementAnimalListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ManagementAnimal" },
+          }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    ManagementReport:
+      type: object
+      required:
+        [
+          id,
+          animal_id,
+          status,
+          submitted_at,
+          answers,
+          corrections,
+          ai_observations,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        animal_id: { type: string, format: uuid }
+        animal_name: { type: [string, "null"] }
+        status: { type: string }
+        submitted_at: { type: string, format: date-time }
+        answers: { type: object, additionalProperties: true }
+        note: { type: [string, "null"] }
+        media_ids: { type: array, items: { type: string, format: uuid } }
+        corrections:
+          { type: array, items: { type: object, additionalProperties: true } }
+        ai_observations:
+          { type: array, items: { $ref: "#/components/schemas/AiObservation" } }
+    ManagementReportListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ManagementReport" },
+          }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    ManagementReportCorrectionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        observations: { type: object, additionalProperties: true }
+        note: { type: [string, "null"] }
+        animal_id: { type: [string, "null"], format: uuid }
+    ManagementArchiveRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    ManagementReportableScope:
+      type: object
+      required: [id, organization_id, starts_at, ends_at, status]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        animal_id: { type: [string, "null"], format: uuid }
+        area_id: { type: [string, "null"], format: uuid }
+        volunteer_user_id: { type: [string, "null"], format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        status: { type: string, enum: [active, inactive] }
+    ManagementReportableScopeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ManagementReportableScope" },
+          }
+    ManagementReportableScopeRequest:
+      type: object
+      required: [starts_at, ends_at]
+      properties:
+        animal_id: { type: [string, "null"], format: uuid }
+        area_id: { type: [string, "null"], format: uuid }
+        volunteer_user_id: { type: [string, "null"], format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+    ManagementReportableScopeUpdateRequest:
+      type: object
+      properties:
+        status: { type: string, enum: [active, inactive] }
+        ends_at: { type: string, format: date-time }
+    ManagementQrCode:
+      type: object
+      required: [id, animal_id, status, deep_link]
+      properties:
+        id: { type: string, format: uuid }
+        animal_id: { type: string, format: uuid }
+        status: { type: string, enum: [active, revoked] }
+        deep_link: { type: string }
+        token: { type: [string, "null"], description: 僅建立時回傳 }
+    ManagementQrCodeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ManagementQrCode" },
+          }
+    ManagementQrCodeRequest:
+      type: object
+      required: [animal_id]
+      properties:
+        animal_id: { type: string, format: uuid }
+    ManagementAuditRecord:
+      type: object
+      additionalProperties: true
+    ManagementAuditList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ManagementAuditRecord" },
+          }
     LineWebhookRequest:
       type: object
       required: [destination, events]
@@ -1169,13 +1688,21 @@ components:
         status: { type: string, enum: [pending_setup, active, suspended] }
     OrganizationCreateRequest:
       type: object
-      required: [code, name, status, initial_admin_username, initial_admin_temporary_password]
+      required:
+        [
+          code,
+          name,
+          status,
+          initial_admin_username,
+          initial_admin_temporary_password,
+        ]
       properties:
         code: { type: string }
         name: { type: string }
         status: { type: string, enum: [pending_setup] }
         initial_admin_username: { type: string, minLength: 1 }
-        initial_admin_temporary_password: { type: string, format: password, minLength: 1 }
+        initial_admin_temporary_password:
+          { type: string, format: password, minLength: 1 }
         address: { type: string }
         service_area: { type: string }
         contact: { type: string }
@@ -1261,7 +1788,8 @@ components:
       type: object
       required: [items]
       properties:
-        items: { type: array, items: { $ref: "#/components/schemas/ShelterArea" } }
+        items:
+          { type: array, items: { $ref: "#/components/schemas/ShelterArea" } }
     AnimalCandidate:
       type: object
       required: [id, name, organization_id, can_report]
@@ -1576,7 +2104,8 @@ components:
         description: { type: string }
         status: { type: string, enum: [active, disabled] }
         display_order: { type: integer, minimum: 0 }
-        source: { type: string, enum: [platform_default, organization_extension] }
+        source:
+          { type: string, enum: [platform_default, organization_extension] }
     ObservationOption:
       type: object
       required:
@@ -1602,7 +2131,8 @@ components:
         enabled: { type: boolean }
         display_order: { type: integer, minimum: 0 }
         requires_note: { type: boolean }
-        source: { type: string, enum: [platform_default, organization_extension] }
+        source:
+          { type: string, enum: [platform_default, organization_extension] }
         editable: { type: boolean }
     ObservationOptionCreateRequest:
       type: object
@@ -1693,7 +2223,8 @@ components:
         output_schema_version: { type: string, minLength: 1 }
         raw_ai_output:
           { type: [object, array, string, "null"], additionalProperties: true }
-        validation_result: { type: [object, "null"], additionalProperties: true }
+        validation_result:
+          { type: [object, "null"], additionalProperties: true }
         validated_ai_observation:
           { type: [object, "null"], additionalProperties: true }
         human_review_result:

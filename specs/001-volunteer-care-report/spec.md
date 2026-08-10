@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-05
 
-**Status**: In Progress — 247/308 項任務已完成，尚有 61 項未完成；最新 Analyze 結果為 CRITICAL = 0、HIGH = 0。Feature 尚未達到 Feature Completion；GCP Demo Deployment 另有 T239～T244 部署分支尚未完成，不能視為可部署產品。
+**Status**: In Progress — 297/308 項任務已完成，尚有 11 項未完成；最新 Analyze 結果為 CRITICAL = 0、HIGH = 0。Feature 尚未達到 Feature Completion；GCP Demo Deployment 另有 T243～T244 部署驗證尚未完成，不能視為可部署產品。
 
 **Input**: User description: 建立「浪浪森友會」第一個功能規格：志工日常照護回報與動物近期歷程。
 

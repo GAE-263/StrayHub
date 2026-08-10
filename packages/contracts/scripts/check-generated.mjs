@@ -8,7 +8,12 @@ const generated = join(directory, "openapi.ts");
 try {
   const result = spawnSync(
     "npx",
-    ["openapi-typescript", "../../specs/001-volunteer-care-report/contracts/openapi.yaml", "-o", generated],
+    [
+      "openapi-typescript",
+      "../../specs/001-volunteer-care-report/contracts/openapi.yaml",
+      "-o",
+      generated,
+    ],
     { stdio: "inherit" },
   );
   if (result.status !== 0) process.exit(result.status ?? 1);

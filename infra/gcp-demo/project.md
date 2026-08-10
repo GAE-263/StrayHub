@@ -26,16 +26,16 @@ User ID、真實姓名、照片或其他個資。
 
 ## Service 清單
 
-| 元件 | GCP 服務 | Service Account | 主要責任 |
-|---|---|---|---|
-| Web | Cloud Run Service | `strayhub-demo-next` | Next.js 管理／LIFF 介面 |
-| API | Cloud Run Service | `strayhub-demo-api` | FastAPI CRM、Webhook、授權與 Scope |
-| Worker | Cloud Run Service | `strayhub-demo-worker` | 非同步 Job 邊界 |
-| Migration | Cloud Run Job | `strayhub-demo-migration` | 受控 Cloud SQL Alembic Migration |
-| Database | Cloud SQL PostgreSQL | Migration／Runtime Roles | CRM 唯一事實來源 |
-| Object Storage | Private Cloud Storage | API／Worker | 清理後媒體與 Signed URL |
-| Image | Artifact Registry | GitHub OIDC | 映像保存與建置輸出 |
-| Logs | Cloud Logging | Runtime Service Accounts | 不含 Secret 的集中式觀測 |
+| 元件           | GCP 服務              | Service Account           | 主要責任                           |
+| -------------- | --------------------- | ------------------------- | ---------------------------------- |
+| Web            | Cloud Run Service     | `strayhub-demo-next`      | Next.js 管理／LIFF 介面            |
+| API            | Cloud Run Service     | `strayhub-demo-api`       | FastAPI CRM、Webhook、授權與 Scope |
+| Worker         | Cloud Run Service     | `strayhub-demo-worker`    | 非同步 Job 邊界                    |
+| Migration      | Cloud Run Job         | `strayhub-demo-migration` | 受控 Cloud SQL Alembic Migration   |
+| Database       | Cloud SQL PostgreSQL  | Migration／Runtime Roles  | CRM 唯一事實來源                   |
+| Object Storage | Private Cloud Storage | API／Worker               | 清理後媒體與 Signed URL            |
+| Image          | Artifact Registry     | GitHub OIDC               | 映像保存與建置輸出                 |
+| Logs           | Cloud Logging         | Runtime Service Accounts  | 不含 Secret 的集中式觀測           |
 
 ## Secret 與禁止事項
 

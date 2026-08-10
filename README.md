@@ -19,6 +19,8 @@ cp .env.example .env
 docker compose -f infra/local/docker-compose.yml up -d postgres minio
 uv run alembic upgrade head
 uv run python -m scripts.seed_local
+# 載入 T255 工作人員驗收用的固定 14 日 Timeline（需先完成 seed_local）
+uv run python -m scripts.seed_t255_timeline
 ```
 
 若 `.env` 的 `AUTH_JWT_ACTIVE_PRIVATE_KEY` 與 `AUTH_JWT_ACTIVE_PUBLIC_KEY` 為空，請先產生本機限定金鑰並填入 `.env`；不可將這些金鑰用於正式環境：
@@ -49,8 +51,10 @@ uv run python services/worker/worker.py
 - 管理前端：<http://127.0.0.1:3000>
 - 管理登入頁：<http://127.0.0.1:3000/login>
 - Swagger：<http://127.0.0.1:8000/docs>
-- 本機資料帳號：`local-staff-a`、`local-volunteer-a`，密碼都是 `local-only-password`
+- 本機資料帳號：`local-staff-a`、`local-volunteer-a`、`local-platform-admin`，密碼都是 `local-only-password`
 - 另一個租戶帳號：`local-staff-b`、`local-volunteer-b`
+
+`local-platform-admin` 是沒有 Shelter Membership 的平台級 `PLATFORM_ADMIN`，登入後可選擇並管理 `ORG-A`／`ORG-B`。
 
 Seed 只建立虛構的 `ORG-A`／`ORG-B`，兩邊可以使用相同 Shelter Number，供租戶隔離展示。完成測試後可安全移除這組資料：
 
@@ -58,7 +62,7 @@ Seed 只建立虛構的 `ORG-A`／`ORG-B`，兩邊可以使用相同 Shelter Num
 uv run python -m scripts.reset_local --yes
 ```
 
-登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8000/v1/*`，再以登入帳號的 `ORG-A` Membership 設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
+登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8000/v1/*`，再依登入帳號的 Membership 或平台管理員授權設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
 
 ## 一鍵本機展示
 

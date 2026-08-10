@@ -71,6 +71,11 @@ class FakeAuthRepository:
     async def get_organization(self, organization_id):
         return self.organization if organization_id == self.organization.id else None
 
+    async def organizations(self, *, active_only=False):
+        return (
+            [self.organization] if not active_only or self.organization.status == "active" else []
+        )
+
     async def revoke_refresh_family(self, family_id):
         for record in self.refresh.values():
             if record.family_id == family_id:
@@ -131,6 +136,33 @@ async def test_login_refresh_rotation_and_family_replay() -> None:
     with pytest.raises(DomainError, match="Refresh Token 無效"):
         await service.refresh(refresh_token=first["refresh_token"])
     assert all(record.status == "revoked" for record in repository.refresh.values())
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_login_lists_active_organizations_without_membership() -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="platform-admin",
+        display_name="Platform Admin",
+        password_hash=hasher.hash("password"),
+        platform_role="PLATFORM_ADMIN",
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    repository.membership = None
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+
+    result = await service.login(username="platform-admin", password="password")
+
+    assert result["organizations"] == [
+        {
+            "id": repository.organization.id,
+            "code": "SHELTER",
+            "name": "Shelter",
+            "role": "PLATFORM_ADMIN",
+        }
+    ]
 
 
 @pytest.mark.asyncio

@@ -14,18 +14,18 @@ daemon 可用時執行。Gate 會停止於任一失敗，不接受 `skip` 或自
 
 ## 證據紀錄
 
-| 項目 | 結果 | 證據 |
-|---|---|---|
-| Python Ruff／Pytest | PASS | `uv run ruff check .`、`ruff format --check .`、248 tests |
-| Frontend quality／build | PASS | 22 Vitest、TypeScript、Mobile／A11y、Prettier、Next build |
-| OpenAPI Contract Types | PASS | `npm --prefix packages/contracts run check` |
-| Empty Migration／Seed | PASS | Full local regression included T224 boundaries |
-| Organization A／B isolation | PASS | Full local regression and isolation contract |
-| MinIO／GCS Adapter Contract | PASS | 12 migration／isolation／adapter tests |
-| LINE Adapter Contract | PASS | Mock／formal adapter contract included |
-| Secret scan | PASS | No credential-shaped material in `infra/gcp-demo` |
+| 項目                          | 結果 | 證據                                                       |
+| ----------------------------- | ---- | ---------------------------------------------------------- |
+| Python Ruff／Pytest           | PASS | `uv run ruff check .`、`ruff format --check .`、248 tests  |
+| Frontend quality／build       | PASS | 22 Vitest、TypeScript、Mobile／A11y、Prettier、Next build  |
+| OpenAPI Contract Types        | PASS | `npm --prefix packages/contracts run check`                |
+| Empty Migration／Seed         | PASS | Full local regression included T224 boundaries             |
+| Organization A／B isolation   | PASS | Full local regression and isolation contract               |
+| MinIO／GCS Adapter Contract   | PASS | 12 migration／isolation／adapter tests                     |
+| LINE Adapter Contract         | PASS | Mock／formal adapter contract included                     |
+| Secret scan                   | PASS | No credential-shaped material in `infra/gcp-demo`          |
 | Terraform fmt／init／validate | PASS | Terraform 1.15.8、Google provider 6.50.0、backend disabled |
-| API／Worker／Web Docker build | PASS | `strayhub-demo-api:gate`、`worker:gate`、`web:gate` |
+| API／Worker／Web Docker build | PASS | `strayhub-demo-api:gate`、`worker:gate`、`web:gate`        |
 
 Gate 完成摘要：`Deployment Gate passed. No Terraform apply was executed.`
 

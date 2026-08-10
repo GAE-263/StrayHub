@@ -59,7 +59,9 @@ class SessionService:
         )
         await self.repository.add(session)
         result = await self._issue_session(user.id, session)
-        result["organizations"] = await self._available_organizations(user.id)
+        result["organizations"] = await self._available_organizations(
+            user.id, platform_scope=user.platform_role == "PLATFORM_ADMIN"
+        )
         return result
 
     async def refresh(self, *, refresh_token: str) -> dict:
@@ -88,7 +90,19 @@ class SessionService:
                 return True
         return False
 
-    async def _available_organizations(self, user_id: UUID) -> list[dict]:
+    async def _available_organizations(
+        self, user_id: UUID, *, platform_scope: bool = False
+    ) -> list[dict]:
+        if platform_scope:
+            return [
+                {
+                    "id": organization.id,
+                    "code": organization.code,
+                    "name": organization.name,
+                    "role": "PLATFORM_ADMIN",
+                }
+                for organization in await self.repository.organizations(active_only=True)
+            ]
         organizations = []
         for membership in await self.repository.memberships(user_id, active_only=True):
             organization = await self.repository.get_organization(membership.organization_id)

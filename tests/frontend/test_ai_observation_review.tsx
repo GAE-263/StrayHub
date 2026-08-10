@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AIObservationPanel } from "../../apps/web/features/ai-observation/AIObservationPanel";
 
-
 describe("AIObservationPanel", () => {
   it("separates AI, original source and human review regions", () => {
     const html = renderToStaticMarkup(
@@ -14,7 +13,9 @@ describe("AIObservationPanel", () => {
           sourceType: "photo",
           sourceId: "media-1",
           rawAiOutput: { observations: [{ code: "appearance.changed" }] },
-          validatedAiObservation: { observations: [{ code: "appearance.changed" }] },
+          validatedAiObservation: {
+            observations: [{ code: "appearance.changed" }],
+          },
           humanReviewResult: null,
         },
       }),

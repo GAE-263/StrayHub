@@ -92,6 +92,7 @@ uv run python -m scripts.reset_local --yes
 - Shelter A：`ORG-A`
 - Shelter B：`ORG-B`
 - 兩者各建立一個工作人員、一個志工與一隻收容編號 `VAAAG114080610` 的 Animal。
+- 另外建立沒有 Shelter Membership 的 `local-platform-admin`（`PLATFORM_ADMIN`），可登入後選擇 `ORG-A`／`ORG-B`。
 - 產生各自的 QR Token、Cage／Area 與今日可回報範圍。
 - 載入平台預設 Observation Category／Option 與 Effective Option 測試資料。
 - 不使用真實姓名、電話、地址、照片或正式收容所資料。
@@ -246,15 +247,16 @@ MinIO／GCS Adapter Contract、Frontend Test／Typecheck／Build、OpenAPI Gener
 [`management-workbench-plan.md`](management-workbench-plan.md) 執行以下固定路徑：
 
 1. 以 `local-staff-a` 登入 `/login`，確認登入後可看見目前 `ORG-A` Context、角色與工作台導航。
-2. 從工作台首頁進入動物清單，使用收容編號或名稱搜尋，開啟指定動物檔案，再進入 Timeline；
+2. 以 `local-platform-admin` 登入 `/login`，確認可選擇 `ORG-A`／`ORG-B`，且不需要 Shelter Membership。
+3. 從工作台首頁進入動物清單，使用收容編號或名稱搜尋，開啟指定動物檔案，再進入 Timeline；
    量測不超過三次主要操作。
-3. 從同一個動物工作區展開近 14 日、無回報日、同日多筆回報、原始 Note／Photo、AI 狀態與
+4. 從同一個動物工作區展開近 14 日、無回報日、同日多筆回報、原始 Note／Photo、AI 狀態與
    人工修正狀態；不得把 AI 失敗或未觀察顯示成正常。
-4. 以 `SHELTER_ADMIN`／`STAFF` 測試帳號確認導航依角色顯示；直接輸入無權限路由仍由 API 拒絕。
-5. 在 Context 選擇器切換 A／B 後，確認舊租戶的動物、回報、照片、選項與 Dashboard 數量不殘留。
-6. 驗證管理員可從工作台進入帳號、Cage／Area、QR、Reportable Scope 與 Observation Vocabulary；
+5. 以 `SHELTER_ADMIN`／`STAFF` 測試帳號確認導航依角色顯示；直接輸入無權限路由仍由 API 拒絕。
+6. 在 Context 選擇器切換 A／B 後，確認舊租戶的動物、回報、照片、選項與 Dashboard 數量不殘留。
+7. 驗證管理員可從工作台進入帳號、Cage／Area、QR、Reportable Scope 與 Observation Vocabulary；
    每個異動都能看到成功／失敗與 Audit 入口。
-7. 驗證工作台的 Dashboard、Report inbox、AI review 與 Audit query 在空資料、載入中、403、
+8. 驗證工作台的 Dashboard、Report inbox、AI review 與 Audit query 在空資料、載入中、403、
    409 Context、401 Session 過期與 API 失敗時都有可理解的狀態。
 
 工作台 Gate：角色導航、Context 顯示與 API 授權一致；工作人員可在三次主要操作內進入指定

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { authFetch } from "../../../../lib/auth";
 
 type Category = {
   id: string;
@@ -42,8 +43,6 @@ async function responseData<T>(response: Response): Promise<T> {
 }
 
 export default function ObservationOptionsPage() {
-  const apiBaseUrl = "";
-  const accessToken = undefined;
   const [categories, setCategories] = useState<Category[]>([]);
   const [options, setOptions] = useState<Option[]>([]);
   const [categoryId, setCategoryId] = useState("");
@@ -55,19 +54,11 @@ export default function ObservationOptionsPage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const request = useCallback(
-    async <T,>(path: string, init?: RequestInit) => {
-      const token =
-        accessToken ?? window.sessionStorage.getItem("access_token");
-      const headers = new Headers(init?.headers);
-      headers.set("Content-Type", "application/json");
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      return responseData<T>(
-        await fetch(`${apiBaseUrl}${path}`, { ...init, headers }),
-      );
-    },
-    [accessToken, apiBaseUrl],
-  );
+  const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    headers.set("Content-Type", "application/json");
+    return responseData<T>(await authFetch(path, { ...init, headers }));
+  }, []);
 
   const load = useCallback(async () => {
     const [categoryData, optionData] = await Promise.all([

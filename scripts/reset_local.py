@@ -48,6 +48,8 @@ async def reset() -> int:
             for table in (
                 "care_report_corrections",
                 "report_idempotency_keys",
+                "ai_call_logs",
+                "ai_observations",
                 "ai_processing_jobs",
                 "care_reports",
                 "care_report_drafts",
@@ -65,8 +67,18 @@ async def reset() -> int:
                 )
             await session.execute(
                 text(
+                    "DELETE FROM refresh_token_records WHERE session_id IN ("
+                    "SELECT id FROM session_records WHERE "
+                    "active_organization_id = ANY(:organization_ids) "
+                    "OR user_id IN (SELECT id FROM users WHERE username LIKE 'local-%'))"
+                ),
+                params,
+            )
+            await session.execute(
+                text(
                     "DELETE FROM session_records "
-                    "WHERE active_organization_id = ANY(:organization_ids)"
+                    "WHERE active_organization_id = ANY(:organization_ids) "
+                    "OR user_id IN (SELECT id FROM users WHERE username LIKE 'local-%')"
                 ),
                 params,
             )

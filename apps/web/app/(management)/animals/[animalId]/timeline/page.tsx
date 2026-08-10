@@ -11,6 +11,7 @@ import {
   mapDays,
   type ApiDay,
 } from "../../../../../features/animal-timeline/timelineMapping";
+import { Breadcrumbs } from "../../../../../components/management/Breadcrumbs";
 
 type Props = { params: Promise<{ animalId: string }> };
 
@@ -61,8 +62,23 @@ export default function AnimalTimelinePage({ params }: Props) {
 
   return (
     <main>
-      <h1>動物近期歷程</h1>
-      <p>可查看近 14 日每日狀態、同日多筆原始回報與 AI／人工狀態。</p>
+      <Breadcrumbs
+        items={[
+          { label: "動物檔案", href: "/animals" },
+          { label: animalId, href: `/animals/${animalId}` },
+          { label: "近期歷程" },
+        ]}
+      />
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">CARE TIMELINE</span>
+          <h1>動物近期歷程</h1>
+          <p>可查看近 14 日每日狀態、同日多筆原始回報與 AI／人工狀態。</p>
+        </div>
+        <a className="button button-secondary" href={`/animals/${animalId}`}>
+          回到動物檔案
+        </a>
+      </div>
       <TimelineFilters
         disabled={loading}
         onChange={changeDate}

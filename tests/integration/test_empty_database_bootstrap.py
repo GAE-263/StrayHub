@@ -59,6 +59,17 @@ async def test_empty_database_bootstrap_seed_reset_and_reversible_upgrade() -> N
                 )
                 == 2
             )
+            platform_admin = await connection.fetchrow(
+                """
+                SELECT u.platform_role, count(m.id) AS membership_count
+                FROM users u
+                LEFT JOIN organization_memberships m ON m.user_id = u.id
+                WHERE u.username = 'local-platform-admin'
+                GROUP BY u.platform_role
+                """
+            )
+            assert platform_admin["platform_role"] == "PLATFORM_ADMIN"
+            assert platform_admin["membership_count"] == 0
         finally:
             await connection.close()
 

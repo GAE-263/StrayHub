@@ -6,6 +6,7 @@ export type ApiReport = {
   volunteer_user_id?: string;
   note?: string | null;
   observations?: Record<string, string>;
+  observation_snapshots?: Record<string, Record<string, string>> | null;
   media_ids?: string[];
   ai_job_status?: string;
   status?: string;
@@ -29,6 +30,19 @@ export function mapDays(days: ApiDay[]): TimelineDay[] {
       volunteerUserId: report.volunteer_user_id,
       note: report.note,
       observations: report.observations,
+      observationSnapshots: report.observation_snapshots
+        ? Object.fromEntries(
+            Object.entries(report.observation_snapshots).map(
+              ([key, snapshot]) => [
+                key,
+                {
+                  code: snapshot.code,
+                  displayName: snapshot.display_name,
+                },
+              ],
+            ),
+          )
+        : undefined,
       mediaIds: report.media_ids,
       aiJobStatus: report.ai_job_status,
       status: report.status,

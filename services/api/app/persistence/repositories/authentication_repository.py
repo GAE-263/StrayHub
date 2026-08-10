@@ -53,6 +53,13 @@ class AuthenticationRepository:
     async def get_organization(self, organization_id: UUID) -> Organization | None:
         return await self.session.get(Organization, organization_id)
 
+    async def organizations(self, *, active_only: bool = False) -> list[Organization]:
+        statement = select(Organization).order_by(Organization.name)
+        if active_only:
+            statement = statement.where(Organization.status == "active")
+        result = await self.session.execute(statement)
+        return list(result.scalars())
+
     async def get_session(self, session_id: UUID) -> SessionRecord | None:
         return await self.session.get(SessionRecord, session_id)
 

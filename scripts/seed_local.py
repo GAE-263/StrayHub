@@ -45,6 +45,25 @@ async def seed() -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
     async with session_factory() as session:
         async with session.begin():
+            platform_admin = await _get_or_create(
+                session,
+                User,
+                select(User).where(User.username == "local-platform-admin"),
+                lambda: User(
+                    username="local-platform-admin",
+                    display_name="本機平台管理員",
+                    password_hash=hasher.hash("local-only-password"),
+                    platform_role="PLATFORM_ADMIN",
+                    status="active",
+                ),
+            )
+            platform_admin.display_name = "本機平台管理員"
+            platform_admin.platform_role = "PLATFORM_ADMIN"
+            platform_admin.status = "active"
+            result["PLATFORM"] = {
+                "username": platform_admin.username,
+                "role": platform_admin.platform_role,
+            }
             for org_code, org_name in (("ORG-A", "虛構收容所 A"), ("ORG-B", "虛構收容所 B")):
                 organization = await _get_or_create(
                     session,

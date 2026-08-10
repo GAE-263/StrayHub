@@ -59,7 +59,20 @@ describe("AnimalTimeline", () => {
               submittedAt: "2026-08-07T09:00:00+08:00",
               volunteerUserId: "staff-1",
               note: "原始心得",
-              observations: { emotion: "emotion.calm" },
+              observations: {
+                urination: "urination.not_observed",
+                emotion: "emotion.uncertain",
+              },
+              observationSnapshots: {
+                urination: {
+                  code: "urination.not_observed",
+                  displayName: "未觀察",
+                },
+                emotion: {
+                  code: "emotion.uncertain",
+                  displayName: "無法判斷",
+                },
+              },
               mediaIds: ["media-1", "media-2"],
               aiJobStatus: "pending",
               status: "saved",
@@ -77,6 +90,10 @@ describe("AnimalTimeline", () => {
 
     expect(button?.getAttribute("aria-expanded")).toBe("true");
     expect(container?.textContent).toContain("原始心得");
+    expect(container?.textContent).toContain("排尿");
+    expect(container?.textContent).toContain("未觀察");
+    expect(container?.textContent).toContain("情緒");
+    expect(container?.textContent).toContain("無法判斷");
     expect(container?.textContent).toContain("照片：2 張");
     expect(container?.textContent).toContain("AI 處理：pending");
     expect(container?.textContent).toContain("人工資料狀態：saved");

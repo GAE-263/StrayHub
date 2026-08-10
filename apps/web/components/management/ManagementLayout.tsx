@@ -1,0 +1,183 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { AppHeader } from "./AppHeader";
+import { AppSidebar } from "./AppSidebar";
+import {
+  clearAuth,
+  authFetch,
+  getAccessToken,
+  type CurrentUser,
+} from "../../lib/auth";
+import { ErrorState, LoadingState } from "./StateViews";
+import { StatusBanner } from "./StatusBanner";
+
+type Props = { children: React.ReactNode };
+
+export function ManagementLayout({ children }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [profile, setProfile] = useState<CurrentUser | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [organizations, setOrganizations] = useState<
+    Array<{ id: string; code: string; name: string }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const showContextRequired = () =>
+      setError("目前頁面需要重新選擇 Active Shelter Context。");
+    window.addEventListener("strayhub:context-required", showContextRequired);
+    return () =>
+      window.removeEventListener(
+        "strayhub:context-required",
+        showContextRequired,
+      );
+  }, []);
+
+  const loadContext = useCallback(async () => {
+    if (!getAccessToken()) {
+      router.replace("/login");
+      return;
+    }
+    const [profileResponse, contextResponse, organizationsResponse] =
+      await Promise.all([
+        authFetch("/v1/auth/me"),
+        authFetch("/v1/auth/active-shelter-context"),
+        authFetch("/v1/organizations"),
+      ]);
+    if (
+      !profileResponse.ok ||
+      !contextResponse.ok ||
+      !organizationsResponse.ok
+    ) {
+      if (profileResponse.status === 401 || contextResponse.status === 401) {
+        clearAuth();
+        router.replace("/login");
+        return;
+      }
+      throw new Error("目前帳號尚未準備好管理工作台 Context。");
+    }
+    setProfile((await profileResponse.json()) as CurrentUser);
+    const context = (await contextResponse.json()) as {
+      organization_id?: string;
+    };
+    setOrganizationId(context.organization_id ?? null);
+    const organizationData = (await organizationsResponse.json()) as {
+      items: Array<{ id: string; code: string; name: string }>;
+    };
+    setOrganizations(organizationData.items);
+  }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadContext()
+      .catch((requestError: unknown) => {
+        if (!cancelled)
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "無法載入登入狀態",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadContext, pathname]);
+
+  const activeMembership = useMemo(
+    () =>
+      profile?.memberships.find(
+        (membership) => membership.organization_id === organizationId,
+      ),
+    [organizationId, profile],
+  );
+
+  const logout = async () => {
+    try {
+      await authFetch("/v1/auth/logout", { method: "POST" });
+    } finally {
+      clearAuth();
+      router.replace("/login");
+    }
+  };
+
+  const switchOrganization = async (nextOrganizationId: string) => {
+    if (nextOrganizationId === organizationId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await authFetch("/v1/auth/active-shelter-context", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: nextOrganizationId }),
+      });
+      if (!response.ok) throw new Error("無法切換 Active Shelter Context");
+      const next = organizations.find(
+        (organization) => organization.id === nextOrganizationId,
+      );
+      if (next && typeof window !== "undefined") {
+        window.sessionStorage.setItem("active_organization_id", next.id);
+        window.sessionStorage.setItem("active_organization_code", next.code);
+      }
+      window.location.reload();
+    } catch (switchError: unknown) {
+      setError(
+        switchError instanceof Error ? switchError.message : "Context 切換失敗",
+      );
+      setLoading(false);
+    }
+  };
+
+  if (loading)
+    return (
+      <LoadingState
+        title="正在確認工作台 Context…"
+        description="重新驗證 Session 與 Membership。"
+      />
+    );
+  if (error || !profile || !organizationId) {
+    return (
+      <ErrorState
+        title="無法開啟管理工作台"
+        description={error || "請回到登入頁選擇有效的收容所。"}
+      />
+    );
+  }
+
+  const role = profile.user.platform_role ?? activeMembership?.role ?? "STAFF";
+  const organizationLabel =
+    typeof window !== "undefined"
+      ? (window.sessionStorage.getItem("active_organization_code") ??
+        organizationId.slice(0, 8))
+      : organizationId.slice(0, 8);
+
+  return (
+    <div className="app-frame">
+      <AppHeader
+        displayName={
+          profile.user.display_name ?? profile.user.username ?? "使用者"
+        }
+        organizationLabel={organizationLabel}
+        organizations={organizations}
+        activeOrganizationId={organizationId}
+        onSwitchOrganization={(nextOrganizationId) =>
+          void switchOrganization(nextOrganizationId)
+        }
+        onLogout={() => void logout()}
+      />
+      <div className="app-body">
+        <AppSidebar role={role} />
+        <main className="app-main">
+          {error ? <StatusBanner kind="warning">{error}</StatusBanner> : null}
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

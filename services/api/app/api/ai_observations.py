@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from services.api.app.api.dependencies import (
     RequestContext,
@@ -11,6 +11,7 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.errors import DomainError
+from services.api.app.api.management_access import require_staff_or_admin
 from services.api.app.application.ai_review import AIReviewService
 from services.api.app.application.audit_service import AuditService
 from services.api.app.persistence.repositories.ai_observation_repository import (
@@ -77,6 +78,21 @@ def _response(observation) -> AIObservationResponse:
 MANAGEMENT_ROLES = {"PLATFORM_ADMIN", "SHELTER_ADMIN", "STAFF"}
 
 
+@router.get("/v1/management/ai-review")
+async def list_management_ai_review_queue(
+    observation_status: str | None = Query(default=None, alias="status"),  # noqa: B008
+    limit: int = Query(default=50, ge=1, le=100),  # noqa: B008
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict[str, list[AIObservationResponse]]:
+    organization_id = require_staff_or_admin(context)
+    items = await AIObservationRepository(session, organization_id).list_for_review(
+        status=observation_status,
+        limit=limit,
+    )
+    return {"items": [_response(item) for item in items]}
+
+
 @router.get("/v1/ai-observations/{observationId}", response_model=AIObservationResponse)
 async def get_ai_observation(
     observationId: UUID,  # noqa: N803
@@ -129,6 +145,32 @@ async def review_ai_observation(
     if context.user_id is None:
         raise DomainError("authentication_required", "請先完成身分驗證", 401)
     repository = AIObservationRepository(session, context.organization_id)
+    observation = await AIReviewService(repository, audit=AuditService(session)).review(
+        observationId,
+        actor_user_id=context.user_id,
+        action=payload.action,
+        result=payload.corrected_observation,
+        reason=payload.reason,
+    )
+    await session.commit()
+    return _response(observation)
+
+
+@router.post(
+    "/v1/management/ai-review/{observationId}/review",
+    response_model=AIObservationResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def review_management_ai_observation(
+    observationId: UUID,  # noqa: N803
+    payload: AIReviewRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> AIObservationResponse:
+    organization_id = require_staff_or_admin(context)
+    if context.user_id is None:
+        raise DomainError("authentication_required", "請先完成身分驗證", 401)
+    repository = AIObservationRepository(session, organization_id)
     observation = await AIReviewService(repository, audit=AuditService(session)).review(
         observationId,
         actor_user_id=context.user_id,

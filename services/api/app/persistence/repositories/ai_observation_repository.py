@@ -70,3 +70,22 @@ class AIObservationRepository:
             .order_by(AIObservation.created_at)
         )
         return list(result.scalars())
+
+    async def list_for_review(
+        self, *, status: str | None = None, limit: int = 50
+    ) -> list[AIObservation]:
+        query = (
+            select(AIObservation)
+            .join(AIProcessingJob, AIProcessingJob.id == AIObservation.job_id)
+            .where(
+                AIObservation.organization_id == self.organization_id,
+                AIProcessingJob.organization_id == self.organization_id,
+            )
+            .options(joinedload(AIObservation.job))
+            .order_by(AIObservation.created_at.desc())
+            .limit(limit)
+        )
+        if status:
+            query = query.where(AIObservation.status == status)
+        result = await self.session.execute(query)
+        return list(result.scalars())

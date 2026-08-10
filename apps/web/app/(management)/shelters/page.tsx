@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { authFetch } from "../../../lib/auth";
 
 type Shelter = {
   id: string;
@@ -41,8 +42,6 @@ async function responseData<T>(response: Response): Promise<T> {
 }
 
 export default function SheltersManagementPage() {
-  const apiBaseUrl = "";
-  const accessToken = undefined;
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [selectedShelterId, setSelectedShelterId] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -64,21 +63,15 @@ export default function SheltersManagementPage() {
     [shelters, selectedShelterId],
   );
 
-  const request = useCallback(
-    async <T,>(path: string, init?: RequestInit) => {
-      const token =
-        accessToken ?? window.sessionStorage.getItem("access_token");
-      const headers = new Headers(init?.headers);
-      headers.set("Content-Type", "application/json");
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      const response = await fetch(`${apiBaseUrl}${path}`, {
-        ...init,
-        headers,
-      });
-      return responseData<T>(response);
-    },
-    [accessToken, apiBaseUrl],
-  );
+  const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    headers.set("Content-Type", "application/json");
+    const response = await authFetch(path, {
+      ...init,
+      headers,
+    });
+    return responseData<T>(response);
+  }, []);
 
   const loadShelters = useCallback(
     async (preferredId?: string) => {
@@ -181,6 +174,21 @@ export default function SheltersManagementPage() {
     await loadShelterDetails();
   };
 
+  const updateMembership = async (
+    membershipId: string,
+    changes: Partial<Pick<Membership, "role" | "status">>,
+  ) => {
+    await request<Membership>(
+      `/v1/organizations/${selectedShelterId}/memberships/${membershipId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(changes),
+      },
+    );
+    setMessage("Membership 已更新並寫入 Audit。");
+    await loadShelterDetails();
+  };
+
   const createArea = async () => {
     await request<Area>(`/v1/organizations/${selectedShelterId}/areas`, {
       method: "POST",
@@ -258,7 +266,35 @@ export default function SheltersManagementPage() {
         <ul>
           {memberships.map((membership) => (
             <li key={membership.id}>
-              {membership.user_id}（{membership.role}／{membership.status}）
+              <span>
+                {membership.user_id}（{membership.status}）
+              </span>
+              <select
+                aria-label={`${membership.user_id} 角色`}
+                defaultValue={membership.role}
+                onChange={(event) =>
+                  void runAction(() =>
+                    updateMembership(membership.id, {
+                      role: event.target.value as Membership["role"],
+                    }),
+                  )
+                }
+              >
+                <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
+                <option value="STAFF">STAFF</option>
+                <option value="VOLUNTEER">VOLUNTEER</option>
+              </select>
+              <button
+                type="button"
+                disabled={membership.status === "disabled"}
+                onClick={() =>
+                  void runAction(() =>
+                    updateMembership(membership.id, { status: "disabled" }),
+                  )
+                }
+              >
+                停用
+              </button>
             </li>
           ))}
         </ul>

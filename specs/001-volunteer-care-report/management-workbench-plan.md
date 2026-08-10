@@ -101,40 +101,40 @@ ManagementLayout
 
 ## 4. 路由與模組邊界
 
-| 路由 | 主要角色 | 目的 | 依賴的 CRM 能力 |
-|---|---|---|---|
-| `/login` | 全部 | 登入、Refresh、選定 Context | Authentication、Membership |
-| `/` | 平台／管理員／工作人員 | 今日摘要、待處理任務、快速入口 | Dashboard aggregation |
-| `/animals` | 平台／管理員／工作人員 | 動物清單、搜尋、篩選與最近活動 | Animal list/search、Scope |
-| `/animals/:animalId` | 平台／管理員／工作人員 | 動物檔案、基本資料、QR／區域摘要 | Animal detail、Cage／Area |
-| `/animals/:animalId/timeline` | 平台／管理員／工作人員 | 近 14 日與更早歷程 | Timeline、Report、Media、AI |
-| `/reports` | 管理員／工作人員 | 回報收件匣、狀態篩選、待覆核 | Report list/detail、Archive/Correction |
-| `/reports/:reportId` | 管理員／工作人員 | 原始回報、照片、AI 與人工修正 | Report、Media、AI、Audit |
-| `/settings/observation-options` | 管理員／工作人員 | 觀察類別與有效選項維護 | Effective Vocabulary |
-| `/shelters` | 平台／收容所管理員 | 收容所、帳號、Membership、Cage／Area | Organization management |
-| `/settings/reportable-scope` | 管理員／授權工作人員 | 個別動物、區域、指定志工範圍 | Daily Reportable Scope |
-| `/settings/qr-codes` | 管理員／授權工作人員 | QR 建立、撤銷、重新產生與列印資料 | QR Code management |
-| `/settings/audit` | 平台／管理員／授權工作人員 | 依權限查看異動追蹤 | Audit query |
-| `/animal-confirmation` | 志工 | 手機動物確認與建立回報 Draft | Animal selection、Draft |
-| `/care-report` | 志工 | LIFF／備援回報與 Draft 恢復 | Draft、Report |
+| 路由                            | 主要角色                   | 目的                                 | 依賴的 CRM 能力                        |
+| ------------------------------- | -------------------------- | ------------------------------------ | -------------------------------------- |
+| `/login`                        | 全部                       | 登入、Refresh、選定 Context          | Authentication、Membership             |
+| `/`                             | 平台／管理員／工作人員     | 今日摘要、待處理任務、快速入口       | Dashboard aggregation                  |
+| `/animals`                      | 平台／管理員／工作人員     | 動物清單、搜尋、篩選與最近活動       | Animal list/search、Scope              |
+| `/animals/:animalId`            | 平台／管理員／工作人員     | 動物檔案、基本資料、QR／區域摘要     | Animal detail、Cage／Area              |
+| `/animals/:animalId/timeline`   | 平台／管理員／工作人員     | 近 14 日與更早歷程                   | Timeline、Report、Media、AI            |
+| `/reports`                      | 管理員／工作人員           | 回報收件匣、狀態篩選、待覆核         | Report list/detail、Archive/Correction |
+| `/reports/:reportId`            | 管理員／工作人員           | 原始回報、照片、AI 與人工修正        | Report、Media、AI、Audit               |
+| `/settings/observation-options` | 管理員／工作人員           | 觀察類別與有效選項維護               | Effective Vocabulary                   |
+| `/shelters`                     | 平台／收容所管理員         | 收容所、帳號、Membership、Cage／Area | Organization management                |
+| `/settings/reportable-scope`    | 管理員／授權工作人員       | 個別動物、區域、指定志工範圍         | Daily Reportable Scope                 |
+| `/settings/qr-codes`            | 管理員／授權工作人員       | QR 建立、撤銷、重新產生與列印資料    | QR Code management                     |
+| `/settings/audit`               | 平台／管理員／授權工作人員 | 依權限查看異動追蹤                   | Audit query                            |
+| `/animal-confirmation`          | 志工                       | 手機動物確認與建立回報 Draft         | Animal selection、Draft                |
+| `/care-report`                  | 志工                       | LIFF／備援回報與 Draft 恢復          | Draft、Report                          |
 
 既有 `/shelters`、`/settings/observation-options` 與 Timeline 頁面先納入 Shell；不再以
 獨立頁面各自建立一套 Header、登入檢查或 API client。
 
 ## 5. 角色導航矩陣
 
-| 模組 | PLATFORM_ADMIN | SHELTER_ADMIN | STAFF | VOLUNTEER |
-|---|---:|---:|---:|---:|
-| 工作台首頁 | ✓ | ✓ | ✓ | mobile 入口 |
-| 動物清單／檔案／Timeline | ✓ | ✓ | ✓ | ✗完整歷程 |
-| 回報收件匣／修正／封存 | ✓ | ✓ | 依授權 | ✗ |
-| 觀察語彙 | ✓ | ✓ | ✓ | 只使用有效選項 |
-| 帳號／Membership | ✓ | 所屬 Shelter | ✗ | ✗ |
-| 收容所建立／啟用／停用 | ✓ | ✗ | ✗ | ✗ |
-| Cage／Area／QR | ✓ | 所屬 Shelter | 依授權 | 只掃描／解析 |
-| Daily Reportable Scope | ✓ | ✓ | 依授權 | ✗ |
-| AI 人工覆核 | ✓ | ✓ | 依授權 | ✗ |
-| Audit 查詢 | ✓ | 所屬 Shelter | 依授權 | ✗ |
+| 模組                     | PLATFORM_ADMIN | SHELTER_ADMIN |  STAFF |      VOLUNTEER |
+| ------------------------ | -------------: | ------------: | -----: | -------------: |
+| 工作台首頁               |              ✓ |             ✓ |      ✓ |    mobile 入口 |
+| 動物清單／檔案／Timeline |              ✓ |             ✓ |      ✓ |      ✗完整歷程 |
+| 回報收件匣／修正／封存   |              ✓ |             ✓ | 依授權 |              ✗ |
+| 觀察語彙                 |              ✓ |             ✓ |      ✓ | 只使用有效選項 |
+| 帳號／Membership         |              ✓ |  所屬 Shelter |      ✗ |              ✗ |
+| 收容所建立／啟用／停用   |              ✓ |             ✗ |      ✗ |              ✗ |
+| Cage／Area／QR           |              ✓ |  所屬 Shelter | 依授權 |   只掃描／解析 |
+| Daily Reportable Scope   |              ✓ |             ✓ | 依授權 |              ✗ |
+| AI 人工覆核              |              ✓ |             ✓ | 依授權 |              ✗ |
+| Audit 查詢               |              ✓ |  所屬 Shelter | 依授權 |              ✗ |
 
 角色矩陣只控制導航與使用者體驗；每個 API 仍必須以已驗證 Session、Membership、Role
 與 Organization Scope 重驗證。
