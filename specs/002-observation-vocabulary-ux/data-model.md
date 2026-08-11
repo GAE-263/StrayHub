@@ -59,7 +59,7 @@ Organization／收容所
 | --- | --- | --- |
 | `id` | 穩定識別；不能因改名、停用或封存改變 | UI key、稽核 resource、使用索引關聯 |
 | `category_id` | 必須指向可用的既有觀察類別；建立後不在本 MVP 跨類別移動 | 分組與後續回報欄位對應 |
-| `organization_id` | 空值代表平台預設；有值時只能等於目前收容所 | source、權限與 RLS 邊界 |
+| `organization_id` | 空值代表平台預設；有值時必須等於操作當下已驗證的單一收容所情境；平台管理員必須先切換有效情境 | source、權限與 RLS 邊界 |
 | `code` | 小寫英文字母開頭；可含小寫英文字母、數字、底線、句點；不得有空白或大寫；目前收容所完整有效詞彙範圍唯一 | stable code 搜尋、回報值、歷史快照 |
 | `display_name` | 不可為空白；以台灣繁體中文為主；保持適合手機回報的短名稱 | UI 主要文字、後續回報選項 |
 | `description` | 可為空；使用簡短非診斷性繁體中文 | UI 次要說明與回報輔助 |
@@ -78,12 +78,13 @@ Organization／收容所
 - `has_historical_usage`：是否有至少一筆歷史回報使用該選項或該 code；查不到或使用索引不完整時採 true／鎖定策略。
 - `historical_usage_count`：供管理者理解保留原因的可選數量；不在一般 Staff 唯讀畫面顯示不必要的管理細節。
 - `last_modified_at`：沿用 `updated_at`。
+- `updated_at`：作為編輯表單的版本條件；更新請求必須帶回表單載入時取得的值，避免過期寫入覆蓋他人修改。
 - `last_modified_by`：從最新相關 AuditRecord 解析；沒有可對應 actor 時顯示「系統」或「平台預設」。
 
 ### 不變條件
 
 1. 平台預設 option 的 `organization_id` 不可被收容所管理操作修改。
-2. 收容所自訂 option 的 `organization_id` 建立後固定，不可移交給其他收容所。
+2. 收容所自訂 option 的 `organization_id` 建立後固定，不可移交給其他收容所；建立與每次 mutation 均以操作當下已驗證的單一 Shelter Context 綁定。
 3. `code` 在新增、未使用自訂 option 修改時都必須通過格式與目前收容所 effective vocabulary 唯一性檢查。
 4. 一旦 `has_historical_usage` 為真，`code` 不可修改；狀態仍只能使用非破壞性生命週期。
 5. 不提供硬刪除；`disabled` 與 `archived` 都不會出現在新回報的有效選項集合。
@@ -189,15 +190,17 @@ Organization／收容所
 | --- | --- | --- |
 | `observation_option.created` | 新增自訂 option | category、code、name、description、order、requires_note、status、source |
 | `observation_option.updated` | 編輯名稱、code、說明、排序或補充說明 | 只列出真正變更的欄位及前後值，並保留 option scope |
-| `observation_option.reordered` | 重新排序 | 受影響 options 的前後 order 與 category |
+| `observation_option.reordered` | 重新排序 | 每個受影響 option 各自的前後 order 與 category，並帶共同 `operation_id` |
 | `observation_option.disabled` | 確認停用 | 原／新 status、option code、name、歷史使用旗標 |
 | `observation_option.restored` | 確認恢復 | 原／新 status、option code、name |
 | `observation_option.archived` | 確認封存 | 原／新 status、option code、name、原因（若有） |
 
 稽核 invariants：
 
-- `organization_id` 必須是自訂 option 所屬收容所；平台預設不由一般收容所 mutation 產生。
-- `actor_user_id`、時間、resource id、source channel、before／after 與結果不可省略。
+- `organization_id`、`actor_user_id`、`resource_id`、時間與 `source_channel` 對 ObservationOption mutation 不可為空；平台預設不由一般收容所 mutation 產生。
+- `operation_id` 對所有 ObservationOption mutation 不可為空；新的單次 mutation 產生新的 UUID，同一次多選項排序共用同一 UUID。既有稽核紀錄由 migration 以各自的 AuditRecord `id` 回填，不建立不存在的歷史批次關聯。
+- `before` 與 `after` 欄位必須存在；新增操作可使用 `before: null`，其他成功 mutation 應保存對應的前後內容。成功 mutation 的 `result` 固定為 `success`，畫面顯示「成功」。
+- 一次排序若影響多個自訂 option，必須為每個受影響 option 建立獨立 AuditRecord，使用相同 `operation_id` 關聯，且 `resource_id` 指向各自 option。
 - 失敗驗證、權限拒絕或使用者取消不得產生成功 mutation action；若安全政策要求拒絕紀錄，使用既有 access-denied action。
 - A 收容所管理者只能讀取 A scope 的稽核資料；不可透過 code、resource id 或筆數推測 B。
 
@@ -205,17 +208,32 @@ Organization／收容所
 
 頁面摘要不是新的正式資料表；由同一份目前收容所資料計算：
 
-- `category_count`：符合可見類別規則的類別數；
+- `category_count`：固定為平台既有的 13 個觀察類別，即使某類別暫時沒有選項也計入；Staff 的 `staff_active` scope 仍只回傳其可見的啟用數量語意；
 - `active_option_count`：平台預設＋收容所自訂的 active option；
 - `custom_option_count`：本收容所自訂 option 的全部狀態；
 - `inactive_option_count`：disabled＋archived option；
-- `matched_option_count`：目前前端搜尋／篩選的結果數，不能覆蓋未篩選摘要。
+- `matched_option_count`：由前端使用完整 API response 經搜尋／篩選後計算的畫面衍生值，不屬於 API 的未篩選摘要或 response 必填欄位。
+
+管理者的 summary／category counts 使用 `admin_full` scope；Staff 使用 `staff_active` scope，只提供啟用中的詞彙與數量，不回傳收容所自訂或停用／封存的管理數量。
 
 類別計數與選項來源／狀態從同一個 API response 或同一個資料快照計算，避免頁面顯示互相矛盾的數字。
 
+## Observation option audit query（觀察選項變更紀錄查詢）
+
+本功能不建立第二份稽核資料，也不新增另一個稽核資料表。管理頁沿用既有 `/v1/management/audit` 與 `AuditRecord`，以 `resource_type=ObservationOption`、`resource_id` 和目前已驗證的 Shelter Context 查詢目前收容所的自訂選項變更紀錄。
+
+查詢規則：
+
+- 只有設定管理權限可查詢；Staff、Volunteer、無有效 Context 或其他未授權角色不得取得管理稽核內容。
+- 回應至少提供不可為空的 `organization_id`、`actor_user_id`、`resource_id`、`operation_id`，以及 `created_at`、`action`、`before`、`after`、`reason`、`source_channel` 與 `result`；成功 mutation 的 `result` 固定為 `success`，供頁面顯示「成功」。
+- 本頁對 `resource_type=ObservationOption` 的查詢只允許設定管理權限；既有稽核入口對其他 resource type 的原有權限不因本功能改變。
+- 後端必須以已驗證的 organization scope 過濾，不信任 query string 的 organization id；查詢結果不得洩漏其他收容所的存在性、筆數或內容。
+- 沒有紀錄是正常空狀態；查詢失敗時不以空資料冒充成功，前端顯示錯誤與重新載入操作。
+- 變更紀錄檢視不提供修改、刪除或重播稽核事件的操作。
+
 ## Migration 與回滾要求
 
-1. 新 migration 只能向前增加 `archived` 可用語意、usage index、必要索引與 RLS policy，不把既有 `active`／`disabled` 資料改成新來源。
+1. 新 migration 只能向前增加 `archived` 可用語意、`audit_records.operation_id`、usage index、必要索引與 RLS policy，不把既有 `active`／`disabled` 資料改成新來源；既有 AuditRecord 的 `operation_id` 以該筆 record id 回填。
 2. 回填前先備份或驗證既有 `answer_snapshots`／`answers` 可讀取；回填失敗不得清空正式回報。
 3. Migration downgrade 不得刪除既有 CareReport 或 snapshots；若無法安全 downgrade derived usage index，應明確標記不可回退，而不是破壞歷史資料。
 4. 空資料庫升級、既有資料升級、重複執行回填、A／B RLS 與回報提交／修正回歸都必須有測試證據。

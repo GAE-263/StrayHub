@@ -34,7 +34,7 @@ paths:
       operationId: listObservationOptions
       summary: 取得目前收容所的觀察選項與摘要
       description: >-
-        Admin-level settings context 可讀取有效與歷史狀態；Staff 只回傳啟用中的可用詞彙。
+        Admin-level settings context 可讀取有效與歷史狀態並回傳完整管理摘要；Staff 只回傳啟用中的可用詞彙與 staff_active 摘要。
         回應必須只包含 platform default 與目前 organization 的 organization extension。
       responses:
         "200":
@@ -188,6 +188,55 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
 
+  /v1/management/audit:
+    get:
+      tags: [Management Audit]
+      operationId: queryManagementAudit
+      summary: 查詢目前收容所的唯讀變更紀錄
+      description: >-
+        本功能只使用既有管理稽核路徑查詢觀察選項紀錄；對 resource_type=ObservationOption
+        的查詢必須限制在目前已驗證的收容所，且只有具設定管理權限者可以查看。頁面會以
+        resource_id 查詢單一自訂選項的變更前後內容；Staff 不得取得這些管理稽核細節。
+        既有稽核入口對其他 resource type 的原有權限不因本功能改變。
+      parameters:
+        - name: actor_user_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: resource_type
+          in: query
+          required: false
+          schema: { type: string, default: ObservationOption }
+        - name: resource_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          required: false
+          schema: { type: string }
+        - name: from_time
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to_time
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        "200":
+          description: 目前收容所範圍內的唯讀變更紀錄
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationAuditListResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -214,18 +263,30 @@ components:
         display_order: { type: integer, minimum: 0 }
         source: { type: string, enum: [platform_default, organization_extension] }
     ObservationCategoryCount:
+      oneOf:
+        - $ref: "#/components/schemas/ObservationAdminCategoryCount"
+        - $ref: "#/components/schemas/ObservationStaffCategoryCount"
+    ObservationAdminCategoryCount:
       type: object
-      required: [category_id, active_count, custom_count, inactive_count]
+      required: [scope, category_id, active_count, custom_count, inactive_count]
       properties:
+        scope: { type: string, enum: [admin_full] }
         category_id: { type: string, format: uuid }
         active_count: { type: integer, minimum: 0 }
         custom_count: { type: integer, minimum: 0 }
         inactive_count: { type: integer, minimum: 0 }
+    ObservationStaffCategoryCount:
+      type: object
+      required: [scope, category_id, active_count]
+      properties:
+        scope: { type: string, enum: [staff_active] }
+        category_id: { type: string, format: uuid }
+        active_count: { type: integer, minimum: 0 }
     ObservationOption:
       type: object
       required:
         [id, category_id, code, display_name, description, status, enabled, display_order,
-         requires_note, source, editable, has_historical_usage, last_modified_at]
+         requires_note, source, editable, has_historical_usage, last_modified_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         category_id: { type: string, format: uuid }
@@ -246,15 +307,28 @@ components:
         has_historical_usage: { type: boolean }
         historical_usage_count: { type: integer, minimum: 0 }
         last_modified_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
         last_modified_by: { type: string, nullable: true }
     ObservationOptionSummary:
+      oneOf:
+        - $ref: "#/components/schemas/ObservationAdminSummary"
+        - $ref: "#/components/schemas/ObservationStaffSummary"
+    ObservationAdminSummary:
       type: object
-      required: [category_count, active_option_count, custom_option_count, inactive_option_count]
+      required: [scope, category_count, active_option_count, custom_option_count, inactive_option_count]
       properties:
+        scope: { type: string, enum: [admin_full] }
         category_count: { type: integer, minimum: 0 }
         active_option_count: { type: integer, minimum: 0 }
         custom_option_count: { type: integer, minimum: 0 }
         inactive_option_count: { type: integer, minimum: 0 }
+    ObservationStaffSummary:
+      type: object
+      required: [scope, category_count, active_option_count]
+      properties:
+        scope: { type: string, enum: [staff_active] }
+        category_count: { type: integer, minimum: 0 }
+        active_option_count: { type: integer, minimum: 0 }
     ObservationCategoryListResponse:
       type: object
       required: [items]
@@ -264,7 +338,7 @@ components:
           items: { $ref: "#/components/schemas/ObservationCategory" }
     ObservationOptionListResponse:
       type: object
-      required: [items, summary, category_counts, matched_option_count]
+      required: [items, summary, category_counts]
       properties:
         items:
           type: array
@@ -273,7 +347,6 @@ components:
         category_counts:
           type: array
           items: { $ref: "#/components/schemas/ObservationCategoryCount" }
-        matched_option_count: { type: integer, minimum: 0 }
     ObservationOptionCreateRequest:
       type: object
       required: [category_id, code, display_name]
@@ -291,8 +364,10 @@ components:
         requires_note: { type: boolean, default: false }
     ObservationOptionUpdateRequest:
       type: object
+      required: [expected_updated_at]
       additionalProperties: false
       properties:
+        expected_updated_at: { type: string, format: date-time }
         code:
           type: string
           minLength: 1
@@ -322,6 +397,35 @@ components:
           type: array
           minItems: 1
           items: { $ref: "#/components/schemas/ObservationOptionReorderItem" }
+    ObservationAuditRecord:
+      type: object
+      required:
+        [id, organization_id, actor_user_id, operation_id, action, resource_type, resource_id,
+         source_channel, before, after, reason, result, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        actor_user_id: { type: string, format: uuid }
+        operation_id: { type: string, format: uuid, description: 同一次排序操作的受影響選項共用識別；其他 mutation 可使用單次操作識別 }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string, format: uuid }
+        source_channel: { type: string }
+        before: { type: object, nullable: true, additionalProperties: true }
+        after: { type: object, nullable: true, additionalProperties: true }
+        reason: { type: string, nullable: true }
+        result:
+          type: string
+          enum: [success]
+          description: 成功 mutation 固定為 success；畫面顯示「成功」。失敗、取消或拒絕不建立成功 mutation 紀錄。
+        created_at: { type: string, format: date-time }
+    ObservationAuditListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ObservationAuditRecord" }
     ErrorResponse:
       type: object
       required: [code, message]

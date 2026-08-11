@@ -13,7 +13,8 @@
 - `services/api/app/api/observation_options.py` 已提供類別列表、選項列表、建立、PATCH 更新與 reorder；目前 update 沒有 `requires_note`、code 或封存生命週期，且 `OPTION_MANAGER_ROLES` 將 `STAFF` 也列為可管理者。
 - `ObservationOption` 目前只有 `active`／`disabled` 語意，來源由 `organization_id is null` 推導；現有 Repository 只允許同一收容所讀取平台預設與自己的自訂資料。
 - `CareReport.answer_snapshots` 已保存回報建立時的 code 與顯示名稱；它是歷史顯示相容性的既有基礎，但資料欄位是 JSON，不能把目前選項名稱回填覆蓋舊快照。
-- `AuditService` 已能保存 organization、actor、action、resource、before／after、source channel 與 reason，可直接延伸觀察選項稽核，不需要另建第二套稽核來源。
+- `AuditService` 已能保存 organization、actor、action、resource、before／after、source channel 與 reason，可直接延伸觀察選項稽核，不需要另建第二套稽核來源；現有 `AuditRecord` 尚未有 `operation_id`，本功能需在既有稽核資料上向前相容地增加此欄位。
+- `services/api/app/api/audit.py` 已提供唯讀 `/v1/management/audit` 查詢與目前 organization scope，但目前以 `require_staff_or_admin` 允許 Staff，且尚未支援 `resource_id`；本功能只需將 `resource_type=ObservationOption` 的本頁查詢收斂為設定管理權限並增加單一觀察選項紀錄篩選，其他稽核資源維持既有入口權限。
 - `packages/contracts/src/openapi.ts` 是生成檔；目前 source-of-truth 在既有 feature 的 `specs/001-volunteer-care-report/contracts/openapi.yaml`，實作時需同步該契約並重新產生型別。
 
 ## Decision 1：沿用既有 HTTP 路徑，擴充回應與狀態動作
@@ -42,7 +43,7 @@
 
 ## Decision 3：保留 wire source，將顯示名稱改為台灣繁體中文
 
-**Decision**：API 仍保留 `source: platform_default | organization_extension`，前端與文件把 `organization_extension` 顯示為「收容所自訂」。平台預設選項由 `organization_id is null` 判定，收容所自訂只允許目前 Organization 的資料。
+**Decision**：API 仍保留 `source: platform_default | organization_extension`，前端與文件把 `organization_extension` 顯示為「收容所自訂」。平台預設選項由 `organization_id is null` 判定，收容所自訂的 `organization_id` 必須由操作當下已驗證的單一 Shelter Context 決定；平台管理員必須先切換有效情境。
 
 **Rationale**：現有 generated types、Bot effective option mapping 與隔離測試已使用 `organization_extension`；只改顯示文案即可達成使用者語言目標，不會讓下游以為來源值改變。資料來源判定仍由後端推導，不信任前端傳入 source。
 
@@ -128,6 +129,31 @@
 
 - 只做頁面 snapshot test：拒絕，無法驗證狀態轉換、稽核、RLS 或回報歷史。
 - 直接跑完整 `verify_local.sh` 作為唯一回饋：拒絕，回饋速度慢且無法定位規格情境；先 targeted，再完整 gate。
+
+## Decision 11：沿用既有 Audit API，提供觀察選項的頁內唯讀檢視
+
+**Decision**：頁面不建立第二份稽核來源，也不複製 AuditRecord；由 `/v1/management/audit` 提供 `resource_id` 篩選，頁面以 `resource_type=ObservationOption` 查詢單一收容所自訂選項的變更紀錄。對此 resource type 的查詢僅允許 `SHELTER_ADMIN` 與有效 Shelter Context 的 `PLATFORM_ADMIN`；Staff 維持詞彙唯讀查看，但不得取得本頁觀察選項管理稽核細節。既有稽核入口對其他 resource type 的原有權限不因本功能改變；稽核回應對此 resource type 的 organization、actor、resource 與 operation id 必須可辨識。
+
+**Rationale**：專案已有 AuditRecord、AuditService 與一般唯讀稽核頁，重用既有查詢可維持 CRM 稽核的單一來源並降低契約分裂；`resource_id` 篩選讓觀察詞彙頁只呈現目前 option 的變更，符合管理者查看前後內容的需求。收斂 Staff 權限是現有 `require_staff_or_admin` 與本功能「管理細節不干擾一般工作人員」要求之間的安全缺口修正。
+
+**Alternatives considered**：
+
+- 在 observation option response 直接嵌入完整 audit 陣列：拒絕，會放大列表 payload、混合管理資料與詞彙資料，且不利於稽核查詢獨立控制權限。
+- 建立新的 `/v1/observation-options/{id}/audit` 資源：拒絕，會重複既有 audit query 邏輯與資料來源；本功能只擴充既有查詢必要的 resource filter。
+- 讓 Staff 共用現有 audit query：拒絕，會暴露不必要的管理細節，不符合最小權限與本次已確認的權限範圍。
+
+## Decision 12：成功稽核結果、失敗回饋與效能邊界
+
+**Decision**：成功完成的新增、修改、排序、停用、恢復與封存才建立成功 mutation AuditRecord，`result` 固定為 `success`（畫面顯示「成功」）；驗證失敗、取消或權限拒絕不得建立成功 mutation 紀錄，安全政策需要時沿用既有 access-denied action。一次排序若影響多個自訂 option，為每個受影響 option 建立獨立紀錄，並以共同 `operation_id` 關聯。初次載入、搜尋／篩選結果與失敗錯誤／重新載入狀態均納入 p95 2 秒驗收。
+
+**Rationale**：固定結果讓共用 AuditRecord 不必推測 before／after 才能判斷是否完成，並將失敗狀態的使用者等待時間納入規格已有的效能承諾；這些規則不要求為失敗操作新增第二套稽核資料模型。
+
+既有稽核紀錄在 migration 時以各自的 AuditRecord `id` 回填 `operation_id`，保證新契約的非空要求且不假造歷史上不存在的批次關聯；新的單次 mutation 產生新的 UUID，同一次多選項排序共用該 UUID。
+
+**Alternatives considered**：
+
+- 為每個失敗、取消與拒絕新增正式結果事件：暫不採用，會擴大既有稽核語意；如安全政策需要，沿用既有拒絕事件。
+- 只驗證成功載入效能：拒絕，錯誤狀態長時間無回饋同樣會造成使用者誤判資料不存在。
 
 ## 未解決問題
 

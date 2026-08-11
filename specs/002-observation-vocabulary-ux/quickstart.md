@@ -85,16 +85,30 @@ npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
 
 預期結果：狀態轉換是可追蹤且非破壞性；停用／封存只影響新的回報表單。
 
-### 5. Staff 唯讀與收容所隔離
+### 5. 查看變更紀錄
+
+以具設定管理權限的 `local-platform-admin` 登入 `ORG-A`：
+
+1. 在一個收容所自訂選項上選擇「查看變更紀錄」。
+2. 確認本頁以唯讀方式顯示操作者、時間、操作類型、變更前內容、變更後內容與結果「成功」。
+3. 確認只顯示 `ORG-A` 的 `ObservationOption` 紀錄；查詢使用目前 Shelter Context，不接受外部 organization id 擴大範圍。
+4. 若檢視排序異動，確認每個受影響 option 各有一筆紀錄、各自顯示排序前後值，且共用同一 `operation_id`。
+5. 使用 `local-staff-a` 重新登入，確認看不到「查看變更紀錄」入口，也不能從 API 取得本頁觀察選項管理稽核細節；既有稽核入口對其他類型紀錄的原有權限不因本功能改變。
+6. 對沒有紀錄的選項確認顯示「目前沒有變更紀錄」；模擬查詢失敗時確認顯示繁體中文錯誤與「重新載入」。
+
+預期結果：稽核資料沿用既有 AuditRecord／Audit API，管理者可追溯本所變更，Staff 與其他收容所不可查看。
+
+### 6. Staff 唯讀與收容所隔離
 
 1. 使用 `local-staff-a` 登入並選擇 `ORG-A`，確認可以閱讀啟用詞彙但看不到新增、編輯、排序、停用、恢復、封存按鈕。
-2. 使用 `local-staff-b` 選擇 `ORG-B`，確認看不到 `ORG-A` 的自訂名稱、筆數、狀態或 stable code。
-3. 嘗試將 A 的 option id 或網址帶入 B 的操作，確認回應拒絕且不洩漏 A 是否存在。
-4. 以 `local-platform-admin` 切換收容所後，確認摘要與自訂 option 隨目前 Context 改變。
+2. 確認 Staff response 使用 `staff_active` scope，只顯示啟用中的類別／選項數量，不顯示收容所自訂總數或停用／封存總數。
+3. 使用 `local-staff-b` 選擇 `ORG-B`，確認看不到 `ORG-A` 的自訂名稱、筆數、狀態或 stable code。
+4. 嘗試將 A 的 option id 或網址帶入 B 的操作，確認回應拒絕且不洩漏 A 是否存在。
+5. 以 `local-platform-admin` 切換收容所後，確認摘要與自訂 option 隨目前 Context 改變。
 
 預期結果：前端角色差異與 API／資料存取邊界一致；相同 stable code 可在不同收容所獨立存在且互不影響。
 
-### 6. 小尺寸螢幕與鍵盤
+### 7. 小尺寸螢幕與鍵盤
 
 使用瀏覽器約 320px 寬度並只使用鍵盤：
 
@@ -114,8 +128,11 @@ uv run pytest \
   tests/unit/test_observation_option_service.py \
   tests/integration/test_observation_options.py \
   tests/integration/test_observation_option_usage.py \
+  tests/integration/test_observation_option_audit.py \
+  tests/integration/test_audit_service.py \
   tests/isolation/test_observation_option_isolation.py \
   tests/contract/test_observation_options_contract.py \
+  tests/contract/test_management_workbench_contract.py \
   tests/e2e/test_us4_observation_options.py -q
 
 npm --prefix apps/web test -- --run
@@ -124,6 +141,8 @@ npm --prefix packages/contracts run check
 ```
 
 預期結果：測試涵蓋狀態轉換、stable code 驗證與使用鎖定、歷史 snapshot、Audit、A／B 隔離、前端互動、可及性與生成契約無漂移。
+
+效能驗收：使用 13 個類別與約 500 個選項的本機 fixture，固定同一瀏覽器與本機服務條件，重複執行初次載入、搜尋／篩選與模擬請求失敗各 10 次；摘要可見、結果可見，以及錯誤或重新載入狀態可見時間的 p95 均不得超過 2 秒。篩選操作使用已完成的單次載入資料，不另發送逐字搜尋請求。
 
 ## 完整品質 Gate
 
@@ -144,5 +163,7 @@ npm --prefix packages/contracts run check
 
 - [ ] 四項摘要與 13 類別資訊架構符合 [ui-behavior.md](contracts/ui-behavior.md)。
 - [ ] HTTP response、狀態動作、錯誤與授權符合 [observation-vocabulary.yaml](contracts/observation-vocabulary.yaml)。
-- [ ] 歷史 snapshot、使用索引、Audit 與 RLS 測試通過 [data-model.md](data-model.md) 的 invariants。
+- [ ] 歷史 snapshot、使用索引、Audit 查詢（含 `resource_id` 與管理者授權）與 RLS 測試通過 [data-model.md](data-model.md) 的 invariants。
 - [ ] Targeted tests、完整品質 Gate 與人工小尺寸螢幕／鍵盤驗收均完成。
+- [ ] 管理者能在本頁查看自訂選項變更紀錄，Staff 與其他收容所無法查看或推測。
+- [ ] 效能測試的初次摘要載入、搜尋／篩選結果與失敗錯誤／重新載入狀態可見時間 p95 均不超過 2 秒。
