@@ -23,6 +23,7 @@ from services.api.app.persistence.models.identity import (
     WebhookSession,
 )
 from services.api.app.persistence.models.observation import ObservationCategory, ObservationOption
+from services.api.app.persistence.models.observation_usage import ObservationOptionUsage
 from services.api.app.persistence.models.qr_code import AnimalQrCode
 from services.api.app.persistence.models.reportable_scope import DailyReportableScope
 from services.api.app.persistence.models.shelter_area import ShelterArea
@@ -45,6 +46,7 @@ __all__ = [
     "LineWebhookEvent",
     "ObservationCategory",
     "ObservationOption",
+    "ObservationOptionUsage",
     "Organization",
     "OrganizationMembership",
     "RefreshTokenRecord",

@@ -25,7 +25,23 @@ class AuditMixin:
     )
 
 
+def _audit_json_value(value: Any) -> Any:
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _audit_json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_audit_json_value(item) for item in value]
+    return value
+
+
 def model_dump_for_audit(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
-        return value.model_dump(mode="json")
+        return _audit_json_value(value.model_dump(mode="json"))
+    if isinstance(value, dict):
+        return _audit_json_value(value)
+    if isinstance(value, list):
+        return {"items": _audit_json_value(value)}
     return {"value": str(value)}

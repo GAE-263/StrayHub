@@ -25,6 +25,7 @@ class ReportSubmissionService:
         audit=None,
         note_validator: Callable[[dict[str, str], str | None], None] | None = None,
         answer_snapshots: dict[str, dict[str, str]] | None = None,
+        usage_service=None,
     ) -> None:
         self.drafts = drafts
         self.reports = reports
@@ -33,6 +34,7 @@ class ReportSubmissionService:
         self.audit = audit
         self.note_validator = note_validator
         self.answer_snapshots = answer_snapshots
+        self.usage_service = usage_service
 
     async def submit(
         self,
@@ -103,6 +105,13 @@ class ReportSubmissionService:
             report_id=report.id,
             media_asset_ids=media_asset_ids or await self.drafts.media_ids(draft.id),
         )
+        if self.usage_service is not None:
+            try:
+                await self.usage_service.index_report(report, snapshots=report.answer_snapshots)
+            except Exception:
+                # The CRM report is authoritative; a rebuildable index must never
+                # make an otherwise valid volunteer report fail.
+                pass
         if self.audit is not None:
             await self.audit.record(
                 organization_id=report.organization_id,

@@ -299,6 +299,313 @@ td {
 .empty-state {
   color: var(--muted);
 }
+
+.sr-only {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.observation-page-heading {
+  align-items: center;
+}
+.observation-summary-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 22px;
+}
+.metric-card-loading {
+  opacity: 0.7;
+}
+.source-explanation {
+  margin-bottom: 22px;
+}
+.source-explanation p {
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 8px 0 0;
+}
+.observation-filters {
+  margin-bottom: 22px;
+}
+.observation-filter-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, 2fr) repeat(3, minmax(150px, 1fr));
+  margin: 18px 0 12px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 15px;
+}
+.field label,
+.checkbox-field {
+  font-size: 13px;
+  font-weight: 700;
+}
+.field input,
+.field select,
+.field textarea {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 9px 11px;
+  width: 100%;
+}
+.field textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+button:focus-visible {
+  outline: 3px solid rgba(22, 116, 92, 0.26);
+  outline-offset: 2px;
+}
+.field-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.observation-category-list {
+  display: grid;
+  gap: 14px;
+}
+.observation-category-group,
+.observation-option-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.observation-category-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  padding: 18px 20px;
+  text-align: left;
+  width: 100%;
+}
+.observation-category-toggle strong {
+  display: inline-block;
+  font-size: 17px;
+  margin-right: 10px;
+}
+.observation-category-toggle code {
+  color: var(--muted);
+  font-size: 12px;
+}
+.observation-category-counts {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.observation-category-content {
+  border-top: 1px solid var(--line);
+  padding: 16px;
+}
+.observation-option-section + .observation-option-section {
+  border-top: 1px dashed var(--line);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+.observation-option-section h3 {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+.observation-option-card {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 15px;
+}
+.observation-option-main h4 {
+  font-size: 16px;
+  margin: 0;
+}
+.observation-option-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 5px 0 0;
+}
+.observation-option-meta {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px 12px;
+}
+.observation-option-meta code {
+  color: var(--ink);
+  font-size: 12px;
+}
+.badge {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.badge-source {
+  background: #f0f3f2;
+  color: #4b635c;
+}
+.history-note {
+  color: var(--warning);
+  font-weight: 700;
+}
+.observation-option-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.button-danger {
+  background: #fff5f4;
+  border: 1px solid #e7c7c7;
+  color: var(--danger);
+}
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.notice {
+  border-radius: 10px;
+  margin: 0 0 18px;
+  padding: 12px 15px;
+}
+.notice.success {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.notice.warning {
+  background: #fff7ea;
+  color: var(--warning);
+}
+.dialog-backdrop {
+  align-items: center;
+  background: rgba(25, 51, 47, 0.46);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 50;
+}
+.observation-dialog {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  margin: 0;
+  max-height: min(90vh, 760px);
+  max-width: 720px;
+  overflow: auto;
+  padding: 24px;
+  width: min(100%, 720px);
+}
+.observation-dialog::backdrop {
+  background: transparent;
+}
+.dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.form-grid-compact {
+  align-items: end;
+  grid-template-columns: 1fr 1fr;
+}
+.checkbox-field {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-height: 42px;
+}
+.form-error {
+  color: var(--danger);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.observation-audit-panel {
+  max-width: 980px;
+}
+.observation-audit-panel pre {
+  max-width: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .observation-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .observation-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .observation-search-field {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 600px) {
+  .app-header {
+    padding: 0 16px;
+  }
+  .app-body {
+    display: block;
+  }
+  .app-sidebar {
+    display: none;
+  }
+  .app-main {
+    padding: 24px 14px 48px;
+  }
+  .observation-page-heading {
+    align-items: flex-start;
+    display: grid;
+    gap: 16px;
+  }
+  .observation-page-heading .button {
+    justify-self: start;
+  }
+  .observation-summary-grid,
+  .observation-filter-grid,
+  .form-grid-compact {
+    grid-template-columns: 1fr;
+  }
+  .observation-category-toggle {
+    align-items: flex-start;
+    display: grid;
+    gap: 12px;
+  }
+  .observation-category-counts {
+    justify-content: flex-start;
+  }
+  .observation-option-actions .button {
+    flex: 1 1 auto;
+  }
+  .observation-dialog {
+    padding: 18px;
+  }
+}
 .loading-dot {
   animation: pulse 1.2s infinite;
   background: var(--accent);

@@ -66,6 +66,7 @@ uv run pytest \
 
 echo "[Demo] PASS"
 echo "Staff A:      local-staff-a / local-only-password"
+echo "Shelter Admin: local-shelter-admin-a / local-only-password (ORG-A)"
 echo "Volunteer A:  local-volunteer-a / local-only-password"
 echo "Staff B:      local-staff-b / local-only-password"
 echo "Platform:     local-platform-admin / local-only-password"

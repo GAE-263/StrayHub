@@ -497,6 +497,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * 取得目前收容所的觀察選項與摘要
+         * @description 設定管理者可讀取啟用、停用與封存的完整管理資料；Staff 只回傳啟用中的可用詞彙。 回應只包含平台預設與目前收容所自訂資料，搜尋與篩選條件可同時使用。
+         */
         get: operations["listObservationOptions"];
         put?: never;
         post: operations["createObservationOption"];
@@ -521,7 +525,77 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * 修改收容所自訂觀察選項
+         * @description 可修改中文名稱、說明、排序、是否需要補充說明；stable code 只有在沒有歷史使用時可修改。 平台預設與其他收容所 option 一律不可修改。
+         */
         patch: operations["updateObservationOption"];
+        trace?: never;
+    };
+    "/v1/observation-options/{optionId}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                optionId: components["parameters"]["OptionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 停用收容所自訂觀察選項
+         * @description 停用不會出現在新的回報表單，歷史回報與快照仍保留。
+         */
+        post: operations["disableObservationOption"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/observation-options/{optionId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                optionId: components["parameters"]["OptionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 恢復收容所自訂觀察選項
+         * @description 將停用或封存自訂選項恢復為啟用；stable code 與歷史快照不變。
+         */
+        post: operations["restoreObservationOption"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/observation-options/{optionId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                optionId: components["parameters"]["OptionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 封存收容所自訂觀察選項
+         * @description 封存不會出現在新的回報表單，歷史回報、快照與稽核紀錄仍保留。
+         */
+        post: operations["archiveObservationOption"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/observation-options/reorder": {
@@ -917,6 +991,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * 查詢目前收容所的唯讀變更紀錄
+         * @description 查詢 ObservationOption 時只允許具設定管理權限且已驗證目前 Shelter Context 的使用者， 並可用 resource_id 查詢單一選項；Staff 不得取得本頁管理稽核細節，其他資源類型沿用既有權限。
+         */
         get: operations["queryManagementAudit"];
         put?: never;
         post?: never;
@@ -1061,6 +1139,31 @@ export interface components {
             animal_id: string;
         };
         ManagementAuditRecord: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            organization_id?: string | null;
+            /** Format: uuid */
+            actor_user_id?: string | null;
+            /** Format: uuid */
+            operation_id?: string;
+            action?: string;
+            resource_type?: string;
+            /** Format: uuid */
+            resource_id?: string | null;
+            source_channel?: string;
+            before?: {
+                [key: string]: unknown;
+            } | null;
+            after?: {
+                [key: string]: unknown;
+            } | null;
+            reason?: string | null;
+            /** @enum {string} */
+            result?: "success";
+            /** Format: date-time */
+            created_at?: string;
+        } & {
             [key: string]: unknown;
         };
         ManagementAuditList: {
@@ -1501,7 +1604,7 @@ export interface components {
             organization_id?: string | null;
             code: string;
             display_name: string;
-            description?: string;
+            description: string;
             /** @enum {string} */
             status: "active" | "disabled";
             display_order: number;
@@ -1517,15 +1620,54 @@ export interface components {
             organization_id?: string | null;
             code: string;
             display_name: string;
-            description?: string;
+            description: string;
             /** @enum {string} */
-            status: "active" | "disabled";
+            status: "active" | "disabled" | "archived";
             enabled: boolean;
             display_order: number;
-            requires_note?: boolean;
+            requires_note: boolean;
             /** @enum {string} */
             source: "platform_default" | "organization_extension";
             editable: boolean;
+            has_historical_usage: boolean;
+            historical_usage_count: number;
+            /** Format: date-time */
+            last_modified_at: string;
+            last_modified_by?: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ObservationCategoryCount: components["schemas"]["ObservationAdminCategoryCount"] | components["schemas"]["ObservationStaffCategoryCount"];
+        ObservationAdminCategoryCount: {
+            /** @enum {string} */
+            scope: "admin_full";
+            /** Format: uuid */
+            category_id: string;
+            active_count: number;
+            custom_count: number;
+            inactive_count: number;
+        };
+        ObservationStaffCategoryCount: {
+            /** @enum {string} */
+            scope: "staff_active";
+            /** Format: uuid */
+            category_id: string;
+            active_count: number;
+        };
+        ObservationOptionSummary: components["schemas"]["ObservationAdminSummary"] | components["schemas"]["ObservationStaffSummary"];
+        ObservationAdminSummary: {
+            /** @enum {string} */
+            scope: "admin_full";
+            category_count: number;
+            active_option_count: number;
+            custom_option_count: number;
+            inactive_option_count: number;
+        };
+        ObservationStaffSummary: {
+            /** @enum {string} */
+            scope: "staff_active";
+            category_count: number;
+            active_option_count: number;
         };
         ObservationOptionCreateRequest: {
             /** Format: uuid */
@@ -1540,9 +1682,13 @@ export interface components {
             requires_note: boolean;
         };
         ObservationOptionUpdateRequest: {
+            /** Format: date-time */
+            expected_updated_at: string;
+            code?: string;
             display_name?: string;
             description?: string;
             display_order?: number;
+            requires_note?: boolean;
             enabled?: boolean;
         };
         ObservationOptionReorderItem: {
@@ -1555,6 +1701,40 @@ export interface components {
         };
         ObservationOptionListResponse: {
             items: components["schemas"]["ObservationOption"][];
+            summary: components["schemas"]["ObservationOptionSummary"];
+            category_counts: components["schemas"]["ObservationCategoryCount"][];
+        };
+        ObservationLifecycleRequest: {
+            reason?: string;
+        };
+        ObservationAuditRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            actor_user_id: string;
+            /** Format: uuid */
+            operation_id: string;
+            action: string;
+            resource_type: string;
+            /** Format: uuid */
+            resource_id: string;
+            source_channel: string;
+            before: {
+                [key: string]: unknown;
+            } | null;
+            after: {
+                [key: string]: unknown;
+            } | null;
+            reason: string | null;
+            /** @enum {string} */
+            result: "success";
+            /** Format: date-time */
+            created_at: string;
+        };
+        ObservationAuditListResponse: {
+            items: components["schemas"]["ObservationAuditRecord"][];
         };
         AiObservation: {
             /** Format: uuid */
@@ -2607,14 +2787,19 @@ export interface operations {
     };
     listObservationOptions: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: string;
+                category?: string;
+                state?: "active" | "disabled" | "archived";
+                source?: "platform_default" | "organization_extension";
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 目前可用與歷史 Observation Option */
+            /** @description 選項、類別計數與未篩選摘要 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2652,6 +2837,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     updateObservationOption: {
@@ -2681,6 +2867,90 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    disableObservationOption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                optionId: components["parameters"]["OptionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 選項已變為 disabled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationOption"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreObservationOption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                optionId: components["parameters"]["OptionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 選項已變為 active */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationOption"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    archiveObservationOption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                optionId: components["parameters"]["OptionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ObservationLifecycleRequest"];
+            };
+        };
+        responses: {
+            /** @description 選項已變為 archived */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationOption"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     reorderObservationOptions: {
@@ -2708,6 +2978,8 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listAiObservations: {
@@ -3380,6 +3652,7 @@ export interface operations {
             query?: {
                 actor_user_id?: string;
                 resource_type?: string;
+                resource_id?: string;
                 action?: string;
                 from_time?: string;
                 to_time?: string;

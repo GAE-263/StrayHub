@@ -23,6 +23,15 @@ def test_observation_vocabulary_exposes_read_and_management_contracts() -> None:
         paths["/v1/observation-options/reorder"]["post"]["operationId"]
         == "reorderObservationOptions"
     )
+    assert paths["/v1/observation-options/{optionId}/disable"]["post"]["operationId"] == (
+        "disableObservationOption"
+    )
+    assert paths["/v1/observation-options/{optionId}/restore"]["post"]["operationId"] == (
+        "restoreObservationOption"
+    )
+    assert paths["/v1/observation-options/{optionId}/archive"]["post"]["operationId"] == (
+        "archiveObservationOption"
+    )
 
 
 def test_management_contract_is_failure_first_and_has_no_hard_delete() -> None:
@@ -30,7 +39,9 @@ def test_management_contract_is_failure_first_and_has_no_hard_delete() -> None:
     paths = document["paths"]
     schemas = document["components"]["schemas"]
     create = schemas["ObservationOptionCreateRequest"]
+    update = schemas["ObservationOptionUpdateRequest"]
     assert {"category_id", "code", "display_name"} <= set(create["required"])
+    assert update["required"] == ["expected_updated_at"]
     assert "delete" not in paths["/v1/observation-options/{optionId}"]
 
     for path, method in (
@@ -51,3 +62,18 @@ def test_option_contract_keeps_stable_code_and_source_metadata() -> None:
     )
     assert "code" in option["properties"]
     assert "display_name" in option["properties"]
+    assert set(option["properties"]["status"]["enum"]) == {
+        "active",
+        "disabled",
+        "archived",
+    }
+    assert {"has_historical_usage", "historical_usage_count"} <= set(option["properties"])
+
+
+def test_observation_audit_contract_has_operation_grouping_and_resource_filter() -> None:
+    document = _document()
+    audit_path = document["paths"]["/v1/management/audit"]
+    parameter_names = {item.get("name") for item in audit_path["get"]["parameters"]}
+    assert "resource_id" in parameter_names
+    audit = document["components"]["schemas"]["ManagementAuditRecord"]
+    assert {"operation_id", "result", "before", "after"} <= set(audit["properties"])
