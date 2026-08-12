@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
@@ -26,6 +26,10 @@ class ObservationOption(IdentityMixin, AuditMixin, Base):
     __tablename__ = "observation_options"
     __table_args__ = (
         UniqueConstraint("category_id", "code", name="uq_observation_option_category_code"),
+        CheckConstraint(
+            "status IN ('active', 'disabled', 'archived')",
+            name="ck_observation_options_status",
+        ),
     )
 
     category_id: Mapped[UUID] = mapped_column(ForeignKey("observation_categories.id"), index=True)

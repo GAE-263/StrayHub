@@ -72,6 +72,21 @@ class ObservationRepository:
         )
         return result.scalar_one_or_none() is not None
 
+    async def option_code_exists_for_update(self, code: str, *, exclude_id: UUID) -> bool:
+        result = await self.session.execute(
+            select(ObservationOption.id)
+            .where(
+                ObservationOption.id != exclude_id,
+                ObservationOption.code == code,
+                or_(
+                    ObservationOption.organization_id.is_(None),
+                    ObservationOption.organization_id == self.organization_id,
+                ),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def add_option(self, option: ObservationOption) -> ObservationOption:
         if option.organization_id != self.organization_id:
             raise ValueError("organization option scope mismatch")
@@ -87,3 +102,18 @@ class ObservationRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_option_any(self, option_id: UUID) -> ObservationOption | None:
+        result = await self.session.execute(
+            select(ObservationOption).where(
+                ObservationOption.id == option_id,
+                or_(
+                    ObservationOption.organization_id.is_(None),
+                    ObservationOption.organization_id == self.organization_id,
+                ),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def active_effective_options(self) -> list[ObservationOption]:
+        return await self.effective_options(include_disabled_history=False)

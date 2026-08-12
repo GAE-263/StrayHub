@@ -17,6 +17,9 @@ from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
 )
+from services.api.app.application.observation_option_usage_service import (
+    ObservationOptionUsageService,
+)
 from services.api.app.application.report_correction import ReportCorrectionService
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.application.report_submission import ReportSubmissionService
@@ -272,9 +275,11 @@ async def create_care_report(
         raise DomainError("incomplete_answers", "缺少必要回報答案", 422)
     draft.answers = payload.observations
     draft.current_step = "reviewing"
-    options = await ObservationRepository(session, context.organization_id).effective_options(
-        include_disabled_history=False
-    )
+    observation_repository = ObservationRepository(session, context.organization_id)
+    options = await observation_repository.effective_options(include_disabled_history=False)
+    categories = await observation_repository.categories(include_disabled=True)
+    category_codes = {category.id: category.code for category in categories}
+    options_by_code = {option.code: option for option in options}
     observation_service = EffectiveObservationService(
         {
             option.code: EffectiveOption(
@@ -290,8 +295,15 @@ async def create_care_report(
     validator = observation_service.validate_answer
     answer_snapshots = {
         field: {
+            "category_code": category_codes[options_by_code[code].category_id],
             "code": code,
             "display_name": observation_service.options[code].display_name,
+            "description": observation_service.options[code].description,
+            "source": (
+                "platform_default"
+                if options_by_code[code].organization_id is None
+                else "organization_extension"
+            ),
         }
         for field, code in payload.observations.items()
         if code in observation_service.options
@@ -313,6 +325,7 @@ async def create_care_report(
         audit=AuditService(session),
         note_validator=await _effective_note_validator(session, context.organization_id),
         answer_snapshots=answer_snapshots,
+        usage_service=ObservationOptionUsageService(session, context.organization_id),
     ).submit(
         draft_id=draft.id,
         volunteer_user_id=context.user_id,
@@ -359,6 +372,7 @@ async def correct_care_report(
         AnimalRepository(session, context.organization_id),
         answer_validator=await _effective_answer_validator(session, context.organization_id),
         audit=AuditService(session),
+        usage_service=ObservationOptionUsageService(session, context.organization_id),
     ).correct(
         reportId,
         actor_user_id=context.user_id,

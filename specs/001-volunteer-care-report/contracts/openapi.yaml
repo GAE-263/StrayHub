@@ -577,9 +577,30 @@ paths:
     get:
       tags: [Observation Vocabulary]
       operationId: listObservationOptions
+      summary: 取得目前收容所的觀察選項與摘要
+      description: >-
+        設定管理者可讀取啟用、停用與封存的完整管理資料；Staff 只回傳啟用中的可用詞彙。
+        回應只包含平台預設與目前收容所自訂資料，搜尋與篩選條件可同時使用。
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - name: state
+          in: query
+          required: false
+          schema: { type: string, enum: [active, disabled, archived] }
+        - name: source
+          in: query
+          required: false
+          schema: { type: string, enum: [platform_default, organization_extension] }
       responses:
         "200":
-          description: 目前可用與歷史 Observation Option
+          description: 選項、類別計數與未篩選摘要
           content:
             application/json:
               schema:
@@ -604,12 +625,17 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/observation-options/{optionId}:
     parameters:
       - $ref: "#/components/parameters/OptionId"
     patch:
       tags: [Observation Vocabulary]
       operationId: updateObservationOption
+      summary: 修改收容所自訂觀察選項
+      description: >-
+        可修改中文名稱、說明、排序、是否需要補充說明；stable code 只有在沒有歷史使用時可修改。
+        平台預設與其他收容所 option 一律不可修改。
       requestBody:
         required: true
         content:
@@ -625,6 +651,67 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/observation-options/{optionId}/disable:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    post:
+      tags: [Observation Vocabulary]
+      operationId: disableObservationOption
+      summary: 停用收容所自訂觀察選項
+      description: 停用不會出現在新的回報表單，歷史回報與快照仍保留。
+      responses:
+        "200":
+          description: 選項已變為 disabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservationOption" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/observation-options/{optionId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    post:
+      tags: [Observation Vocabulary]
+      operationId: restoreObservationOption
+      summary: 恢復收容所自訂觀察選項
+      description: 將停用或封存自訂選項恢復為啟用；stable code 與歷史快照不變。
+      responses:
+        "200":
+          description: 選項已變為 active
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservationOption" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/observation-options/{optionId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/OptionId"
+    post:
+      tags: [Observation Vocabulary]
+      operationId: archiveObservationOption
+      summary: 封存收容所自訂觀察選項
+      description: 封存不會出現在新的回報表單，歷史回報、快照與稽核紀錄仍保留。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ObservationLifecycleRequest" }
+      responses:
+        "200":
+          description: 選項已變為 archived
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservationOption" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/observation-options/reorder:
     post:
       tags: [Observation Vocabulary]
@@ -645,6 +732,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/care-reports/{reportId}/ai-observations:
     get:
       tags: [AI]
@@ -1099,6 +1188,10 @@ paths:
     get:
       tags: [Management Audit]
       operationId: queryManagementAudit
+      summary: 查詢目前收容所的唯讀變更紀錄
+      description: >-
+        查詢 ObservationOption 時只允許具設定管理權限且已驗證目前 Shelter Context 的使用者，
+        並可用 resource_id 查詢單一選項；Staff 不得取得本頁管理稽核細節，其他資源類型沿用既有權限。
       parameters:
         - {
             name: actor_user_id,
@@ -1106,6 +1199,11 @@ paths:
             schema: { type: string, format: uuid },
           }
         - { name: resource_type, in: query, schema: { type: string } }
+        - {
+            name: resource_id,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
         - { name: action, in: query, schema: { type: string } }
         - {
             name: from_time,
@@ -1451,6 +1549,20 @@ components:
     ManagementAuditRecord:
       type: object
       additionalProperties: true
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: [string, "null"], format: uuid }
+        actor_user_id: { type: [string, "null"], format: uuid }
+        operation_id: { type: string, format: uuid }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: [string, "null"], format: uuid }
+        source_channel: { type: string }
+        before: { type: [object, "null"], additionalProperties: true }
+        after: { type: [object, "null"], additionalProperties: true }
+        reason: { type: [string, "null"] }
+        result: { type: string, enum: [success] }
+        created_at: { type: string, format: date-time }
     ManagementAuditList:
       type: object
       required: [items]
@@ -2095,13 +2207,13 @@ components:
           }
     ObservationCategory:
       type: object
-      required: [id, code, display_name, status, display_order, source]
+      required: [id, code, display_name, description, status, display_order, source]
       properties:
         id: { type: string, format: uuid }
         organization_id: { type: [string, "null"], format: uuid }
-        code: { type: string }
-        display_name: { type: string }
-        description: { type: string }
+        code: { type: string, maxLength: 80 }
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500 }
         status: { type: string, enum: [active, disabled] }
         display_order: { type: integer, minimum: 0 }
         source:
@@ -2114,42 +2226,111 @@ components:
           category_id,
           code,
           display_name,
+          description,
           status,
           enabled,
           display_order,
+          requires_note,
           source,
           editable,
+          has_historical_usage,
+          historical_usage_count,
+          last_modified_at,
+          updated_at,
         ]
       properties:
         id: { type: string, format: uuid }
         category_id: { type: string, format: uuid }
         organization_id: { type: [string, "null"], format: uuid }
-        code: { type: string }
-        display_name: { type: string }
-        description: { type: string }
-        status: { type: string, enum: [active, disabled] }
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[a-z][a-z0-9_.]*$"
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500 }
+        status: { type: string, enum: [active, disabled, archived] }
         enabled: { type: boolean }
         display_order: { type: integer, minimum: 0 }
         requires_note: { type: boolean }
         source:
           { type: string, enum: [platform_default, organization_extension] }
         editable: { type: boolean }
+        has_historical_usage: { type: boolean }
+        historical_usage_count: { type: integer, minimum: 0 }
+        last_modified_at: { type: string, format: date-time }
+        last_modified_by: { type: [string, "null"] }
+        updated_at: { type: string, format: date-time }
+    ObservationCategoryCount:
+      oneOf:
+        - $ref: "#/components/schemas/ObservationAdminCategoryCount"
+        - $ref: "#/components/schemas/ObservationStaffCategoryCount"
+    ObservationAdminCategoryCount:
+      type: object
+      required: [scope, category_id, active_count, custom_count, inactive_count]
+      properties:
+        scope: { type: string, enum: [admin_full] }
+        category_id: { type: string, format: uuid }
+        active_count: { type: integer, minimum: 0 }
+        custom_count: { type: integer, minimum: 0 }
+        inactive_count: { type: integer, minimum: 0 }
+    ObservationStaffCategoryCount:
+      type: object
+      required: [scope, category_id, active_count]
+      properties:
+        scope: { type: string, enum: [staff_active] }
+        category_id: { type: string, format: uuid }
+        active_count: { type: integer, minimum: 0 }
+    ObservationOptionSummary:
+      oneOf:
+        - $ref: "#/components/schemas/ObservationAdminSummary"
+        - $ref: "#/components/schemas/ObservationStaffSummary"
+    ObservationAdminSummary:
+      type: object
+      required: [scope, category_count, active_option_count, custom_option_count, inactive_option_count]
+      properties:
+        scope: { type: string, enum: [admin_full] }
+        category_count: { type: integer, minimum: 0 }
+        active_option_count: { type: integer, minimum: 0 }
+        custom_option_count: { type: integer, minimum: 0 }
+        inactive_option_count: { type: integer, minimum: 0 }
+    ObservationStaffSummary:
+      type: object
+      required: [scope, category_count, active_option_count]
+      properties:
+        scope: { type: string, enum: [staff_active] }
+        category_count: { type: integer, minimum: 0 }
+        active_option_count: { type: integer, minimum: 0 }
     ObservationOptionCreateRequest:
       type: object
       required: [category_id, code, display_name]
+      additionalProperties: false
       properties:
         category_id: { type: string, format: uuid }
-        code: { type: string }
-        display_name: { type: string }
-        description: { type: string, default: "" }
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[a-z][a-z0-9_.]*$"
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500, default: "" }
         display_order: { type: integer, minimum: 0, default: 0 }
         requires_note: { type: boolean, default: false }
     ObservationOptionUpdateRequest:
       type: object
+      required: [expected_updated_at]
+      additionalProperties: false
       properties:
-        display_name: { type: string }
-        description: { type: string }
+        expected_updated_at: { type: string, format: date-time }
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[a-z][a-z0-9_.]*$"
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 500 }
         display_order: { type: integer, minimum: 0 }
+        requires_note: { type: boolean }
         enabled: { type: boolean }
     ObservationOptionReorderItem:
       type: object
@@ -2160,6 +2341,7 @@ components:
     ObservationOptionReorderRequest:
       type: object
       required: [items]
+      additionalProperties: false
       properties:
         items:
           type: array
@@ -2167,13 +2349,48 @@ components:
           items: { $ref: "#/components/schemas/ObservationOptionReorderItem" }
     ObservationOptionListResponse:
       type: object
-      required: [items]
+      required: [items, summary, category_counts]
       properties:
         items:
           {
             type: array,
             items: { $ref: "#/components/schemas/ObservationOption" },
           }
+        summary: { $ref: "#/components/schemas/ObservationOptionSummary" }
+        category_counts:
+          type: array
+          items: { $ref: "#/components/schemas/ObservationCategoryCount" }
+    ObservationLifecycleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 500 }
+    ObservationAuditRecord:
+      type: object
+      required:
+        [id, organization_id, actor_user_id, operation_id, action, resource_type, resource_id,
+         source_channel, before, after, reason, result, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        actor_user_id: { type: string, format: uuid }
+        operation_id: { type: string, format: uuid }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string, format: uuid }
+        source_channel: { type: string }
+        before: { type: [object, "null"], additionalProperties: true }
+        after: { type: [object, "null"], additionalProperties: true }
+        reason: { type: [string, "null"] }
+        result: { type: string, enum: [success] }
+        created_at: { type: string, format: date-time }
+    ObservationAuditListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ObservationAuditRecord" }
     AiObservation:
       type: object
       required:

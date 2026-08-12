@@ -23,6 +23,7 @@ class ReportCorrectionService:
         answer_validator: Callable[[str, str], None] | None = None,
         audit: AuditService | None = None,
         source_channel: str = "api",
+        usage_service=None,
     ) -> None:
         self.reports = reports
         self.animals = animals
@@ -30,6 +31,7 @@ class ReportCorrectionService:
         self.answer_validator = answer_validator
         self.audit = audit
         self.source_channel = source_channel
+        self.usage_service = usage_service
 
     async def correct(
         self,
@@ -110,6 +112,13 @@ class ReportCorrectionService:
                 after=after,
                 reason=reason,
             )
+        if self.usage_service is not None and observations is not None:
+            try:
+                await self.usage_service.index_report(
+                    report, answers=observations, snapshots=report.answer_snapshots
+                )
+            except Exception:
+                pass
         return report
 
     async def archive(self, report_id: UUID, *, actor_user_id: UUID, reason: str):

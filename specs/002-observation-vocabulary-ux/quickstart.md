@@ -30,6 +30,7 @@ npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
 | 測試帳號 | 用途 |
 | --- | --- |
 | `local-platform-admin`／`local-only-password` | 切換至 `ORG-A`，驗證完整管理操作 |
+| `local-shelter-admin-a`／`local-only-password` | 直接以 `SHELTER_ADMIN` 身分驗證 `ORG-A` 管理操作 |
 | `local-staff-a`／`local-only-password` | 驗證 Staff 只能唯讀查看啟用詞彙 |
 | `local-staff-b`／`local-only-password` | 驗證 `ORG-B` 資料隔離 |
 
@@ -161,9 +162,17 @@ npm --prefix packages/contracts run check
 
 ## 完成判定
 
-- [ ] 四項摘要與 13 類別資訊架構符合 [ui-behavior.md](contracts/ui-behavior.md)。
-- [ ] HTTP response、狀態動作、錯誤與授權符合 [observation-vocabulary.yaml](contracts/observation-vocabulary.yaml)。
-- [ ] 歷史 snapshot、使用索引、Audit 查詢（含 `resource_id` 與管理者授權）與 RLS 測試通過 [data-model.md](data-model.md) 的 invariants。
+- [X] 四項摘要與 13 類別資訊架構符合 [ui-behavior.md](contracts/ui-behavior.md)。
+- [X] HTTP response、狀態動作、錯誤與授權符合 [observation-vocabulary.yaml](contracts/observation-vocabulary.yaml)。
+- [X] 歷史 snapshot、使用索引、Audit 查詢（含 `resource_id` 與管理者授權）與 RLS 測試通過 [data-model.md](data-model.md) 的 invariants。
 - [ ] Targeted tests、完整品質 Gate 與人工小尺寸螢幕／鍵盤驗收均完成。
-- [ ] 管理者能在本頁查看自訂選項變更紀錄，Staff 與其他收容所無法查看或推測。
-- [ ] 效能測試的初次摘要載入、搜尋／篩選結果與失敗錯誤／重新載入狀態可見時間 p95 均不超過 2 秒。
+- [X] 管理者能在本頁查看自訂選項變更紀錄，Staff 與其他收容所無法查看或推測。
+- [X] 效能測試的初次摘要載入、搜尋／篩選結果與失敗錯誤／重新載入狀態可見時間 p95 均不超過 2 秒。
+
+## 實作驗證紀錄（2026-08-11）
+
+- Alembic migration、空資料庫 bootstrap、本機虛構 seed、A／B 收容所隔離與完整本機流程驗證通過。
+- Python 完整測試 `290 passed`；Ruff 檢查與格式檢查通過。
+- 前端 quality 通過（47 個 feature tests），typecheck、mobile／a11y 測試與 production build 通過；generated OpenAPI contract check 通過。
+- 新增 `tests/performance/test_observation_vocabulary_performance.py`，以 13 類別／500 選項重複 10 次驗證摘要、搜尋／篩選與錯誤狀態資料處理 p95 不超過 2 秒。
+- 已完成實作層級的角色、租戶、歷史快照、usage index 與 audit 自動化驗證；真實瀏覽器中的 320px、螢幕閱讀器與純鍵盤人工驗收尚未在本次工作階段執行，需於產品驗收階段補做。

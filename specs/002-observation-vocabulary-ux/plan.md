@@ -145,3 +145,10 @@ apps/web/features/observation-vocabulary/ObservationAuditPanel.test.tsx
 | --- | --- | --- |
 | 可重建的觀察選項使用索引 | 既有歷史回報以 JSON 保存，需可靠判斷 stable code 是否已被使用，才能安全允許未使用自訂 code 修改並顯示管理狀態 | 每次對每個選項掃描 `care_reports` JSON；在代表性 500 選項下會造成難以預測的查詢成本與遺漏舊快照風險 |
 | 明確的 disable／restore／archive 動作 | 三種狀態轉換的提示、權限與稽核語意不同，不能以含糊的 `enabled` 布林值取代 | 只擴充 PATCH `enabled`；會無法區分恢復與封存，也容易遺漏停用前說明與專屬 Audit action |
+
+## 實作後 constitution 與 MVP 邊界複核（2026-08-11）
+
+- **志工低摩擦／正體中文**：頁面以 13 個中文類別、摘要、收合分組與搜尋篩選降低閱讀負擔；stable code 僅作次要資訊，操作文字與錯誤訊息使用台灣正體中文。
+- **歷史追溯**：`answer_snapshots` 仍是歷史顯示事實來源；usage index 可重建，停用／封存取代永久刪除，且不改寫既有 snapshot。
+- **權限隱私稽核／多收容所資料隔離**：mutation、觀察選項管理 audit 與 usage 查詢均受目前 Shelter Context、角色與 RLS 範圍約束；未建立跨所管理入口或以 UI 隱藏代替 API 邊界。
+- **MVP 邊界**：本次只涵蓋既有管理頁的摘要、漸進式揭露、搜尋／篩選、自訂選項維護、生命週期、audit 與歷史相容；未加入批次編輯、匯入／匯出、類別治理、完整手機回報流程或第二份 CRM 事實來源。

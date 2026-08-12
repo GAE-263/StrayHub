@@ -1,5 +1,9 @@
 node_modules
 .next
+out
+dist
+build
+coverage
 ../../specs
 ../../.specify
 ../../.agents

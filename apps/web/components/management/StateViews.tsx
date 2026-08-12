@@ -1,3 +1,5 @@
+import React from "react";
+
 type StateProps = { title: string; description?: string };
 
 export function LoadingState({ title, description }: StateProps) {

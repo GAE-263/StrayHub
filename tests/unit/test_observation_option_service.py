@@ -50,10 +50,58 @@ async def test_option_rename_keeps_code_and_disable_keeps_history() -> None:
 async def test_code_must_be_unique_and_reorder_only_updates_extensions() -> None:
     repository = FakeObservationRepository()
     service = ObservationOptionService(repository)
-    first = await service.create(category_id=uuid4(), code="emotion.first", display_name="第一個")
-    second = await service.create(category_id=uuid4(), code="emotion.second", display_name="第二個")
+    category_id = uuid4()
+    first = await service.create(
+        category_id=category_id, code="emotion.first", display_name="第一個"
+    )
+    second = await service.create(
+        category_id=category_id, code="emotion.second", display_name="第二個"
+    )
     with pytest.raises(DomainError, match="Code 已存在"):
         await service.create(category_id=uuid4(), code="emotion.first", display_name="重複")
 
     reordered = await service.reorder([second.id, first.id])
     assert [option.display_order for option in reordered] == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_is_non_destructive_and_history_locks_stable_code() -> None:
+    repository = FakeObservationRepository()
+    service = ObservationOptionService(repository)
+    option = await service.create(
+        category_id=uuid4(), code="emotion.history", display_name="歷史詞彙"
+    )
+
+    option = await service.disable(option.id)
+    assert option.status == "disabled"
+    option = await service.archive(option.id)
+    assert option.status == "archived"
+    option = await service.restore(option.id)
+    assert option.status == "active"
+    assert option.code == "emotion.history"
+
+
+@pytest.mark.asyncio
+async def test_platform_defaults_and_used_codes_cannot_be_mutated() -> None:
+    repository = FakeObservationRepository()
+    platform_option = await ObservationOptionService(repository).create(
+        category_id=uuid4(), code="emotion.platform", display_name="平台"
+    )
+    platform_option.organization_id = None
+    with pytest.raises(DomainError, match="平台預設"):
+        await ObservationOptionService(repository).update(
+            platform_option.id, display_name="不應修改"
+        )
+
+    custom_option = await ObservationOptionService(repository).create(
+        category_id=uuid4(), code="emotion.locked", display_name="已使用"
+    )
+
+    class UsedOptionIndex:
+        async def has_usage(self, option_id):
+            return option_id == custom_option.id
+
+    with pytest.raises(DomainError, match="stable code 已鎖定"):
+        await ObservationOptionService(repository, usage=UsedOptionIndex()).update(
+            custom_option.id, code="emotion.renamed"
+        )

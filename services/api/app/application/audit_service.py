@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,10 +21,12 @@ class AuditService:
         action: str,
         resource_type: str,
         resource_id: UUID | None = None,
+        operation_id: UUID | None = None,
         source_channel: str,
         before: Any = None,
         after: Any = None,
         reason: str | None = None,
+        result: str = "success",
     ) -> AuditRecord:
         if not action or not resource_type or not source_channel:
             raise ValueError("audit action, resource_type and source_channel are required")
@@ -33,6 +35,7 @@ class AuditService:
         record = AuditRecord(
             organization_id=organization_id,
             actor_user_id=actor_user_id,
+            operation_id=operation_id or uuid4(),
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
@@ -40,6 +43,7 @@ class AuditService:
             before_data=model_dump_for_audit(before) if before is not None else None,
             after_data=model_dump_for_audit(after) if after is not None else None,
             reason=reason,
+            result=result,
         )
         self.session.add(record)
         await self.session.flush()

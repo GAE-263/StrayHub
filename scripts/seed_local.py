@@ -25,9 +25,73 @@ from sqlalchemy import select
 
 from .seed_observation_vocabulary import PLATFORM_OPTIONS
 
+CATEGORY_NAMES = {
+    "care_completion": "照護完成",
+    "walk_completion": "散步完成",
+    "feeding": "進食",
+    "water": "飲水",
+    "activity": "活動",
+    "urination": "排尿",
+    "defecation": "排便",
+    "resource_guarding": "護食",
+    "human_interaction": "人際互動",
+    "animal_interaction": "動物互動",
+    "emotion": "情緒",
+    "walk": "散步",
+    "appearance_special_status": "外觀／特殊狀態",
+}
+
+OPTION_NAMES = {
+    "completed": "已完成",
+    "partially_completed": "部分完成",
+    "not_provided": "未提供",
+    "not_observed": "未觀察到",
+    "uncertain": "不確定",
+    "not_done": "未完成",
+    "normal": "正常",
+    "less": "較少",
+    "almost_none": "幾乎沒有",
+    "observed": "有觀察到",
+    "usual": "平常",
+    "lower": "較低",
+    "higher": "較高",
+    "unwilling": "不願意",
+    "formed": "成形",
+    "soft": "偏軟",
+    "watery": "水樣",
+    "different_color": "顏色不同",
+    "different_shape": "形狀不同",
+    "tense": "緊繃",
+    "vocalizes": "發出聲音",
+    "blocks": "阻擋",
+    "moves_food": "移動食物",
+    "no_approach": "不靠近",
+    "seeking": "主動尋求",
+    "avoidant": "迴避",
+    "calm": "平靜",
+    "alert": "警覺",
+    "excited": "興奮",
+    "withdrawn": "退縮",
+    "seeking_interaction": "尋求互動",
+    "willing": "願意",
+    "exploring": "探索",
+    "reluctant": "猶豫",
+    "slow_or_stopping": "變慢或停下",
+    "tries_to_return": "嘗試返回",
+    "human_reaction": "對人的反應",
+    "animal_reaction": "對動物的反應",
+    "changed": "外觀改變",
+    "scratching": "搔抓",
+    "red_area": "泛紅區域",
+    "reduced_hair": "毛髮變少",
+    "lying_long": "長時間躺臥",
+    "different_walk": "行走不同",
+    "other": "其他",
+}
+
 
 def _display_name(code: str) -> str:
-    return code.rsplit(".", 1)[-1].replace("_", " ")
+    return OPTION_NAMES.get(code.rsplit(".", 1)[-1], code.rsplit(".", 1)[-1].replace("_", "／"))
 
 
 async def _get_or_create(session, model, statement, factory):
@@ -130,7 +194,7 @@ async def seed() -> dict[str, dict[str, str]]:
                     ),
                 )
                 for user, role in ((staff, "STAFF"), (volunteer, "VOLUNTEER")):
-                    await _get_or_create(
+                    membership = await _get_or_create(
                         session,
                         OrganizationMembership,
                         select(OrganizationMembership).where(
@@ -146,6 +210,40 @@ async def seed() -> dict[str, dict[str, str]]:
                             )
                         ),
                     )
+                    membership.role = role
+                    membership.status = "active"
+                if org_code == "ORG-A":
+                    shelter_admin = await _get_or_create(
+                        session,
+                        User,
+                        select(User).where(User.username == "local-shelter-admin-a"),
+                        lambda: User(
+                            username="local-shelter-admin-a",
+                            display_name="本機收容所管理員 A",
+                            password_hash=hasher.hash("local-only-password"),
+                            status="active",
+                        ),
+                    )
+                    shelter_admin.display_name = "本機收容所管理員 A"
+                    shelter_admin.status = "active"
+                    shelter_admin_membership = await _get_or_create(
+                        session,
+                        OrganizationMembership,
+                        select(OrganizationMembership).where(
+                            OrganizationMembership.organization_id == organization.id,
+                            OrganizationMembership.user_id == shelter_admin.id,
+                        ),
+                        lambda shelter_admin=shelter_admin, organization=organization: (
+                            OrganizationMembership(
+                                organization_id=organization.id,
+                                user_id=shelter_admin.id,
+                                role="SHELTER_ADMIN",
+                                status="active",
+                            )
+                        ),
+                    )
+                    shelter_admin_membership.role = "SHELTER_ADMIN"
+                    shelter_admin_membership.status = "active"
                 active_session = await _get_or_create(
                     session,
                     SessionRecord,
@@ -220,13 +318,14 @@ async def seed() -> dict[str, dict[str, str]]:
                         lambda category_code=category_code: ObservationCategory(
                             organization_id=None,
                             code=category_code,
-                            display_name=category_code,
+                            display_name=CATEGORY_NAMES[category_code],
                             description="本機非診斷性照護觀察語彙",
                             status="active",
                         ),
                     )
+                    category.display_name = CATEGORY_NAMES[category_code]
                     for option_code in option_codes:
-                        await _get_or_create(
+                        option = await _get_or_create(
                             session,
                             ObservationOption,
                             select(ObservationOption).where(
@@ -243,6 +342,8 @@ async def seed() -> dict[str, dict[str, str]]:
                                 requires_note=option_code.endswith(".other"),
                             ),
                         )
+                        option.display_name = _display_name(option_code)
+                        option.description = "本機展示選項"
                 result[org_code] = {
                     "organization_id": str(organization.id),
                     "staff_username": staff.username,
@@ -252,6 +353,8 @@ async def seed() -> dict[str, dict[str, str]]:
                     "qr_token": raw_qr_token,
                     "animal_id": str(animal.id),
                 }
+                if org_code == "ORG-A":
+                    result[org_code]["shelter_admin_username"] = shelter_admin.username
     return result
 
 

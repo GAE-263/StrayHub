@@ -256,6 +256,7 @@ components:
       required: [id, code, display_name, description, status, display_order, source]
       properties:
         id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid, nullable: true }
         code: { type: string, maxLength: 80 }
         display_name: { type: string, minLength: 1, maxLength: 200 }
         description: { type: string, maxLength: 500 }
@@ -377,6 +378,7 @@ components:
         description: { type: string, maxLength: 500 }
         display_order: { type: integer, minimum: 0 }
         requires_note: { type: boolean }
+        enabled: { type: boolean, description: 舊版相容欄位；false 等同停用 }
     ObservationLifecycleRequest:
       type: object
       additionalProperties: false
