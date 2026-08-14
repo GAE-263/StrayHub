@@ -1,4 +1,10 @@
 import React, { FormEvent, useEffect, useState } from "react";
+import { Button } from "../../components/ui/button";
+import { Dialog } from "../../components/ui/dialog";
+import { Field } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
+import { Select } from "../../components/ui/select";
+import { Textarea } from "../../components/ui/textarea";
 import {
   Category,
   categoryLabel,
@@ -95,130 +101,110 @@ export function ObservationOptionForm({
   };
 
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <dialog
-        className="observation-dialog"
-        open
-        aria-modal="true"
-        aria-labelledby="observation-form-title"
-      >
-        <div className="panel-heading">
-          <h2 id="observation-form-title">
-            {option ? "編輯觀察選項" : "新增選項"}
-          </h2>
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={onCancel}
+    <Dialog
+      open
+      title={option ? "編輯觀察選項" : "新增選項"}
+      onClose={onCancel}
+    >
+      <form onSubmit={submit}>
+        <Field>
+          <label htmlFor="option-category">觀察類別</label>
+          <Select
+            id="option-category"
+            value={value.category_id}
+            disabled={Boolean(option)}
+            onChange={(event) =>
+              setValue({ ...value, category_id: event.target.value })
+            }
+            required
           >
-            取消
-          </button>
+            <option value="">請選擇類別</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {categoryLabel(category)}（{category.code}）
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field>
+          <label htmlFor="option-code">stable code</label>
+          <Input
+            id="option-code"
+            value={value.code}
+            maxLength={120}
+            readOnly={Boolean(option?.has_historical_usage)}
+            onChange={(event) =>
+              setValue({ ...value, code: event.target.value })
+            }
+            aria-describedby="option-code-help"
+            required
+          />
+          <span id="option-code-help" className="field-help">
+            使用小寫英文字母、數字、底線或句點；已有歷史回報使用的 code 會鎖定。
+          </span>
+        </Field>
+        <Field>
+          <label htmlFor="option-display-name">中文名稱</label>
+          <Input
+            id="option-display-name"
+            value={value.display_name}
+            maxLength={200}
+            onChange={(event) =>
+              setValue({ ...value, display_name: event.target.value })
+            }
+            required
+          />
+        </Field>
+        <Field>
+          <label htmlFor="option-description">說明</label>
+          <Textarea
+            id="option-description"
+            value={value.description}
+            maxLength={500}
+            onChange={(event) =>
+              setValue({ ...value, description: event.target.value })
+            }
+          />
+        </Field>
+        <div className="p1-form-grid form-grid-compact">
+          <Field>
+            <label htmlFor="option-order">排序</label>
+            <Input
+              id="option-order"
+              type="number"
+              min="0"
+              value={value.display_order}
+              onChange={(event) =>
+                setValue({ ...value, display_order: event.target.value })
+              }
+            />
+          </Field>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={value.requires_note}
+              onChange={(event) =>
+                setValue({ ...value, requires_note: event.target.checked })
+              }
+            />
+            是否需要補充說明
+          </label>
         </div>
-        <form onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="option-category">觀察類別</label>
-            <select
-              id="option-category"
-              value={value.category_id}
-              disabled={Boolean(option)}
-              onChange={(event) =>
-                setValue({ ...value, category_id: event.target.value })
-              }
-              required
-            >
-              <option value="">請選擇類別</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {categoryLabel(category)}（{category.code}）
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="option-code">stable code</label>
-            <input
-              id="option-code"
-              value={value.code}
-              maxLength={120}
-              readOnly={Boolean(option?.has_historical_usage)}
-              onChange={(event) =>
-                setValue({ ...value, code: event.target.value })
-              }
-              aria-describedby="option-code-help"
-              required
-            />
-            <span id="option-code-help" className="field-help">
-              使用小寫英文字母、數字、底線或句點；已有歷史回報使用的 code
-              會鎖定。
-            </span>
-          </div>
-          <div className="field">
-            <label htmlFor="option-display-name">中文名稱</label>
-            <input
-              id="option-display-name"
-              value={value.display_name}
-              maxLength={200}
-              onChange={(event) =>
-                setValue({ ...value, display_name: event.target.value })
-              }
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="option-description">說明</label>
-            <textarea
-              id="option-description"
-              value={value.description}
-              maxLength={500}
-              onChange={(event) =>
-                setValue({ ...value, description: event.target.value })
-              }
-            />
-          </div>
-          <div className="form-grid form-grid-compact">
-            <div className="field">
-              <label htmlFor="option-order">排序</label>
-              <input
-                id="option-order"
-                type="number"
-                min="0"
-                value={value.display_order}
-                onChange={(event) =>
-                  setValue({ ...value, display_order: event.target.value })
-                }
-              />
-            </div>
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                checked={value.requires_note}
-                onChange={(event) =>
-                  setValue({ ...value, requires_note: event.target.checked })
-                }
-              />
-              是否需要補充說明
-            </label>
-          </div>
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="dialog-actions">
-            <button
-              className="button button-secondary"
-              type="button"
-              onClick={onCancel}
-            >
-              取消
-            </button>
-            <button className="button" type="submit" disabled={saving}>
-              {saving ? "儲存中…" : "儲存"}
-            </button>
-          </div>
-        </form>
-      </dialog>
-    </div>
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="p1-actions">
+          <Button variant="secondary" type="button" onClick={onCancel}>
+            取消
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "儲存中…" : "儲存"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

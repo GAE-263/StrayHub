@@ -1,6 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
+import { statusSummary } from "../../components/management/ui-status";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/management/StateViews";
 
 type ObservationSnapshot = {
   code?: string;
@@ -72,9 +78,9 @@ function observationEntries(
 export function AnimalTimeline({ days, loading = false, error }: Props) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
-  if (loading) return <p role="status">正在載入動物歷程…</p>;
-  if (error) return <p role="alert">歷程載入失敗：{error}</p>;
-  if (days.length === 0) return <p>目前沒有可顯示的歷程。</p>;
+  if (loading) return <LoadingState title="正在載入動物歷程…" />;
+  if (error) return <ErrorState title="歷程載入失敗" description={error} />;
+  if (days.length === 0) return <EmptyState title="目前沒有可顯示的歷程" />;
 
   return (
     <ol aria-label="動物近 14 天歷程">
@@ -83,6 +89,7 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
           <h3>{day.date}</h3>
           {day.hasReport ? (
             <button
+              className="ui-button ui-button-ghost"
               type="button"
               aria-expanded={expandedDate === day.date}
               onClick={() =>
@@ -103,7 +110,11 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
                 report.observationSnapshots,
               );
               return (
-                <article key={report.id} aria-label={`回報 ${report.id}`}>
+                <article
+                  className="ui-card timeline-report"
+                  key={report.id}
+                  aria-label={`回報 ${report.id}`}
+                >
                   <p>
                     回報時間：{report.submittedAt ?? "未提供"}
                     {report.volunteerUserId
@@ -123,8 +134,8 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
                     </dl>
                   ) : null}
                   <p>照片：{report.mediaIds?.length ?? 0} 張</p>
-                  <p>AI 處理：{report.aiJobStatus ?? "未提供"}</p>
-                  <p>人工資料狀態：{report.status ?? "未提供"}</p>
+                  <p>AI 處理：{statusSummary(report.aiJobStatus)}</p>
+                  <p>人工資料狀態：{statusSummary(report.status)}</p>
                 </article>
               );
             })}

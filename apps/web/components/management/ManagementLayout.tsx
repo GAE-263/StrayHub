@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
 import { AppSidebar } from "./AppSidebar";
+import { MobileNavigation } from "./MobileNavigation";
 import {
   clearAuth,
   authFetch,
@@ -25,6 +26,7 @@ export function ManagementLayout({ children }: Props) {
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [contextSwitchError, setContextSwitchError] = useState("");
 
   useEffect(() => {
     const showContextRequired = () =>
@@ -110,7 +112,7 @@ export function ManagementLayout({ children }: Props) {
   const switchOrganization = async (nextOrganizationId: string) => {
     if (nextOrganizationId === organizationId) return;
     setLoading(true);
-    setError("");
+    setContextSwitchError("");
     try {
       const response = await authFetch("/v1/auth/active-shelter-context", {
         method: "PUT",
@@ -127,7 +129,7 @@ export function ManagementLayout({ children }: Props) {
       }
       window.location.reload();
     } catch (switchError: unknown) {
-      setError(
+      setContextSwitchError(
         switchError instanceof Error ? switchError.message : "Context 切換失敗",
       );
       setLoading(false);
@@ -171,10 +173,13 @@ export function ManagementLayout({ children }: Props) {
         }
         onLogout={() => void logout()}
       />
+      <MobileNavigation role={role} />
       <div className="app-body">
         <AppSidebar role={role} />
         <main className="app-main">
-          {error ? <StatusBanner kind="warning">{error}</StatusBanner> : null}
+          {contextSwitchError ? (
+            <StatusBanner kind="warning">{contextSwitchError}</StatusBanner>
+          ) : null}
           {children}
         </main>
       </div>

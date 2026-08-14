@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authFetch } from "../../../lib/auth";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PermissionDeniedState,
 } from "../../../components/management/StateViews";
+import { statusLabel } from "../../../components/management/ui-status";
+import { Badge } from "../../../components/ui/badge";
+import { Field } from "../../../components/ui/field";
+import { Input } from "../../../components/ui/input";
+import { Select } from "../../../components/ui/select";
+import { Table } from "../../../components/ui/table";
+import { buildReportsQuery } from "../management-query";
 
 type Report = {
   id: string;
@@ -32,27 +40,45 @@ export default function ReportsPage() {
   const [data, setData] = useState<ResponseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const latestRequest = useRef(0);
 
   useEffect(() => {
-    const params = new URLSearchParams({ page: "1", page_size: "50" });
-    if (fromDate) params.set("from_date", fromDate);
-    if (toDate) params.set("to_date", toDate);
-    if (status) params.set("status", status);
+    const controller = new AbortController();
+    const requestId = ++latestRequest.current;
+    const params = buildReportsQuery({ fromDate, toDate, status });
     setLoading(true);
-    void authFetch(`/v1/management/reports?${params}`)
+    setError("");
+    setPermissionDenied(false);
+    void authFetch(`/v1/management/reports?${params}`, {
+      signal: controller.signal,
+    })
       .then(async (response) => {
+        if (response.status === 403) {
+          if (requestId !== latestRequest.current) return;
+          setData(null);
+          setPermissionDenied(true);
+          return;
+        }
         if (!response.ok)
           throw new Error(`Report Inbox 載入失敗（HTTP ${response.status}）`);
-        setData((await response.json()) as ResponseData);
+        const nextData = (await response.json()) as ResponseData;
+        if (!controller.signal.aborted && requestId === latestRequest.current)
+          setData(nextData);
       })
-      .catch((requestError: unknown) =>
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Report Inbox 載入失敗",
-        ),
-      )
-      .finally(() => setLoading(false));
+      .catch((requestError: unknown) => {
+        if (!controller.signal.aborted && requestId === latestRequest.current)
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Report Inbox 載入失敗",
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && requestId === latestRequest.current)
+          setLoading(false);
+      });
+    return () => controller.abort();
   }, [fromDate, status, toDate]);
 
   return (
@@ -64,29 +90,29 @@ export default function ReportsPage() {
           <p>保留志工原始回報，集中處理狀態、AI 提示與可追溯修正。</p>
         </div>
       </div>
-      <section className="panel">
+      <section className="panel ui-card">
         <div className="toolbar">
-          <div className="field">
+          <Field>
             <label htmlFor="report-from">開始日期</label>
-            <input
+            <Input
               id="report-from"
               type="date"
               value={fromDate}
               onChange={(event) => setFromDate(event.target.value)}
             />
-          </div>
-          <div className="field">
+          </Field>
+          <Field>
             <label htmlFor="report-to">結束日期</label>
-            <input
+            <Input
               id="report-to"
               type="date"
               value={toDate}
               onChange={(event) => setToDate(event.target.value)}
             />
-          </div>
-          <div className="field">
+          </Field>
+          <Field>
             <label htmlFor="report-status">狀態</label>
-            <select
+            <Select
               id="report-status"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
@@ -95,10 +121,13 @@ export default function ReportsPage() {
               <option value="saved">已保存</option>
               <option value="amended">已修正</option>
               <option value="archived">已封存</option>
-            </select>
-          </div>
+            </Select>
+          </Field>
         </div>
         {loading ? <LoadingState title="正在載入回報…" /> : null}
+        {permissionDenied ? (
+          <PermissionDeniedState description="請切換到已授權收容所，或聯絡收容所管理者。" />
+        ) : null}
         {error ? (
           <ErrorState title="無法載入 Report Inbox" description={error} />
         ) : null}
@@ -109,48 +138,43 @@ export default function ReportsPage() {
           />
         ) : null}
         {!loading && !error && data?.items.length ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>提交時間</th>
-                  <th>動物</th>
-                  <th>狀態</th>
-                  <th>AI</th>
-                  <th>操作</th>
+          <Table>
+            <thead>
+              <tr>
+                <th>提交時間</th>
+                <th>動物</th>
+                <th>狀態</th>
+                <th>AI</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((report) => (
+                <tr key={report.id}>
+                  <td>
+                    {new Date(report.submitted_at).toLocaleString("zh-TW")}
+                  </td>
+                  <td>
+                    <Link
+                      className="text-link"
+                      href={`/animals/${report.animal_id}`}
+                    >
+                      {report.animal_name ?? report.animal_id.slice(0, 8)}
+                    </Link>
+                  </td>
+                  <td>
+                    <Badge>{statusLabel(report.status)}</Badge>
+                  </td>
+                  <td>{statusLabel(report.ai_job_status)}</td>
+                  <td>
+                    <Link className="text-link" href={`/reports/${report.id}`}>
+                      查看 Detail →
+                    </Link>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.items.map((report) => (
-                  <tr key={report.id}>
-                    <td>
-                      {new Date(report.submitted_at).toLocaleString("zh-TW")}
-                    </td>
-                    <td>
-                      <Link
-                        className="text-link"
-                        href={`/animals/${report.animal_id}`}
-                      >
-                        {report.animal_name ?? report.animal_id.slice(0, 8)}
-                      </Link>
-                    </td>
-                    <td>
-                      <span className="badge">{report.status}</span>
-                    </td>
-                    <td>{report.ai_job_status}</td>
-                    <td>
-                      <Link
-                        className="text-link"
-                        href={`/reports/${report.id}`}
-                      >
-                        查看 Detail →
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </Table>
         ) : null}
       </section>
     </main>

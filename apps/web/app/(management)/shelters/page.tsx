@@ -2,6 +2,18 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { authFetch } from "../../../lib/auth";
+import { Alert } from "../../../components/ui/alert";
+import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../components/ui/card";
+import { Field } from "../../../components/ui/field";
+import { Input } from "../../../components/ui/input";
+import { Select } from "../../../components/ui/select";
 
 type Shelter = {
   id: string;
@@ -203,176 +215,226 @@ export default function SheltersManagementPage() {
     <main aria-labelledby="shelter-management-title">
       <h1 id="shelter-management-title">收容所與帳號管理</h1>
       <p>所有資料操作都由後端依驗證後的機構範圍判定。</p>
-      {errorMessage && <p role="alert">授權或操作失敗：{errorMessage}</p>}
-      {message && <p role="status">{message}</p>}
+      {errorMessage && (
+        <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
+      )}
+      {message && <Alert role="status">{message}</Alert>}
 
-      <section aria-labelledby="shelter-list-title">
-        <h2 id="shelter-list-title">收容所</h2>
-        <label htmlFor="selected-shelter">目前管理收容所</label>
-        <select
-          id="selected-shelter"
-          value={selectedShelterId}
-          onChange={(event) => setSelectedShelterId(event.target.value)}
-        >
-          <option value="">請選擇</option>
-          {shelters.map((shelter) => (
-            <option key={shelter.id} value={shelter.id}>
-              {shelter.name}（{shelter.status}）
-            </option>
-          ))}
-        </select>
-        {selectedShelter?.status === "pending_setup" && (
-          <button type="button" onClick={() => void runAction(activateShelter)}>
-            啟用收容所
-          </button>
-        )}
-        <form onSubmit={(event) => void submit(event, createShelter)}>
-          <h3>建立收容所</h3>
-          <label htmlFor="shelter-code">機構代碼</label>
-          <input
-            id="shelter-code"
-            value={organizationCode}
-            onChange={(event) => setOrganizationCode(event.target.value)}
-            required
-          />
-          <label htmlFor="shelter-name">收容所名稱</label>
-          <input
-            id="shelter-name"
-            value={newShelterName}
-            onChange={(event) => setNewShelterName(event.target.value)}
-            required
-          />
-          <label htmlFor="initial-admin-username">初始管理員帳號</label>
-          <input
-            id="initial-admin-username"
-            value={initialAdminUsername}
-            onChange={(event) => setInitialAdminUsername(event.target.value)}
-            required
-          />
-          <label htmlFor="initial-admin-password">初始管理員暫時密碼</label>
-          <input
-            id="initial-admin-password"
-            type="password"
-            value={initialAdminPassword}
-            onChange={(event) => setInitialAdminPassword(event.target.value)}
-            required
-          />
-          <button type="submit">建立收容所</button>
-        </form>
-      </section>
-
-      <section aria-labelledby="account-list-title">
-        <h2 id="account-list-title">帳號與 Membership</h2>
-        <ul>
-          {memberships.map((membership) => (
-            <li key={membership.id}>
-              <span>
-                {membership.user_id}（{membership.status}）
-              </span>
-              <select
-                aria-label={`${membership.user_id} 角色`}
-                defaultValue={membership.role}
+      <Card aria-labelledby="shelter-list-title">
+        <CardHeader>
+          <CardTitle id="shelter-list-title">收容所</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Field>
+            <label htmlFor="selected-shelter">目前管理收容所</label>
+            <Select
+              id="selected-shelter"
+              value={selectedShelterId}
+              onChange={(event) => setSelectedShelterId(event.target.value)}
+            >
+              <option value="">請選擇</option>
+              {shelters.map((shelter) => (
+                <option key={shelter.id} value={shelter.id}>
+                  {shelter.name}（{shelter.status}）
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {selectedShelter?.status === "pending_setup" && (
+            <Button
+              type="button"
+              onClick={() => void runAction(activateShelter)}
+            >
+              啟用收容所
+            </Button>
+          )}
+          <form onSubmit={(event) => void submit(event, createShelter)}>
+            <h3>建立收容所</h3>
+            <Field>
+              <label htmlFor="shelter-code">機構代碼</label>
+              <Input
+                id="shelter-code"
+                value={organizationCode}
+                onChange={(event) => setOrganizationCode(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="shelter-name">收容所名稱</label>
+              <Input
+                id="shelter-name"
+                value={newShelterName}
+                onChange={(event) => setNewShelterName(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="initial-admin-username">初始管理員帳號</label>
+              <Input
+                id="initial-admin-username"
+                value={initialAdminUsername}
                 onChange={(event) =>
-                  void runAction(() =>
-                    updateMembership(membership.id, {
-                      role: event.target.value as Membership["role"],
-                    }),
-                  )
+                  setInitialAdminUsername(event.target.value)
+                }
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="initial-admin-password">初始管理員暫時密碼</label>
+              <Input
+                id="initial-admin-password"
+                type="password"
+                value={initialAdminPassword}
+                onChange={(event) =>
+                  setInitialAdminPassword(event.target.value)
+                }
+                required
+              />
+            </Field>
+            <Button type="submit">建立收容所</Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card aria-labelledby="account-list-title">
+        <CardHeader>
+          <CardTitle id="account-list-title">帳號與 Membership</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul>
+            {memberships.map((membership) => (
+              <li key={membership.id}>
+                <span>
+                  {membership.user_id}（<Badge>{membership.status}</Badge>）
+                </span>
+                <Select
+                  aria-label={`${membership.user_id} 角色`}
+                  defaultValue={membership.role}
+                  onChange={(event) =>
+                    void runAction(() =>
+                      updateMembership(membership.id, {
+                        role: event.target.value as Membership["role"],
+                      }),
+                    )
+                  }
+                >
+                  <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
+                  <option value="STAFF">STAFF</option>
+                  <option value="VOLUNTEER">VOLUNTEER</option>
+                </Select>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={membership.status === "disabled"}
+                  onClick={() =>
+                    void runAction(() =>
+                      updateMembership(membership.id, { status: "disabled" }),
+                    )
+                  }
+                >
+                  停用
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <form onSubmit={(event) => void submit(event, createAccount)}>
+            <h3>建立機構帳號</h3>
+            <Field>
+              <label htmlFor="account-username">帳號</label>
+              <Input
+                id="account-username"
+                value={accountUsername}
+                onChange={(event) => setAccountUsername(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="account-display-name">顯示名稱</label>
+              <Input
+                id="account-display-name"
+                value={accountDisplayName}
+                onChange={(event) => setAccountDisplayName(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="account-password">暫時密碼</label>
+              <Input
+                id="account-password"
+                type="password"
+                value={accountPassword}
+                onChange={(event) => setAccountPassword(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="account-role">角色</label>
+              <Select
+                id="account-role"
+                value={accountRole}
+                onChange={(event) =>
+                  setAccountRole(event.target.value as Membership["role"])
                 }
               >
                 <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
                 <option value="STAFF">STAFF</option>
                 <option value="VOLUNTEER">VOLUNTEER</option>
-              </select>
-              <button
-                type="button"
-                disabled={membership.status === "disabled"}
-                onClick={() =>
-                  void runAction(() =>
-                    updateMembership(membership.id, { status: "disabled" }),
-                  )
+              </Select>
+            </Field>
+            <Button
+              type="submit"
+              disabled={selectedShelter?.status !== "active"}
+            >
+              建立帳號
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card aria-labelledby="area-list-title">
+        <CardHeader>
+          <CardTitle id="area-list-title">Cage / Area</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul>
+            {areas.map((area) => (
+              <li key={area.id}>
+                {area.name}（{area.area_type}／<Badge>{area.status}</Badge>）
+              </li>
+            ))}
+          </ul>
+          <form onSubmit={(event) => void submit(event, createArea)}>
+            <Field>
+              <label htmlFor="area-name">區域名稱</label>
+              <Input
+                id="area-name"
+                value={areaName}
+                onChange={(event) => setAreaName(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="area-type">類型</label>
+              <Select
+                id="area-type"
+                value={areaType}
+                onChange={(event) =>
+                  setAreaType(event.target.value as Area["area_type"])
                 }
               >
-                停用
-              </button>
-            </li>
-          ))}
-        </ul>
-        <form onSubmit={(event) => void submit(event, createAccount)}>
-          <h3>建立機構帳號</h3>
-          <label htmlFor="account-username">帳號</label>
-          <input
-            id="account-username"
-            value={accountUsername}
-            onChange={(event) => setAccountUsername(event.target.value)}
-            required
-          />
-          <label htmlFor="account-display-name">顯示名稱</label>
-          <input
-            id="account-display-name"
-            value={accountDisplayName}
-            onChange={(event) => setAccountDisplayName(event.target.value)}
-            required
-          />
-          <label htmlFor="account-password">暫時密碼</label>
-          <input
-            id="account-password"
-            type="password"
-            value={accountPassword}
-            onChange={(event) => setAccountPassword(event.target.value)}
-            required
-          />
-          <label htmlFor="account-role">角色</label>
-          <select
-            id="account-role"
-            value={accountRole}
-            onChange={(event) =>
-              setAccountRole(event.target.value as Membership["role"])
-            }
-          >
-            <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
-            <option value="STAFF">STAFF</option>
-            <option value="VOLUNTEER">VOLUNTEER</option>
-          </select>
-          <button type="submit" disabled={selectedShelter?.status !== "active"}>
-            建立帳號
-          </button>
-        </form>
-      </section>
-
-      <section aria-labelledby="area-list-title">
-        <h2 id="area-list-title">Cage / Area</h2>
-        <ul>
-          {areas.map((area) => (
-            <li key={area.id}>
-              {area.name}（{area.area_type}／{area.status}）
-            </li>
-          ))}
-        </ul>
-        <form onSubmit={(event) => void submit(event, createArea)}>
-          <label htmlFor="area-name">區域名稱</label>
-          <input
-            id="area-name"
-            value={areaName}
-            onChange={(event) => setAreaName(event.target.value)}
-            required
-          />
-          <label htmlFor="area-type">類型</label>
-          <select
-            id="area-type"
-            value={areaType}
-            onChange={(event) =>
-              setAreaType(event.target.value as Area["area_type"])
-            }
-          >
-            <option value="area">Area</option>
-            <option value="cage">Cage</option>
-          </select>
-          <button type="submit" disabled={selectedShelter?.status !== "active"}>
-            建立區域
-          </button>
-        </form>
-      </section>
+                <option value="area">Area</option>
+                <option value="cage">Cage</option>
+              </Select>
+            </Field>
+            <Button
+              type="submit"
+              disabled={selectedShelter?.status !== "active"}
+            >
+              建立區域
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   );
 }

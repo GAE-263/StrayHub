@@ -2,10 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { authFetch } from "../../../../lib/auth";
+import { LoadingState } from "../../../../components/management/StateViews";
+import { Alert } from "../../../../components/ui/alert";
+import { Badge } from "../../../../components/ui/badge";
+import { Button } from "../../../../components/ui/button";
 import {
-  ErrorState,
-  LoadingState,
-} from "../../../../components/management/StateViews";
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../../components/ui/card";
+import { Field } from "../../../../components/ui/field";
+import { Input } from "../../../../components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../../components/ui/table";
 
 type Qr = {
   id: string;
@@ -89,90 +105,97 @@ export default function QrCodesPage() {
           <p>QR 只提供動物候選查詢，不是授權憑證；Token 僅在建立時顯示一次。</p>
         </div>
       </div>
-      {error ? <ErrorState title="QR 操作失敗" description={error} /> : null}
+      {error ? <Alert role="alert">{error}</Alert> : null}
       {issuedToken ? (
-        <p className="notice success" role="status">
+        <Alert role="status">
           請立即保存此一次性 Token：<code>{issuedToken}</code>
-        </p>
+        </Alert>
       ) : null}
-      <section className="panel">
-        <h2>建立 QR</h2>
-        <div className="toolbar">
-          <div className="field">
-            <label htmlFor="qr-animal">Animal ID</label>
-            <input
-              id="qr-animal"
-              value={animalId}
-              onChange={(event) => setAnimalId(event.target.value)}
-              placeholder="UUID"
-            />
+      <Card>
+        <CardHeader>
+          <CardTitle>建立 QR</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="p1-actions">
+            <Field>
+              <label htmlFor="qr-animal">Animal ID</label>
+              <Input
+                id="qr-animal"
+                value={animalId}
+                onChange={(event) => setAnimalId(event.target.value)}
+                placeholder="UUID"
+              />
+            </Field>
+            <Button
+              type="button"
+              disabled={!animalId}
+              onClick={() => void create()}
+            >
+              建立 QR
+            </Button>
           </div>
-          <button
-            className="button"
-            type="button"
-            disabled={!animalId}
-            onClick={() => void create()}
-          >
-            建立 QR
-          </button>
-        </div>
-      </section>
-      <section className="panel">
-        <h2>已建立綁定</h2>
-        {loading ? (
-          <LoadingState title="正在載入 QR…" />
-        ) : items.length === 0 ? (
-          <p className="muted">目前沒有 QR 綁定。</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>已建立綁定</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <LoadingState title="正在載入 QR…" />
+          ) : items.length === 0 ? (
+            <p className="muted">目前沒有 QR 綁定。</p>
+          ) : (
+            <Table>
+              <TableHeader>
                 <tr>
-                  <th>動物</th>
-                  <th>狀態</th>
-                  <th>Deep Link</th>
-                  <th>操作</th>
+                  <TableHead>動物</TableHead>
+                  <TableHead>狀態</TableHead>
+                  <TableHead>Deep Link</TableHead>
+                  <TableHead>操作</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.animal_id.slice(0, 8)}…</td>
-                    <td>
-                      <span className="badge">{item.status}</span>
-                    </td>
-                    <td>{item.deep_link ?? "—"}</td>
-                    <td>
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        disabled={item.revoked}
-                        onClick={() => void revoke(item.id)}
-                      >
-                        撤銷
-                      </button>
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        onClick={() => void regenerate(item.id)}
-                      >
-                        重新產生
-                      </button>
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        onClick={print}
-                      >
-                        列印
-                      </button>
-                    </td>
-                  </tr>
+                  <TableRow key={item.id}>
+                    <TableCell>{item.animal_id.slice(0, 8)}…</TableCell>
+                    <TableCell>
+                      <Badge>{item.status}</Badge>
+                    </TableCell>
+                    <TableCell>{item.deep_link ?? "—"}</TableCell>
+                    <TableCell>
+                      <div className="p1-actions">
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          disabled={item.revoked}
+                          onClick={() => void revoke(item.id)}
+                        >
+                          撤銷
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          onClick={() => void regenerate(item.id)}
+                        >
+                          重新產生
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          onClick={print}
+                        >
+                          列印
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }

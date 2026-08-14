@@ -8,6 +8,9 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../../components/management/StateViews";
+import { statusLabel } from "../../../../components/management/ui-status";
+import { Badge } from "../../../../components/ui/badge";
+import { Card } from "../../../../components/ui/card";
 
 type Props = { params: Promise<{ animalId: string }> };
 type Animal = {
@@ -71,12 +74,15 @@ export default function AnimalProfilePage({ params }: Props) {
             {animal.shelter_number} · {animal.area_name ?? "未分配區域"}
           </p>
         </div>
-        <Link className="button" href={`/animals/${animal.id}/timeline`}>
+        <Link
+          className="ui-button ui-button-default"
+          href={`/animals/${animal.id}/timeline`}
+        >
           開啟近期歷程
         </Link>
       </div>
       <div className="content-grid">
-        <section className="panel" aria-labelledby="animal-summary-title">
+        <Card className="panel" aria-labelledby="animal-summary-title">
           <h2 id="animal-summary-title">基本資料</h2>
           <dl className="detail-list">
             <div>
@@ -86,7 +92,7 @@ export default function AnimalProfilePage({ params }: Props) {
             <div>
               <dt>目前狀態</dt>
               <dd>
-                <span className="badge">{animal.status}</span>
+                <Badge>{statusLabel(animal.status)}</Badge>
               </dd>
             </div>
             <div>
@@ -101,8 +107,8 @@ export default function AnimalProfilePage({ params }: Props) {
               <dd>{animal.photo_key ? "已設定" : "尚未設定"}</dd>
             </div>
           </dl>
-        </section>
-        <section className="panel" aria-labelledby="animal-actions-title">
+        </Card>
+        <Card className="panel" aria-labelledby="animal-actions-title">
           <h2 id="animal-actions-title">工作入口</h2>
           <Link className="link-card" href={`/animals/${animal.id}/timeline`}>
             <strong>Timeline</strong>
@@ -112,7 +118,7 @@ export default function AnimalProfilePage({ params }: Props) {
             <strong>QR 綁定</strong>
             <p className="muted">前往管理此收容所的 QR 綁定。</p>
           </Link>
-        </section>
+        </Card>
       </div>
     </main>
   );

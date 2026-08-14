@@ -1,6 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
+import { Alert } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
+import { Field } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
 
 export type AIObservationStatus =
   | "pending"
@@ -68,60 +79,84 @@ export function AIObservationPanel({ observation, onReview }: Props) {
   };
 
   return (
-    <section aria-labelledby={`ai-observation-${observation.id}`}>
-      <h2 id={`ai-observation-${observation.id}`}>AI 輔助擷取</h2>
-      <p role="status">狀態：{statusLabels[observation.status]}</p>
-      <p>
-        來源：{sourceLabel}（{observation.sourceId ?? "未提供來源識別"}）
-      </p>
+    <Card aria-labelledby={`ai-observation-${observation.id}`}>
+      <CardHeader>
+        <CardTitle id={`ai-observation-${observation.id}`}>
+          AI 輔助擷取
+        </CardTitle>
+        <Alert aria-live="polite" aria-atomic="true">
+          狀態：<Badge>{statusLabels[observation.status]}</Badge>
+        </Alert>
+        <p>
+          來源：{sourceLabel}（{observation.sourceId ?? "未提供來源識別"}）
+        </p>
+      </CardHeader>
+      <CardContent>
+        <section aria-labelledby={`ai-original-${observation.id}`}>
+          <h3 id={`ai-original-${observation.id}`}>原始資料</h3>
+          <pre className="p1-code-block">
+            {formatValue(observation.rawAiOutput)}
+          </pre>
+        </section>
 
-      <section aria-labelledby={`ai-original-${observation.id}`}>
-        <h3 id={`ai-original-${observation.id}`}>原始資料</h3>
-        <pre>{formatValue(observation.rawAiOutput)}</pre>
-      </section>
+        <section aria-labelledby={`ai-result-${observation.id}`}>
+          <h3 id={`ai-result-${observation.id}`}>AI 擷取結果</h3>
+          {observation.status === "failed" ||
+          observation.status === "invalid" ? (
+            <Alert role="alert" aria-live="polite">
+              {statusLabels[observation.status]}
+              {observation.failureReason
+                ? `：${observation.failureReason}`
+                : "。"}
+              <br />
+              原始回報已保存，仍可繼續人工處理。
+            </Alert>
+          ) : (
+            <pre className="p1-code-block">
+              {formatValue(observation.validatedAiObservation)}
+            </pre>
+          )}
+        </section>
 
-      <section aria-labelledby={`ai-result-${observation.id}`}>
-        <h3 id={`ai-result-${observation.id}`}>AI 擷取結果</h3>
-        {observation.status === "failed" || observation.status === "invalid" ? (
-          <p role="alert">
-            {statusLabels[observation.status]}
-            {observation.failureReason
-              ? `：${observation.failureReason}`
-              : "。"}
-          </p>
-        ) : (
-          <pre>{formatValue(observation.validatedAiObservation)}</pre>
-        )}
-      </section>
-
-      <section aria-labelledby={`ai-review-${observation.id}`}>
-        <h3 id={`ai-review-${observation.id}`}>人工覆核結果</h3>
-        <pre>{formatValue(observation.humanReviewResult)}</pre>
-        {canReview && (
-          <div>
-            <button type="button" onClick={() => review("confirm")}>
-              確認
-            </button>
-            <button type="button" onClick={() => review("reject")}>
-              拒絕
-            </button>
-            <label>
-              修正內容
-              <input
-                value={correction}
-                onChange={(event) => setCorrection(event.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => review("correct")}
-              disabled={!correction}
-            >
-              修正
-            </button>
-          </div>
-        )}
-      </section>
-    </section>
+        <section aria-labelledby={`ai-review-${observation.id}`}>
+          <h3 id={`ai-review-${observation.id}`}>人工覆核結果</h3>
+          <pre className="p1-code-block">
+            {formatValue(observation.humanReviewResult)}
+          </pre>
+          {canReview && (
+            <div className="p1-actions">
+              <Button type="button" onClick={() => review("confirm")}>
+                確認
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => review("reject")}
+              >
+                拒絕
+              </Button>
+              <Field>
+                <label htmlFor={`ai-correction-${observation.id}`}>
+                  修正內容
+                </label>
+                <Input
+                  id={`ai-correction-${observation.id}`}
+                  value={correction}
+                  onChange={(event) => setCorrection(event.target.value)}
+                />
+              </Field>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => review("correct")}
+                disabled={!correction}
+              >
+                修正
+              </Button>
+            </div>
+          )}
+        </section>
+      </CardContent>
+    </Card>
   );
 }

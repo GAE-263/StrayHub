@@ -1,12 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { Field } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
 
 export type LiffFallbackProps = {
   initialAnswers?: Record<string, string>;
   draftId?: string;
   note?: string;
-  onSave?: (answers: Record<string, string>, note: string) => void;
+  onSave?: (
+    answers: Record<string, string>,
+    note: string,
+  ) => void | Promise<void>;
   onRetryMedia?: () => void;
   onReselectAnimal?: () => void;
   onReturnToBot?: () => void;
@@ -40,22 +48,45 @@ export function LiffFallback({
   const [answers, setAnswers] = useState(initialAnswers);
   const [note, setNote] = useState(initialNote);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const savingRef = useRef(false);
 
-  const save = () => {
-    onSave?.(answers, note);
-    setSaved(true);
+  const save = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    try {
+      await onSave?.(answers, note);
+      setSaved(true);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "草稿保存失敗，請重試。",
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
-    <section aria-labelledby="liff-fallback-title">
+    <Card
+      className="volunteer-report-card"
+      aria-labelledby="liff-fallback-title"
+    >
       <h2 id="liff-fallback-title">補充回報</h2>
       <p>LINE Bot 中斷時，可恢復草稿、批次修改答案或輸入較長心得。</p>
       {draftId && <p aria-label="草稿識別">目前草稿：{draftId}</p>}
-      <div aria-label="回報答案">
+      <div className="form-grid" aria-label="回報答案">
         {Object.entries(answerLabels).map(([key, label]) => (
-          <label key={key}>
-            {label}
-            <input
+          <Field key={key}>
+            <label htmlFor={`answer-${key}`}>{label}</label>
+            <Input
+              id={`answer-${key}`}
               name={key}
               value={answers[key] ?? ""}
               onChange={(event) => {
@@ -66,33 +97,43 @@ export function LiffFallback({
                 }));
               }}
             />
-          </label>
+          </Field>
         ))}
       </div>
-      <label>
-        補充心得（選填）
-        <textarea
+      <Field>
+        <label htmlFor="care-note">補充心得（選填）</label>
+        <Textarea
+          id="care-note"
           value={note}
           maxLength={5000}
           onChange={(event) => setNote(event.target.value)}
         />
-      </label>
+      </Field>
       <p aria-live="polite">{note.length} 字</p>
-      <div>
-        <button type="button" onClick={save}>
-          儲存並繼續
-        </button>
-        <button type="button" onClick={onRetryMedia}>
+      <div className="toolbar">
+        <Button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving}
+          aria-describedby="save-status"
+        >
+          {saving ? "儲存中…" : "儲存並繼續"}
+        </Button>
+        <Button variant="secondary" type="button" onClick={onRetryMedia}>
           重新附加照片
-        </button>
-        <button type="button" onClick={onReselectAnimal}>
+        </Button>
+        <Button variant="secondary" type="button" onClick={onReselectAnimal}>
           重新選擇動物
-        </button>
-        <button type="button" onClick={onReturnToBot}>
+        </Button>
+        <Button variant="ghost" type="button" onClick={onReturnToBot}>
           回到 LINE Bot
-        </button>
+        </Button>
       </div>
-      {saved && <p role="status">草稿已保存，可回到 LINE Bot 繼續。</p>}
-    </section>
+      <p id="save-status" role="status" aria-live="polite">
+        {saving
+          ? "正在保存原始回報，請不要重複提交。"
+          : error || (saved ? "草稿已保存，可回到 LINE Bot 繼續。" : "")}
+      </p>
+    </Card>
   );
 }

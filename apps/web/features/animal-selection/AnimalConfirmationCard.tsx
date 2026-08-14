@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Card } from "../../components/ui/card";
 
 type AnimalCandidate = {
   id: string;
@@ -24,7 +25,10 @@ export function AnimalConfirmationCard({
   onReselect,
 }: Props) {
   return (
-    <section aria-labelledby="animal-confirmation-title">
+    <Card
+      className="animal-confirmation-card"
+      aria-labelledby="animal-confirmation-title"
+    >
       <h2 id="animal-confirmation-title">請確認回報對象</h2>
       {animal.photoUrl ? (
         <img src={animal.photoUrl} alt={`${animal.name} 的照片`} />
@@ -37,12 +41,21 @@ export function AnimalConfirmationCard({
       {animal.area && <p>區域：{animal.area}</p>}
       {!animal.cage && !animal.area && <p>籠位／區域：未維護</p>}
       <p>{animal.canReport ? "目前可回報" : "目前不可回報"}</p>
-      <button type="button" onClick={onConfirm} disabled={!animal.canReport}>
+      <button
+        className="ui-button ui-button-default"
+        type="button"
+        onClick={onConfirm}
+        disabled={!animal.canReport}
+      >
         確認是這隻
       </button>
-      <button type="button" onClick={onReselect}>
+      <button
+        className="ui-button ui-button-secondary"
+        type="button"
+        onClick={onReselect}
+      >
         重新選擇
       </button>
-    </section>
+    </Card>
   );
 }

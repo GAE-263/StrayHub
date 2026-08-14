@@ -99,6 +99,27 @@ npm --prefix apps/web run test:a11y
 npm --prefix apps/web run build
 ```
 
+前端 UX foundation：
+
+```bash
+npm --prefix apps/web run test:e2e:tooling
+npm --prefix apps/web run test:e2e:p0:list
+npm --prefix apps/web run test:e2e:p0
+npm --prefix apps/web run test:visual
+npm --prefix apps/web run test:a11y:browser
+npm --prefix apps/web run test:axe
+```
+
+`apps/web/components/ui/` 是按需求維護的 shadcn/ui foundation；業務組合元件放在
+`components/management/` 與 `features/`。新增操作圖示使用 `lucide-react` 的 named
+import，icon-only 控制必須提供可理解的 accessible name。Tailwind token 集中在
+`apps/web/app/globals.css`，P0 responsive viewport 為 360、768、1024 與 1440px。
+UI migration 只改 presentation 與可觀察互動，不得改動既有 API 契約、CRM 唯一事實來源、
+原始回報保存、AI 人工覆核邊界或 Organization／Active Shelter Context 隔離。
+
+P0 visual baseline 位於 `apps/web/e2e/p0-visual.spec.ts-snapshots/`；只有 reviewer 確認
+設計變更後才能執行 `test:visual:update`。P1 browser scripts 是獨立證據，不是 P0 gate 依賴。
+
 Contract Types：
 
 ```bash

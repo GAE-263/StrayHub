@@ -8,6 +8,14 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../../components/management/StateViews";
+import { statusLabel } from "../../../../components/management/ui-status";
+import { Badge } from "../../../../components/ui/badge";
+import { Button } from "../../../../components/ui/button";
+import { Card } from "../../../../components/ui/card";
+import { Field } from "../../../../components/ui/field";
+import { Textarea } from "../../../../components/ui/textarea";
+import { AlertDialog } from "../../../../components/ui/alert-dialog";
+import { reportAIStatusSummary } from "../../report-detail-state";
 
 type Props = { params: Promise<{ reportId: string }> };
 type Observation = {
@@ -40,6 +48,7 @@ export default function ReportDetailPage({ params }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const load = () => {
     void authFetch(`/v1/management/reports/${reportId}`)
@@ -113,7 +122,7 @@ export default function ReportDetailPage({ params }: Props) {
           <h1 id="report-detail-title">{report.animal_name ?? "動物回報"}</h1>
           <p>
             {new Date(report.submitted_at).toLocaleString("zh-TW")} ·{" "}
-            <span className="badge">{report.status}</span>
+            <Badge>{statusLabel(report.status)}</Badge>
           </p>
         </div>
       </div>
@@ -128,7 +137,7 @@ export default function ReportDetailPage({ params }: Props) {
         </p>
       ) : null}
       <div className="content-grid">
-        <section className="panel">
+        <Card className="panel">
           <h2>原始回報</h2>
           <pre className="json-view">
             {JSON.stringify(report.answers, null, 2)}
@@ -141,15 +150,20 @@ export default function ReportDetailPage({ params }: Props) {
               ? `${report.media_ids.length} 個 Media Asset，需依權限取得 Signed URL。`
               : "此回報沒有照片。"}
           </p>
-        </section>
-        <section className="panel">
+        </Card>
+        <Card className="panel">
           <h2>AI 狀態</h2>
+          <p role="status" aria-live="polite" aria-atomic="true">
+            {reportAIStatusSummary(report.ai_observations)
+              .map((item) => `AI：${item.label}`)
+              .join("；") || "AI：尚無 AI Observation"}
+          </p>
           {report.ai_observations.length ? (
             report.ai_observations.map((observation) => (
-              <article className="ai-card" key={observation.id}>
+              <Card className="ai-card" key={observation.id}>
                 <div>
                   <strong>{observation.source_type}</strong>
-                  <span className="badge">{observation.status}</span>
+                  <Badge>{statusLabel(observation.status)}</Badge>
                 </div>
                 {observation.failure_reason ? (
                   <p className="muted">{observation.failure_reason}</p>
@@ -168,38 +182,37 @@ export default function ReportDetailPage({ params }: Props) {
                     )}
                   </pre>
                 </details>
-              </article>
+              </Card>
             ))
           ) : (
             <p className="muted">尚無 AI Observation。</p>
           )}
-        </section>
+        </Card>
       </div>
-      <section className="panel mutation-panel">
+      <Card className="panel mutation-panel">
         <h2>Correction／Archive</h2>
         <p className="muted">
           修正會建立 Correction 與 Audit；封存只改變狀態，不會 Hard Delete。
         </p>
-        <div className="field">
+        <Field>
           <label htmlFor="correction-answers">修正後 answers（JSON）</label>
-          <textarea
+          <Textarea
             id="correction-answers"
             value={correction}
             onChange={(event) => setCorrection(event.target.value)}
           />
-        </div>
-        <div className="field">
+        </Field>
+        <Field>
           <label htmlFor="correction-reason">原因</label>
-          <textarea
+          <Textarea
             id="correction-reason"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="請說明此次修正或封存原因"
           />
-        </div>
+        </Field>
         <div className="toolbar">
-          <button
-            className="button"
+          <Button
             type="button"
             disabled={busy || !reason.trim()}
             onClick={() => {
@@ -214,24 +227,50 @@ export default function ReportDetailPage({ params }: Props) {
             }}
           >
             保存 Correction
-          </button>
-          <button
-            className="button button-secondary"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             disabled={busy || !reason.trim()}
-            onClick={() => void mutate("archive", { reason })}
+            onClick={() => setArchiveOpen(true)}
           >
             Archive
-          </button>
-          <button
-            className="button button-secondary"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => router.push(`/animals/${report.animal_id}/timeline`)}
           >
             回到 Timeline
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
+      <AlertDialog
+        open={archiveOpen}
+        title="確認封存回報"
+        onClose={() => setArchiveOpen(false)}
+      >
+        <p>封存只會改變回報狀態，不會刪除原始回報、照片或 Audit 紀錄。</p>
+        <div className="toolbar">
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={() => setArchiveOpen(false)}
+          >
+            取消
+          </Button>
+          <Button
+            variant="destructive"
+            type="button"
+            onClick={() => {
+              setArchiveOpen(false);
+              void mutate("archive", { reason });
+            }}
+          >
+            確認封存
+          </Button>
+        </div>
+      </AlertDialog>
     </main>
   );
 }

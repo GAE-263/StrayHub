@@ -1,13 +1,21 @@
 "use client";
 
+import React from "react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LogIn } from "lucide-react";
 import {
   clearAuth,
   storeActiveOrganization,
   storeSession,
   type AuthOrganization,
 } from "../../lib/auth";
+import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
+import { LOGIN_STATE_COPY } from "../../components/management/route-state";
 
 type LoginResponse = {
   access_token: string;
@@ -70,7 +78,9 @@ export default function LoginPage() {
       setOrganizations(availableOrganizations);
       const organization = availableOrganizations[0];
       if (!organization) {
-        throw new Error("此帳號沒有可用的收容所授權，無法進入管理工作台。");
+        throw new Error(
+          `${LOGIN_STATE_COPY.noShelterAccess.label}：${LOGIN_STATE_COPY.noShelterAccess.nextStep}`,
+        );
       }
       storeSession(login);
       if (availableOrganizations.length > 1) {
@@ -102,7 +112,7 @@ export default function LoginPage() {
       setError(
         contextError instanceof Error
           ? contextError.message
-          : "Context 設定失敗",
+          : `${LOGIN_STATE_COPY.contextFailure.label}：${LOGIN_STATE_COPY.contextFailure.nextStep}`,
       );
     } finally {
       setSubmitting(false);
@@ -110,72 +120,92 @@ export default function LoginPage() {
   };
 
   return (
-    <main aria-labelledby="login-title">
-      <h1 id="login-title">浪浪森友會管理入口</h1>
-      <p>登入後會建立 Active Shelter Context，進入角色感知管理工作台。</p>
-      <form onSubmit={submit}>
-        <label htmlFor="username">帳號</label>
-        <input
-          id="username"
-          name="username"
-          autoComplete="username"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          required
-        />
-        {pendingLogin && organizations.length > 1 ? (
-          <>
-            <label htmlFor="organization">目前收容所</label>
-            <select
-              id="organization"
-              value={selectedOrganizationId || organizations[0]?.id}
-              onChange={(event) =>
-                setSelectedOrganizationId(event.target.value)
-              }
-              required
-            >
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}（{organization.code}）
-                </option>
-              ))}
-            </select>
-          </>
-        ) : null}
-        <label htmlFor="password">密碼</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-        {error ? <p role="alert">{error}</p> : null}
-        <button type="submit" disabled={submitting || Boolean(pendingLogin)}>
-          {submitting ? "登入中…" : "登入"}
-        </button>
-      </form>
-      {pendingLogin && organizations.length > 1 ? (
-        <section
-          className="panel login-context-panel"
-          aria-labelledby="context-title"
+    <main className="login-page" aria-labelledby="login-title">
+      <Card className="login-card">
+        <span className="eyebrow">STRAYHUB CRM</span>
+        <h1 id="login-title">浪浪森友會管理入口</h1>
+        <p className="muted">
+          登入後會建立 Active Shelter Context，進入角色感知管理工作台。
+        </p>
+        <form
+          onSubmit={submit}
+          aria-describedby={error ? "login-error" : undefined}
         >
-          <h2 id="context-title">確認目前收容所</h2>
-          <p className="muted">
-            請選擇這次工作的 Active Shelter Context；後端會重新驗證 Membership。
-          </p>
-          <button
-            className="button"
-            type="button"
-            disabled={submitting}
-            onClick={() => void confirmContext()}
+          <Label htmlFor="username">帳號</Label>
+          <Input
+            id="username"
+            name="username"
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+          />
+          {pendingLogin && organizations.length > 1 ? (
+            <>
+              <Label htmlFor="organization">目前收容所</Label>
+              <Select
+                id="organization"
+                value={selectedOrganizationId || organizations[0]?.id}
+                onChange={(event) =>
+                  setSelectedOrganizationId(event.target.value)
+                }
+                required
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}（{organization.code}）
+                  </option>
+                ))}
+              </Select>
+            </>
+          ) : null}
+          <Label htmlFor="password">密碼</Label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+          {error ? (
+            <p id="login-error" className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <Button type="submit" disabled={submitting || Boolean(pendingLogin)}>
+            <LogIn size={16} aria-hidden="true" />
+            {submitting ? `${LOGIN_STATE_COPY.saving.label}…` : "登入"}
+          </Button>
+        </form>
+        {pendingLogin && organizations.length > 1 ? (
+          <section
+            className="panel login-context-panel"
+            aria-labelledby="context-title"
           >
-            {submitting ? "設定中…" : "進入管理工作台"}
-          </button>
-        </section>
-      ) : null}
+            <h2 id="context-title">確認目前收容所</h2>
+            <p className="muted">
+              請選擇這次工作的 Active Shelter Context；後端會重新驗證
+              Membership。
+            </p>
+            <Button
+              type="button"
+              disabled={submitting}
+              onClick={() => void confirmContext()}
+            >
+              {submitting
+                ? `${LOGIN_STATE_COPY.saving.label}…`
+                : "進入管理工作台"}
+            </Button>
+          </section>
+        ) : null}
+        {submitting ? (
+          <p className="sr-only" role="status" aria-live="polite">
+            {LOGIN_STATE_COPY.saving.nextStep}
+          </p>
+        ) : null}
+      </Card>
     </main>
   );
 }

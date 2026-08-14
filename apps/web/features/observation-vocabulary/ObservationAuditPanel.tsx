@@ -1,5 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { authFetch } from "../../lib/auth";
+import { Alert } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import { Dialog } from "../../components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../components/ui/table";
 import { ObservationOption } from "./observationVocabulary";
 
 type AuditRecord = {
@@ -24,7 +35,6 @@ export function ObservationAuditPanel({ option, onClose }: Props) {
   const [items, setItems] = useState<AuditRecord[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const closeRef = useRef<HTMLButtonElement>(null);
   const load = async () => {
     setLoading(true);
     setError("");
@@ -45,7 +55,6 @@ export function ObservationAuditPanel({ option, onClose }: Props) {
     }
   };
   useEffect(() => {
-    closeRef.current?.focus();
     void load();
   }, [option.id]);
   useEffect(() => {
@@ -56,81 +65,64 @@ export function ObservationAuditPanel({ option, onClose }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <dialog
-        className="observation-dialog observation-audit-panel"
-        open
-        aria-modal="true"
-        aria-labelledby="audit-panel-title"
-      >
-        <div className="panel-heading">
-          <div>
-            <h2 id="audit-panel-title">變更紀錄：{option.display_name}</h2>
-            <p className="muted">只顯示目前收容所此自訂選項的唯讀紀錄。</p>
-          </div>
-          <button
-            ref={closeRef}
-            className="button button-quiet"
-            type="button"
-            onClick={onClose}
-          >
-            關閉
-          </button>
-        </div>
-        {loading ? <p role="status">正在載入變更紀錄…</p> : null}
-        {error ? (
-          <div className="state-card error-state" role="alert">
-            <strong>{error}</strong>
-            <button
-              className="button button-secondary"
-              type="button"
-              onClick={() => void load()}
-            >
-              重新載入
-            </button>
-          </div>
-        ) : null}
-        {!loading && !error && items.length === 0 ? (
-          <p className="muted">目前沒有變更紀錄。</p>
-        ) : null}
-        {!loading && !error && items.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>時間</th>
-                  <th>操作</th>
-                  <th>操作者</th>
-                  <th>結果</th>
-                  <th>變更內容</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{new Date(item.created_at).toLocaleString("zh-TW")}</td>
-                    <td>{item.action}</td>
-                    <td>{item.actor_user_id}</td>
-                    <td>{item.result === "success" ? "成功" : item.result}</td>
-                    <td>
-                      <details>
-                        <summary>查看前後內容</summary>
-                        <pre>
-                          {JSON.stringify(
-                            { before: item.before, after: item.after },
-                            null,
-                            2,
-                          )}
-                        </pre>
-                      </details>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </dialog>
-    </div>
+    <Dialog
+      open
+      title={`變更紀錄：${option.display_name}`}
+      onClose={onClose}
+      className="p1-audit-dialog"
+    >
+      <p className="muted">只顯示目前收容所此自訂選項的唯讀紀錄。</p>
+      {loading ? <p role="status">正在載入變更紀錄…</p> : null}
+      {error ? (
+        <Alert role="alert">
+          <strong>{error}</strong>
+          <Button variant="secondary" type="button" onClick={() => void load()}>
+            重新載入
+          </Button>
+        </Alert>
+      ) : null}
+      {!loading && !error && items.length === 0 ? (
+        <p className="muted">目前沒有變更紀錄。</p>
+      ) : null}
+      {!loading && !error && items.length > 0 ? (
+        <Table>
+          <TableHeader>
+            <tr>
+              <TableHead>時間</TableHead>
+              <TableHead>操作</TableHead>
+              <TableHead>操作者</TableHead>
+              <TableHead>結果</TableHead>
+              <TableHead>變更內容</TableHead>
+            </tr>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell>
+                  {new Date(item.created_at).toLocaleString("zh-TW")}
+                </TableCell>
+                <TableCell>{item.action}</TableCell>
+                <TableCell>{item.actor_user_id}</TableCell>
+                <TableCell>
+                  {item.result === "success" ? "成功" : item.result}
+                </TableCell>
+                <TableCell>
+                  <details>
+                    <summary>查看前後內容</summary>
+                    <pre>
+                      {JSON.stringify(
+                        { before: item.before, after: item.after },
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </details>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : null}
+    </Dialog>
   );
 }

@@ -125,11 +125,22 @@ export default function AnimalConfirmationPage() {
   };
 
   return (
-    <main aria-labelledby="animal-confirmation-title">
+    <main
+      className="volunteer-page"
+      aria-labelledby="animal-confirmation-title"
+    >
       <h1 id="animal-confirmation-title">選擇照護動物</h1>
       <p>請先從今日名單、QR Code 或收容編號找到候選動物，再明確確認。</p>
-      {errorMessage && <p role="alert">{errorMessage}</p>}
-      {message && <p role="status">{message}</p>}
+      {errorMessage && (
+        <p className="notice error" role="alert">
+          {errorMessage}
+        </p>
+      )}
+      {message && (
+        <p className="notice success" role="status" aria-live="polite">
+          {message}
+        </p>
+      )}
 
       <section aria-labelledby="qr-search-title">
         <h2 id="qr-search-title">QR Code</h2>
@@ -144,7 +155,9 @@ export default function AnimalConfirmationPage() {
             onChange={(event) => setQrToken(event.target.value)}
             required
           />
-          <button type="submit">解析 QR Code</button>
+          <button className="button" type="submit">
+            解析 QR Code
+          </button>
         </form>
       </section>
 
@@ -161,7 +174,9 @@ export default function AnimalConfirmationPage() {
             onChange={(event) => setQuery(event.target.value)}
             required
           />
-          <button type="submit">搜尋</button>
+          <button className="button" type="submit">
+            搜尋
+          </button>
         </form>
       </section>
 
@@ -177,6 +192,7 @@ export default function AnimalConfirmationPage() {
                   {candidate.name}／{candidate.shelter_number ?? "未維護"}
                 </span>
                 <button
+                  className="button button-secondary"
                   type="button"
                   onClick={() => void selectCandidate(candidate)}
                 >

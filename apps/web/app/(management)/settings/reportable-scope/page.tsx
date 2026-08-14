@@ -2,10 +2,26 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { authFetch } from "../../../../lib/auth";
+import { LoadingState } from "../../../../components/management/StateViews";
+import { Alert } from "../../../../components/ui/alert";
+import { Badge } from "../../../../components/ui/badge";
+import { Button } from "../../../../components/ui/button";
 import {
-  ErrorState,
-  LoadingState,
-} from "../../../../components/management/StateViews";
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../../components/ui/card";
+import { Field } from "../../../../components/ui/field";
+import { Input } from "../../../../components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../../components/ui/table";
 
 type Scope = {
   id: string;
@@ -102,119 +118,119 @@ export default function ReportableScopePage() {
           <p>限制志工今天可看到的動物、Cage／Area 與指定帳號。</p>
         </div>
       </div>
-      {message ? (
-        <p className="notice success" role="status">
-          {message}
-        </p>
-      ) : null}
-      {error ? <ErrorState title="操作無法完成" description={error} /> : null}
-      <section className="panel">
-        <h2>建立範圍</h2>
-        <form className="form-grid" onSubmit={create}>
-          <div className="field">
-            <label htmlFor="scope-animal">Animal ID（可選）</label>
-            <input
-              id="scope-animal"
-              value={animalId}
-              onChange={(event) => setAnimalId(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="scope-area">Cage／Area ID（可選）</label>
-            <input
-              id="scope-area"
-              value={areaId}
-              onChange={(event) => setAreaId(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="scope-volunteer">
-              指定 Volunteer User ID（可選）
-            </label>
-            <input
-              id="scope-volunteer"
-              value={volunteerUserId}
-              onChange={(event) => setVolunteerUserId(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="scope-start">開始時間</label>
-            <input
-              id="scope-start"
-              type="datetime-local"
-              value={startsAt}
-              onChange={(event) => setStartsAt(event.target.value)}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="scope-end">結束時間</label>
-            <input
-              id="scope-end"
-              type="datetime-local"
-              value={endsAt}
-              onChange={(event) => setEndsAt(event.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <button className="button" type="submit">
-              建立可回報範圍
-            </button>
-          </div>
-        </form>
-      </section>
-      <section className="panel">
-        <h2>目前範圍</h2>
-        {loading ? (
-          <LoadingState title="正在載入範圍…" />
-        ) : items.length === 0 ? (
-          <p className="muted">目前沒有設定。</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+      {message ? <Alert role="status">{message}</Alert> : null}
+      {error ? <Alert role="alert">{error}</Alert> : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>建立範圍</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="p1-form-grid" onSubmit={create}>
+            <Field>
+              <label htmlFor="scope-animal">Animal ID（可選）</label>
+              <Input
+                id="scope-animal"
+                value={animalId}
+                onChange={(event) => setAnimalId(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <label htmlFor="scope-area">Cage／Area ID（可選）</label>
+              <Input
+                id="scope-area"
+                value={areaId}
+                onChange={(event) => setAreaId(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <label htmlFor="scope-volunteer">
+                指定 Volunteer User ID（可選）
+              </label>
+              <Input
+                id="scope-volunteer"
+                value={volunteerUserId}
+                onChange={(event) => setVolunteerUserId(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <label htmlFor="scope-start">開始時間</label>
+              <Input
+                id="scope-start"
+                type="datetime-local"
+                value={startsAt}
+                onChange={(event) => setStartsAt(event.target.value)}
+                required
+              />
+            </Field>
+            <Field>
+              <label htmlFor="scope-end">結束時間</label>
+              <Input
+                id="scope-end"
+                type="datetime-local"
+                value={endsAt}
+                onChange={(event) => setEndsAt(event.target.value)}
+                required
+              />
+            </Field>
+            <div>
+              <Button type="submit">建立可回報範圍</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>目前範圍</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <LoadingState title="正在載入範圍…" />
+          ) : items.length === 0 ? (
+            <p className="muted">目前沒有設定。</p>
+          ) : (
+            <Table>
+              <TableHeader>
                 <tr>
-                  <th>目標</th>
-                  <th>有效期間</th>
-                  <th>狀態</th>
-                  <th>操作</th>
+                  <TableHead>目標</TableHead>
+                  <TableHead>有效期間</TableHead>
+                  <TableHead>狀態</TableHead>
+                  <TableHead>操作</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {items.map((scope) => (
-                  <tr key={scope.id}>
-                    <td>
+                  <TableRow key={scope.id}>
+                    <TableCell>
                       {scope.animal_id
                         ? `Animal ${scope.animal_id.slice(0, 8)}`
                         : scope.area_id
                           ? `Area ${scope.area_id.slice(0, 8)}`
                           : "未指定目標"}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       {new Date(scope.starts_at).toLocaleString("zh-TW")} —{" "}
                       {new Date(scope.ends_at).toLocaleString("zh-TW")}
-                    </td>
-                    <td>
-                      <span className="badge">{scope.status}</span>
-                    </td>
-                    <td>
-                      <button
-                        className="button button-secondary"
+                    </TableCell>
+                    <TableCell>
+                      <Badge>{scope.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="secondary"
                         type="button"
                         disabled={scope.status !== "active"}
                         onClick={() => void deactivate(scope)}
                       >
                         停用
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }

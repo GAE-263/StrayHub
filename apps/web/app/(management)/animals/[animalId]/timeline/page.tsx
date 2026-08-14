@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import {
   AnimalTimeline,
   TimelineDay,
@@ -12,6 +12,7 @@ import {
   type ApiDay,
 } from "../../../../../features/animal-timeline/timelineMapping";
 import { Breadcrumbs } from "../../../../../components/management/Breadcrumbs";
+import { buildTimelineQuery } from "../../../management-query";
 
 type Props = { params: Promise<{ animalId: string }> };
 
@@ -21,16 +22,16 @@ export default function AnimalTimelinePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [range, setRange] = useState({ start: "", end: "" });
+  const latestRequest = useRef(0);
 
   const loadTimeline = useCallback(
     async (
       nextRange: { start: string; end: string } = { start: "", end: "" },
     ) => {
+      const requestId = ++latestRequest.current;
       setLoading(true);
       setError("");
-      const query = new URLSearchParams();
-      if (nextRange.start) query.set("start_date", nextRange.start);
-      if (nextRange.end) query.set("end_date", nextRange.end);
+      const query = buildTimelineQuery(nextRange);
       try {
         const suffix = query.toString() ? `?${query.toString()}` : "";
         const response = await authFetch(
@@ -38,13 +39,14 @@ export default function AnimalTimelinePage({ params }: Props) {
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = (await response.json()) as { days: ApiDay[] };
-        setDays(mapDays(data.days));
+        if (requestId === latestRequest.current) setDays(mapDays(data.days));
       } catch (requestError) {
-        setError(
-          requestError instanceof Error ? requestError.message : "無法載入",
-        );
+        if (requestId === latestRequest.current)
+          setError(
+            requestError instanceof Error ? requestError.message : "無法載入",
+          );
       } finally {
-        setLoading(false);
+        if (requestId === latestRequest.current) setLoading(false);
       }
     },
     [animalId],

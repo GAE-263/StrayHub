@@ -30,5 +30,7 @@ describe("ObservationOptionForm", () => {
     expect(html).toContain("已有歷史回報使用的 code 會鎖定");
     expect(html).toContain("儲存");
     expect(html).toContain("取消");
+    expect(html).toContain("ui-dialog");
+    expect(html).toContain("ui-input");
   });
 });

@@ -8,7 +8,14 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PermissionDeniedState,
 } from "../components/management/StateViews";
+import { MANAGEMENT_HOME_STATE_COPY } from "../components/management/route-state";
+import { statusLabel } from "../components/management/ui-status";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Table } from "../components/ui/table";
 
 type Dashboard = {
   organization_id: string;
@@ -40,6 +47,7 @@ export default function ManagementHome() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   useEffect(() => {
     if (!getAccessToken()) return;
@@ -49,6 +57,10 @@ export default function ManagementHome() {
         if (response.status === 401) {
           clearAuth();
           window.location.assign("/login");
+          return;
+        }
+        if (response.status === 403) {
+          setPermissionDenied(true);
           return;
         }
         if (!response.ok)
@@ -81,11 +93,16 @@ export default function ManagementHome() {
             <h1 id="management-home-title">管理工作台總覽</h1>
             <p>從今日照護狀態開始，快速找到動物、回報與待處理任務。</p>
           </div>
-          <Link className="button" href="/animals">
+          <Link className="ui-button ui-button-default" href="/animals">
             查看動物清單
           </Link>
         </div>
         {loading ? <LoadingState title="正在載入今日摘要…" /> : null}
+        {permissionDenied ? (
+          <PermissionDeniedState
+            description={MANAGEMENT_HOME_STATE_COPY.permissionDenied.nextStep}
+          />
+        ) : null}
         {error ? (
           <ErrorState title="Dashboard 載入失敗" description={error} />
         ) : null}
@@ -93,14 +110,14 @@ export default function ManagementHome() {
           <>
             <div className="metric-grid">
               {metrics.map(([key, label]) => (
-                <div className="metric-card" key={key}>
+                <Card className="metric-card" key={key}>
                   <span>{label}</span>
                   <strong>{dashboard.summary[key]}</strong>
-                </div>
+                </Card>
               ))}
             </div>
             <div className="content-grid">
-              <section className="panel" aria-labelledby="recent-reports-title">
+              <Card className="panel" aria-labelledby="recent-reports-title">
                 <div className="panel-heading">
                   <h2 id="recent-reports-title">最近回報</h2>
                   <Link className="text-link" href="/reports">
@@ -109,48 +126,48 @@ export default function ManagementHome() {
                 </div>
                 {dashboard.recent_reports.length === 0 ? (
                   <EmptyState
-                    title="目前沒有最近回報"
-                    description="新回報會在這裡出現。"
+                    title={MANAGEMENT_HOME_STATE_COPY.emptyRecentReports.label}
+                    description={
+                      MANAGEMENT_HOME_STATE_COPY.emptyRecentReports.nextStep
+                    }
                   />
                 ) : (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>提交時間</th>
-                          <th>Animal ID</th>
-                          <th>狀態</th>
-                          <th>AI</th>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>提交時間</th>
+                        <th>Animal ID</th>
+                        <th>狀態</th>
+                        <th>AI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashboard.recent_reports.map((report) => (
+                        <tr key={report.id}>
+                          <td>
+                            {new Date(report.submitted_at).toLocaleString(
+                              "zh-TW",
+                            )}
+                          </td>
+                          <td>
+                            <Link
+                              className="text-link"
+                              href={`/animals/${report.animal_id}`}
+                            >
+                              {report.animal_id.slice(0, 8)}…
+                            </Link>
+                          </td>
+                          <td>
+                            <Badge>{statusLabel(report.status)}</Badge>
+                          </td>
+                          <td>{statusLabel(report.ai_job_status)}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {dashboard.recent_reports.map((report) => (
-                          <tr key={report.id}>
-                            <td>
-                              {new Date(report.submitted_at).toLocaleString(
-                                "zh-TW",
-                              )}
-                            </td>
-                            <td>
-                              <Link
-                                className="text-link"
-                                href={`/animals/${report.animal_id}`}
-                              >
-                                {report.animal_id.slice(0, 8)}…
-                              </Link>
-                            </td>
-                            <td>
-                              <span className="badge">{report.status}</span>
-                            </td>
-                            <td>{report.ai_job_status}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </Table>
                 )}
-              </section>
-              <section className="panel" aria-labelledby="quick-entry-title">
+              </Card>
+              <Card className="panel" aria-labelledby="quick-entry-title">
                 <h2 id="quick-entry-title">快速入口</h2>
                 <Link className="link-card" href="/animals">
                   <strong>動物檔案</strong>
@@ -164,7 +181,7 @@ export default function ManagementHome() {
                   <strong>AI Review Queue</strong>
                   <p className="muted">人工確認、拒絕或修正 AI 結果。</p>
                 </Link>
-              </section>
+              </Card>
             </div>
           </>
         ) : null}

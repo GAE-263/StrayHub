@@ -19,6 +19,39 @@
 
 密碼沿用 README 的 local-only password；不得使用正式環境 credentials。
 
+### 實作前 baseline（2026-08-14）
+
+- `npm --prefix apps/web run quality`：通過（既有 28 個 test files、47 tests）。
+- `npm --prefix apps/web run build`：通過（Next production build）。
+- P0 route baseline 截圖：由 T048 在 Chromium browser tooling 完成後建立並審核；tooling smoke 不取代 route baseline。
+
+### 實作後自動化 evidence（2026-08-14）
+
+- Component／mapping：33 個 Vitest test files、55 tests 通過；TypeScript typecheck 通過。
+- P0 browser：login／管理首頁、Shell、志工、管理核心、state feedback 與 keyboard smoke 通過；Active Shelter Context 切換失敗仍保留 Shell／登出入口；saving failure 保留輸入，重試成功且 duplicate submit 只送出一次。
+- P0 responsive：9 條 route × 4 個 viewport（360x800、768x1024、1024x768、1440x900）共 36 組 overflow assertions 通過。
+- P0 axe：7 個已登入核心 route × 4 個 viewport 共 28 組 scan，另 `/login` 與 `/` 各 4 個 viewport，critical／serious violations 為 0。
+- P0 visual：以 production server 執行時 9 條 route 中 7 條 route 的 baseline compare 通過；`/` 與 `/reports/report-a` 的 360px baseline 分別出現內容／高度差異，未執行 snapshot update，等待 reviewer 審核後再決定是否更新 baseline。先前 dev server 的失敗包含 Next.js dev indicator，不作為 visual evidence。
+- P0 tooling：Chromium 與 `@axe-core/playwright` tooling smoke 通過；P1 evidence 不納入上述數字或 P0 gate。
+- 尚未自動化或尚未取得外部證據：VoiceOver／人工放大文字 checklist、SC-001／SC-002 代表性使用者樣本，以及上述 2 個 visual baseline drift 的 reviewer 決定；`./scripts/verify_local.sh` 已補足真實 ORG-A／ORG-B tenant regression、後端冪等性／CRM 單一提交與 AI failure evidence，這些結果仍不得由 browser mock 單獨代替。
+
+### T060 P0 final gate execution record（2026-08-14）
+
+| Gate | Result | Evidence／備註 |
+| --- | --- | --- |
+| `npm --prefix apps/web run quality` | PASS | 35 test files、60 tests、typecheck、mobile／a11y、format 全通過 |
+| `npm --prefix apps/web run build` | PASS | Next production build 通過；`verify_local.sh` 亦再次通過 frontend build |
+| `test:e2e:tooling` | PASS | Chromium／axe tooling smoke 1/1 |
+| `test:e2e:p0` | PASS | 69/69，使用乾淨 server；先前 stale dev server 失敗已排除 |
+| `test:visual` | BLOCKED | 7/9 pass；`/`、`/reports/report-a` 的 360px baseline drift 待 reviewer 決定，未更新 snapshot |
+| `test:a11y:browser` | PASS | 9/9，P0 routes 四 viewport axe critical／serious 為 0 |
+| `test:axe` | PASS | 同一組 P0 axe specs 9/9 |
+| `./scripts/verify_local.sh` | PASS | 291 Python tests、isolation、冪等性／CRM、AI failure、lint／mypy、contract、Docker build 通過 |
+| VoiceOver／人工 checklist | BLOCKED | 需實際 macOS VoiceOver、放大文字、長中文與窄螢幕 reviewer sign-off |
+| SC-001／SC-002 | BLOCKED | 尚未取得代表性使用者 timing sample |
+
+因此 T060 仍維持 BLOCKED；不得以自動化 browser／axe 結果替代人工 VoiceOver 或真人 usability evidence，也不得未經 reviewer 審核更新 visual baseline。
+
 ## 設定驗證
 
 實作階段首次安裝後，確認 package lock 與生成設定存在，再執行：
@@ -113,6 +146,14 @@ P0 route coverage 不得以只通過 `/` 或清單頁代表完成；九個 route
 4. 使用 macOS VoiceOver 完成志工回報與管理 Timeline 的主要閱讀流程；記錄標題順序、目前頁面、狀態與按鈕名稱。
 5. 啟用 Reduce Motion，確認不靠動畫理解 loading、Sheet、Dialog 或成功訊息。
 
+人工 checklist（需在有真實本機 seed 與 macOS VoiceOver 的環境補簽）：
+
+- [ ] `/login`：標題、欄位、錯誤、saving 與 context 選擇可讀取。
+- [ ] 管理首頁：目前收容所、角色、目前頁面、主要入口與空資料下一步可讀取。
+- [ ] 志工流程：動物身分、確認、草稿、保存失敗保留輸入與重試可完成。
+- [ ] Timeline：日期、無回報、同日多筆、AI／人工狀態與返回可讀取。
+- [ ] 360px、長中文、放大文字與 Reduce Motion 不造成截斷或必要操作遺失。
+
 ### 6. 可用性指標執行規範
 
 - 志工與工作人員各至少 10 位代表性測試者；每組至少 9 位未受協助完成才可判定 90% 通過。
@@ -131,6 +172,13 @@ P0 route coverage 不得以只通過 `/` 或清單頁代表完成；九個 route
 ## P1 額外驗證（不納入 P0 門檻）
 
 當 US5 的 P0 browser、responsive、keyboard、screen reader 與 visual evidence 已完成後，可獨立執行 `npm --prefix apps/web run test:p1:e2e` 與 `npm --prefix apps/web run test:p1:a11y`，驗證以下 P1 route：`/ai-review`、`/shelters`、`/settings/observation-options`、`/settings/qr-codes`、`/settings/reportable-scope`、`/settings/audit`。P1 沿用 P0 的 state、overlay、tenant 與 accessibility checklist；P1 未完成不得回頭阻擋已具備證據的 P0 門檻。
+
+### P1 evidence record（2026-08-14）
+
+- `npm --prefix apps/web run test:p1:e2e`：2/2 通過，涵蓋六個 P1 route 的主要 state／資料 scope，以及 AI Queue permission denied。
+- `npm --prefix apps/web run test:p1:a11y`：24/24 scan 通過（六個 P1 route × 360x800、768x1024、1024x768、1440x900），critical／serious violations 為 0。
+- 修正共用 `Table` horizontal scroll wrapper 的 keyboard focus，消除 `scrollable-region-focusable` serious violation。
+- P1 evidence 獨立記錄，不納入 P0 gate；未改變 API contract、租戶隔離、原始資料保存或 AI 人工覆核邊界。
 
 ## 品質門檻
 
@@ -154,3 +202,25 @@ npm --prefix apps/web run test:axe
 - [ ] 志工 draft／save failure、AI failure、Timeline history 與 ORG-A／ORG-B isolation regression 通過。
 - [ ] 既有 `npm run quality`、build 與完整 local 門檻通過。
 - [ ] 已遷移頁面不再依賴對應 legacy class；尚未遷移頁面的 legacy CSS 有明確保留理由。
+
+## T051 人工驗收紀錄
+
+以下項目不能由 `@axe-core/playwright` 或一般 browser assertion 取代，需由 reviewer 在實際桌面／行動裝置完成並附截圖或錄影證據。自動化已先覆蓋四個 viewport 的 overflow、keyboard smoke、`prefers-reduced-motion` CSS 規則與 `/login`／`/` route rendering；這些結果不等同於人工 sign-off。
+
+| 項目 | 路由／範圍 | 結果 | 證據／備註 |
+| --- | --- | --- | --- |
+| VoiceOver | `/login`、`/`、`/animals`、`/reports`、志工核心流程 | 待人工簽核 | 需確認 heading、landmark、label、live region、Sheet focus 與錯誤下一步；不可用 axe 結果代替 |
+| 放大文字 | `/login`、`/`、管理核心、志工核心 | 待人工簽核 | 以 200%／400% text zoom 檢查內容重疊、截斷、操作順序與水平捲動 |
+| 長中文 | `/login`、管理首頁、錯誤／權限／AI 狀態、表格與 Timeline | 待人工簽核 | 使用長姓名、收容所名稱、錯誤描述與識別碼確認換行及 hierarchy |
+| Reduce Motion | Shell、Sheet、loading／saving／AI 狀態 | 自動化已覆蓋，人工待確認 | `globals.css` 已有 `prefers-reduced-motion: reduce`；需確認實機無不必要動畫 |
+| 窄螢幕 | 360px `/login`、`/`、`/animals`、`/reports`、志工流程 | 自動化通過，人工待確認 | Playwright responsive suite 通過；需以實機確認觸控與文字放大後仍可操作 |
+| 管理首頁 state | `/` loading／empty／error／permission denied | 自動化通過，人工待確認 | 確認繁中下一步、Active Shelter Context 與登出入口仍可理解及操作 |
+
+### T056 legacy CSS 保留清單
+
+目前 `.button`、`.panel`、`.field`、`.badge`、`.state-card`、`.dialog-backdrop`、`.observation-dialog` 與 `.dialog-actions` 仍有實際引用，不能在本階段刪除。保留原因如下：
+
+- `.button`、`.panel`、`.field`、`.badge`：仍由 P1 settings／AI／Observation Vocabulary 與部分志工頁使用。
+- `.state-card`：仍是共用 `StateViews` 的語意 class，並被未遷移志工／P1 state branch 使用。
+- `.dialog-backdrop`、`.observation-dialog`、`.dialog-actions`：仍由 Observation Vocabulary 的既有自訂 dialog 使用，P1 遷移尚未完成。
+- 已完成本階段的重複 `.field`／`.badge` declarations 已合併；未引用的 legacy selector 會在對應 P1 migration 完成後再移除。

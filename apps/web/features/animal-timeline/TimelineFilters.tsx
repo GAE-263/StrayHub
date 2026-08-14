@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import { Field } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
 
 type Props = {
   onChange: (value: string) => void;
@@ -13,19 +15,21 @@ export function TimelineFilters({ onChange, onRangeChange, disabled }: Props) {
   const [end, setEnd] = useState("");
 
   return (
-    <fieldset>
+    <fieldset className="ui-card timeline-filters">
       <legend>歷程查詢</legend>
-      <label>
-        指定日期
-        <input
+      <Field>
+        <label htmlFor="timeline-date">指定日期</label>
+        <Input
+          id="timeline-date"
           type="date"
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />
-      </label>
-      <label>
-        起始日期
-        <input
+      </Field>
+      <Field>
+        <label htmlFor="timeline-start">起始日期</label>
+        <Input
+          id="timeline-start"
           type="date"
           value={start}
           disabled={disabled}
@@ -35,10 +39,11 @@ export function TimelineFilters({ onChange, onRangeChange, disabled }: Props) {
             onRangeChange?.({ start: nextStart, end });
           }}
         />
-      </label>
-      <label>
-        結束日期
-        <input
+      </Field>
+      <Field>
+        <label htmlFor="timeline-end">結束日期</label>
+        <Input
+          id="timeline-end"
           type="date"
           value={end}
           disabled={disabled}
@@ -48,7 +53,7 @@ export function TimelineFilters({ onChange, onRangeChange, disabled }: Props) {
             onRangeChange?.({ start, end: nextEnd });
           }}
         />
-      </label>
+      </Field>
     </fieldset>
   );
 }

@@ -52,6 +52,7 @@ describe("observation vocabulary accessibility surfaces", () => {
 
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-controls="category-content-emotion"');
+    expect(html).toContain("observation-category-toggle");
     expect(html).toContain("啟用中");
     expect(html).toContain("自訂");
     expect(html).toContain("停用／封存");
@@ -72,5 +73,7 @@ describe("observation vocabulary accessibility surfaces", () => {
     expect(html).toContain("狀態");
     expect(html).toContain("來源");
     expect(html).toContain("清除搜尋與篩選");
+    expect(html).toContain("ui-card");
+    expect(html).toContain("ui-input");
   });
 });
