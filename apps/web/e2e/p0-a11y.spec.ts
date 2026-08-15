@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mockManagementApi } from "./fixtures";
+import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
 
 const viewports = [
   { width: 360, height: 800 },
@@ -40,5 +41,28 @@ test("所有已登入 P0 route 在四個 viewport 沒有 critical 或 serious ax
         `${route} ${viewport.width}x${viewport.height}`,
       ).toEqual([]);
     }
+  }
+});
+
+test("志工報名與管理 routes 沒有 critical 或 serious axe violations", async ({
+  page,
+}) => {
+  await mockVolunteerAccessApi(page);
+  for (const route of [
+    "/volunteer-application?entry=entry&id_token=id-token",
+    "/volunteers/applications",
+    "/volunteers/access",
+    "/volunteers/notifications",
+    "/settings/volunteer-access",
+  ]) {
+    await page.goto(route);
+    await expect(page.locator("main").first()).toBeVisible();
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(
+      results.violations.filter((item) =>
+        ["critical", "serious"].includes(item.impact ?? ""),
+      ),
+      route,
+    ).toEqual([]);
   }
 });

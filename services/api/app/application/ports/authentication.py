@@ -1,5 +1,7 @@
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 
 class PasswordHasherPort(Protocol):
@@ -18,3 +20,13 @@ class AccessTokenPort(Protocol):
 
 class LineIdentityVerifierPort(Protocol):
     async def verify(self, token: str) -> str: ...
+
+
+@dataclass(frozen=True)
+class ActiveVolunteerEntryReference:
+    reference_id: UUID
+    organization_id: UUID
+
+
+class VolunteerEntryResolverPort(Protocol):
+    async def resolve(self, raw_reference: str) -> ActiveVolunteerEntryReference | None: ...

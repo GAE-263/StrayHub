@@ -71,8 +71,10 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
         await connection.execute(
             """
             INSERT INTO organization_memberships
-                (id, organization_id, user_id, role, status, created_at, updated_at)
-            VALUES ($1, $2, $3, 'VOLUNTEER', 'active', now(), now())
+                (id, organization_id, user_id, role, status, created_at, updated_at,
+                 valid_from, expires_at)
+            VALUES ($1, $2, $3, 'VOLUNTEER', 'active', now(), now(),
+                    now() - interval '1 hour', now() + interval '7 days')
             """,
             membership_id,
             organization_id,

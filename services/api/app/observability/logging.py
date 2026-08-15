@@ -2,9 +2,15 @@ import logging
 import re
 from typing import Any
 
-_SECRET_PATTERN = re.compile(r"(token|secret|password|signed[_-]?url|authorization)", re.I)
+_SECRET_PATTERN = re.compile(
+    r"(token|secret|password|signed[_-]?url|authorization|line[_-]?user[_-]?id|"
+    r"entry[_-]?reference|provider[_-]?credential|recipient[_-]?(?:id|identifier))",
+    re.I,
+)
 _SECRET_VALUE_PATTERN = re.compile(
-    r"(?P<prefix>bearer\s+|(?:token|secret|password|authorization|signed[_-]?url)\s*[:=]\s*)"
+    r"(?P<prefix>bearer\s+|(?:token|secret|password|authorization|signed[_-]?url|"
+    r"line[_-]?user[_-]?id|entry[_-]?reference|provider[_-]?credential|"
+    r"recipient[_-]?(?:id|identifier))\s*[:=]\s*)"
     r"(?P<value>[^\s,;&]+)",
     re.I,
 )

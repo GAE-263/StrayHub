@@ -1,6 +1,8 @@
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import Depends, Header, Request
@@ -12,6 +14,7 @@ from services.api.app.persistence.database.scope import (
     set_authentication_user_scope,
     set_organization_scope,
     set_platform_scope,
+    set_platform_support_scope,
 )
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -27,6 +30,68 @@ class RequestContext:
     role: str
     platform_scope: bool = False
     session_id: UUID | None = None
+
+
+@dataclass
+class PlatformSupportAuditLifecycle:
+    result: str = "success"
+
+
+def validate_platform_support_request(
+    context: RequestContext,
+    target_organization_id: UUID | None,
+    support_reason: str | None,
+) -> str:
+    if not context.platform_scope or context.role != "PLATFORM_ADMIN":
+        raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
+    if not isinstance(target_organization_id, UUID):
+        raise DomainError("platform_target_required", "平台支援必須指定單一收容所", 422)
+    reason = (support_reason or "").strip()
+    if not reason:
+        raise DomainError("platform_support_reason_required", "請填寫平台支援原因", 422)
+    if len(reason) > 500:
+        raise DomainError("platform_support_reason_too_long", "平台支援原因不得超過 500 字", 422)
+    return reason
+
+
+@asynccontextmanager
+async def platform_support_audit_lifecycle(
+    audit: Any,
+    *,
+    context: RequestContext,
+    target_organization_id: UUID,
+    support_reason: str,
+    resource_type: str,
+    session: AsyncSession | None = None,
+) -> AsyncIterator[PlatformSupportAuditLifecycle]:
+    """Record one terminal audit result for every scoped platform request."""
+    lifecycle = PlatformSupportAuditLifecycle()
+    failed = False
+    try:
+        yield lifecycle
+    except DomainError as exc:
+        failed = True
+        lifecycle.result = "not_found" if exc.status_code == 404 else "denied"
+        raise
+    except Exception:
+        failed = True
+        lifecycle.result = "exception"
+        raise
+    finally:
+        if failed and session is not None:
+            await session.rollback()
+            await set_platform_support_scope(session, target_organization_id)
+        await audit.record(
+            organization_id=target_organization_id,
+            actor_user_id=context.user_id,
+            action="platform_support.access",
+            resource_type=resource_type,
+            source_channel="api",
+            reason=support_reason,
+            result=lifecycle.result,
+        )
+        if failed and session is not None:
+            await session.commit()
 
 
 async def request_session(
@@ -141,8 +206,8 @@ async def _load_request_context(
         organization = await repository.get_organization(organization_id)
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)
-        membership = await repository.get_membership(user.id, organization_id)
-        if membership is not None and membership.status == "active":
+        membership = await repository.get_effective_membership(user.id, organization_id)
+        if membership is not None:
             membership_id = membership.id
             if not platform_scope:
                 role = membership.role
@@ -161,3 +226,16 @@ async def _load_request_context(
         platform_scope=platform_scope,
         session_id=session_record.id,
     )
+
+
+async def apply_platform_support_scope(
+    session: AsyncSession,
+    *,
+    context: RequestContext,
+    target_organization_id: UUID | None,
+    support_reason: str | None,
+) -> str:
+    reason = validate_platform_support_request(context, target_organization_id, support_reason)
+    assert target_organization_id is not None
+    await set_platform_support_scope(session, target_organization_id)
+    return reason

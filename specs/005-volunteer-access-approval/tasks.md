@@ -18,9 +18,9 @@
 
 **Purpose**：先固定 canonical API surface、generated types 與跨故事 fixture vocabulary。
 
-- [ ] T001 將 `specs/005-volunteer-access-approval/contracts/volunteer-access.openapi.yaml` 的 12 個 paths、13 個 operations、錯誤語意與 schemas 合併至 canonical `specs/001-volunteer-care-report/contracts/openapi.yaml`
-- [ ] T002 由 canonical OpenAPI 重新生成 `packages/contracts/src/openapi.ts`，並在 `packages/contracts/scripts/check-generated.mjs` 加入 005 operation/schema drift assertions
-- [ ] T003 [P] 建立 ORG-A／ORG-B、未知 LINE identity、停用申請入口、policy、entry reference、Application／Grant 狀態矩陣、停用 user/org 未清理 context、通知失敗、100 筆與 1,200 筆 batch 的共用 fixture builders 於 `tests/fixtures/volunteer_access.py`
+- [X] T001 將 `specs/005-volunteer-access-approval/contracts/volunteer-access.openapi.yaml` 的 12 個 paths、13 個 operations、錯誤語意與 schemas 合併至 canonical `specs/001-volunteer-care-report/contracts/openapi.yaml`
+- [X] T002 由 canonical OpenAPI 重新生成 `packages/contracts/src/openapi.ts`，並在 `packages/contracts/scripts/check-generated.mjs` 加入 005 operation/schema drift assertions
+- [X] T003 [P] 建立 ORG-A／ORG-B、未知 LINE identity、停用申請入口、policy、entry reference、Application／Grant 狀態矩陣、停用 user/org 未清理 context、通知失敗、100 筆與 1,200 筆 batch 的共用 fixture builders 於 `tests/fixtures/volunteer_access.py`
 
 **Checkpoint**：後續 API、Web 與測試皆使用同一份 canonical contract 與 fixture 命名。
 
@@ -34,35 +34,35 @@
 
 ### Foundation tests（先寫並確認失敗）
 
-- [ ] T004 [P] 在 `tests/unit/test_volunteer_access_time.py` 建立 `[valid_from, expires_at)`、UTC、168 小時初始 policy、future／active／expired／revoked 與 immediate-expiry confirmation 的 domain tests
-- [ ] T005 [P] 在 `tests/unit/test_volunteer_access_models.py` 建立 Application transition、finite VOLUNTEER Membership、單一 active Grant、policy snapshot、Batch／Item terminality、Notification／Retry idempotency 與 Audit system actor constraints tests
-- [ ] T006 [P] 在 `tests/integration/test_volunteer_access_migration.py` 建立 empty DB upgrade、0024→staged policy→0025、active unbounded legacy policy-aware backfill、disabled／revoked／expired 不啟用且不建立 synthetic Application／Grant、`SYSTEM_MIGRATION` Audit、forward recovery 與單一 Alembic head tests
-- [ ] T007 [P] 在 `tests/security/test_volunteer_access_entry_reference.py` 建立 raw token 不落庫、tampered／revoked／cross-purpose 拒絕、resolver 最小輸出及 runtime role 無法直接 SELECT entry table 的 tests
-- [ ] T008 [P] 在 `tests/security/test_volunteer_access_effective_membership.py` 建立 null／invalid expiry、future、expired、revoked、停用 user/org 與跨 organization context 全部拒絕的 request-time security tests
-- [ ] T009 [P] 在 `tests/contract/test_organization_management_contract.py` 增加既有 membership endpoint 不得建立無期限 VOLUNTEER，以及 additive validity/access-version response tests
-- [ ] T010 [P] 在 `tests/integration/test_organization_management.py` 驗證新 organization 與 168 小時初始 Volunteer Access Policy 原子建立、預設 `applications_enabled=true`，且 policy insert failure 時兩者皆回滾
-- [ ] T011 [P] 在 `tests/unit/test_platform_scope_audit.py` 驗證 PLATFORM_ADMIN support success、denied、not-found、validation failure 與 exception 都記錄單一 target、reason 與 result，缺少 target/reason 時不執行 business query
+- [X] T004 [P] 在 `tests/unit/test_volunteer_access_time.py` 建立 `[valid_from, expires_at)`、UTC、168 小時初始 policy、future／active／expired／revoked 與 immediate-expiry confirmation 的 domain tests
+- [X] T005 [P] 在 `tests/unit/test_volunteer_access_models.py` 建立 Application transition、finite VOLUNTEER Membership、單一 active Grant、policy snapshot、Batch／Item terminality、Notification／Retry idempotency 與 Audit system actor constraints tests
+- [X] T006 [P] 在 `tests/integration/test_volunteer_access_migration.py` 建立 empty DB upgrade、0024→staged policy→0025、active unbounded legacy policy-aware backfill、disabled／revoked／expired 不啟用且不建立 synthetic Application／Grant、`SYSTEM_MIGRATION` Audit、forward recovery 與單一 Alembic head tests
+- [X] T007 [P] 在 `tests/security/test_volunteer_access_entry_reference.py` 建立 raw token 不落庫、tampered／revoked／cross-purpose 拒絕、resolver 最小輸出及 runtime role 無法直接 SELECT entry table 的 tests
+- [X] T008 [P] 在 `tests/security/test_volunteer_access_effective_membership.py` 建立 null／invalid expiry、future、expired、revoked、停用 user/org 與跨 organization context 全部拒絕的 request-time security tests
+- [X] T009 [P] 在 `tests/contract/test_organization_management_contract.py` 增加既有 membership endpoint 不得建立無期限 VOLUNTEER，以及 additive validity/access-version response tests
+- [X] T010 [P] 在 `tests/integration/test_organization_management.py` 驗證新 organization 與 168 小時初始 Volunteer Access Policy 原子建立、預設 `applications_enabled=true`，且 policy insert failure 時兩者皆回滾
+- [X] T011 [P] 在 `tests/unit/test_platform_scope_audit.py` 驗證 PLATFORM_ADMIN support success、denied、not-found、validation failure 與 exception 都記錄單一 target、reason 與 result，缺少 target/reason 時不執行 business query
 
 ### Foundation implementation
 
-- [ ] T012 在 `services/api/app/domain/volunteer_access.py` 實作 Application／Grant transition、effective predicate、UTC period validation、reason normalization、policy snapshot、request fingerprint 與 stable error codes
-- [ ] T013 在 `services/api/app/persistence/models/identity.py` 為 `OrganizationMembership` 新增 `valid_from`、`expires_at`、`access_version` 與 `expired`／`revoked` volunteer status semantics
-- [ ] T014 [P] 在 `services/api/app/persistence/models/audit.py` 為 `AuditRecord` 新增 `actor_type`、`actor_reference`、user/system conditional validation 與 `SYSTEM_MIGRATION` 表示法
-- [ ] T015 在 `services/api/app/persistence/models/volunteer_access.py` 建立 `OrganizationVolunteerAccessPolicy`、`ShelterVolunteerEntryReference`、`VolunteerApplication`、`VolunteerAccessGrant`、Decision Batch／Item、Notification Delivery／Retry Batch／Item models 與 constraints
-- [ ] T016 在 `services/api/app/persistence/models/__init__.py` 與 `services/api/app/persistence/__init__.py` 匯出 005 models，確保 API、Worker 與 Alembic metadata 使用同一定義
-- [ ] T017 在 `services/api/migrations/versions/0024_volunteer_access_expand.py` 建立 nullable Membership/Audit 擴充、新 tables/indexes/FORCE RLS、168 小時 organization policy backfill、固定 search path 的 `resolve_volunteer_entry_reference` SECURITY DEFINER function 與最小 runtime grants
-- [ ] T018 [P] 建立可在 0024 與 0025 間依 organization 調整遷移期限且寫入受控 Audit 的 `scripts/configure_volunteer_access_policy.py`
-- [ ] T019 在 `services/api/migrations/versions/0025_volunteer_access_enforce.py` 以單一 migration timestamp 與各 organization policy，僅為 active、unbounded VOLUNTEER 建立 legacy Application／Grant snapshot；disabled／revoked／expired Membership 保持原狀且 synthetic Application／Grant 數量為 0；寫 `SYSTEM_MIGRATION` Audit、驗證 active VOLUNTEER 有限期後加入 enforce constraints
-- [ ] T020 [P] 建立至少 256-bit raw token、只持久化 SHA-256 digest、支援發行／輪替／撤銷且 raw 僅顯示一次的 `scripts/issue_volunteer_entry_reference.py`
-- [ ] T021 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 建立強制 organization scope 的 policy、entry resolve、application、grant、batch/item、outbox/retry CRUD、row lock 與 cursor primitives
-- [ ] T022 [P] 在 `services/api/app/persistence/database/scope.py` 實作 `set_platform_support_scope(target_organization_id)`，讓 platform mode 仍設定單一 `app.current_org_id` 而非取得全租戶 scope
-- [ ] T023 在 `services/api/app/persistence/repositories/authentication_repository.py` 實作使用 database time 的 effective Membership query，讓 active-only memberships 排除 future／expired／revoked volunteer
-- [ ] T024 在 `services/api/app/api/dependencies.py` 套用 effective Membership request gate，並實作 PLATFORM_ADMIN 單一 target／`X-Platform-Support-Reason` 1..500 與 request-scoped Audit lifecycle，讓 success／denied／not-found／validation／exception 都記錄 result 且缺少 target/reason 時不執行 business query
-- [ ] T025 [P] 在 `services/api/app/application/authentication/context_service.py` 與 `services/api/app/application/authentication/line_identity_service.py` 套用相同 effective predicate，禁止無效 volunteer 建立或維持 Active Context／Webhook Session
-- [ ] T026 在 `services/api/app/application/organization_management.py` 與 `services/api/app/api/organization_management.py` 拒絕既有 generic endpoint 建立／轉換無期限 VOLUNTEER，並回傳 validity/access-version
-- [ ] T027 在 `services/api/app/application/organization_management.py` 與 `services/api/app/persistence/repositories/organization_repository.py` 讓 organization 與 `OrganizationVolunteerAccessPolicy(applications_enabled=true, default_grant_duration_hours=168)` 在同一 transaction 建立，任一步驟失敗皆回滾且不採 lazy-create
-- [ ] T028 [P] 在 `services/api/app/application/volunteer_notification_service.py` 建立 domain transaction 內 outbox enqueue、唯一 event idempotency key 與 sanitized payload helper，不同步呼叫 LINE
-- [ ] T029 在 `scripts/seed_local.py` 建立 deterministic policy／entry references、未知 identity、停用申請入口、new／pending／rejected／future／active／expired／revoked、停用 user/org 未清理 context、跨 organization、所有通知事件失敗、100 筆人工批次及 1,200 筆 all-filtered fixtures，並保留既有 care data
+- [X] T012 在 `services/api/app/domain/volunteer_access.py` 實作 Application／Grant transition、effective predicate、UTC period validation、reason normalization、policy snapshot、request fingerprint 與 stable error codes
+- [X] T013 在 `services/api/app/persistence/models/identity.py` 為 `OrganizationMembership` 新增 `valid_from`、`expires_at`、`access_version` 與 `expired`／`revoked` volunteer status semantics
+- [X] T014 [P] 在 `services/api/app/persistence/models/audit.py` 為 `AuditRecord` 新增 `actor_type`、`actor_reference`、user/system conditional validation 與 `SYSTEM_MIGRATION` 表示法
+- [X] T015 在 `services/api/app/persistence/models/volunteer_access.py` 建立 `OrganizationVolunteerAccessPolicy`、`ShelterVolunteerEntryReference`、`VolunteerApplication`、`VolunteerAccessGrant`、Decision Batch／Item、Notification Delivery／Retry Batch／Item models 與 constraints
+- [X] T016 在 `services/api/app/persistence/models/__init__.py` 與 `services/api/app/persistence/__init__.py` 匯出 005 models，確保 API、Worker 與 Alembic metadata 使用同一定義
+- [X] T017 在 `services/api/migrations/versions/0024_volunteer_access_expand.py` 建立 nullable Membership/Audit 擴充、新 tables/indexes/FORCE RLS、168 小時 organization policy backfill、固定 search path 的 `resolve_volunteer_entry_reference` SECURITY DEFINER function 與最小 runtime grants
+- [X] T018 [P] 建立可在 0024 與 0025 間依 organization 調整遷移期限且寫入受控 Audit 的 `scripts/configure_volunteer_access_policy.py`
+- [X] T019 在 `services/api/migrations/versions/0025_volunteer_access_enforce.py` 以單一 migration timestamp 與各 organization policy，僅為 active、unbounded VOLUNTEER 建立 legacy Application／Grant snapshot；disabled／revoked／expired Membership 保持原狀且 synthetic Application／Grant 數量為 0；寫 `SYSTEM_MIGRATION` Audit、驗證 active VOLUNTEER 有限期後加入 enforce constraints
+- [X] T020 [P] 建立至少 256-bit raw token、只持久化 SHA-256 digest、支援發行／輪替／撤銷且 raw 僅顯示一次的 `scripts/issue_volunteer_entry_reference.py`
+- [X] T021 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 建立強制 organization scope 的 policy、entry resolve、application、grant、batch/item、outbox/retry CRUD、row lock 與 cursor primitives
+- [X] T022 [P] 在 `services/api/app/persistence/database/scope.py` 實作 `set_platform_support_scope(target_organization_id)`，讓 platform mode 仍設定單一 `app.current_org_id` 而非取得全租戶 scope
+- [X] T023 在 `services/api/app/persistence/repositories/authentication_repository.py` 實作使用 database time 的 effective Membership query，讓 active-only memberships 排除 future／expired／revoked volunteer
+- [X] T024 在 `services/api/app/api/dependencies.py` 套用 effective Membership request gate，並實作 PLATFORM_ADMIN 單一 target／`X-Platform-Support-Reason` 1..500 與 request-scoped Audit lifecycle，讓 success／denied／not-found／validation／exception 都記錄 result 且缺少 target/reason 時不執行 business query
+- [X] T025 [P] 在 `services/api/app/application/authentication/context_service.py` 與 `services/api/app/application/authentication/line_identity_service.py` 套用相同 effective predicate，禁止無效 volunteer 建立或維持 Active Context／Webhook Session
+- [X] T026 在 `services/api/app/application/organization_management.py` 與 `services/api/app/api/organization_management.py` 拒絕既有 generic endpoint 建立／轉換無期限 VOLUNTEER，並回傳 validity/access-version
+- [X] T027 在 `services/api/app/application/organization_management.py` 與 `services/api/app/persistence/repositories/organization_repository.py` 讓 organization 與 `OrganizationVolunteerAccessPolicy(applications_enabled=true, default_grant_duration_hours=168)` 在同一 transaction 建立，任一步驟失敗皆回滾且不採 lazy-create
+- [X] T028 [P] 在 `services/api/app/application/volunteer_notification_service.py` 建立 domain transaction 內 outbox enqueue、唯一 event idempotency key 與 sanitized payload helper，不同步呼叫 LINE
+- [X] T029 在 `scripts/seed_local.py` 建立 deterministic policy／entry references、未知 identity、停用申請入口、new／pending／rejected／future／active／expired／revoked、停用 user/org 未清理 context、跨 organization、所有通知事件失敗、100 筆人工批次及 1,200 筆 all-filtered fixtures，並保留既有 care data
 
 **Checkpoint**：Foundation ready。新 organization 必有 168 小時初始 policy；資料庫不能存在 active 且無有限期限的 VOLUNTEER；pre-context resolver 只回單一候選 organization；所有受保護 request 使用同一 effective predicate；PLATFORM_ADMIN 的每次 management read/write 已具備 target/reason/result Audit。
 
@@ -76,22 +76,22 @@
 
 ### Tests for User Story 1（先寫並確認失敗）
 
-- [ ] T030 [P] [US1] 在 `tests/contract/test_volunteer_access_contract.py` 驗證 status、submit、withdraw contract、duplicate 201/200 semantics、expected_version 與安全 403/404/409/422 schemas
-- [ ] T031 [P] [US1] 在 `tests/unit/test_volunteer_application_service.py` 驗證 entry purpose、首次 identity、duplicate client_request_id、terminal transition、reapply history 與 no-membership rules
-- [ ] T032 [P] [US1] 在 `tests/integration/test_volunteer_access_application.py` 驗證 unknown status 不建立 User/Binding、只有 submit 原子建立／重用 User + LineUserBinding + pending Application、unique race recovery、入口停用阻止新申請但保留既有 own status、withdraw、history link 與跨 organization 獨立 application
-- [ ] T033 [P] [US1] 在 `tests/security/test_unauthenticated_internal_data.py` 增加 pending／rejected／withdrawn onboarding 不可取得 animals/drafts/reports/list/count 且錯誤不洩漏其他 applicant 的 assertions
-- [ ] T034 [P] [US1] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.test.tsx` 建立繁中 new／pending／rejected／withdrawn／expired、withdraw/reapply、無帳密、無 protected content 與安全 loading/error tests
-- [ ] T035 [P] [US1] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 先建立首次報名、double-click/network retry、reload、ORG-A/ORG-B entry 與 protected request count=0 的 browser scenarios
+- [X] T030 [P] [US1] 在 `tests/contract/test_volunteer_access_contract.py` 驗證 status、submit、withdraw contract、duplicate 201/200 semantics、expected_version 與安全 403/404/409/422 schemas
+- [X] T031 [P] [US1] 在 `tests/unit/test_volunteer_application_service.py` 驗證 entry purpose、首次 identity、duplicate client_request_id、terminal transition、reapply history 與 no-membership rules
+- [X] T032 [P] [US1] 在 `tests/integration/test_volunteer_access_application.py` 驗證 unknown status 不建立 User/Binding、只有 submit 原子建立／重用 User + LineUserBinding + pending Application、unique race recovery、入口停用阻止新申請但保留既有 own status、withdraw、history link 與跨 organization 獨立 application
+- [X] T033 [P] [US1] 在 `tests/security/test_unauthenticated_internal_data.py` 增加 pending／rejected／withdrawn onboarding 不可取得 animals/drafts/reports/list/count 且錯誤不洩漏其他 applicant 的 assertions
+- [X] T034 [P] [US1] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.test.tsx` 建立繁中 new／pending／rejected／withdrawn／expired、withdraw/reapply、無帳密、無 protected content 與安全 loading/error tests
+- [X] T035 [P] [US1] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 先建立首次報名、double-click/network retry、reload、ORG-A/ORG-B entry 與 protected request count=0 的 browser scenarios
 
 ### Implementation for User Story 1
 
-- [ ] T036 [P] [US1] 在 `services/api/app/application/ports/authentication.py` 定義 entry resolver port，只輸出 active reference id／候選 organization id，不輸出 role、Membership 或授權結果
-- [ ] T037 [US1] 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 串接 digest + purpose 的 SECURITY DEFINER resolver，解析後立即設定 organization scope，並實作 own current/history application queries
-- [ ] T038 [US1] 在 `services/api/app/application/volunteer_access_service.py` 實作 LINE identity flow：status/withdraw 只重用既有 Binding，unknown status 不持久化資料；只有 submit 可原子建立／重用 User + Binding + pending Application，並加入入口停用 submit gate、既有 own-status 例外、Audit/outbox 與 unique-violation recovery，且不建立 Membership/Session/context
-- [ ] T039 [US1] 在 `services/api/app/api/volunteer_access.py` 實作 `/v1/volunteer-applications/status`、`POST /v1/volunteer-applications`、withdraw endpoint 與最小資料 serializers，並在 `services/api/app/main.py` 註冊 router
-- [ ] T040 [P] [US1] 在 `apps/web/features/volunteer-access/volunteerAccess.ts` 實作 RFC3339→台灣時區、application/effective status、next-action 與安全 error mapping，不把 entry/client state 當成授權
-- [ ] T041 [US1] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.tsx` 實作 LINE identity status/apply/withdraw/reapply UI，身分解析前不掛載受保護 children
-- [ ] T042 [US1] 在 `apps/web/app/(volunteer-onboarding)/volunteer-application/page.tsx` 建立不依賴 Membership-protected layout 的 onboarding route，只傳入 LIFF identity 與 entry reference
+- [X] T036 [P] [US1] 在 `services/api/app/application/ports/authentication.py` 定義 entry resolver port，只輸出 active reference id／候選 organization id，不輸出 role、Membership 或授權結果
+- [X] T037 [US1] 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 串接 digest + purpose 的 SECURITY DEFINER resolver，解析後立即設定 organization scope，並實作 own current/history application queries
+- [X] T038 [US1] 在 `services/api/app/application/volunteer_access_service.py` 實作 LINE identity flow：status/withdraw 只重用既有 Binding，unknown status 不持久化資料；只有 submit 可原子建立／重用 User + Binding + pending Application，並加入入口停用 submit gate、既有 own-status 例外、Audit/outbox 與 unique-violation recovery，且不建立 Membership/Session/context
+- [X] T039 [US1] 在 `services/api/app/api/volunteer_access.py` 實作 `/v1/volunteer-applications/status`、`POST /v1/volunteer-applications`、withdraw endpoint 與最小資料 serializers，並在 `services/api/app/main.py` 註冊 router
+- [X] T040 [P] [US1] 在 `apps/web/features/volunteer-access/volunteerAccess.ts` 實作 RFC3339→台灣時區、application/effective status、next-action 與安全 error mapping，不把 entry/client state 當成授權
+- [X] T041 [US1] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.tsx` 實作 LINE identity status/apply/withdraw/reapply UI，身分解析前不掛載受保護 children
+- [X] T042 [US1] 在 `apps/web/app/(volunteer-onboarding)/volunteer-application/page.tsx` 建立不依賴 Membership-protected layout 的 onboarding route，只傳入 LIFF identity 與 entry reference
 
 **Checkpoint**：US1 可獨立 demo。志工能報名／查狀態／撤回／再次報名，但無法取得任何收容所資料或 Membership。
 
@@ -105,27 +105,27 @@
 
 ### Tests for User Story 2（先寫並確認失敗）
 
-- [ ] T043 [P] [US2] 在 `tests/contract/test_volunteer_access_contract.py` 增加 policy、application list、decision batch create/status/item-cursor、explicit 1..500、all-filtered、per-item override/result 與 operation conflict contract tests
-- [ ] T044 [P] [US2] 在 `tests/unit/test_volunteer_batch_decision.py` 驗證 request fingerprint、policy snapshot、common/per-item period merge、reject reason、expected_version、terminal item replay 與 batch count/status rules
-- [ ] T045 [P] [US2] 在 `tests/integration/test_volunteer_access_batch.py` 建立 repeatable-read immutable snapshot、逐項 transaction、95 success + 5 conflict、process interruption resume、same-operation replay 與 different-payload 409 tests
-- [ ] T046 [P] [US2] 在 `tests/performance/test_volunteer_access_batch.py` 驗證 100 筆流程及 1,200 筆 snapshot=1,200、每 chunk≤500、確認後新增排除、無遺失／重做與 cursor 結果完整率 100%
-- [ ] T047 [P] [US2] 在 `tests/security/test_volunteer_access_authorization.py` 驗證 STAFF、VOLUNTEER、ORG-B admin 與缺少 target/reason 的 PLATFORM_ADMIN 無法取得 ORG-A list/count/batch/resource-existence
-- [ ] T048 [P] [US2] 在 `apps/web/features/volunteer-access/ApplicationBatchWorkbench.test.tsx` 建立 filter、partial/all-filtered select、snapshot count、common period、10 筆 override、confirm、progress、cursor results、conflict 與 failed-only retry tests
-- [ ] T049 [P] [US2] 在 `apps/web/features/volunteer-access/VolunteerAccessPolicyForm.test.tsx` 建立 168 小時初始值、positive finite validation、expected-version conflict 與新 policy 不追溯既有 Batch/Grant tests
-- [ ] T050 [P] [US2] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加 100 筆批次、1,200 筆非同步進度、全篩選不降級目前頁、第二管理員 stale version、partial result 與 failed-only retry browser scenarios
+- [X] T043 [P] [US2] 在 `tests/contract/test_volunteer_access_contract.py` 增加 policy、application list、decision batch create/status/item-cursor、explicit 1..500、all-filtered、per-item override/result 與 operation conflict contract tests
+- [X] T044 [P] [US2] 在 `tests/unit/test_volunteer_batch_decision.py` 驗證 request fingerprint、policy snapshot、common/per-item period merge、reject reason、expected_version、terminal item replay 與 batch count/status rules
+- [X] T045 [P] [US2] 在 `tests/integration/test_volunteer_access_batch.py` 建立 repeatable-read immutable snapshot、逐項 transaction、95 success + 5 conflict、process interruption resume、same-operation replay 與 different-payload 409 tests
+- [X] T046 [P] [US2] 在 `tests/performance/test_volunteer_access_batch.py` 驗證 100 筆流程及 1,200 筆 snapshot=1,200、每 chunk≤500、確認後新增排除、無遺失／重做與 cursor 結果完整率 100%
+- [X] T047 [P] [US2] 在 `tests/security/test_volunteer_access_authorization.py` 驗證 STAFF、VOLUNTEER、ORG-B admin 與缺少 target/reason 的 PLATFORM_ADMIN 無法取得 ORG-A list/count/batch/resource-existence
+- [X] T048 [P] [US2] 在 `apps/web/features/volunteer-access/ApplicationBatchWorkbench.test.tsx` 建立 filter、partial/all-filtered select、snapshot count、common period、10 筆 override、confirm、progress、cursor results、conflict 與 failed-only retry tests
+- [X] T049 [P] [US2] 在 `apps/web/features/volunteer-access/VolunteerAccessPolicyForm.test.tsx` 建立 168 小時初始值、positive finite validation、expected-version conflict 與新 policy 不追溯既有 Batch/Grant tests
+- [X] T050 [P] [US2] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加 100 筆批次、1,200 筆非同步進度、全篩選不降級目前頁、第二管理員 stale version、partial result 與 failed-only retry browser scenarios
 
 ### Implementation for User Story 2
 
-- [ ] T051 [US2] 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 實作 organization-scoped list filters/cursor、repeatable-read all-filtered Batch/Item snapshot、explicit limit、application `FOR UPDATE`、terminal result 與 resumable pending-item queries
-- [ ] T052 [US2] 在 `services/api/app/application/volunteer_batch_service.py` 實作 operation id/fingerprint、policy snapshot、完整 target freeze、每次最多 500 筆 claim、逐 item transaction、optimistic conflict、partial success 與 summary reconciliation
-- [ ] T053 [US2] 在 `services/api/app/application/volunteer_access_service.py` 實作單筆 approve/reject transaction：Application、Membership current projection、Grant、per-target Audit、outbox 與 BatchItem result 原子一致，並提供 policy read/update、管理員 application list及 policy version/duration snapshot
-- [ ] T054 [US2] 在 `services/api/app/api/volunteer_access.py` 實作 policy GET/PATCH、application GET、decision batch POST/GET 與 batch item cursor GET endpoints，並以 path organization + actor context 重新授權
-- [ ] T055 [P] [US2] 在 `services/worker/app/persistence/volunteer_access_repository.py` 實作 BatchItem `FOR UPDATE SKIP LOCKED` claim、stale claim recovery、terminal-result protection 與最多 500 筆 chunk persistence
-- [ ] T056 [US2] 在 `services/worker/app/handlers/volunteer_access_handler.py` 串接 logical batch chunk processing，程序中斷後只處理 pending item 且不變更 snapshot
-- [ ] T057 [P] [US2] 在 `apps/web/features/volunteer-access/VolunteerAccessPolicyForm.tsx` 實作 organization policy 顯示／修改、完整確認摘要、version conflict 與只影響後續決策說明
-- [ ] T058 [US2] 在 `apps/web/app/(management)/settings/volunteer-access/page.tsx` 串接 policy GET/PATCH，提供 applications enabled 與預設授權時數設定
-- [ ] T059 [P] [US2] 在 `apps/web/features/volunteer-access/ApplicationBatchWorkbench.tsx` 實作 100+ 筆 table、filter、explicit/all-filtered selection、完整 snapshot count、共同/個別期限、reject reason、確認、進度、cursor 結果與 retry payload
-- [ ] T060 [US2] 在 `apps/web/app/(management)/volunteers/applications/page.tsx` 串接 list/policy/batch APIs，保留未送出選取與 validation errors，並在 `apps/web/components/management/AppSidebar.tsx` 加入管理角色入口
+- [X] T051 [US2] 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 實作 organization-scoped list filters/cursor、repeatable-read all-filtered Batch/Item snapshot、explicit limit、application `FOR UPDATE`、terminal result 與 resumable pending-item queries
+- [X] T052 [US2] 在 `services/api/app/application/volunteer_batch_service.py` 實作 operation id/fingerprint、policy snapshot、完整 target freeze、每次最多 500 筆 claim、逐 item transaction、optimistic conflict、partial success 與 summary reconciliation
+- [X] T053 [US2] 在 `services/api/app/application/volunteer_access_service.py` 實作單筆 approve/reject transaction：Application、Membership current projection、Grant、per-target Audit、outbox 與 BatchItem result 原子一致，並提供 policy read/update、管理員 application list及 policy version/duration snapshot
+- [X] T054 [US2] 在 `services/api/app/api/volunteer_access.py` 實作 policy GET/PATCH、application GET、decision batch POST/GET 與 batch item cursor GET endpoints，並以 path organization + actor context 重新授權
+- [X] T055 [P] [US2] 在 `services/worker/app/persistence/volunteer_access_repository.py` 實作 BatchItem `FOR UPDATE SKIP LOCKED` claim、stale claim recovery、terminal-result protection 與最多 500 筆 chunk persistence
+- [X] T056 [US2] 在 `services/worker/app/handlers/volunteer_access_handler.py` 串接 logical batch chunk processing，程序中斷後只處理 pending item 且不變更 snapshot
+- [X] T057 [P] [US2] 在 `apps/web/features/volunteer-access/VolunteerAccessPolicyForm.tsx` 實作 organization policy 顯示／修改、完整確認摘要、version conflict 與只影響後續決策說明
+- [X] T058 [US2] 在 `apps/web/app/(management)/settings/volunteer-access/page.tsx` 串接 policy GET/PATCH，提供 applications enabled 與預設授權時數設定
+- [X] T059 [P] [US2] 在 `apps/web/features/volunteer-access/ApplicationBatchWorkbench.tsx` 實作 100+ 筆 table、filter、explicit/all-filtered selection、完整 snapshot count、共同/個別期限、reject reason、確認、進度、cursor 結果與 retry payload
+- [X] T060 [US2] 在 `apps/web/app/(management)/volunteers/applications/page.tsx` 串接 list/policy/batch APIs，保留未送出選取與 validation errors，並在 `apps/web/components/management/AppSidebar.tsx` 加入管理角色入口
 
 **Checkpoint**：US2 可用直接建立的 pending fixtures 獨立驗證；100 筆人工操作與 1,200 筆完整 snapshot/chunk 均可重現。
 
@@ -139,21 +139,21 @@
 
 ### Tests for User Story 3（先寫並確認失敗）
 
-- [ ] T061 [P] [US3] 在 `tests/unit/test_volunteer_grant_service.py` 驗證 approval commit time、policy snapshot/custom/future period、Membership projection、唯一 active Grant、role 不提升與 reactivation rules
-- [ ] T062 [P] [US3] 在 `tests/integration/test_volunteer_access_approval.py` 驗證 approved Application→Membership→Grant→Audit/outbox 原子一致、ORG-A/ORG-B 獨立、policy 變更不追溯與通知失敗不回滾
-- [ ] T063 [P] [US3] 在 `tests/contract/test_authentication_contract.py` 增加 005 effective Membership helper 對 active/future/expired/revoked 的 004 LIFF exchange handoff contract tests，不在 005 建立 route UI
-- [ ] T064 [P] [US3] 在 `tests/integration/test_active_shelter_context.py` 增加只有 active-unexpired VOLUNTEER 能建立/維持 target context，雙 organization 不混用且管理角色不套 volunteer expiry 的 tests
-- [ ] T065 [P] [US3] 在 `tests/contract/test_line_adapter_contract.py` 增加 LINE push port、local mock success/transient/terminal failure 與不含 protected payload tests
-- [ ] T066 [P] [US3] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.test.tsx` 增加 upcoming/active、organization、台灣時區完整期限、remaining duration、進入照護與 notification-failed 仍顯示 CRM 正式結果 tests
-- [ ] T067 [P] [US3] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加 initial/organization-policy/custom/future/cross-organization approval 與 own-status browser scenarios
+- [X] T061 [P] [US3] 在 `tests/unit/test_volunteer_grant_service.py` 驗證 approval commit time、policy snapshot/custom/future period、Membership projection、唯一 active Grant、role 不提升與 reactivation rules
+- [X] T062 [P] [US3] 在 `tests/integration/test_volunteer_access_approval.py` 驗證 approved Application→Membership→Grant→Audit/outbox 原子一致、ORG-A/ORG-B 獨立、policy 變更不追溯與通知失敗不回滾
+- [X] T063 [P] [US3] 在 `tests/contract/test_authentication_contract.py` 增加 005 effective Membership helper 對 active/future/expired/revoked 的 004 LIFF exchange handoff contract tests，不在 005 建立 route UI
+- [X] T064 [P] [US3] 在 `tests/integration/test_active_shelter_context.py` 增加只有 active-unexpired VOLUNTEER 能建立/維持 target context，雙 organization 不混用且管理角色不套 volunteer expiry 的 tests
+- [X] T065 [P] [US3] 在 `tests/contract/test_line_adapter_contract.py` 增加 LINE push port、local mock success/transient/terminal failure 與不含 protected payload tests
+- [X] T066 [P] [US3] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.test.tsx` 增加 upcoming/active、organization、台灣時區完整期限、remaining duration、進入照護與 notification-failed 仍顯示 CRM 正式結果 tests
+- [X] T067 [P] [US3] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加 initial/organization-policy/custom/future/cross-organization approval 與 own-status browser scenarios
 
 ### Implementation for User Story 3
 
-- [ ] T068 [US3] 在 `services/api/app/application/volunteer_access_service.py` 實作 Grant effective-status、own-status grant summary、remaining duration 與歷史週期讀取，重用 T053 的 approval transaction 且不重複建立或修改正式決策；直接依賴 T053
-- [ ] T069 [US3] 在 `services/api/app/api/volunteer_access.py` 實作 organization grant list endpoint 與 approved/upcoming/active own-status response，Membership/Grant 日期一律輸出 RFC3339 UTC
-- [ ] T070 [P] [US3] 在 `services/api/app/application/ports/line_messaging.py` 與 `services/api/app/infrastructure/line/messaging_api_adapter.py` 實作最少資料 LINE push contract，並在 `services/api/app/infrastructure/line/mock_adapter.py` 實作 deterministic failure modes
-- [ ] T071 [US3] 在 `services/worker/app/persistence/volunteer_access_repository.py` 與 `services/worker/app/handlers/volunteer_access_handler.py` 實作 notification `SKIP LOCKED` claim、ownership、bounded backoff、sent/retry_wait/failed 狀態且不重放 domain mutation
-- [ ] T072 [US3] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.tsx` 顯示 approved upcoming/active、目前收容所、台灣時區期限與剩餘時間，只有 effective active 才呈現交給 004 的「進入照護流程」下一步
+- [X] T068 [US3] 在 `services/api/app/application/volunteer_access_service.py` 實作 Grant effective-status、own-status grant summary、remaining duration 與歷史週期讀取，重用 T053 的 approval transaction 且不重複建立或修改正式決策；直接依賴 T053
+- [X] T069 [US3] 在 `services/api/app/api/volunteer_access.py` 實作 organization grant list endpoint 與 approved/upcoming/active own-status response，Membership/Grant 日期一律輸出 RFC3339 UTC
+- [X] T070 [P] [US3] 在 `services/api/app/application/ports/line_messaging.py` 與 `services/api/app/infrastructure/line/messaging_api_adapter.py` 實作最少資料 LINE push contract，並在 `services/api/app/infrastructure/line/mock_adapter.py` 實作 deterministic failure modes
+- [X] T071 [US3] 在 `services/worker/app/persistence/volunteer_access_repository.py` 與 `services/worker/app/handlers/volunteer_access_handler.py` 實作 notification `SKIP LOCKED` claim、ownership、bounded backoff、sent/retry_wait/failed 狀態且不重放 domain mutation
+- [X] T072 [US3] 在 `apps/web/features/volunteer-access/VolunteerApplicationPage.tsx` 顯示 approved upcoming/active、目前收容所、台灣時區期限與剩餘時間，只有 effective active 才呈現交給 004 的「進入照護流程」下一步
 
 **Checkpoint**：US1+US2+US3 構成核心 P0：報名、人工核准與限時有效授權；004 只需消費 effective Membership contract。
 
@@ -167,23 +167,23 @@
 
 ### Tests for User Story 4（先寫並確認失敗）
 
-- [ ] T073 [P] [US4] 在 `tests/contract/test_volunteer_access_contract.py` 增加 grant list/PATCH discriminator、update_period、revoke、confirm_immediate_expiry、expected_version 與安全 conflict contract tests
-- [ ] T074 [P] [US4] 在 `tests/unit/test_volunteer_grant_mutation.py` 建立 extend/shorten/revoke/terminal immutability、blank reason、version increments 與 new-cycle rules tests
-- [ ] T075 [P] [US4] 在 `tests/integration/test_volunteer_access_expiration.py` 建立 request-time exact-boundary、自然到期與 user/org 停用後即時拒絕、沒有後續 request 時 Worker≤60 秒補償收斂、idempotent sweep、Session/Webhook scoped cleanup 與 other-org preservation tests
-- [ ] T076 [P] [US4] 在 `tests/integration/test_volunteer_access_history_preservation.py` 驗證 revoke/expire 不刪 Draft/CareReport/Media/source Application，重新報名核准建立新 Grant 且可追溯舊週期
-- [ ] T077 [P] [US4] 在 `tests/integration/test_volunteer_access_migration.py` 補齊 ORG-A 72h／ORG-B 168h legacy transition、policy snapshot、disabled／revoked／expired Membership 不啟用且 synthetic Application／Grant 數量為 0、原 active Membership 關聯與可後續調整／撤銷 tests
-- [ ] T078 [P] [US4] 在 `apps/web/features/volunteer-access/AccessGrantTable.test.tsx` 建立 extend/shorten/immediate confirm/revoke reason/version conflict、歷史週期與 preserved input tests
-- [ ] T079 [P] [US4] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加期限調整、立即失效、撤銷、自然到期、重新申請/授權與跨 organization context 保留 browser scenarios
+- [X] T073 [P] [US4] 在 `tests/contract/test_volunteer_access_contract.py` 增加 grant list/PATCH discriminator、update_period、revoke、confirm_immediate_expiry、expected_version 與安全 conflict contract tests
+- [X] T074 [P] [US4] 在 `tests/unit/test_volunteer_grant_mutation.py` 建立 extend/shorten/revoke/terminal immutability、blank reason、version increments 與 new-cycle rules tests
+- [X] T075 [P] [US4] 在 `tests/integration/test_volunteer_access_expiration.py` 建立 request-time exact-boundary、自然到期與 user/org 停用後即時拒絕、沒有後續 request 時 Worker≤60 秒補償收斂、idempotent sweep、Session/Webhook scoped cleanup 與 other-org preservation tests
+- [X] T076 [P] [US4] 在 `tests/integration/test_volunteer_access_history_preservation.py` 驗證 revoke/expire 不刪 Draft/CareReport/Media/source Application，重新報名核准建立新 Grant 且可追溯舊週期
+- [X] T077 [P] [US4] 在 `tests/integration/test_volunteer_access_migration.py` 補齊 ORG-A 72h／ORG-B 168h legacy transition、policy snapshot、disabled／revoked／expired Membership 不啟用且 synthetic Application／Grant 數量為 0、原 active Membership 關聯與可後續調整／撤銷 tests
+- [X] T078 [P] [US4] 在 `apps/web/features/volunteer-access/AccessGrantTable.test.tsx` 建立 extend/shorten/immediate confirm/revoke reason/version conflict、歷史週期與 preserved input tests
+- [X] T079 [P] [US4] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加期限調整、立即失效、撤銷、自然到期、重新申請/授權與跨 organization context 保留 browser scenarios
 
 ### Implementation for User Story 4
 
-- [ ] T080 [US4] 在 `services/api/app/application/volunteer_access_service.py` 實作 Grant period mutation/revoke、新 Application/Grant cycle 規則、optimistic version、Audit/outbox 與 immediate scoped cleanup
-- [ ] T081 [US4] 在 `services/api/app/application/volunteer_expiration_service.py` 實作 due Grant row lock、inactive organization/disabled user 未收斂 context sweep、Membership/Grant transition、SessionRecord target context clear、WebhookSession expiry/revoke、適用 Audit/outbox 與 60 秒冪等補償收斂
-- [ ] T082 [US4] 在 `services/api/app/api/volunteer_access.py` 實作 Grant PATCH endpoint，縮短至 now 前要求 `confirm_immediate_expiry` 且 revoke reason 必填
-- [ ] T083 [US4] 在 `services/worker/app/handlers/volunteer_access_handler.py` 串接 expiry sweep、notification delivery、stale claim recovery 與單次 bounded work iteration
-- [ ] T084 [US4] 在 `services/worker/worker.py` 以不超過 60 秒 interval 啟動可取消的 volunteer batch/expiry/user-org invalidation/notification loop，保留既有 AI Worker 行為與 graceful shutdown
-- [ ] T085 [P] [US4] 在 `apps/web/features/volunteer-access/AccessGrantTable.tsx` 實作 Grant 篩選、期限修改、立即失效確認、revoke reason、conflict reload 與歷史週期顯示
-- [ ] T086 [US4] 在 `apps/web/app/(management)/volunteers/access/page.tsx` 串接 grant list/mutation APIs，顯示目前 CRM 狀態、期限、歷史週期與安全錯誤下一步
+- [X] T080 [US4] 在 `services/api/app/application/volunteer_access_service.py` 實作 Grant period mutation/revoke、新 Application/Grant cycle 規則、optimistic version、Audit/outbox 與 immediate scoped cleanup
+- [X] T081 [US4] 在 `services/api/app/application/volunteer_expiration_service.py` 實作 due Grant row lock、inactive organization/disabled user 未收斂 context sweep、Membership/Grant transition、SessionRecord target context clear、WebhookSession expiry/revoke、適用 Audit/outbox 與 60 秒冪等補償收斂
+- [X] T082 [US4] 在 `services/api/app/api/volunteer_access.py` 實作 Grant PATCH endpoint，縮短至 now 前要求 `confirm_immediate_expiry` 且 revoke reason 必填
+- [X] T083 [US4] 在 `services/worker/app/handlers/volunteer_access_handler.py` 串接 expiry sweep、notification delivery、stale claim recovery 與單次 bounded work iteration
+- [X] T084 [US4] 在 `services/worker/worker.py` 以不超過 60 秒 interval 啟動可取消的 volunteer batch/expiry/user-org invalidation/notification loop，保留既有 AI Worker 行為與 graceful shutdown
+- [X] T085 [P] [US4] 在 `apps/web/features/volunteer-access/AccessGrantTable.tsx` 實作 Grant 篩選、期限修改、立即失效確認、revoke reason、conflict reload 與歷史週期顯示
+- [X] T086 [US4] 在 `apps/web/app/(management)/volunteers/access/page.tsx` 串接 grant list/mutation APIs，顯示目前 CRM 狀態、期限、歷史週期與安全錯誤下一步
 
 **Checkpoint**：US4 可獨立證明失效立即生效、60 秒內持久收斂、跨收容所 context 不互傷且原始照護資料完整保留。
 
@@ -197,26 +197,26 @@
 
 ### Tests for User Story 5（先寫並確認失敗）
 
-- [ ] T087 [P] [US5] 在 `tests/isolation/test_volunteer_access_isolation.py` 建立 application/list/count/grant/batch/item/notification/retry/Audit 的 ORG-A↔ORG-B read/write/id-guess matrix
-- [ ] T088 [P] [US5] 在 `tests/isolation/test_foundational_tenant_matrix.py` 增加直接 repository 漏 tenant filter 時由 FORCE RLS 阻擋所有 005 tables，以及 platform support scope 仍只見單一 target 的 assertions
-- [ ] T089 [P] [US5] 在 `tests/security/test_volunteer_access_authorization.py` 增加 SHELTER_ADMIN active-context、STAFF/VOLUNTEER deny、PLATFORM_ADMIN 每個 list/detail/mutation 必填 target/reason、禁止混合清單與 generic not-found/no-count-leak tests
-- [ ] T090 [P] [US5] 在 `tests/integration/test_volunteer_access_audit.py` 驗證 submit/withdraw/approve/reject/policy/period/expire/revoke/regrant、batch summary 與 platform read/write 的 actor/source/before/after/reason/result/operation-id coverage
-- [ ] T091 [P] [US5] 在 `tests/integration/test_volunteer_access_notifications.py` 建立所有 event type transient/terminal failure、organization failure filters、只有 failed 可 manual retry 1..500、retry_wait／sending／sent 或提交期間狀態改變回 per-item conflict、operation replay/conflict、stale claim 與 domain counts/version 不增加 tests
-- [ ] T092 [P] [US5] 在 `tests/security/test_observability_logging.py` 增加 id token、raw entry token、LINE user id、provider credential、other-applicant data 不得出現在 error/log/audit payload 的 tests
-- [ ] T093 [P] [US5] 在 `apps/web/features/volunteer-access/NotificationFailureQueue.test.tsx` 建立 event/status/time filters、cursor、只有 failed 可選取、retry_wait 顯示等待自動重試並停用選取、single/multi retry、operation replay、提交期間狀態改變的 partial conflict、最少收件人資訊與 keyboard/live-region tests
-- [ ] T094 [P] [US5] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加 STAFF/VOLUNTEER/ORG-B deep-link 不掛載名單、不發管理 request、PLATFORM_ADMIN target/reason Audit 與統一通知 failure/retry browser scenarios
+- [X] T087 [P] [US5] 在 `tests/isolation/test_volunteer_access_isolation.py` 建立 application/list/count/grant/batch/item/notification/retry/Audit 的 ORG-A↔ORG-B read/write/id-guess matrix
+- [X] T088 [P] [US5] 在 `tests/isolation/test_foundational_tenant_matrix.py` 增加直接 repository 漏 tenant filter 時由 FORCE RLS 阻擋所有 005 tables，以及 platform support scope 仍只見單一 target 的 assertions
+- [X] T089 [P] [US5] 在 `tests/security/test_volunteer_access_authorization.py` 增加 SHELTER_ADMIN active-context、STAFF/VOLUNTEER deny、PLATFORM_ADMIN 每個 list/detail/mutation 必填 target/reason、禁止混合清單與 generic not-found/no-count-leak tests
+- [X] T090 [P] [US5] 在 `tests/integration/test_volunteer_access_audit.py` 驗證 submit/withdraw/approve/reject/policy/period/expire/revoke/regrant、batch summary 與 platform read/write 的 actor/source/before/after/reason/result/operation-id coverage
+- [X] T091 [P] [US5] 在 `tests/integration/test_volunteer_access_notifications.py` 建立所有 event type transient/terminal failure、organization failure filters、只有 failed 可 manual retry 1..500、retry_wait／sending／sent 或提交期間狀態改變回 per-item conflict、operation replay/conflict、stale claim 與 domain counts/version 不增加 tests
+- [X] T092 [P] [US5] 在 `tests/security/test_observability_logging.py` 增加 id token、raw entry token、LINE user id、provider credential、other-applicant data 不得出現在 error/log/audit payload 的 tests
+- [X] T093 [P] [US5] 在 `apps/web/features/volunteer-access/NotificationFailureQueue.test.tsx` 建立 event/status/time filters、cursor、只有 failed 可選取、retry_wait 顯示等待自動重試並停用選取、single/multi retry、operation replay、提交期間狀態改變的 partial conflict、最少收件人資訊與 keyboard/live-region tests
+- [X] T094 [P] [US5] 在 `apps/web/e2e/volunteer-access-approval.spec.ts` 增加 STAFF/VOLUNTEER/ORG-B deep-link 不掛載名單、不發管理 request、PLATFORM_ADMIN target/reason Audit 與統一通知 failure/retry browser scenarios
 
 ### Implementation for User Story 5
 
-- [ ] T095 [US5] 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 對所有 resource/list/count/batch/notification/retry queries 強制 organization parameter、RLS scope 與 non-enumerating lookup，移除任何 unscoped fallback
-- [ ] T096 [US5] 在 `services/api/app/api/dependencies.py` 稽核所有 volunteer management routes 都使用 Foundational 的 PLATFORM_ADMIN target/reason/result Audit dependency，禁止 endpoint 略過、重複記錄或建立全租戶 platform scope；SHELTER_ADMIN 沿用 target Active Context 且不要求 support header
-- [ ] T097 [US5] 在 `services/api/app/application/volunteer_access_service.py` 統一 lifecycle/batch per-item Audit mapping，共用 operation id，並保存 platform target/reason/result 而不混入其他 organization
-- [ ] T098 [US5] 在 `services/api/app/application/volunteer_notification_service.py` 實作 organization-scoped 統一 failure list、event/status/time cursor filters、1..500 Retry Batch/Item、operation fingerprint、只允許仍為 failed 的 delivery 原子轉為 retry_wait，並讓其他狀態產生不變更 delivery 的 per-item conflict partial results
-- [ ] T099 [US5] 在 `services/api/app/api/volunteer_access.py` 實作 notification failure list 與 bulk retry endpoints，並集中 generic 403/404/409 回應與最少資料 serializer
-- [ ] T100 [US5] 在 `services/worker/app/persistence/volunteer_access_repository.py` 與 `services/worker/app/handlers/volunteer_access_handler.py` 完成 admin retry/stale notification claim 處理，只新增 attempt opportunity 且不呼叫 domain decision service
-- [ ] T101 [P] [US5] 在 `services/api/app/observability/logging.py` 加入 LINE id token、entry token、provider credential、recipient identifier 與 cross-tenant detail redaction
-- [ ] T102 [P] [US5] 在 `apps/web/features/volunteer-access/NotificationFailureQueue.tsx` 實作統一失敗表、event/status/time filters、cursor、只有 failed 可選取及 single/multi retry、retry_wait 等其他狀態停用選取、partial conflict results 與可理解 live feedback
-- [ ] T103 [US5] 在 `apps/web/app/(management)/volunteers/notifications/page.tsx` 串接 failure list/retry APIs，並在 `apps/web/app/(management)/volunteers/layout.tsx` 與 `apps/web/components/management/AppSidebar.tsx` 建立 management role mount-before-fetch boundary
+- [X] T095 [US5] 在 `services/api/app/persistence/repositories/volunteer_access_repository.py` 對所有 resource/list/count/batch/notification/retry queries 強制 organization parameter、RLS scope 與 non-enumerating lookup，移除任何 unscoped fallback
+- [X] T096 [US5] 在 `services/api/app/api/dependencies.py` 稽核所有 volunteer management routes 都使用 Foundational 的 PLATFORM_ADMIN target/reason/result Audit dependency，禁止 endpoint 略過、重複記錄或建立全租戶 platform scope；SHELTER_ADMIN 沿用 target Active Context 且不要求 support header
+- [X] T097 [US5] 在 `services/api/app/application/volunteer_access_service.py` 統一 lifecycle/batch per-item Audit mapping，共用 operation id，並保存 platform target/reason/result 而不混入其他 organization
+- [X] T098 [US5] 在 `services/api/app/application/volunteer_notification_service.py` 實作 organization-scoped 統一 failure list、event/status/time cursor filters、1..500 Retry Batch/Item、operation fingerprint、只允許仍為 failed 的 delivery 原子轉為 retry_wait，並讓其他狀態產生不變更 delivery 的 per-item conflict partial results
+- [X] T099 [US5] 在 `services/api/app/api/volunteer_access.py` 實作 notification failure list 與 bulk retry endpoints，並集中 generic 403/404/409 回應與最少資料 serializer
+- [X] T100 [US5] 在 `services/worker/app/persistence/volunteer_access_repository.py` 與 `services/worker/app/handlers/volunteer_access_handler.py` 完成 admin retry/stale notification claim 處理，只新增 attempt opportunity 且不呼叫 domain decision service
+- [X] T101 [P] [US5] 在 `services/api/app/observability/logging.py` 加入 LINE id token、entry token、provider credential、recipient identifier 與 cross-tenant detail redaction
+- [X] T102 [P] [US5] 在 `apps/web/features/volunteer-access/NotificationFailureQueue.tsx` 實作統一失敗表、event/status/time filters、cursor、只有 failed 可選取及 single/multi retry、retry_wait 等其他狀態停用選取、partial conflict results 與可理解 live feedback
+- [X] T103 [US5] 在 `apps/web/app/(management)/volunteers/notifications/page.tsx` 串接 failure list/retry APIs，並在 `apps/web/app/(management)/volunteers/layout.tsx` 與 `apps/web/components/management/AppSidebar.tsx` 建立 management role mount-before-fetch boundary
 
 **Checkpoint**：US5 可獨立證明 service + query + RLS 三層租戶隔離、PLATFORM_ADMIN 單一 target 支援稽核與通知重試不改變正式授權。
 
@@ -226,15 +226,15 @@
 
 **Purpose**：完成跨故事 contract drift、responsive/accessibility/visual、migration regression、人工成功指標與完整品質 Gate。
 
-- [ ] T104 [P] 在 `tests/contract/test_generated_contract_types.py` 與 `tests/contract/test_openapi_contract.py` 增加 005 的 13 operations、35 schemas、platform support header、batch cursor 與 generated-type drift coverage
-- [ ] T105 [P] 在 `tests/integration/test_empty_database_bootstrap.py` 與 `tests/integration/test_shelter_status_and_membership.py` 加入 0024/0025 empty/legacy upgrade、新 organization policy 原子初始化、disabled／revoked／expired Membership 不建立 synthetic Application／Grant、suspended organization／disabled user 無 request cleanup、finite VOLUNTEER 與 existing non-volunteer regression
-- [ ] T106 [P] 在 `apps/web/e2e/p0-responsive.spec.ts` 加入 onboarding、100/1,200 筆 batch workbench、policy、Grant 與 notification queue 的 360x800、768x1024、1024x768、1440x900 scenarios
-- [ ] T107 [P] 在 `apps/web/e2e/p0-keyboard.spec.ts` 與 `apps/web/e2e/p0-a11y.spec.ts` 加入 filter/select-all/period override/dialog focus/return focus/live result/notification retry，要求 Axe critical/serious=0
+- [X] T104 [P] 在 `tests/contract/test_generated_contract_types.py` 與 `tests/contract/test_openapi_contract.py` 增加 005 的 13 operations、35 schemas、platform support header、batch cursor 與 generated-type drift coverage
+- [X] T105 [P] 在 `tests/integration/test_empty_database_bootstrap.py` 與 `tests/integration/test_shelter_status_and_membership.py` 加入 0024/0025 empty/legacy upgrade、新 organization policy 原子初始化、disabled／revoked／expired Membership 不建立 synthetic Application／Grant、suspended organization／disabled user 無 request cleanup、finite VOLUNTEER 與 existing non-volunteer regression
+- [X] T106 [P] 在 `apps/web/e2e/p0-responsive.spec.ts` 加入 onboarding、100/1,200 筆 batch workbench、policy、Grant 與 notification queue 的 360x800、768x1024、1024x768、1440x900 scenarios
+- [X] T107 [P] 在 `apps/web/e2e/p0-keyboard.spec.ts` 與 `apps/web/e2e/p0-a11y.spec.ts` 加入 filter/select-all/period override/dialog focus/return focus/live result/notification retry，要求 Axe critical/serious=0
 - [ ] T108 [P] 在 `apps/web/e2e/p0-visual.spec.ts` 加入 onboarding states、batch confirmation/progress/partial result、policy、Grant 與 notification failure snapshots；只有 reviewer 確認 UI 後才更新 `apps/web/e2e/p0-visual.spec.ts-snapshots/`
-- [ ] T109 在 `apps/web/package.json` 將 `e2e/volunteer-access-approval.spec.ts` 納入 P0 e2e/a11y/visual commands，並維持既有 route/management/volunteer regression suites
+- [X] T109 在 `apps/web/package.json` 將 `e2e/volunteer-access-approval.spec.ts` 納入 P0 e2e/a11y/visual commands，並維持既有 route/management/volunteer regression suites
 - [ ] T110 依 `specs/005-volunteer-access-approval/quickstart.md` 執行至少 20 位首次志工（≥10 iOS、≥10 Android）SC-001 計時與至少 3 位管理員各 100 筆 SC-002 計時，將匿名原始記錄、介入、錯誤與可重算 pass rate 寫入 `specs/005-volunteer-access-approval/validation.md`
-- [ ] T111 在 `specs/005-volunteer-access-approval/checklists/requirements.md` 補上 FR-001～FR-027／SC-001～SC-015 對應的自動化測試或人工證據連結，不以勾選取代實際結果
-- [ ] T112 依 `specs/005-volunteer-access-approval/quickstart.md` 執行 migration、新 organization policy 原子初始化、policy staging、entry issue/rotation、unknown status/停用入口、seed、API/Web/Worker、100/1,200 筆 batch、expiry/user-org invalidation、notification failure、platform support、tenant isolation 與 004 handoff 預備驗收，將結果記錄於 `specs/005-volunteer-access-approval/validation.md`
+- [X] T111 在 `specs/005-volunteer-access-approval/checklists/requirements.md` 補上 FR-001～FR-027／SC-001～SC-015 對應的自動化測試或人工證據連結，不以勾選取代實際結果
+- [X] T112 依 `specs/005-volunteer-access-approval/quickstart.md` 執行 migration、新 organization policy 原子初始化、policy staging、entry issue/rotation、unknown status/停用入口、seed、API/Web/Worker、100/1,200 筆 batch、expiry/user-org invalidation、notification failure、platform support、tenant isolation 與 004 handoff 預備驗收，將結果記錄於 `specs/005-volunteer-access-approval/validation.md`
 - [ ] T113 執行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`npm --prefix packages/contracts run check`、`npm --prefix apps/web run quality`、build、P0 Playwright、axe、visual 與 `./scripts/verify_local.sh`，把完整 command/result/known limitations 寫入 `specs/005-volunteer-access-approval/validation.md`
 
 ---

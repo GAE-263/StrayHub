@@ -31,6 +31,9 @@ tags:
   - name: Management Settings
   - name: Management Audit
   - name: LINE Bot
+  - name: Volunteer Applications
+  - name: Volunteer Access Management
+  - name: Volunteer Notification Management
 security:
   - bearerAuth: []
 paths:
@@ -1230,6 +1233,432 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /v1/volunteer-applications/status:
+    post:
+      tags: [Volunteer Applications]
+      operationId: resolveVolunteerApplicationStatus
+      summary: 以 LINE 身分與收容所入口取得自己的申請／授權狀態；未知 identity 不建立持久化資料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerIdentityRequest'
+      responses:
+        '200':
+          description: 自己在指定收容所的安全狀態
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '403':
+          $ref: '#/components/responses/EntryUnavailable'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /v1/volunteer-applications:
+    post:
+      tags: [Volunteer Applications]
+      operationId: submitVolunteerApplication
+      summary: 以 LINE 身分提交單一收容所志工申請
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerApplicationCreateRequest'
+      responses:
+        '200':
+          description: 重複提交時回傳既有 pending 申請
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '201':
+          description: pending 申請已建立；尚未建立 Membership
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '403':
+          $ref: '#/components/responses/EntryUnavailable'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /v1/volunteer-applications/{applicationId}/withdraw:
+    post:
+      tags: [Volunteer Applications]
+      operationId: withdrawVolunteerApplication
+      summary: 撤回自己的 pending 申請
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerApplicationWithdrawRequest'
+      responses:
+        '200':
+          description: 申請已撤回
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/organizations/{organizationId}/volunteer-access-policy:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: getVolunteerAccessPolicy
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 目前收容所申請設定
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerAccessPolicy'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+    patch:
+      tags: [Volunteer Access Management]
+      operationId: updateVolunteerAccessPolicy
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerAccessPolicyUpdateRequest'
+      responses:
+        '200':
+          description: 設定已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerAccessPolicy'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/organizations/{organizationId}/volunteer-applications:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: listVolunteerApplications
+      summary: 查詢目前收容所申請
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ApplicationStatus'
+        - name: submitted_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: submitted_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: 僅包含 target organization 的最少審核資料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerApplicationListResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-decision-batches:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    post:
+      tags: [Volunteer Access Management]
+      operationId: createVolunteerDecisionBatch
+      summary: 批次核准或拒絕 pending 申請
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerDecisionBatchRequest'
+      responses:
+        '200':
+          description: 同 operation id 重播的既有結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerDecisionBatchResponse'
+        '201':
+          description: 已建立不可變 target snapshot；批次可能 queued／processing／completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerDecisionBatchResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BatchId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: getVolunteerDecisionBatch
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 可對帳的批次與逐項結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerDecisionBatchResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}/items:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BatchId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: listVolunteerDecisionBatchItems
+      summary: 以 cursor 查詢 logical batch 的不可變 target 與逐筆結果
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: result
+          in: query
+          schema:
+            $ref: '#/components/schemas/BatchItemResult'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: 僅包含 Batch 建立時已快照的 target
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerDecisionBatchItemListResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-access-grants:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: listVolunteerAccessGrants
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/GrantStatus'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: 目前 organization 的授權週期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerAccessGrantListResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-access-grants/{grantId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/GrantId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    patch:
+      tags: [Volunteer Access Management]
+      operationId: updateVolunteerAccessGrant
+      summary: 延長、縮短或撤銷目前授權
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/GrantPeriodUpdateRequest'
+                - $ref: '#/components/schemas/GrantRevokeRequest'
+              discriminator:
+                propertyName: action
+      responses:
+        '200':
+          description: 授權已更新；可能因縮短而立即 expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerAccessGrant'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/organizations/{organizationId}/volunteer-notifications:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Notification Management]
+      operationId: listVolunteerNotificationFailures
+      summary: 查詢目前 organization 的統一通知失敗清單
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: event_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/NotificationEventType'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [retry_wait, failed]
+        - name: failed_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: failed_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: 僅包含 target organization 的最少必要失敗資訊
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerNotificationListResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-notifications/retry:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    post:
+      tags: [Volunteer Notification Management]
+      operationId: retryVolunteerNotifications
+      summary: 冪等重試單筆或多筆 failed notification，不重放 domain decision
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerNotificationRetryRequest'
+      responses:
+        '200':
+          description: 相同 operation id/payload 重播既有 retry batch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerNotificationRetryResponse'
+        '202':
+          description: retry batch 已建立；可重試項目已回到 queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerNotificationRetryResponse'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 components:
   securitySchemes:
     bearerAuth:
@@ -1334,6 +1763,36 @@ components:
         in: query,
         schema: { type: integer, minimum: 1, maximum: 100, default: 20 },
       }
+    PlatformSupportReason:
+      name: X-Platform-Support-Reason
+      in: header
+      required: false
+      description: PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 500
+    ApplicationId:
+      name: applicationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BatchId:
+      name: batchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     BadRequest:
       description: Webhook 或 Request 格式錯誤
@@ -1369,7 +1828,7 @@ components:
             { schema: { $ref: "#/components/schemas/ErrorResponse" } },
         }
     Conflict:
-      description: Idempotency 或資料狀態衝突
+      description: Idempotency、stale version、operation payload 或資料狀態衝突
       content:
         {
           application/json:
@@ -1382,6 +1841,36 @@ components:
           application/json:
             { schema: { $ref: "#/components/schemas/ErrorResponse" } },
         }
+    EntryUnavailable:
+      description: LINE 身分或收容所申請入口不可用；不揭露內部狀態
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ManagementDenied:
+      description: actor 無此 organization 的志工授權管理權
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ScopedNotFound:
+      description: 在已授權 organization scope 內找不到資源，或不得揭露其存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: 日期、原因、項目數或其他輸入不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    DependencyUnavailable:
+      description: LINE identity/provider 暫時不可用；未建立部分狀態
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     ErrorResponse:
       type: object
@@ -1390,6 +1879,7 @@ components:
         code: { type: string }
         message: { type: string }
         request_id: { type: string }
+        operation_id: { type: [string, "null"], format: uuid }
         details: { type: object, additionalProperties: true }
     ManagementDashboard:
       type: object
@@ -1846,7 +2336,14 @@ components:
         organization_id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
         role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
-        status: { type: string, enum: [invited, active, disabled] }
+        status: { type: string, enum: [invited, active, disabled, expired, revoked] }
+        valid_from:
+          type: [string, "null"]
+          format: date-time
+        expires_at:
+          type: [string, "null"]
+          format: date-time
+        access_version: { type: integer, minimum: 1, default: 1 }
     MembershipCreateRequest:
       type: object
       required: [user_id, role]
@@ -2462,3 +2959,543 @@ components:
         action: { type: string, enum: [confirm, reject, correct] }
         reason: { type: string, minLength: 1, maxLength: 500 }
         corrected_observation: { type: object, additionalProperties: true }
+    ApplicationStatus:
+      type: string
+      enum: [pending, approved, rejected, withdrawn]
+    EffectiveAccessStatus:
+      type: string
+      enum: [none, pending, upcoming, active, expired, revoked, rejected, withdrawn]
+    GrantStatus:
+      type: string
+      enum: [active, expired, revoked]
+    BatchStatus:
+      type: string
+      enum: [queued, processing, completed, completed_with_errors]
+    BatchItemResult:
+      type: string
+      enum: [pending, succeeded, conflict, failed]
+    NotificationStatus:
+      type: string
+      enum: [pending, sending, retry_wait, sent, failed]
+    NotificationEventType:
+      type: string
+      enum:
+        [application_submitted, application_withdrawn, approved, rejected, grant_changed,
+         expired, revoked]
+    VolunteerIdentityRequest:
+      type: object
+      required: [id_token, shelter_entry_reference]
+      additionalProperties: false
+      properties:
+        id_token:
+          type: string
+          minLength: 1
+        shelter_entry_reference:
+          type: string
+          minLength: 1
+    VolunteerApplicationCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/VolunteerIdentityRequest'
+        - type: object
+          required: [client_request_id, consent_acknowledged]
+          additionalProperties: false
+          properties:
+            client_request_id:
+              type: string
+              format: uuid
+            consent_acknowledged:
+              type: boolean
+              const: true
+    VolunteerApplicationWithdrawRequest:
+      allOf:
+        - $ref: '#/components/schemas/VolunteerIdentityRequest'
+        - type: object
+          required: [expected_version]
+          additionalProperties: false
+          properties:
+            expected_version:
+              type: integer
+              minimum: 1
+    VolunteerApplicationStatusResponse:
+      type: object
+      required: [organization, effective_status, next_actions]
+      properties:
+        organization:
+          $ref: '#/components/schemas/PublicOrganization'
+        application:
+          oneOf:
+            - $ref: '#/components/schemas/VolunteerApplication'
+            - type: 'null'
+        grant:
+          oneOf:
+            - $ref: '#/components/schemas/VolunteerAccessGrantSummary'
+            - type: 'null'
+        effective_status:
+          $ref: '#/components/schemas/EffectiveAccessStatus'
+        next_actions:
+          type: array
+          items:
+            type: string
+            enum: [apply, wait, withdraw, enter_care, reapply, contact_shelter, return_to_line]
+    PublicOrganization:
+      type: object
+      required: [id, name, applications_enabled]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        applications_enabled:
+          type: boolean
+          description: false 只阻止新申請；既有 applicant 仍可讀取 own status
+    VolunteerApplication:
+      type: object
+      required: [id, organization_id, display_name, status, submitted_at, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        submitted_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: [string, 'null']
+          format: date-time
+        decision_reason:
+          type: [string, 'null']
+        version:
+          type: integer
+          minimum: 1
+    VolunteerApplicationListResponse:
+      type: object
+      required: [items, matching_count, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerApplication'
+        matching_count:
+          type: integer
+          minimum: 0
+          description: 目前 filter 的 tenant-scoped 計數；最後 target 仍以 Batch snapshot 為準
+        next_cursor:
+          type: [string, 'null']
+    VolunteerAccessPolicy:
+      type: object
+      required: [organization_id, applications_enabled, default_grant_duration_hours, version]
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        applications_enabled:
+          type: boolean
+          description: false 只阻止新申請；既有 applicant 仍可讀取 own status
+        default_grant_duration_hours:
+          type: integer
+          minimum: 1
+          default: 168
+          description: 新 organization 建立 transaction 內初始為 168；更新只影響後續建立的 decision
+        version:
+          type: integer
+          minimum: 1
+    VolunteerAccessPolicyUpdateRequest:
+      type: object
+      required: [expected_version]
+      minProperties: 2
+      additionalProperties: false
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1
+        applications_enabled:
+          type: boolean
+        default_grant_duration_hours:
+          type: integer
+          minimum: 1
+    VolunteerDecisionBatchRequest:
+      type: object
+      required: [operation_id, decision, selection]
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 500
+        default_valid_from:
+          type: [string, 'null']
+          format: date-time
+        default_expires_at:
+          type: [string, 'null']
+          format: date-time
+        selection:
+          oneOf:
+            - $ref: '#/components/schemas/ExplicitVolunteerDecisionSelection'
+            - $ref: '#/components/schemas/AllFilteredVolunteerDecisionSelection'
+          discriminator:
+            propertyName: mode
+    ExplicitVolunteerDecisionSelection:
+      type: object
+      required: [mode, items]
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          const: explicit_items
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/VolunteerDecisionItemRequest'
+    AllFilteredVolunteerDecisionSelection:
+      type: object
+      required: [mode, filter]
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          const: all_filtered
+        filter:
+          $ref: '#/components/schemas/VolunteerApplicationBatchFilter'
+        overrides:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/VolunteerDecisionItemRequest'
+    VolunteerApplicationBatchFilter:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          const: pending
+        submitted_from:
+          type: [string, 'null']
+          format: date-time
+        submitted_to:
+          type: [string, 'null']
+          format: date-time
+    VolunteerDecisionItemRequest:
+      type: object
+      required: [application_id, expected_version]
+      additionalProperties: false
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        expected_version:
+          type: integer
+          minimum: 1
+        valid_from:
+          type: [string, 'null']
+          format: date-time
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+    VolunteerDecisionBatchResponse:
+      type: object
+      required:
+        [id, organization_id, operation_id, decision, selection_mode, snapshot_at, status,
+         requested_count, processed_count, succeeded_count, conflict_count, failed_count,
+         chunk_size, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        operation_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [approve, reject]
+        selection_mode:
+          type: string
+          enum: [explicit_items, all_filtered]
+        snapshot_at:
+          type: string
+          format: date-time
+        policy_version_used:
+          type: [integer, 'null']
+          minimum: 1
+        default_duration_hours_used:
+          type: [integer, 'null']
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/BatchStatus'
+        requested_count:
+          type: integer
+          minimum: 1
+        processed_count:
+          type: integer
+          minimum: 0
+        succeeded_count:
+          type: integer
+        conflict_count:
+          type: integer
+        failed_count:
+          type: integer
+        chunk_size:
+          type: integer
+          const: 500
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+    VolunteerDecisionBatchItemListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerDecisionItemResponse'
+        next_cursor:
+          type: [string, 'null']
+    VolunteerDecisionItemResponse:
+      type: object
+      required: [application_id, result]
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        result:
+          $ref: '#/components/schemas/BatchItemResult'
+        error_code:
+          type: [string, 'null']
+        resulting_application_version:
+          type: [integer, 'null']
+        membership_id:
+          type: [string, 'null']
+          format: uuid
+        grant_id:
+          type: [string, 'null']
+          format: uuid
+        grant:
+          oneOf:
+            - $ref: '#/components/schemas/VolunteerAccessGrantSummary'
+            - type: 'null'
+    VolunteerAccessGrantSummary:
+      type: object
+      required: [id, status, source_type, valid_from, expires_at, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/GrantStatus'
+        source_type:
+          type: string
+          enum: [manager_approval, legacy_migration]
+        policy_version_used:
+          type: [integer, 'null']
+          minimum: 1
+        duration_hours_used:
+          type: [integer, 'null']
+          minimum: 1
+        valid_from:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 1
+    VolunteerAccessGrant:
+      allOf:
+        - $ref: '#/components/schemas/VolunteerAccessGrantSummary'
+        - type: object
+          required: [organization_id, user_id, membership_id, application_id, display_name, approved_at]
+          properties:
+            organization_id:
+              type: string
+              format: uuid
+            user_id:
+              type: string
+              format: uuid
+            membership_id:
+              type: string
+              format: uuid
+            application_id:
+              type: string
+              format: uuid
+            display_name:
+              type: string
+            approved_at:
+              type: string
+              format: date-time
+            revocation_reason:
+              type: [string, 'null']
+            notification:
+              oneOf:
+                - $ref: '#/components/schemas/VolunteerNotification'
+                - type: 'null'
+    VolunteerAccessGrantListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerAccessGrant'
+        next_cursor:
+          type: [string, 'null']
+    GrantPeriodUpdateRequest:
+      type: object
+      required: [action, expected_version, valid_from, expires_at]
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          const: update_period
+        expected_version:
+          type: integer
+          minimum: 1
+        valid_from:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        confirm_immediate_expiry:
+          type: boolean
+          default: false
+        reason:
+          type: [string, 'null']
+          maxLength: 500
+    GrantRevokeRequest:
+      type: object
+      required: [action, expected_version, reason]
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          const: revoke
+        expected_version:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    VolunteerNotification:
+      type: object
+      required:
+        [id, organization_id, recipient_display_name, event_type, resource_type, resource_id,
+         status, attempt_count, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        recipient_display_name:
+          type: string
+        event_type:
+          $ref: '#/components/schemas/NotificationEventType'
+        resource_type:
+          type: string
+          enum: [volunteer_application, volunteer_access_grant]
+        resource_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        attempt_count:
+          type: integer
+          minimum: 0
+        last_error_code:
+          type: [string, 'null']
+        last_failed_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    VolunteerNotificationListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerNotification'
+        next_cursor:
+          type: [string, 'null']
+    VolunteerNotificationRetryRequest:
+      type: object
+      required: [operation_id, notification_ids]
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+        notification_ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    VolunteerNotificationRetryResponse:
+      type: object
+      required: [id, operation_id, requested_count, requeued_count, conflict_count, failed_count, items]
+      properties:
+        id:
+          type: string
+          format: uuid
+        operation_id:
+          type: string
+          format: uuid
+        requested_count:
+          type: integer
+          minimum: 1
+        requeued_count:
+          type: integer
+          minimum: 0
+        conflict_count:
+          type: integer
+          minimum: 0
+        failed_count:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerNotificationRetryItem'
+    VolunteerNotificationRetryItem:
+      type: object
+      required: [notification_id, result]
+      properties:
+        notification_id:
+          type: string
+          format: uuid
+        result:
+          type: string
+          enum: [requeued, conflict, failed]
+        error_code:
+          type: [string, 'null']

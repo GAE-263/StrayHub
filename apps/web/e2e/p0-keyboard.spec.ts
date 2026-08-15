@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
+import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
 
 test("登入核心操作可用鍵盤完成", async ({ page }) => {
   await page.goto("/login");
@@ -174,4 +175,58 @@ test("Report detail AlertDialog 可用 Escape／取消並 restore focus", async 
   await archive.press("Enter");
   await dialog.getByRole("button", { name: "取消" }).click();
   await expect(archive).toBeFocused();
+});
+
+test("志工批次期限、確認 dialog、live result 與通知重試可由鍵盤操作", async ({
+  page,
+}) => {
+  await mockVolunteerAccessApi(page);
+  await page.goto("/volunteers/applications");
+  const allFiltered = page.getByRole("checkbox", {
+    name: /目前篩選結果全部/,
+  });
+  await allFiltered.focus();
+  await page.keyboard.press("Space");
+  await expect(allFiltered).toBeChecked();
+  const individual = page.getByLabel(/王小明.*個別到期時間/);
+  const selectedApplicant = page.getByLabel(/選取 王小明/);
+  await selectedApplicant.focus();
+  await page.keyboard.press("Space");
+  await individual.focus();
+  await individual.fill("2026-08-22T12:00");
+  await expect(individual).toHaveValue("2026-08-22T12:00");
+  const create = page.getByRole("button", { name: "確認並建立批次" });
+  await create.focus();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("alertdialog", {
+    name: "確認志工批次決策",
+  });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "關閉批次確認" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(create).toBeFocused();
+  await create.press("Enter");
+  await dialog.getByRole("button", { name: "送出完整快照" }).press("Enter");
+  await expect(page.getByRole("status").last()).toContainText("批次已建立");
+  await expect(page.getByRole("status").last()).toHaveAttribute(
+    "aria-live",
+    "polite",
+  );
+
+  await page.goto("/volunteers/notifications");
+  const filter = page.getByRole("button", { name: "套用篩選" });
+  await filter.focus();
+  await expect(filter).toBeFocused();
+  const failed = page.getByRole("checkbox", { name: "選取 志工 A 通知" });
+  await failed.focus();
+  await page.keyboard.press("Space");
+  const retry = page.getByRole("button", { name: "重試已選取（1）" });
+  await retry.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status").last()).toContainText(
+    "已重新排入 1 筆",
+  );
 });

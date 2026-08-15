@@ -25,6 +25,19 @@ async def set_platform_scope(session: AsyncSession, enabled: bool = True) -> Non
     await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
 
 
+async def set_platform_support_scope(session: AsyncSession, target_organization_id: UUID) -> None:
+    """Constrain a platform-support request to exactly one organization."""
+    if not isinstance(target_organization_id, UUID):
+        raise DomainError("platform_target_required", "平台支援必須指定單一收容所", 422)
+    await session.execute(
+        text("SELECT set_config('app.current_org_id', :organization_id, true)"),
+        {"organization_id": str(target_organization_id)},
+    )
+    await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
+    await session.execute(text("SELECT set_config('app.platform_support', 'true', true)"))
+    await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
+
+
 async def set_authentication_user_scope(session: AsyncSession, user_id: UUID) -> None:
     """Allow pre-context authentication queries to see only this user's membership."""
     if not isinstance(user_id, UUID):

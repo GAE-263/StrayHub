@@ -8,7 +8,7 @@ import asyncio
 from services.api.app.persistence.database.engine import session_factory
 from sqlalchemy import text
 
-ORGANIZATION_CODES = ("ORG-A", "ORG-B")
+ORGANIZATION_CODES = ("ORG-A", "ORG-B", "ORG-DISABLED")
 
 
 async def reset() -> int:
@@ -46,6 +46,15 @@ async def reset() -> int:
                 params,
             )
             for table in (
+                "volunteer_notification_retry_batch_items",
+                "volunteer_notification_retry_batches",
+                "volunteer_decision_batch_items",
+                "volunteer_decision_batches",
+                "volunteer_notification_deliveries",
+                "volunteer_access_grants",
+                "volunteer_applications",
+                "shelter_volunteer_entry_references",
+                "organization_volunteer_access_policies",
                 "care_report_corrections",
                 "report_idempotency_keys",
                 "ai_call_logs",

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.line_messaging import LineImageContent
 
 
 class MockLineAdapter:
-    def __init__(self) -> None:
+    def __init__(self, *, push_failure_mode: str | None = None) -> None:
         self.replies: list[tuple[str, list[dict]]] = []
+        self.pushes: list[tuple[str, list[dict]]] = []
+        self.push_failure_mode = push_failure_mode
         self.images: dict[str, LineImageContent] = {}
         self.rich_menus: list[dict] = []
+
+    async def push(self, *, to_user_id: str, messages: list[dict]) -> None:
+        if self.push_failure_mode == "transient":
+            raise DomainError("line_push_transient", "LINE 暫時無法投遞", 503)
+        if self.push_failure_mode == "terminal":
+            raise DomainError("line_push_terminal", "LINE 收件者無法接收", 422)
+        self.pushes.append((to_user_id, messages))
 
     async def reply(self, *, reply_token: str, messages: list[dict]) -> None:
         self.replies.append((reply_token, messages))

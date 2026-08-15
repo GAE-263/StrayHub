@@ -9,6 +9,9 @@ from services.api.app.persistence.models.identity import (
     OrganizationMembership,
     User,
 )
+from services.api.app.persistence.models.volunteer_access import (
+    OrganizationVolunteerAccessPolicy,
+)
 
 
 class _Session:
@@ -44,6 +47,17 @@ class _Repository:
         elif isinstance(value, OrganizationMembership):
             self.memberships.append(value)
         return value
+
+    async def create_with_volunteer_policy(self, *, code, name):
+        organization = await self.add(Organization(code=code, name=name, status="pending_setup"))
+        await self.add(
+            OrganizationVolunteerAccessPolicy(
+                organization_id=organization.id,
+                applications_enabled=True,
+                default_grant_duration_hours=168,
+            )
+        )
+        return organization
 
     async def get(self, organization_id):
         if self.organization and self.organization.id == organization_id:
@@ -91,5 +105,6 @@ async def test_create_organization_commits_initial_admin_and_audit_atomically(mo
     audits = [value for value in session.values if isinstance(value, AuditRecord)]
     assert response.status == "pending_setup"
     assert len(repository.memberships) == 1
+    assert any(isinstance(value, OrganizationVolunteerAccessPolicy) for value in session.values)
     assert {audit.action for audit in audits} == {"organization.created", "membership.created"}
     assert session.commit_count == 1

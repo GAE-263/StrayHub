@@ -4,6 +4,7 @@ import yaml
 from fastapi.routing import APIRoute
 from services.api.app.api.organization_management import (
     AccountCreateRequest,
+    MembershipResponse,
     OrganizationCreateRequest,
     router,
 )
@@ -44,3 +45,12 @@ def test_organization_router_exposes_account_area_status_and_initial_admin_opera
     assert ("/v1/organizations/{organizationId}/areas", "POST") in routes
     assert ("/v1/organizations/{organizationId}/initial-admin", "POST") in routes
     assert ("/v1/organizations/{organizationId}", "PATCH") in routes
+
+
+def test_membership_contract_exposes_finite_volunteer_projection() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    properties = document["components"]["schemas"]["Membership"]["properties"]
+    assert {"valid_from", "expires_at", "access_version"} <= properties.keys()
+    assert {"valid_from", "expires_at", "access_version"} <= MembershipResponse.model_fields.keys()

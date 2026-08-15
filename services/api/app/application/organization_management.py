@@ -14,9 +14,7 @@ class OrganizationManagementService:
         self.password_hasher = password_hasher
 
     async def create(self, *, code: str, name: str, initial_admin_user_id=None) -> Organization:
-        organization = await self.repository.add(
-            Organization(code=code, name=name, status="pending_setup")
-        )
+        organization = await self.repository.create_with_volunteer_policy(code=code, name=name)
         if initial_admin_user_id:
             await self.repository.add(
                 OrganizationMembership(
@@ -93,6 +91,12 @@ class OrganizationManagementService:
     async def create_membership(self, *, organization_id, user_id, role: str):
         if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
             raise DomainError("invalid_role", "收容所角色無效", 422)
+        if role == "VOLUNTEER":
+            raise DomainError(
+                "volunteer_access_flow_required",
+                "請使用志工報名與限時授權流程建立志工權限",
+                422,
+            )
         organization = await self.repository.get(organization_id)
         user = await self.repository.user(user_id)
         if organization is None or user is None:
@@ -116,6 +120,12 @@ class OrganizationManagementService:
         if role is not None:
             if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
                 raise DomainError("invalid_role", "收容所角色無效", 422)
+            if role == "VOLUNTEER" and membership.role != "VOLUNTEER":
+                raise DomainError(
+                    "volunteer_access_flow_required",
+                    "請使用志工報名與限時授權流程轉換志工權限",
+                    422,
+                )
             membership.role = role
         if status is not None:
             if status not in {"invited", "active", "disabled"}:

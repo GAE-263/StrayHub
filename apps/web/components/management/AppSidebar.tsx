@@ -39,6 +39,30 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       },
       { href: "/settings/audit", label: "Audit Query", icon: "audit" },
       {
+        href: "/volunteers/applications",
+        label: "志工報名審核",
+        roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
+        icon: "access",
+      },
+      {
+        href: "/volunteers/access",
+        label: "志工授權管理",
+        roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
+        icon: "access",
+      },
+      {
+        href: "/volunteers/notifications",
+        label: "志工通知失敗",
+        roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
+        icon: "history",
+      },
+      {
+        href: "/settings/volunteer-access",
+        label: "志工授權設定",
+        roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
+        icon: "settings",
+      },
+      {
         href: "/shelters",
         label: "收容所與 Membership",
         roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],

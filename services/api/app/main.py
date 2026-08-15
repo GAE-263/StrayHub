@@ -18,6 +18,7 @@ from services.api.app.api.organization_management import router as organization_
 from services.api.app.api.qr_codes import router as qr_codes_router
 from services.api.app.api.report_inbox import router as report_inbox_router
 from services.api.app.api.reportable_scope import router as reportable_scope_router
+from services.api.app.api.volunteer_access import router as volunteer_access_router
 
 app = FastAPI(title="StrayHub CRM Care Report API", version="0.1.0")
 app.add_exception_handler(DomainError, domain_error_handler)
@@ -38,6 +39,7 @@ app.include_router(line_webhook_router)
 app.include_router(media_router)
 app.include_router(line_binding_router)
 app.include_router(line_drafts_router)
+app.include_router(volunteer_access_router)
 
 
 @app.get("/healthz", tags=["Health"])

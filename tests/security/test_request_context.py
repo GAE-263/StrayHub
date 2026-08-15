@@ -46,6 +46,9 @@ class _AuthRepository:
     async def get_membership(self, _user_id, _organization_id):
         return self.membership
 
+    async def get_effective_membership(self, _user_id, _organization_id):
+        return self.membership if self.membership.status == "active" else None
+
     async def set_authentication_user_scope(self, _user_id):
         return None
 

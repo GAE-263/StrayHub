@@ -153,6 +153,20 @@ export function ManagementLayout({ children }: Props) {
   }
 
   const role = profile.user.platform_role ?? activeMembership?.role ?? "STAFF";
+  const volunteerManagementPath =
+    pathname.startsWith("/volunteers/") ||
+    pathname === "/settings/volunteer-access";
+  if (
+    volunteerManagementPath &&
+    !["PLATFORM_ADMIN", "SHELTER_ADMIN"].includes(role)
+  ) {
+    return (
+      <ErrorState
+        title="無法開啟志工管理"
+        description="目前角色沒有志工報名、授權或通知管理權限。"
+      />
+    );
+  }
   const organizationLabel =
     typeof window !== "undefined"
       ? (window.sessionStorage.getItem("active_organization_code") ??

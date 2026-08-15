@@ -229,9 +229,9 @@ async def test_a_b_resource_matrix_hides_business_resources_and_signed_media() -
             """
             INSERT INTO audit_records
                 (id, organization_id, actor_user_id, action, resource_type, resource_id,
-                 source_channel, created_at)
-            VALUES ($1, $2, $3, 'matrix', 'animal', $4, 'test', now()),
-                   ($5, $6, $7, 'matrix', 'animal', $8, 'test', now())
+                 source_channel, actor_type, created_at)
+            VALUES ($1, $2, $3, 'matrix', 'animal', $4, 'test', 'user', now()),
+                   ($5, $6, $7, 'matrix', 'animal', $8, 'test', 'user', now())
             """,
             audit_a,
             org_a,

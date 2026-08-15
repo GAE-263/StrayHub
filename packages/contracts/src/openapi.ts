@@ -1004,6 +1004,255 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/volunteer-applications/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 以 LINE 身分與收容所入口取得自己的申請／授權狀態；未知 identity 不建立持久化資料 */
+        post: operations["resolveVolunteerApplicationStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/volunteer-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 以 LINE 身分提交單一收容所志工申請 */
+        post: operations["submitVolunteerApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/volunteer-applications/{applicationId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤回自己的 pending 申請 */
+        post: operations["withdrawVolunteerApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-access-policy": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getVolunteerAccessPolicy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateVolunteerAccessPolicy"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-applications": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        /** 查詢目前收容所申請 */
+        get: operations["listVolunteerApplications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-decision-batches": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批次核准或拒絕 pending 申請 */
+        post: operations["createVolunteerDecisionBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                batchId: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getVolunteerDecisionBatch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}/items": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                batchId: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        /** 以 cursor 查詢 logical batch 的不可變 target 與逐筆結果 */
+        get: operations["listVolunteerDecisionBatchItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-access-grants": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listVolunteerAccessGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-access-grants/{grantId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 延長、縮短或撤銷目前授權 */
+        patch: operations["updateVolunteerAccessGrant"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-notifications": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        /** 查詢目前 organization 的統一通知失敗清單 */
+        get: operations["listVolunteerNotificationFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-notifications/retry": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 冪等重試單筆或多筆 failed notification，不重放 domain decision */
+        post: operations["retryVolunteerNotifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1012,6 +1261,8 @@ export interface components {
             code: string;
             message: string;
             request_id: string;
+            /** Format: uuid */
+            operation_id?: string | null;
             details?: {
                 [key: string]: unknown;
             };
@@ -1351,7 +1602,13 @@ export interface components {
             /** @enum {string} */
             role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
             /** @enum {string} */
-            status: "invited" | "active" | "disabled";
+            status: "invited" | "active" | "disabled" | "expired" | "revoked";
+            /** Format: date-time */
+            valid_from?: string | null;
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** @default 1 */
+            access_version: number;
         };
         MembershipCreateRequest: {
             /** Format: uuid */
@@ -1782,6 +2039,277 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** @enum {string} */
+        ApplicationStatus: "pending" | "approved" | "rejected" | "withdrawn";
+        /** @enum {string} */
+        EffectiveAccessStatus: "none" | "pending" | "upcoming" | "active" | "expired" | "revoked" | "rejected" | "withdrawn";
+        /** @enum {string} */
+        GrantStatus: "active" | "expired" | "revoked";
+        /** @enum {string} */
+        BatchStatus: "queued" | "processing" | "completed" | "completed_with_errors";
+        /** @enum {string} */
+        BatchItemResult: "pending" | "succeeded" | "conflict" | "failed";
+        /** @enum {string} */
+        NotificationStatus: "pending" | "sending" | "retry_wait" | "sent" | "failed";
+        /** @enum {string} */
+        NotificationEventType: "application_submitted" | "application_withdrawn" | "approved" | "rejected" | "grant_changed" | "expired" | "revoked";
+        VolunteerIdentityRequest: {
+            id_token: string;
+            shelter_entry_reference: string;
+        };
+        VolunteerApplicationCreateRequest: components["schemas"]["VolunteerIdentityRequest"] & {
+            /** Format: uuid */
+            client_request_id: string;
+            /** @constant */
+            consent_acknowledged: true;
+        };
+        VolunteerApplicationWithdrawRequest: components["schemas"]["VolunteerIdentityRequest"] & {
+            expected_version: number;
+        };
+        VolunteerApplicationStatusResponse: {
+            organization: components["schemas"]["PublicOrganization"];
+            application?: components["schemas"]["VolunteerApplication"] | null;
+            grant?: components["schemas"]["VolunteerAccessGrantSummary"] | null;
+            effective_status: components["schemas"]["EffectiveAccessStatus"];
+            next_actions: ("apply" | "wait" | "withdraw" | "enter_care" | "reapply" | "contact_shelter" | "return_to_line")[];
+        };
+        PublicOrganization: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description false 只阻止新申請；既有 applicant 仍可讀取 own status */
+            applications_enabled: boolean;
+        };
+        VolunteerApplication: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            display_name: string;
+            status: components["schemas"]["ApplicationStatus"];
+            /** Format: date-time */
+            submitted_at: string;
+            /** Format: date-time */
+            decided_at?: string | null;
+            decision_reason?: string | null;
+            version: number;
+        };
+        VolunteerApplicationListResponse: {
+            items: components["schemas"]["VolunteerApplication"][];
+            /** @description 目前 filter 的 tenant-scoped 計數；最後 target 仍以 Batch snapshot 為準 */
+            matching_count: number;
+            next_cursor: string | null;
+        };
+        VolunteerAccessPolicy: {
+            /** Format: uuid */
+            organization_id: string;
+            /** @description false 只阻止新申請；既有 applicant 仍可讀取 own status */
+            applications_enabled: boolean;
+            /**
+             * @description 新 organization 建立 transaction 內初始為 168；更新只影響後續建立的 decision
+             * @default 168
+             */
+            default_grant_duration_hours: number;
+            version: number;
+        };
+        VolunteerAccessPolicyUpdateRequest: {
+            expected_version: number;
+            applications_enabled?: boolean;
+            default_grant_duration_hours?: number;
+        };
+        VolunteerDecisionBatchRequest: {
+            /** Format: uuid */
+            operation_id: string;
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            reason?: string | null;
+            /** Format: date-time */
+            default_valid_from?: string | null;
+            /** Format: date-time */
+            default_expires_at?: string | null;
+            selection: components["schemas"]["ExplicitVolunteerDecisionSelection"] | components["schemas"]["AllFilteredVolunteerDecisionSelection"];
+        };
+        ExplicitVolunteerDecisionSelection: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "ExplicitVolunteerDecisionSelection";
+            items: components["schemas"]["VolunteerDecisionItemRequest"][];
+        };
+        AllFilteredVolunteerDecisionSelection: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "AllFilteredVolunteerDecisionSelection";
+            filter: components["schemas"]["VolunteerApplicationBatchFilter"];
+            overrides?: components["schemas"]["VolunteerDecisionItemRequest"][];
+        };
+        VolunteerApplicationBatchFilter: {
+            /** @constant */
+            status: "pending";
+            /** Format: date-time */
+            submitted_from?: string | null;
+            /** Format: date-time */
+            submitted_to?: string | null;
+        };
+        VolunteerDecisionItemRequest: {
+            /** Format: uuid */
+            application_id: string;
+            expected_version: number;
+            /** Format: date-time */
+            valid_from?: string | null;
+            /** Format: date-time */
+            expires_at?: string | null;
+        };
+        VolunteerDecisionBatchResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            operation_id: string;
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            /** @enum {string} */
+            selection_mode: "explicit_items" | "all_filtered";
+            /** Format: date-time */
+            snapshot_at: string;
+            policy_version_used?: number | null;
+            default_duration_hours_used?: number | null;
+            status: components["schemas"]["BatchStatus"];
+            requested_count: number;
+            processed_count: number;
+            succeeded_count: number;
+            conflict_count: number;
+            failed_count: number;
+            /** @constant */
+            chunk_size: 500;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string | null;
+        };
+        VolunteerDecisionBatchItemListResponse: {
+            items: components["schemas"]["VolunteerDecisionItemResponse"][];
+            next_cursor: string | null;
+        };
+        VolunteerDecisionItemResponse: {
+            /** Format: uuid */
+            application_id: string;
+            result: components["schemas"]["BatchItemResult"];
+            error_code?: string | null;
+            resulting_application_version?: number | null;
+            /** Format: uuid */
+            membership_id?: string | null;
+            /** Format: uuid */
+            grant_id?: string | null;
+            grant?: components["schemas"]["VolunteerAccessGrantSummary"] | null;
+        };
+        VolunteerAccessGrantSummary: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["GrantStatus"];
+            /** @enum {string} */
+            source_type: "manager_approval" | "legacy_migration";
+            policy_version_used?: number | null;
+            duration_hours_used?: number | null;
+            /** Format: date-time */
+            valid_from: string;
+            /** Format: date-time */
+            expires_at: string;
+            version: number;
+        };
+        VolunteerAccessGrant: components["schemas"]["VolunteerAccessGrantSummary"] & {
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            user_id: string;
+            /** Format: uuid */
+            membership_id: string;
+            /** Format: uuid */
+            application_id: string;
+            display_name: string;
+            /** Format: date-time */
+            approved_at: string;
+            revocation_reason?: string | null;
+            notification?: components["schemas"]["VolunteerNotification"] | null;
+        };
+        VolunteerAccessGrantListResponse: {
+            items: components["schemas"]["VolunteerAccessGrant"][];
+            next_cursor: string | null;
+        };
+        GrantPeriodUpdateRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "GrantPeriodUpdateRequest";
+            expected_version: number;
+            /** Format: date-time */
+            valid_from: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @default false */
+            confirm_immediate_expiry: boolean;
+            reason?: string | null;
+        };
+        GrantRevokeRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            action: "GrantRevokeRequest";
+            expected_version: number;
+            reason: string;
+        };
+        VolunteerNotification: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            recipient_display_name: string;
+            event_type: components["schemas"]["NotificationEventType"];
+            /** @enum {string} */
+            resource_type: "volunteer_application" | "volunteer_access_grant";
+            /** Format: uuid */
+            resource_id: string;
+            status: components["schemas"]["NotificationStatus"];
+            attempt_count: number;
+            last_error_code?: string | null;
+            /** Format: date-time */
+            last_failed_at?: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        VolunteerNotificationListResponse: {
+            items: components["schemas"]["VolunteerNotification"][];
+            next_cursor: string | null;
+        };
+        VolunteerNotificationRetryRequest: {
+            /** Format: uuid */
+            operation_id: string;
+            notification_ids: string[];
+        };
+        VolunteerNotificationRetryResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            operation_id: string;
+            requested_count: number;
+            requeued_count: number;
+            conflict_count: number;
+            failed_count: number;
+            items: components["schemas"]["VolunteerNotificationRetryItem"][];
+        };
+        VolunteerNotificationRetryItem: {
+            /** Format: uuid */
+            notification_id: string;
+            /** @enum {string} */
+            result: "requeued" | "conflict" | "failed";
+            error_code?: string | null;
+        };
     };
     responses: {
         /** @description Webhook 或 Request 格式錯誤 */
@@ -1829,7 +2357,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Idempotency 或資料狀態衝突 */
+        /** @description Idempotency、stale version、operation payload 或資料狀態衝突 */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1840,6 +2368,51 @@ export interface components {
         };
         /** @description 日期區間或欄位驗證失敗 */
         UnprocessableEntity: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description LINE 身分或收容所申請入口不可用；不揭露內部狀態 */
+        EntryUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description actor 無此 organization 的志工授權管理權 */
+        ManagementDenied: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description 在已授權 organization scope 內找不到資源，或不得揭露其存在 */
+        ScopedNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description 日期、原因、項目數或其他輸入不合法 */
+        ValidationError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description LINE identity/provider 暫時不可用；未建立部分狀態 */
+        DependencyUnavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1863,6 +2436,11 @@ export interface components {
         LineSignature: string;
         Page: number;
         PageSize: number;
+        /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+        PlatformSupportReason: string;
+        ApplicationId: string;
+        BatchId: string;
+        GrantId: string;
     };
     requestBodies: never;
     headers: never;
@@ -3676,6 +4254,432 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    resolveVolunteerApplicationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerIdentityRequest"];
+            };
+        };
+        responses: {
+            /** @description 自己在指定收容所的安全狀態 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
+                };
+            };
+            403: components["responses"]["EntryUnavailable"];
+            422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    submitVolunteerApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerApplicationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 重複提交時回傳既有 pending 申請 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
+                };
+            };
+            /** @description pending 申請已建立；尚未建立 Membership */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
+                };
+            };
+            403: components["responses"]["EntryUnavailable"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    withdrawVolunteerApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerApplicationWithdrawRequest"];
+            };
+        };
+        responses: {
+            /** @description 申請已撤回 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
+                };
+            };
+            404: components["responses"]["ScopedNotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getVolunteerAccessPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 目前收容所申請設定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerAccessPolicy"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    updateVolunteerAccessPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerAccessPolicyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 設定已更新 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerAccessPolicy"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    listVolunteerApplications: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ApplicationStatus"];
+                submitted_from?: string;
+                submitted_to?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 僅包含 target organization 的最少審核資料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerApplicationListResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerDecisionBatch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerDecisionBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description 同 operation id 重播的既有結果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerDecisionBatchResponse"];
+                };
+            };
+            /** @description 已建立不可變 target snapshot；批次可能 queued／processing／completed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerDecisionBatchResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getVolunteerDecisionBatch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                batchId: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可對帳的批次與逐項結果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerDecisionBatchResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    listVolunteerDecisionBatchItems: {
+        parameters: {
+            query?: {
+                result?: components["schemas"]["BatchItemResult"];
+                cursor?: string;
+                limit?: number;
+            };
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                batchId: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 僅包含 Batch 建立時已快照的 target */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerDecisionBatchItemListResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    listVolunteerAccessGrants: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["GrantStatus"];
+                cursor?: string;
+                limit?: number;
+            };
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 目前 organization 的授權週期 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerAccessGrantListResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    updateVolunteerAccessGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                grantId: components["parameters"]["GrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantPeriodUpdateRequest"] | components["schemas"]["GrantRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description 授權已更新；可能因縮短而立即 expired */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerAccessGrant"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    listVolunteerNotificationFailures: {
+        parameters: {
+            query?: {
+                event_type?: components["schemas"]["NotificationEventType"];
+                status?: "retry_wait" | "failed";
+                failed_from?: string;
+                failed_to?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 僅包含 target organization 的最少必要失敗資訊 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerNotificationListResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    retryVolunteerNotifications: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerNotificationRetryRequest"];
+            };
+        };
+        responses: {
+            /** @description 相同 operation id/payload 重播既有 retry batch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerNotificationRetryResponse"];
+                };
+            };
+            /** @description retry batch 已建立；可重試項目已回到 queue */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerNotificationRetryResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
         };
     };
 }

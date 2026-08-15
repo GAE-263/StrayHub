@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
+import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
 
 const viewports = [
   { width: 360, height: 800 },
@@ -61,3 +62,27 @@ test("P0 routes respect reduced-motion preference", async ({ page }) => {
     stylesheetRulePresent: true,
   });
 });
+
+for (const route of [
+  "/volunteer-application?entry=entry&id_token=id-token",
+  "/volunteers/applications",
+  "/volunteers/access",
+  "/volunteers/notifications",
+  "/settings/volunteer-access",
+]) {
+  test(`${route} volunteer access UI remains usable at required viewports`, async ({
+    page,
+  }) => {
+    await mockVolunteerAccessApi(page);
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto(route);
+      await expect(page.locator("main").first()).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+        ),
+      ).toBe(true);
+    }
+  });
+}

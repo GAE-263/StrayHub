@@ -6,6 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
+from services.api.app.persistence.models.volunteer_access import (
+    OrganizationVolunteerAccessPolicy,
+)
 
 
 class OrganizationRepository:
@@ -23,6 +26,21 @@ class OrganizationRepository:
         self.session.add(value)
         await self.session.flush()
         return value
+
+    async def create_with_volunteer_policy(self, *, code: str, name: str) -> Organization:
+        async with self.session.begin_nested():
+            organization = Organization(code=code, name=name, status="pending_setup")
+            self.session.add(organization)
+            await self.session.flush()
+            self.session.add(
+                OrganizationVolunteerAccessPolicy(
+                    organization_id=organization.id,
+                    applications_enabled=True,
+                    default_grant_duration_hours=168,
+                )
+            )
+            await self.session.flush()
+        return organization
 
     async def membership(
         self, user_id: UUID, organization_id: UUID

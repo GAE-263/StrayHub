@@ -46,6 +46,14 @@ class LineMessagingApiAdapter:
         )
         self._raise_for_status(response)
 
+    async def push(self, *, to_user_id: str, messages: list[dict]) -> None:
+        response = await self._post(
+            f"{self.api_base}/v2/bot/message/push",
+            headers={**self._headers, "Content-Type": "application/json"},
+            json={"to": to_user_id, "messages": messages},
+        )
+        self._raise_for_status(response)
+
     async def get_image_content(self, *, message_id: str) -> LineImageContent:
         response = await self._get(
             f"{self.data_base}/v2/bot/message/{message_id}/content",

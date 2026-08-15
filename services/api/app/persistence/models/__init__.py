@@ -27,6 +27,17 @@ from services.api.app.persistence.models.observation_usage import ObservationOpt
 from services.api.app.persistence.models.qr_code import AnimalQrCode
 from services.api.app.persistence.models.reportable_scope import DailyReportableScope
 from services.api.app.persistence.models.shelter_area import ShelterArea
+from services.api.app.persistence.models.volunteer_access import (
+    OrganizationVolunteerAccessPolicy,
+    ShelterVolunteerEntryReference,
+    VolunteerAccessGrant,
+    VolunteerApplication,
+    VolunteerDecisionBatch,
+    VolunteerDecisionBatchItem,
+    VolunteerNotificationDelivery,
+    VolunteerNotificationRetryBatch,
+    VolunteerNotificationRetryBatchItem,
+)
 
 __all__ = [
     "AIProcessingJob",
@@ -49,10 +60,19 @@ __all__ = [
     "ObservationOptionUsage",
     "Organization",
     "OrganizationMembership",
+    "OrganizationVolunteerAccessPolicy",
     "RefreshTokenRecord",
     "ReportIdempotencyKey",
     "SessionRecord",
     "User",
     "WebhookSession",
     "ShelterArea",
+    "ShelterVolunteerEntryReference",
+    "VolunteerAccessGrant",
+    "VolunteerApplication",
+    "VolunteerDecisionBatch",
+    "VolunteerDecisionBatchItem",
+    "VolunteerNotificationDelivery",
+    "VolunteerNotificationRetryBatch",
+    "VolunteerNotificationRetryBatchItem",
 ]

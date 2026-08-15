@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -67,6 +68,9 @@ class MembershipResponse(BaseModel):
     user_id: UUID
     role: str
     status: str
+    valid_from: datetime | None = None
+    expires_at: datetime | None = None
+    access_version: int = 1
 
 
 class MembershipCreateRequest(BaseModel):

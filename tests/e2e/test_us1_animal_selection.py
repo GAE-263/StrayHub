@@ -54,8 +54,10 @@ async def test_us1_a_volunteer_can_select_only_current_org_reportable_animals() 
         await connection.execute(
             """
             INSERT INTO organization_memberships
-                (id, organization_id, user_id, role, status, created_at, updated_at)
-            VALUES ($1, $2, $3, 'VOLUNTEER', 'active', now(), now())
+                (id, organization_id, user_id, role, status, created_at, updated_at,
+                 valid_from, expires_at)
+            VALUES ($1, $2, $3, 'VOLUNTEER', 'active', now(), now(),
+                    now() - interval '1 hour', now() + interval '7 days')
             """,
             membership_a,
             organization_a,
