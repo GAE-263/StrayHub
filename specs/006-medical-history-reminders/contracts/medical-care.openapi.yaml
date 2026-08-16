@@ -1,0 +1,790 @@
+openapi: 3.1.0
+info:
+  title: StrayHub Medical Care Additive Contract
+  version: 0.1.0
+  description: >-
+    Feature 006 design contract. Implementations merge these paths and schemas into
+    the canonical StrayHub OpenAPI before generating TypeScript contracts.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Medical Records
+  - name: Care Reminders
+  - name: Assigned Care
+  - name: Animal Timeline
+paths:
+  /v1/management/animals/{animalId}/medical-records:
+    parameters:
+      - $ref: '#/components/parameters/AnimalId'
+    get:
+      tags: [Medical Records]
+      operationId: listMedicalRecords
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+        - name: occurred_from
+          in: query
+          schema: { type: string, format: date }
+        - name: occurred_to
+          in: query
+          schema: { type: string, format: date }
+        - name: record_type
+          in: query
+          schema: { $ref: '#/components/schemas/MedicalRecordType' }
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Medical records in the active organization.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecordPage' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Medical Records]
+      operationId: createMedicalRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MedicalRecordCreate' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/medical-records/{recordId}:
+    parameters:
+      - $ref: '#/components/parameters/RecordId'
+    get:
+      tags: [Medical Records]
+      operationId: getMedicalRecord
+      responses:
+        '200':
+          description: Record detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Medical Records]
+      operationId: updateMedicalRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MedicalRecordUpdate' }
+      responses:
+        '200':
+          description: Updated projection; audit preserves before and after.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/medical-records/{recordId}/archive:
+    parameters:
+      - $ref: '#/components/parameters/RecordId'
+    post:
+      tags: [Medical Records]
+      operationId: archiveMedicalRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, reason]
+              properties:
+                expected_version: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: Archived without hard deletion.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/animals/{animalId}/care-reminder-series:
+    parameters:
+      - $ref: '#/components/parameters/AnimalId'
+    post:
+      tags: [Care Reminders]
+      operationId: createCareReminderSeries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CareReminderSeriesCreate' }
+      responses:
+        '201':
+          description: Series created; occurrences remain virtual until overridden or acted on.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareReminderSeries' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/care-reminder-series/{seriesId}:
+    parameters:
+      - $ref: '#/components/parameters/SeriesId'
+    get:
+      tags: [Care Reminders]
+      operationId: getCareReminderSeries
+      responses:
+        '200':
+          description: Series segment detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareReminderSeries' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/care-reminder-series/{seriesId}/stop:
+    parameters:
+      - $ref: '#/components/parameters/SeriesId'
+    post:
+      tags: [Care Reminders]
+      operationId: stopCareReminderSeries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, reason]
+              properties:
+                expected_version: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: Future generation stopped; historical actions retained.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareReminderSeries' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/care-reminder-occurrences/{occurrenceId}:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    patch:
+      tags: [Care Reminders]
+      operationId: editCareReminderOccurrence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OccurrenceEditRequest' }
+      responses:
+        '200':
+          description: This occurrence or this-and-future rule was changed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OccurrenceMutationResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/care-reminder-occurrences/{occurrenceId}/actions:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Care Reminders]
+      operationId: actOnCareReminderOccurrence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OccurrenceActionRequest' }
+      responses:
+        '200':
+          description: Action accepted exactly once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OccurrenceMutationResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/care-agenda:
+    get:
+      tags: [Care Reminders]
+      operationId: getCareAgenda
+      parameters:
+        - name: animal_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: reminder_type
+          in: query
+          schema: { $ref: '#/components/schemas/ReminderType' }
+        - name: assignee_membership_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OccurrenceStatus' }
+        - $ref: '#/components/parameters/PageSize'
+        - name: overdue_cursor
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Four mutually exclusive organization-local buckets.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareAgenda' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/management/care-calendar:
+    get:
+      tags: [Care Reminders]
+      operationId: getCareCalendar
+      parameters:
+        - name: date_from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          required: true
+          description: Inclusive local date; range may not exceed 366 days.
+          schema: { type: string, format: date }
+        - name: animal_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: reminder_type
+          in: query
+          schema: { $ref: '#/components/schemas/ReminderType' }
+        - name: assignee_membership_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OccurrenceStatus' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Occurrences grouped by authoritative organization-local date.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareCalendar' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/assigned-care-reminders:
+    get:
+      tags: [Assigned Care]
+      operationId: listMyAssignedCareReminders
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Minimal projection for the authenticated volunteer only.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AssignedCareItem' }
+                  next_cursor: { type: [string, 'null'] }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/assigned-care-reminders/{occurrenceId}:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+    get:
+      tags: [Assigned Care]
+      operationId: getMyAssignedCareReminder
+      responses:
+        '200':
+          description: Minimal assigned occurrence projection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssignedCareItem' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/assigned-care-reminders/{occurrenceId}/actions:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Assigned Care]
+      operationId: actOnMyAssignedCareReminder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignedOccurrenceActionRequest' }
+      responses:
+        '200':
+          description: Volunteer completion or skip accepted exactly once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OccurrenceMutationResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /v1/animals/{animalId}/timeline:
+    parameters:
+      - $ref: '#/components/parameters/AnimalId'
+    get:
+      tags: [Animal Timeline]
+      operationId: getAnimalTimelineWithMedicalCare
+      description: Additive extension; canonical operation keeps legacy report fields.
+      parameters:
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Organization-local integrated animal timeline.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnimalTimeline' }
+        default: { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    AnimalId:
+      name: animalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RecordId:
+      name: recordId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SeriesId:
+      name: seriesId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OccurrenceId:
+      name: occurrenceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 255 }
+  responses:
+    Error:
+      description: Unified error; unauthorized resources do not reveal existence.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Stale version, reused idempotency key, timezone change, or terminal-state conflict.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConflictResponse' }
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        request_id: { type: string }
+    ConflictResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            latest_version: { type: [integer, 'null'] }
+            latest_status: { type: [string, 'null'] }
+            latest_actor_display_name: { type: [string, 'null'] }
+            latest_action_at: { type: [string, 'null'], format: date-time }
+            timezone_version: { type: [integer, 'null'] }
+    MedicalRecordType:
+      type: string
+      enum: [visit, medication, vaccination, examination, weight, surgery, other]
+    ReminderType:
+      type: string
+      enum: [medication, follow_up, weight, vaccination, examination, other]
+    RecurrenceFrequency:
+      type: string
+      enum: [none, daily, weekly, monthly, yearly]
+    OccurrenceStatus:
+      type: string
+      enum: [pending, completed, skipped, cancelled]
+    MedicalRecordCreate:
+      type: object
+      additionalProperties: false
+      required: [occurred_at, record_type, title, content]
+      properties:
+        occurred_at: { type: string, format: date-time }
+        record_type: { $ref: '#/components/schemas/MedicalRecordType' }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        content: { type: string, minLength: 1, maxLength: 10000 }
+        clinic: { type: [string, 'null'], maxLength: 300 }
+        veterinarian: { type: [string, 'null'], maxLength: 200 }
+        weight_kg: { type: [number, 'null'], exclusiveMinimum: 0 }
+        media_asset_ids:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    MedicalRecordUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        occurred_at: { type: string, format: date-time }
+        record_type: { $ref: '#/components/schemas/MedicalRecordType' }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        content: { type: string, minLength: 1, maxLength: 10000 }
+        clinic: { type: [string, 'null'], maxLength: 300 }
+        veterinarian: { type: [string, 'null'], maxLength: 200 }
+        weight_kg: { type: [number, 'null'], exclusiveMinimum: 0 }
+        media_asset_ids:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    MedicalAttachment:
+      type: object
+      required: [media_asset_id, content_type, download_url, expires_at]
+      properties:
+        media_asset_id: { type: string, format: uuid }
+        content_type: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        download_url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+    MedicalRecord:
+      type: object
+      required:
+        [id, animal_id, occurred_at, occurred_local_at, occurred_timezone, record_type,
+         title, content, status, version, attachments, created_by, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        animal_id: { type: string, format: uuid }
+        occurred_at: { type: string, format: date-time }
+        occurred_local_at: { type: string }
+        occurred_timezone: { type: string }
+        record_type: { $ref: '#/components/schemas/MedicalRecordType' }
+        title: { type: string }
+        content: { type: string }
+        clinic: { type: [string, 'null'] }
+        veterinarian: { type: [string, 'null'] }
+        weight_kg: { type: [number, 'null'] }
+        status: { type: string, enum: [active, archived] }
+        version: { type: integer, minimum: 1 }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/MedicalAttachment' }
+        created_by: { $ref: '#/components/schemas/ActorSummary' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    MedicalRecordPage:
+      type: object
+      required: [items, total_count]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MedicalRecord' }
+        total_count: { type: integer, minimum: 0 }
+        next_cursor: { type: [string, 'null'] }
+    RecurrenceRule:
+      type: object
+      additionalProperties: false
+      required: [frequency, interval]
+      properties:
+        frequency: { $ref: '#/components/schemas/RecurrenceFrequency' }
+        interval: { type: integer, minimum: 1, maximum: 120 }
+        end_date: { type: [string, 'null'], format: date }
+    CareReminderSeriesCreate:
+      type: object
+      additionalProperties: false
+      required: [reminder_type, title, first_local_date, first_local_time, recurrence]
+      properties:
+        reminder_type: { $ref: '#/components/schemas/ReminderType' }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        instructions: { type: string, maxLength: 5000 }
+        first_local_date: { type: string, format: date }
+        first_local_time: { type: string, format: time }
+        assignee_membership_id: { type: [string, 'null'], format: uuid }
+        recurrence: { $ref: '#/components/schemas/RecurrenceRule' }
+    CareReminderSeries:
+      allOf:
+        - $ref: '#/components/schemas/CareReminderSeriesCreate'
+        - type: object
+          required: [id, lineage_id, start_ordinal, status, version, organization_timezone]
+          properties:
+            id: { type: string, format: uuid }
+            lineage_id: { type: string, format: uuid }
+            start_ordinal: { type: integer, minimum: 0 }
+            end_ordinal: { type: [integer, 'null'], minimum: 0 }
+            status: { type: string, enum: [active, suspended, stopped] }
+            version: { type: integer, minimum: 1 }
+            organization_timezone: { type: string }
+            supersedes_series_id: { type: [string, 'null'], format: uuid }
+    AnimalSummary:
+      type: object
+      required: [id, name, shelter_number]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        shelter_number: { type: string }
+        photo_url: { type: [string, 'null'], format: uri }
+        photo_expires_at: { type: [string, 'null'], format: date-time }
+    ActorSummary:
+      type: object
+      required: [user_id, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+    CareOccurrence:
+      type: object
+      required:
+        [occurrence_id, lineage_id, series_id, occurrence_index, version, is_virtual,
+         animal, reminder_type, title, instructions, nominal_local_at, scheduled_at,
+         display_local_at, organization_timezone, status, can_act]
+      properties:
+        occurrence_id: { type: string, format: uuid }
+        lineage_id: { type: string, format: uuid }
+        series_id: { type: string, format: uuid }
+        occurrence_index: { type: integer, minimum: 0 }
+        version: { type: integer, minimum: 0 }
+        is_virtual: { type: boolean }
+        animal: { $ref: '#/components/schemas/AnimalSummary' }
+        reminder_type: { $ref: '#/components/schemas/ReminderType' }
+        title: { type: string }
+        instructions: { type: string }
+        nominal_local_at: { type: string }
+        scheduled_at: { type: string, format: date-time }
+        display_local_at: { type: string }
+        organization_timezone: { type: string }
+        assignee: { oneOf: [{ $ref: '#/components/schemas/ActorSummary' }, { type: 'null' }] }
+        status: { $ref: '#/components/schemas/OccurrenceStatus' }
+        bucket: { type: [string, 'null'], enum: [today_pending, overdue, today_resolved, next_seven_days, null] }
+        can_act: { type: boolean }
+        actual_completed_at: { type: [string, 'null'], format: date-time }
+        recorded_at: { type: [string, 'null'], format: date-time }
+        last_action_at: { type: [string, 'null'], format: date-time }
+        last_actor: { oneOf: [{ $ref: '#/components/schemas/ActorSummary' }, { type: 'null' }] }
+    OccurrenceEditRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, edit_scope, reason]
+      properties:
+        expected_version: { type: integer, minimum: 0 }
+        edit_scope: { type: string, enum: [this_occurrence, this_and_future] }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        scheduled_local_date: { type: string, format: date }
+        scheduled_local_time: { type: string, format: time }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        instructions: { type: string, maxLength: 5000 }
+        assignee_membership_id: { type: [string, 'null'], format: uuid }
+        recurrence: { oneOf: [{ $ref: '#/components/schemas/RecurrenceRule' }, { type: 'null' }] }
+    OccurrenceActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, expected_version]
+      properties:
+        action: { type: string, enum: [complete, skip, reschedule, cancel] }
+        expected_version: { type: integer, minimum: 0 }
+        actual_completed_at:
+          type: [string, 'null']
+          format: date-time
+          description: Optional confirmed execution time for complete; defaults to server recorded time.
+        result_note: { type: string, maxLength: 5000 }
+        reason: { type: string, maxLength: 2000 }
+        new_local_date: { type: string, format: date }
+        new_local_time: { type: string, format: time }
+      description: reason is required for skip/reschedule/cancel; new local date/time are required for reschedule; actual_completed_at is accepted only for complete and may not be later than server recorded_at plus five minutes.
+    AssignedOccurrenceActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, expected_version]
+      properties:
+        action: { type: string, enum: [complete, skip] }
+        expected_version: { type: integer, minimum: 0 }
+        actual_completed_at:
+          type: [string, 'null']
+          format: date-time
+          description: Optional confirmed execution time for complete; defaults to server recorded time.
+        result_note: { type: string, maxLength: 5000 }
+        reason: { type: string, maxLength: 2000 }
+      description: reason is required for skip; actual_completed_at is accepted only for complete and may not be later than server recorded_at plus five minutes.
+    OccurrenceMutationResult:
+      type: object
+      required: [occurrence, action_id, action_type, acted_at, actor]
+      properties:
+        occurrence: { $ref: '#/components/schemas/CareOccurrence' }
+        action_id: { type: string, format: uuid }
+        action_type: { type: string }
+        acted_at: { type: string, format: date-time }
+        actor: { $ref: '#/components/schemas/ActorSummary' }
+        replacement_series: { oneOf: [{ $ref: '#/components/schemas/CareReminderSeries' }, { type: 'null' }] }
+    AgendaBucket:
+      type: object
+      required: [items, total_count]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CareOccurrence' }
+        total_count: { type: integer, minimum: 0 }
+        next_cursor: { type: [string, 'null'] }
+    CareAgenda:
+      type: object
+      required:
+        [local_today, organization_timezone, timezone_version, filters, today_pending,
+         overdue, today_resolved, next_seven_days]
+      properties:
+        local_today: { type: string, format: date }
+        organization_timezone: { type: string }
+        timezone_version: { type: integer, minimum: 1 }
+        filters: { type: object, additionalProperties: true }
+        today_pending: { $ref: '#/components/schemas/AgendaBucket' }
+        overdue: { $ref: '#/components/schemas/AgendaBucket' }
+        today_resolved: { $ref: '#/components/schemas/AgendaBucket' }
+        next_seven_days: { $ref: '#/components/schemas/AgendaBucket' }
+    CalendarDay:
+      type: object
+      required: [local_date, items]
+      properties:
+        local_date: { type: string, format: date }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CareOccurrence' }
+    CareCalendar:
+      type: object
+      required: [organization_timezone, timezone_version, date_from, date_to, days, total_count]
+      properties:
+        organization_timezone: { type: string }
+        timezone_version: { type: integer, minimum: 1 }
+        date_from: { type: string, format: date }
+        date_to: { type: string, format: date }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/CalendarDay' }
+        total_count: { type: integer, minimum: 0 }
+        next_cursor: { type: [string, 'null'] }
+    AssignedCareItem:
+      type: object
+      required: [occurrence_id, version, status, animal, reminder_type, title, instructions, display_local_at, can_complete, can_skip]
+      properties:
+        occurrence_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 0 }
+        status: { $ref: '#/components/schemas/OccurrenceStatus' }
+        animal: { $ref: '#/components/schemas/AnimalSummary' }
+        reminder_type: { $ref: '#/components/schemas/ReminderType' }
+        title: { type: string }
+        instructions: { type: string }
+        display_local_at: { type: string }
+        can_complete: { type: boolean }
+        can_skip: { type: boolean }
+    TimelineEvent:
+      type: object
+      required: [id, kind, occurrence, happened_at, display_local_at, title]
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum: [care_report, medical_record, reminder_completed, reminder_skipped, reminder_rescheduled, reminder_cancelled]
+        occurrence: { type: string, const: actual }
+        happened_at: { type: string, format: date-time }
+        display_local_at: { type: string }
+        title: { type: string }
+        summary: { type: [string, 'null'] }
+        actor: { oneOf: [{ $ref: '#/components/schemas/ActorSummary' }, { type: 'null' }] }
+    TimelineScheduledItem:
+      type: object
+      required: [id, kind, occurrence, scheduled_at, display_local_at, status, title]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, const: care_reminder }
+        occurrence: { type: string, const: scheduled }
+        scheduled_at: { type: string, format: date-time }
+        display_local_at: { type: string }
+        status: { type: string, enum: [pending, overdue] }
+        title: { type: string }
+    TimelineDay:
+      type: object
+      required: [date, reports, has_report, report_count, has_activity, event_count, events, scheduled]
+      properties:
+        date: { type: string, format: date }
+        reports:
+          type: array
+          items: { type: object, additionalProperties: true }
+        has_report: { type: boolean }
+        report_count: { type: integer, minimum: 0 }
+        has_activity: { type: boolean }
+        event_count: { type: integer, minimum: 0 }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/TimelineEvent' }
+        scheduled:
+          type: array
+          items: { $ref: '#/components/schemas/TimelineScheduledItem' }
+    AnimalTimeline:
+      type: object
+      required: [animal_id, organization_timezone, days, open_reminders]
+      properties:
+        animal_id: { type: string, format: uuid }
+        organization_timezone: { type: string }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/TimelineDay' }
+        open_reminders:
+          type: array
+          items: { $ref: '#/components/schemas/CareOccurrence' }
+    MedicalCareCapabilitySummary:
+      type: object
+      required: [can_view_medical_care, can_manage_medical_records, can_manage_series, can_process_occurrences]
+      properties:
+        can_view_medical_care: { type: boolean }
+        can_manage_medical_records: { type: boolean }
+        can_manage_series: { type: boolean }
+        can_process_occurrences: { type: boolean }
+    OrganizationMedicalSettings:
+      type: object
+      required: [timezone, timezone_version]
+      properties:
+        timezone: { type: string, examples: [Asia/Taipei] }
+        timezone_version: { type: integer, minimum: 1 }
+    MembershipMedicalCareAccess:
+      type: object
+      required: [membership_id, medical_care_access]
+      properties:
+        membership_id: { type: string, format: uuid }
+        medical_care_access: { type: boolean }
