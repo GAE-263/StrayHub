@@ -805,7 +805,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["updateManagementAnimalStatus"];
         trace?: never;
     };
     "/v1/management/reports": {
@@ -1253,6 +1253,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/management/animals/{animalId}/medical-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMedicalRecords"];
+        put?: never;
+        post: operations["createMedicalRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/medical-records/{recordId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMedicalRecord"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateMedicalRecord"];
+        trace?: never;
+    };
+    "/v1/management/medical-records/{recordId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archiveMedicalRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/animals/{animalId}/care-reminder-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createCareReminderSeries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/care-reminder-series/{seriesId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCareReminderSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/care-reminder-series/{seriesId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["stopCareReminderSeries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/care-reminder-occurrences/{occurrenceId}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["actOnCareReminderOccurrence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/care-reminder-occurrences/{occurrenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["editCareReminderOccurrence"];
+        trace?: never;
+    };
+    "/v1/management/care-agenda": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCareAgenda"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/care-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCareCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/assigned-care-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMyAssignedCareReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/assigned-care-reminders/{occurrenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMyAssignedCareReminder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/assigned-care-reminders/{occurrenceId}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["actOnMyAssignedCareReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1294,6 +1502,14 @@ export interface components {
             page: number;
             page_size: number;
             total: number;
+        };
+        AnimalStatusUpdateRequest: {
+            status: string;
+            reason: string;
+        };
+        AnimalStatusUpdateResponse: {
+            animal: components["schemas"]["ManagementAnimal"];
+            suspended_series_count: number;
         };
         ManagementReport: {
             /** Format: uuid */
@@ -1563,6 +1779,9 @@ export interface components {
             name: string;
             /** @enum {string} */
             status: "pending_setup" | "active" | "suspended";
+            /** @example Asia/Taipei */
+            timezone: string;
+            timezone_version: number;
         };
         OrganizationCreateRequest: {
             code: string;
@@ -1588,6 +1807,7 @@ export interface components {
             contact?: string;
             /** @enum {string} */
             status?: "pending_setup" | "active" | "suspended";
+            timezone?: string;
         };
         OrganizationListResponse: {
             items: components["schemas"]["Organization"][];
@@ -1609,6 +1829,8 @@ export interface components {
             expires_at?: string | null;
             /** @default 1 */
             access_version: number;
+            /** @default false */
+            medical_care_access: boolean;
         };
         MembershipCreateRequest: {
             /** Format: uuid */
@@ -1621,6 +1843,7 @@ export interface components {
             role?: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
             /** @enum {string} */
             status?: "invited" | "active" | "disabled";
+            medical_care_access?: boolean;
         };
         MembershipListResponse: {
             items: components["schemas"]["Membership"][];
@@ -2310,6 +2533,219 @@ export interface components {
             result: "requeued" | "conflict" | "failed";
             error_code?: string | null;
         };
+        /** @enum {string} */
+        MedicalRecordType: "visit" | "medication" | "vaccination" | "examination" | "weight" | "surgery" | "other";
+        MedicalRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            animal_id: string;
+            /** Format: date-time */
+            occurred_at: string;
+            occurred_timezone: string;
+            record_type: components["schemas"]["MedicalRecordType"];
+            title: string;
+            content: string;
+            clinic?: string | null;
+            veterinarian?: string | null;
+            weight_kg?: number | null;
+            /** @enum {string} */
+            status: "active" | "archived";
+            version: number;
+            /** Format: uuid */
+            created_by_user_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            updated_by_user_id: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+            archive_reason?: string | null;
+            media_ids: string[];
+        };
+        MedicalRecordCreate: {
+            /** Format: date-time */
+            occurred_at: string;
+            record_type: components["schemas"]["MedicalRecordType"];
+            title: string;
+            content: string;
+            clinic?: string | null;
+            veterinarian?: string | null;
+            weight_kg?: number | null;
+            media_ids?: string[];
+        };
+        MedicalRecordUpdate: components["schemas"]["MedicalRecordCreate"] & {
+            expected_version: number;
+            reason: string;
+        };
+        MedicalRecordArchive: {
+            expected_version: number;
+            reason: string;
+        };
+        MedicalRecordPage: {
+            items: components["schemas"]["MedicalRecord"][];
+            next_cursor?: string | null;
+        };
+        /** @enum {string} */
+        ReminderType: "medication" | "follow_up" | "weight" | "vaccination" | "examination" | "other";
+        CareReminderSeriesCreate: {
+            reminder_type: components["schemas"]["ReminderType"];
+            title: string;
+            instructions?: string;
+            /** Format: date-time */
+            first_execution_at: string;
+            /** Format: uuid */
+            assignee_membership_id?: string | null;
+            /** @enum {string} */
+            frequency: "none" | "daily" | "weekly" | "monthly" | "yearly";
+            interval: number;
+            /** Format: date */
+            end_local_date?: string | null;
+        };
+        CareReminderSeries: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            lineage_id: string;
+            /** Format: uuid */
+            animal_id: string;
+            reminder_type: components["schemas"]["ReminderType"];
+            title: string;
+            instructions: string;
+            /** Format: uuid */
+            assignee_membership_id?: string | null;
+            /** Format: date */
+            anchor_local_date: string;
+            /** Format: time */
+            anchor_local_time: string;
+            /** @enum {string} */
+            frequency: "none" | "daily" | "weekly" | "monthly" | "yearly";
+            interval: number;
+            /** Format: date */
+            end_local_date?: string | null;
+            /** @enum {string} */
+            status: "active" | "suspended" | "stopped";
+            version: number;
+        };
+        ReminderStop: {
+            expected_version: number;
+            reason: string;
+        };
+        OccurrenceAction: {
+            /** @enum {string} */
+            action: "completed" | "skipped" | "cancelled" | "rescheduled";
+            expected_version: number;
+            reason?: string | null;
+            result_note?: string | null;
+            /** Format: date-time */
+            scheduled_at?: string | null;
+            /** Format: date-time */
+            actual_completed_at?: string | null;
+        };
+        OccurrenceEdit: {
+            /** @enum {string} */
+            scope: "this" | "this_and_future";
+            expected_version: number;
+            /** Format: date-time */
+            scheduled_at?: string | null;
+            title?: string | null;
+            instructions?: string | null;
+            reason: string;
+        };
+        OccurrenceMutation: {
+            /** Format: uuid */
+            action_id: string;
+            /** @enum {string} */
+            action_type: "completed" | "skipped" | "cancelled" | "rescheduled";
+            /** Format: date-time */
+            acted_at: string;
+            /** Format: uuid */
+            actor_user_id: string;
+            /** Format: uuid */
+            occurrence_id: string;
+            /** @enum {string} */
+            status: "pending" | "completed" | "skipped" | "cancelled";
+            version: number;
+            /** Format: date-time */
+            scheduled_at: string;
+            /** Format: date-time */
+            recorded_at: string | null;
+            /** Format: date-time */
+            actual_completed_at: string | null;
+        };
+        CareAgenda: {
+            timezone: string;
+            timezone_version: number;
+            /** Format: date */
+            local_today: string;
+            buckets: {
+                [key: string]: {
+                    [key: string]: unknown;
+                }[];
+            };
+            totals: {
+                [key: string]: number;
+            };
+            pages: {
+                [key: string]: {
+                    items: {
+                        [key: string]: unknown;
+                    }[];
+                    total_count: number;
+                    next_cursor: string | null;
+                };
+            };
+        };
+        AssignedCareAnimal: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            shelter_number: string | null;
+            /** Format: uri */
+            photo_url: string | null;
+        };
+        AssignedCareItem: {
+            /** Format: uuid */
+            occurrence_id: string;
+            version: number;
+            /** @enum {string} */
+            status: "pending" | "completed" | "skipped" | "cancelled";
+            animal: components["schemas"]["AssignedCareAnimal"];
+            reminder_type: components["schemas"]["ReminderType"];
+            title: string;
+            instructions: string;
+            display_local_at: string;
+            can_complete: boolean;
+            can_skip: boolean;
+        };
+        AssignedCareList: {
+            items: components["schemas"]["AssignedCareItem"][];
+            next_cursor: string | null;
+        };
+        AssignedCareAction: {
+            /** @enum {string} */
+            action: "complete" | "skip";
+            expected_version: number;
+            /** Format: date-time */
+            actual_completed_at?: string | null;
+            result_note?: string | null;
+            reason?: string | null;
+        };
+        AssignedCareMutation: {
+            occurrence: components["schemas"]["AssignedCareItem"];
+            /** Format: uuid */
+            action_id: string;
+            /** @enum {string} */
+            action_type: "completed" | "skipped";
+            /** Format: date-time */
+            acted_at: string;
+            /** Format: date-time */
+            recorded_at: string | null;
+            /** Format: date-time */
+            actual_completed_at: string | null;
+        };
     };
     responses: {
         /** @description Webhook 或 Request 格式錯誤 */
@@ -2425,6 +2861,9 @@ export interface components {
         OrganizationId: string;
         MembershipId: string;
         AnimalId: string;
+        RecordId: string;
+        SeriesId: string;
+        OccurrenceId: string;
         DraftId: string;
         MediaId: string;
         ReportId: string;
@@ -3869,6 +4308,36 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    updateManagementAnimalStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimalStatusUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 動物狀態與提醒暫停結果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnimalStatusUpdateResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     listManagementReports: {
         parameters: {
             query?: {
@@ -4680,6 +5149,397 @@ export interface operations {
             403: components["responses"]["ManagementDenied"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    listMedicalRecords: {
+        parameters: {
+            query?: {
+                occurred_from?: string;
+                occurred_to?: string;
+                record_type?: components["schemas"]["MedicalRecordType"];
+                search?: string;
+                include_archived?: boolean;
+            };
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 醫療歷史 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicalRecordPage"];
+                };
+            };
+        };
+    };
+    createMedicalRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedicalRecordCreate"];
+            };
+        };
+        responses: {
+            /** @description 建立醫療歷史 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicalRecord"];
+                };
+            };
+        };
+    };
+    getMedicalRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordId: components["parameters"]["RecordId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 醫療紀錄 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicalRecord"];
+                };
+            };
+        };
+    };
+    updateMedicalRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordId: components["parameters"]["RecordId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedicalRecordUpdate"];
+            };
+        };
+        responses: {
+            /** @description 更新醫療紀錄 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicalRecord"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    archiveMedicalRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordId: components["parameters"]["RecordId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedicalRecordArchive"];
+            };
+        };
+        responses: {
+            /** @description 封存醫療紀錄 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedicalRecord"];
+                };
+            };
+        };
+    };
+    createCareReminderSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareReminderSeriesCreate"];
+            };
+        };
+        responses: {
+            /** @description 建立照護提醒 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareReminderSeries"];
+                };
+            };
+        };
+    };
+    getCareReminderSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seriesId: components["parameters"]["SeriesId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 照護提醒 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareReminderSeries"];
+                };
+            };
+        };
+    };
+    stopCareReminderSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seriesId: components["parameters"]["SeriesId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderStop"];
+            };
+        };
+        responses: {
+            /** @description 停止提醒 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareReminderSeries"];
+                };
+            };
+        };
+    };
+    actOnCareReminderOccurrence: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                occurrenceId: components["parameters"]["OccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OccurrenceAction"];
+            };
+        };
+        responses: {
+            /** @description 處理提醒 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OccurrenceMutation"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    editCareReminderOccurrence: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                occurrenceId: components["parameters"]["OccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OccurrenceEdit"];
+            };
+        };
+        responses: {
+            /** @description 修改單次提醒 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OccurrenceMutation"];
+                };
+            };
+        };
+    };
+    getCareAgenda: {
+        parameters: {
+            query?: {
+                date?: string;
+                animal_id?: string;
+                reminder_type?: string;
+                assignee_membership_id?: string;
+                status?: string;
+                page_size?: number;
+                today_pending_cursor?: number;
+                overdue_cursor?: number;
+                today_resolved_cursor?: number;
+                next_seven_days_cursor?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 今日待辦與逾期 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareAgenda"];
+                };
+            };
+        };
+    };
+    getCareCalendar: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 照護行事曆 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareAgenda"];
+                };
+            };
+        };
+    };
+    listMyAssignedCareReminders: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人被指派事項的最小資料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignedCareList"];
+                };
+            };
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    getMyAssignedCareReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrenceId: components["parameters"]["OccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人被指派單次事項的最小資料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignedCareItem"];
+                };
+            };
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    actOnMyAssignedCareReminder: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                occurrenceId: components["parameters"]["OccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignedCareAction"];
+            };
+        };
+        responses: {
+            /** @description 志工完成或略過本人指派事項 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignedCareMutation"];
+                };
+            };
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
 }

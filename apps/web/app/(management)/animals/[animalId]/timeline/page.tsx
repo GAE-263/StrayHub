@@ -13,6 +13,7 @@ import {
 } from "../../../../../features/animal-timeline/timelineMapping";
 import { Breadcrumbs } from "../../../../../components/management/Breadcrumbs";
 import { buildTimelineQuery } from "../../../management-query";
+import { MedicalHistoryPanel } from "../../../../../features/medical-care/MedicalHistoryPanel";
 
 type Props = { params: Promise<{ animalId: string }> };
 
@@ -90,6 +91,7 @@ export default function AnimalTimelinePage({ params }: Props) {
         }}
       />
       <AnimalTimeline days={days} loading={loading} error={error} />
+      <MedicalHistoryPanel animalId={animalId} />
     </main>
   );
 }

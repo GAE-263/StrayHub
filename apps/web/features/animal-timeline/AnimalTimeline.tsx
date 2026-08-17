@@ -7,6 +7,7 @@ import {
   ErrorState,
   LoadingState,
 } from "../../components/management/StateViews";
+import { TimelineDaySection } from "./TimelineDaySection";
 
 type ObservationSnapshot = {
   code?: string;
@@ -27,6 +28,20 @@ export type TimelineDay = {
     mediaIds?: string[];
     aiJobStatus?: string;
     status?: string;
+  }>;
+  events?: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    summary?: string | null;
+    happenedAt?: string;
+    occurrence?: "actual" | "scheduled";
+  }>;
+  scheduled?: Array<{
+    id: string;
+    title: string;
+    status?: string;
+    scheduledAt?: string;
   }>;
 };
 
@@ -85,61 +100,64 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
   return (
     <ol aria-label="動物近 14 天歷程">
       {days.map((day) => (
-        <li key={day.date}>
-          <h3>{day.date}</h3>
-          {day.hasReport ? (
-            <button
-              className="ui-button ui-button-ghost"
-              type="button"
-              aria-expanded={expandedDate === day.date}
-              onClick={() =>
-                setExpandedDate((current) =>
-                  current === day.date ? null : day.date,
-                )
-              }
-            >
-              有回報：{day.reportCount} 筆
-            </button>
-          ) : (
-            <p>當日無回報</p>
-          )}
-          {expandedDate === day.date &&
-            day.reports?.map((report) => {
-              const entries = observationEntries(
-                report.observations,
-                report.observationSnapshots,
-              );
-              return (
-                <article
-                  className="ui-card timeline-report"
-                  key={report.id}
-                  aria-label={`回報 ${report.id}`}
-                >
-                  <p>
-                    回報時間：{report.submittedAt ?? "未提供"}
-                    {report.volunteerUserId
-                      ? `；回報者：${report.volunteerUserId}`
-                      : ""}
-                  </p>
-                  <p>心得：{report.note ?? "沒有心得"}</p>
-                  <p>結構化觀察：{entries.length} 項</p>
-                  {entries.length > 0 ? (
-                    <dl aria-label="結構化觀察答案" className="detail-list">
-                      {entries.map((entry) => (
-                        <div key={entry.key}>
-                          <dt>{entry.label}</dt>
-                          <dd>{entry.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                  <p>照片：{report.mediaIds?.length ?? 0} 張</p>
-                  <p>AI 處理：{statusSummary(report.aiJobStatus)}</p>
-                  <p>人工資料狀態：{statusSummary(report.status)}</p>
-                </article>
-              );
-            })}
-        </li>
+        <TimelineDaySection
+          key={day.date}
+          date={day.date}
+          hasReport={day.hasReport}
+          reportCount={day.reportCount}
+          events={[
+            ...(day.scheduled ?? []).map((item) => ({
+              ...item,
+              kind: "care_reminder",
+              occurrence: "scheduled" as const,
+            })),
+            ...(day.events ?? []).map((event) => ({
+              ...event,
+              occurrence: "actual" as const,
+            })),
+          ]}
+          reportsExpanded={expandedDate === day.date}
+          onToggleReports={() =>
+            setExpandedDate((current) =>
+              current === day.date ? null : day.date,
+            )
+          }
+          reports={day.reports?.map((report) => {
+            const entries = observationEntries(
+              report.observations,
+              report.observationSnapshots,
+            );
+            return (
+              <article
+                className="ui-card timeline-report"
+                key={report.id}
+                aria-label={`回報 ${report.id}`}
+              >
+                <p>
+                  回報時間：{report.submittedAt ?? "未提供"}
+                  {report.volunteerUserId
+                    ? `；回報者：${report.volunteerUserId}`
+                    : ""}
+                </p>
+                <p>心得：{report.note ?? "沒有心得"}</p>
+                <p>結構化觀察：{entries.length} 項</p>
+                {entries.length > 0 ? (
+                  <dl aria-label="結構化觀察答案" className="detail-list">
+                    {entries.map((entry) => (
+                      <div key={entry.key}>
+                        <dt>{entry.label}</dt>
+                        <dd>{entry.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                <p>照片：{report.mediaIds?.length ?? 0} 張</p>
+                <p>AI 處理：{statusSummary(report.aiJobStatus)}</p>
+                <p>人工資料狀態：{statusSummary(report.status)}</p>
+              </article>
+            );
+          })}
+        />
       ))}
     </ol>
   );

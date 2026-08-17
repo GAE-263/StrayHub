@@ -130,6 +130,20 @@ test("管理核心搜尋、篩選、detail 與 Timeline 展開可用鍵盤完成
   await expect(page.getByText("鍵盤展開測試")).toBeVisible();
 });
 
+test("照護行事曆日期與篩選可由鍵盤操作", async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("access_token", "test-access");
+    sessionStorage.setItem("active_organization_id", "org-a");
+  });
+  await mockManagementApi(page);
+  await page.goto("/care-calendar");
+  await expect(page.getByRole("heading", { name: "照護行事曆" })).toBeVisible();
+  const date = page.getByLabel("日期");
+  await date.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(date).toBeFocused();
+});
+
 test("Sheet 的 Escape、取消與 focus restore 可用鍵盤完成", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.addInitScript(() =>

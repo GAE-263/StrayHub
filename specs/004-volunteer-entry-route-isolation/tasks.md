@@ -1,314 +1,273 @@
-# Tasks：志工角色導向入口與管理路由隔離
+# Tasks: 志工角色導向入口與管理路由隔離
 
-**Input**：`/specs/004-volunteer-entry-route-isolation/` 下的 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/route-access.md`、`quickstart.md`
+**Input**: Design documents from `/specs/004-volunteer-entry-route-isolation/`
 
-**Tests**：本功能規格明確要求角色矩陣、request ordering、active draft、可及性、視覺與後端授權 regression，因此每個 user story 均採測試先行；先確認新增測試在實作前失敗，再完成實作。
+**Prerequisites**: `plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`
 
-**Organization**：任務依 user story 分階段，所有描述包含實際檔案路徑。`[P]` 只標示可在不同檔案、無未完成相依工作的情況下平行執行。
+**Implementation approach**: 先完成共用 auth／route foundation，再以 user story 為單位交付；每個 story 都有獨立測試與驗收矩陣。正式 LIFF 依賴已完成的 005 Membership／Grant／entry reference contract，但不在本功能重做其 lifecycle。
 
-## Format：`[ID] [P?] [Story] Description`
+## Phase 1: Setup（共享基礎設定）
 
-- **[P]**：可與同階段其他 `[P]` 任務平行執行
-- **[US1]…[US7]**：對應 `spec.md` 的 user story
-- Setup、Foundational、Polish 任務不加 user story label
+**目的**：準備 LIFF runtime dependency、canonical contract 與 P0 測試入口。
 
----
+- [ ] T001 [P] 在 `apps/web/package.json` 與 `apps/web/package-lock.json` 加入與鎖定 `@line/liff` dependency，保留既有 Next.js／React 版本相容性
+- [ ] T002 [P] 在 `apps/web/next.config.ts` 與 `infra/gcp-demo/terraform/cloud-run.tf` 對齊 server runtime `LIFF_ID` 注入，確保正式 LIFF ID 不需暴露為授權 secret
+- [ ] T003 在 `specs/001-volunteer-care-report/contracts/openapi.yaml` 更新 `LiffExchangeRequest` 為必填 `id_token` + `shelter_entry_reference`，並依 canonical workflow 重新生成 `packages/contracts/src/openapi.ts`
+- [ ] T004 [P] 在 `apps/web/package.json` 將 `e2e/liff-route-isolation.spec.ts` 納入 P0 browser、a11y 與必要的 visual test scripts
 
-## Phase 1：Setup（共用測試與證據入口）
+## Phase 2: Foundational（阻塞所有 user stories 的共用能力）
 
-**Purpose**：先固定既有基準、角色 fixture 與 P0 test command，避免實作後才補驗收入口。
+**目的**：建立 server-side entry/access primitive、前端 route decision 與不掛載 children 的 boundary；本階段完成前不得開始 user-story implementation。
 
-- [ ] T001 執行變更前 `npm --prefix apps/web run quality`、`npm --prefix apps/web run build` 與 `npm --prefix apps/web run test:e2e:p0:list`，將基準結果與既有失敗記錄在 `specs/004-volunteer-entry-route-isolation/quickstart.md`
-- [ ] T002 [P] 在 `apps/web/e2e/fixtures.ts` 建立四角色、有效／缺少／不一致 context、Session 401／5xx、current draft 與 management request recorder 的可組合 fixture 型別及 scenario builders
-- [ ] T003 [P] 在 `apps/web/package.json` 將 `e2e/role-route-isolation.spec.ts` 納入 `test:e2e:p0` 與 `test:e2e:p0:list`，並在 `apps/web/e2e/README.md` 說明本 suite 的 local-only P0 邊界
+- [ ] T005 在 `apps/web/lib/auth.ts` 與 `apps/web/lib/liff-session.ts` 建立 typed auth/context/recovery state、transient entry reference storage、session source 標記與 logout/terminal cleanup，明確禁止以 client cache 判定 role 或 Membership
+- [ ] T006 [P] 在 `apps/web/lib/route-access.ts` 與 `apps/web/lib/route-access.test.ts` 實作 `EffectiveRole`、management/volunteer area、context-required、redirect、recovery 與 finite-state decision matrix
+- [ ] T007 [P] 在 `services/api/app/infrastructure/line/entry_reference_adapter.py` 實作既有 `VolunteerEntryResolverPort` adapter，呼叫 005 fixed-purpose digest resolver 並在取得單一 organization 後立即套用 organization scope
+- [ ] T008 在 `services/api/app/persistence/repositories/authentication_repository.py` 增加 exact-organization effective Membership/Grant 查詢與 concurrency lock 支援，重用 005 的 active、valid_from、expires_at、Grant predicate，不建立新的授權規則
+- [ ] T009 [P] 在 `apps/web/components/auth/ProtectedRouteState.tsx` 建立 checking、redirecting、context-required、temporary-error、re-entry 與 safe status/alert 的繁中可及狀態元件
+- [ ] T010 在 `apps/web/components/auth/AuthenticatedRouteBoundary.tsx` 建立不掛載 children 的共用 profile/context loader，區分 local session、formal LIFF session、management allow 與 volunteer allow
+- [ ] T011 在 `apps/web/app/(management)/layout.tsx`、`apps/web/app/(management)/page.tsx` 與 `apps/web/app/page.tsx` 調整 root route composition，讓 `/` 與所有 management children 由同一 boundary 控制且 Dashboard 不提前掛載
+- [ ] T012 [P] 在 `tests/fixtures/volunteer_access.py` 擴充 ORG-A／ORG-B、matching/cross-tenant、pending/rejected/future/expired/revoked/active-unexpired access builders，供後續 server 與 e2e matrix 共用
 
-**Checkpoint**：測試資料可表達完整 P0 狀態，P0 指令已包含新 suite，且未新增 production dependency。
+**Checkpoint**：entry resolver、effective-access primitive、route decision、safe state 與 route boundary 可被獨立測試；尚未開放任何新的志工流程。
 
----
+## Phase 3: User Story 1－志工登入後直接開始回報（Priority: P0）🎯 MVP
 
-## Phase 2：Foundational（所有故事的阻斷前置）
+**Goal**：志工從共用 LIFF App 的收容所專屬入口完成無帳密 LINE 驗證、原子建立 Session/context，並直接進入 `/animal-confirmation`，只看到正確收容所資料。
 
-**Purpose**：建立單一角色推導、route decision、auth 型別與不掛載 children 的共用 boundary。
+**Independent Test**：使用受控 ORG-A／ORG-B LIFF entry 與對應 active-unexpired volunteer identity，再以 `local-volunteer-a/b` fixture 驗證無帳密、正確 shelter label、今日動物、cross-entry reject 與 management request count=0。
 
-**⚠️ CRITICAL**：本階段完成前不得開始 user story implementation。
+### Tests for User Story 1
 
-- [ ] T004 [P] 先在 `apps/web/lib/route-access.test.ts` 撰寫 `EffectiveRole`、management／volunteer policy、缺少 token、401、context mismatch、5xx 與 redirect-loop prevention 的失敗 decision matrix 測試
-- [ ] T005 在 `apps/web/lib/route-access.ts` 實作 `EffectiveRole`、`ProtectedRoutePolicy`、`RouteAccessDecision`、登入目的地與錯誤分類純函式，使 T004 通過且不得以 pathname 或 sessionStorage 提升角色
-- [ ] T006 [P] 在 `apps/web/lib/auth.ts` 補齊 profile、active context、membership、organization role 與 `AuthenticatedRouteContext` 共用型別及清除 auth cache helper，不修改既有 storage keys 或 HTTP contract
-- [ ] T007 先在 `apps/web/components/auth/AuthenticatedRouteBoundary.test.tsx` 撰寫 checking 時不掛載 children、profile/context 401 清除登入、context-required、retry、management volunteer redirect 與 management role allow 的失敗 component tests（依賴 T004–T006）
-- [ ] T008 在 `apps/web/components/auth/AuthenticatedRouteBoundary.tsx` 實作 profile + Active Shelter Context loader、有限狀態 render、`router.replace` 與經驗證 context provider，使 T007 通過且 redirect destination 相同時不重複導向
-- [ ] T009 [P] 先在 `apps/web/components/management/route-state.test.ts` 加入 checking、redirecting、session-expired、context-required、membership-mismatch 與 temporary-error 的繁中 copy／下一步／ARIA 語意測試
-- [ ] T010 在 `apps/web/components/management/route-state.ts` 與 `apps/web/components/management/StateViews.tsx` 實作 T009 所需的共用安全狀態文案與 status／alert 呈現，不包含受保護資料名稱、存在性或筆數
-
-**Checkpoint**：純 decision matrix 與 boundary component tests 通過；任一 protected child 都只能在 profile/context 驗證後掛載。
-
----
-
-## Phase 3：User Story 1－志工登入後直接開始回報（Priority：P0）🎯 MVP
-
-**Goal**：志工完成 local login 或既有受控 Session 建立後，在有效 Active Shelter Context 下直接進入 `/animal-confirmation`，且志工頁查詢不早於 route gate。
-
-**Independent Test**：分別以 `local-volunteer-a`、`local-volunteer-b` 登入或注入等價 Session，確認最終 URL 為 `/animal-confirmation`、動物確認功能可使用、首次畫面無 Management Shell，且 boundary 通過前沒有動物／draft request。
-
-### Tests for User Story 1（先寫並確認失敗）
-
-- [ ] T011 [P] [US1] 在 `apps/web/app/login/page.test.tsx` 新增單一與多 organization 志工登入目的地、context PUT 成功後才 redirect、context 失敗清除 auth，以及角色中立登入文案測試
-- [ ] T012 [P] [US1] 在 `apps/web/e2e/role-route-isolation.spec.ts` 新增 `local-volunteer-a`／`local-volunteer-b` 的 login destination、首次可見內容與零 Dashboard request 測試
-- [ ] T013 [P] [US1] 在 `apps/web/app/(volunteer)/animal-confirmation/page.test.tsx` 新增 boundary 未 allow 前不載入今日名單／QR／draft、allow 後保留既有動物確認能力的測試
+- [ ] T013 [P] [US1] 在 `tests/contract/test_authentication_contract.py`、`tests/contract/test_openapi_contract.py` 與 `tests/contract/test_generated_contract_types.py` 驗證 LIFF exchange request 欄位、security、canonical schema 與 generated type 無 drift
+- [ ] T014 [P] [US1] 在 `tests/integration/test_authentication_session.py` 建立 valid binding、active user/org、matching entry 與 active-unexpired Membership/Grant 的 exchange success integration test
+- [ ] T015 [P] [US1] 在 `tests/security/test_liff_exchange_authorization.py` 建立 malformed/revoked/cross-purpose entry、invalid token、missing binding、disabled user/org、pending/rejected/future/expired/revoked/missing Grant 與 cross-tenant denial matrix，並 assert partial Session/Refresh/context 為 0
+- [ ] T016 [P] [US1] 在 `tests/isolation/test_liff_entry_isolation.py` 驗證 ORG-A entry 不會解析或建立 ORG-B context，且相同 shelter number、animal id、query 與轉傳 URL 不會擴大租戶範圍
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] 在 `apps/web/app/login/page.tsx` 於 Active Shelter Context 建立成功後依選定 organization role 使用 `replace` 導向 `/animal-confirmation` 或 `/`，並將「管理入口／工作台」文案改為角色中立
-- [ ] T015 [US1] 新增 `apps/web/app/(volunteer)/layout.tsx` 並套用 `AuthenticatedRouteBoundary` 的 volunteer policy，Session/context 未通過時不得掛載 `/animal-confirmation` 或 `/care-report` children
+- [ ] T017 [US1] 在 `services/api/app/api/authentication.py` 擴充 `LiffExchangeRequest` 為 `id_token` + `shelter_entry_reference`，注入 entry resolver，維持未授權 endpoint 與既有 ErrorResponse contract
+- [ ] T018 [US1] 在 `services/api/app/application/authentication/session_service.py` 實作 raw LINE identity、entry organization、Binding、User、Organization、exact Membership/Grant lock 與 SessionRecord/RefreshTokenRecord 同 transaction exchange；任何失敗都 rollback 且不修改 005 access records
+- [ ] T019 [US1] 在 `services/api/app/api/authentication.py` 與 `services/api/app/application/authentication/session_service.py` 完成 exchange transaction boundary、commit/rollback 與安全錯誤 mapping，禁止回傳其他 organization、Membership、動物或草稿資訊
+- [ ] T020 [US1] 在 `apps/web/features/liff/LiffSessionProvider.tsx` 與 `apps/web/app/(volunteer-entry)/volunteer-entry/page.tsx` 實作 LIFF init/login/raw `getIDToken` bootstrap，只送 token + entry reference，成功後保存 Session/recovery hint 並 replace 到 `/animal-confirmation`
+- [ ] T021 [US1] 在 `apps/web/app/login/page.tsx`、`apps/web/lib/auth.ts` 與 `apps/web/app/(volunteer)/layout.tsx` 實作 local fixture role-directed destination、formal LIFF/session source 分流、server-confirmed shelter label 與 volunteer children mount gate
+- [ ] T022 [US1] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 與 `apps/web/app/(volunteer)/care-report/page.tsx` 加入目前 Active Shelter Context 收容所名稱，確保 context gate 通過前不發 animals、draft 或 report request
+- [ ] T023 [US1] 在 `apps/web/e2e/liff-route-isolation.spec.ts` 實作 US1 browser matrix：local volunteer destination、受控 LIFF bootstrap adapter、ORG-A/ORG-B label/data、no-password flow、cross-entry denial 與 management request count=0
 
-**Checkpoint**：US1 可獨立展示志工登入直達動物確認；這是入口 MVP，完整 management deep-link isolation 仍需 US3。
+**Checkpoint**：US1 可獨立 demo／驗收；志工可直接開始回報，且後端 transaction 與前端入口均已證明租戶隔離。
 
----
+## Phase 4: User Story 2－志工安全恢復 active draft（Priority: P0）
 
-## Phase 4：User Story 2－志工安全恢復 active draft（Priority：P0）
+**Goal**：context 驗證後提供單一可恢復草稿的「繼續回報／稍後處理」，不載入過期、跨收容所或不可回報草稿。
 
-**Goal**：只在 current draft 為 active、未過期、同 context 且動物可回報時提供「繼續回報／稍後處理」，其他狀態不揭露草稿內容。
+**Independent Test**：以 no draft、active-unexpired/same-context、expired/non-active、cross-context、animal unavailable 與 save failure fixtures 驗證 prompt、資料遮蔽、continue/later 與原始輸入保留。
 
-**Independent Test**：以無 draft、可恢復 draft、過期／非 active、跨 context、動物不可回報與保存失敗 fixture 進入 `/animal-confirmation`，逐一驗證 continue／later／unavailable 與原始輸入保留。
+### Tests for User Story 2
 
-### Tests for User Story 2（先寫並確認失敗）
-
-- [ ] T016 [P] [US2] 在 `apps/web/features/line-bot/ActiveDraftPrompt.test.tsx` 撰寫 available／unavailable／none、繁中進度、鍵盤 focus、continue 與 later 不修改 draft 的失敗 component tests
-- [ ] T017 [P] [US2] 在 `apps/web/app/(volunteer)/animal-confirmation/page.test.tsx` 新增 `/v1/animals` 與 `/v1/line/care-report/drafts/current` join、過期／跨 context／不可回報動物不揭露內容、retry 的失敗整合測試
-- [ ] T018 [P] [US2] 在 `apps/web/app/(volunteer)/care-report/page.test.tsx` 新增 current draft 重新驗證、保存失敗保留答案與心得、401 不導向管理頁的 regression tests
-- [ ] T019 [P] [US2] 在 `apps/web/e2e/role-route-isolation.spec.ts` 新增無 draft、單一可恢復 draft、稍後處理、過期／不可恢復與 save failure 的 browser tests
+- [ ] T024 [P] [US2] 在 `apps/web/app/(volunteer)/animal-confirmation/page.test.tsx` 與 `apps/web/app/(volunteer)/care-report/page.test.tsx` 覆蓋 no draft、resumable draft、unavailable draft、continue/later、context mismatch 與 save failure 行為
+- [ ] T025 [P] [US2] 在 `apps/web/e2e/liff-route-isolation.spec.ts` 增加 current draft network/UI assertions，確認 boundary 通過前不讀 draft、不可恢復內容不曝光且 later 不產生 Draft mutation
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] 新增 `apps/web/features/line-bot/ActiveDraftPrompt.tsx`，顯示授權後的動物名稱／收容編號／繁中進度與「繼續回報」「稍後處理」「重試」操作
-- [ ] T021 [US2] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 於 boundary allow 後並行取得今日動物與 current draft，建立 `ActiveDraftResumeView` 並只將 available draft 傳入 T020
-- [ ] T022 [US2] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 實作 continue 前往 `/care-report`、later 僅關閉本次提示、unavailable 不顯示答案／跨租戶動物資訊的行為
-- [ ] T023 [US2] 在 `apps/web/app/(volunteer)/care-report/page.tsx` 將 current draft 取得與保存改用既有 auth helper，保留完整答案、長文字、保存失敗 retry 與 401 Session 終止行為，不改變後端 draft contract
+- [ ] T026 [US2] 在 `apps/web/features/line-bot/ActiveDraftPrompt.tsx` 建立 `ActiveDraftResumeView` 的繁中、keyboard、screen-reader 與 360px prompt，提供「繼續回報」「稍後處理」「無法恢復」狀態
+- [ ] T027 [US2] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 組合既有今日 animals 與 `/v1/line/care-report/drafts/current`，只在 active、未過期、same context 且 animal 可回報時顯示 prompt
+- [ ] T028 [US2] 在 `apps/web/app/(volunteer)/care-report/page.tsx` 接入 continue 後的 server-side current draft re-read，保存失敗時保留原始輸入並禁止自動重播非冪等 mutation
 
-**Checkpoint**：US2 在每個 fixture 下都有有限下一步；P0 仍只處理每位志工／context 一筆 current draft。
+**Checkpoint**：US1 與 US2 均可獨立驗收；志工可安全繼續或稍後處理草稿，且不跨 tenant。
 
----
+## Phase 5: User Story 3－志工直接開啟管理網址時不會看到管理資料（Priority: P0）
 
-## Phase 5：User Story 3－志工直接開啟管理網址時不會看到管理資料（Priority：P0）
+**Goal**：志工對 `/`、所有既有 management route、deep link、query、reload、back 或未知 management child 都不會看到管理內容，也不會發出管理 page request。
 
-**Goal**：所有 P0 management routes 在管理 child 掛載前完成角色判斷；志工只看到安全 status 並被導回 `/animal-confirmation`，management request count 為 0。
+**Independent Test**：以 `local-volunteer-a/b` 逐一開啟 route matrix，觀察 first visible state、navigation、network request、reload/back 與 management shell mount 結果。
 
-**Independent Test**：以志工 Session 逐一開啟 root、動物、timeline、回報、AI、settings 與 shelters 的 concrete／dynamic／query／trailing-slash deep link，驗證首次畫面、request recorder、reload 與 back。
+### Tests for User Story 3
 
-### Tests for User Story 3（先寫並確認失敗）
-
-- [ ] T024 [P] [US3] 在 `apps/web/components/auth/AuthenticatedRouteBoundary.test.tsx` 新增志工 management policy 不掛載 child、不載入 organizations、只執行一次 `replace('/animal-confirmation')` 的測試
-- [ ] T025 [P] [US3] 在 `apps/web/components/management/management-shell.test.tsx` 新增 boundary allow 前 Shell／Sidebar／Breadcrumb 不掛載，allow 後才取得 organizations 與掛載 child 的 request-ordering 測試
-- [ ] T026 [P] [US3] 將 `apps/web/app/page.test.tsx` 遷移為 `apps/web/app/(management)/page.test.tsx` 並改寫 root composition 測試，要求 `/` 由 `(management)` layout gate 接管且 Dashboard effect 不會在志工 decision 前執行
-- [ ] T027 [P] [US3] 在 `apps/web/e2e/role-route-isolation.spec.ts` 建立全部 P0 management route pattern、dynamic id、query string、trailing slash、reload 與 browser back 矩陣，逐案 assert 管理內容不可見且 page-specific management request 為 0
+- [ ] T029 [P] [US3] 在 `apps/web/lib/route-access.test.ts` 與 `apps/web/components/auth/AuthenticatedRouteBoundary.test.tsx` 覆蓋全部 management area、dynamic/query/trailing-slash、role mismatch、checking 與 redirect decision
+- [ ] T030 [P] [US3] 在 `apps/web/e2e/liff-route-isolation.spec.ts` 建立 management deep-link matrix，assert Dashboard/organizations/page-specific management request count=0、first visible state 不含管理資料且無 redirect loop
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] 在 `apps/web/app/(management)/layout.tsx` 先套用 `AuthenticatedRouteBoundary` 的 management policy，再於 allow-management 後掛載 `ManagementLayout` 與 page children
-- [ ] T029 [US3] 新增 `apps/web/app/(management)/page.tsx` 接管 `/`，移除 `apps/web/app/page.tsx` 的舊 root composition，確保 Dashboard 與其他 management routes 共用同一 layout gate
-- [ ] T030 [US3] 將 `apps/web/app/management-home.tsx` 改成只渲染 Dashboard content，移除內層 `ManagementLayout`，使 Dashboard request 只能在 T028 allow 後開始
-- [ ] T031 [US3] 在 `apps/web/components/management/ManagementLayout.tsx` 消費 boundary 提供的已驗證 profile/context，將 `/v1/organizations` 延後到 allow-management 後並移除重複 profile/context 查詢
-- [ ] T032 [US3] 在 `apps/web/e2e/role-route-isolation.spec.ts` 增加首次可見 frame 與 network recorder 的最終 assertions，明確拒絕 Dashboard、Sidebar、Breadcrumb、metrics、筆數及 permission-denied 管理畫面 flash
+- [ ] T031 [US3] 在 `apps/web/components/management/ManagementLayout.tsx` 重排 request lifecycle：先 profile + Active Context、推導 role，再只對 management role 取得 organizations、掛載 Shell 與 page children
+- [ ] T032 [US3] 在 `apps/web/app/(management)/layout.tsx`、`apps/web/app/(management)/page.tsx` 與 `apps/web/app/page.tsx` 完成 `/` route group migration，移除 root 與 Dashboard 的重複 layout/guard composition
+- [ ] T033 [US3] 在 `apps/web/components/auth/ProtectedRouteState.tsx` 與 `apps/web/components/management/ManagementLayout.tsx` 確保 volunteer redirect 使用 replace、children 不掛載、管理 error view 不曝光 metrics/count/detail
 
-**Checkpoint**：US3 的 route matrix 全數導回志工入口，任何志工 management page-specific request 都是 0，back／reload 不可繞過 gate。
+**Checkpoint**：US3 的志工管理 route isolation 可獨立驗收，且不影響 management role 的既有 API 授權。
 
----
+## Phase 6: User Story 4－工作人員登入後維持管理首頁（Priority: P0）
 
-## Phase 6：User Story 4－工作人員登入後維持管理首頁（Priority：P0）
+**Goal**：STAFF 角色登入、reload、management deep link 與既有未授權頁面行為維持不變，不被導向 volunteer entry。
 
-**Goal**：`STAFF` 維持 `/`、Management Shell、Dashboard 與既有授權頁面，不被志工入口規則誤導向。
+**Independent Test**：以 `local-staff-a` 驗證 `/`、既有 Sidebar/management shell、reload、back、authorized route 與既有 403/denied behavior。
 
-**Independent Test**：以 `local-staff-a` 登入、reload `/`、開啟代表性 management deep link 並返回，確認 context、Shell 與既有 permission-denied 行為不變。
+### Tests for User Story 4
 
-### Tests for User Story 4（先寫並確認失敗）
-
-- [ ] T033 [P] [US4] 在 `apps/web/app/login/page.test.tsx` 新增 `STAFF` 單一／多 context 登入維持 `replace('/')` 的 regression tests
-- [ ] T034 [P] [US4] 在 `apps/web/e2e/login-home.spec.ts` 與 `apps/web/e2e/role-route-isolation.spec.ts` 新增 staff login、root reload、management deep link、back 與既有未授權提示 tests
+- [ ] T034 [P] [US4] 在 `apps/web/e2e/login-home.spec.ts` 與 `apps/web/e2e/management-shell.spec.ts` 增加 STAFF destination、reload、deep-link、Sidebar 與 management child regression assertions
 
 ### Implementation for User Story 4
 
-- [ ] T035 [US4] 在 `apps/web/app/management-home.tsx` 修正 route-group 重組後的 Dashboard loading／success／error lifecycle，使 staff 不產生重複 profile/context/Dashboard request
-- [ ] T036 [US4] 在 `apps/web/components/management/ManagementLayout.tsx` 保留 staff 的 Sidebar、Breadcrumb、logout 與目前 context 行為，且 context 未變時不觸發志工 redirect
+- [ ] T035 [US4] 在 `apps/web/components/management/ManagementLayout.tsx` 與 `apps/web/components/management/AppSidebar.tsx` 保留 STAFF 的既有 management shell、導航與 context label，僅套用新的 mount-before-check boundary
+- [ ] T036 [US4] 在 `apps/web/components/management/route-state.ts` 與 `apps/web/app/login/page.tsx` 對 STAFF 缺少單一管理權限時維持既有安全提示，不把 denial 轉成 volunteer access 或跨 tenant data
 
-**Checkpoint**：US4 的既有 staff login-home 與 management regression tests 全數通過。
+**Checkpoint**：US4 可單獨證明 route isolation 是雙向的，STAFF management workflow 無回歸。
 
----
+## Phase 7: User Story 5－管理者維持原本的管理流程與 context 選擇（Priority: P0）
 
-## Phase 7：User Story 5－管理者維持原本的管理流程與 context 選擇（Priority：P0）
+**Goal**：SHELTER_ADMIN 與 PLATFORM_ADMIN 維持 `/`、既有 context selector、租戶範圍與切換失敗時的舊 context 保留行為。
 
-**Goal**：`SHELTER_ADMIN` 與 `PLATFORM_ADMIN` 維持管理入口；平台管理員在 context 選擇成功前不掛載管理資料，切換失敗不混合租戶內容。
+**Independent Test**：使用 shelter admin/platform admin fixture 驗證 single/multiple context、成功切換、失敗重試、reload 與只顯示後端確認 context 的管理資料。
 
-**Independent Test**：以 shelter admin 與 platform admin 測試單一／多 context、初次選擇、切換成功、切換失敗、reload 與 deep link，確認只顯示目前已驗證 context 資料。
+### Tests for User Story 5
 
-### Tests for User Story 5（先寫並確認失敗）
-
-- [ ] T037 [P] [US5] 在 `apps/web/app/login/page.test.tsx` 新增 `SHELTER_ADMIN`／`PLATFORM_ADMIN` 目的地、多 context 未確認不 redirect、context PUT 失敗不掛載管理資料的 tests
-- [ ] T038 [P] [US5] 在 `apps/web/components/management/management-shell.test.tsx` 新增 context switch 成功後重新驗證、失敗保留舊 context 或安全 error、organizations 不混合的 tests
-- [ ] T039 [P] [US5] 在 `apps/web/e2e/role-route-isolation.spec.ts` 新增 shelter admin 與 platform admin 的 root、context selection、switch、reload 與 deep-link regression matrix
+- [ ] T037 [P] [US5] 在 `tests/integration/test_active_shelter_context.py` 與 `tests/security/test_request_context.py` 增加 context switch success/failure、old-context preservation、membership mismatch 與 cross-tenant denial assertions
+- [ ] T038 [P] [US5] 在 `apps/web/e2e/management-core.spec.ts` 與 `apps/web/e2e/liff-route-isolation.spec.ts` 增加 SHELTER_ADMIN/PLATFORM_ADMIN destination、multi-context selector、switch failure、reload 與 stale data assertions
 
 ### Implementation for User Story 5
 
-- [ ] T040 [US5] 在 `apps/web/app/login/page.tsx` 依選定 organization role 顯示正確的角色中立 context 確認文案，且 platform admin 只有在 Active Shelter Context PUT 成功後才前往 `/`
-- [ ] T041 [US5] 在 `apps/web/components/management/ManagementLayout.tsx` 實作 context switch 成功後重新載入已驗證情境、失敗時保留舊 context 或顯示安全 error，並避免新舊 organization data 同時可見
+- [ ] T039 [US5] 在 `apps/web/components/management/ManagementLayout.tsx` 完成 context switch 的 success-only view replacement，失敗時保留 server-confirmed old context/data、顯示錯誤並允許 retry，不混合新 context response
 
-**Checkpoint**：US5 的管理者入口與 context 切換可獨立驗收，沒有未選 context 或跨 organization 的管理資料 flash。
+**Checkpoint**：US4 與 US5 的 management regression 可獨立通過，且 platform context switch 不破壞 XI 多租戶原則。
 
----
+## Phase 8: User Story 6－共用 LINE／LIFF 與 local fixture 遵循一致的志工權限邊界（Priority: P0）
 
-## Phase 8：User Story 6－LINE／LIFF 與 local fixture 遵循一致的志工權限邊界（Priority：P0）
+**Goal**：同一 LINE OA/channel/Webhook/LIFF App 下的 ORG-A／ORG-B 專屬入口、local fixture 與 LINE Bot 具有一致的 context、Membership、route isolation 與 dog-first 邊界。
 
-**Goal**：credential login 與受控 LIFF exchange 後的等價 Session 共用同一 role/context decision；P0 不依賴真實 LINE deployment。
+**Independent Test**：local deterministic matrix 先重跑所有 entry/access/route cases，再用同一受控 LIFF App 的兩個入口與至少兩個 LINE identity 驗證正確 context、cross-entry denial、dog selection 與 Bot fallback。
 
-**Independent Test**：分別用 local volunteer login 與模擬既有 LIFF exchange 成功後的 Session 進入 root、志工 route 與 management deep link，確認 destination、draft 與 request isolation 結果相同。
+### Tests for User Story 6
 
-### Tests for User Story 6（先寫並確認失敗）
-
-- [ ] T042 [P] [US6] 在 `apps/web/lib/route-access.test.ts` 新增 credential login role 與 LIFF-established profile/context 對同一 effective role 產生相同 destination／route decision 的 source-agnostic tests
-- [ ] T043 [P] [US6] 在 `apps/web/e2e/role-route-isolation.spec.ts` 先撰寫受控 LIFF exchange 結果與 credential login 應得到相同志工入口、current draft 與 management request = 0 的失敗矩陣測試
+- [ ] T040 [P] [US6] 在 `tests/fixtures/volunteer_access.py`、`tests/contract/test_volunteer_access_contract.py` 與 `tests/security/test_volunteer_access_entry_reference.py` 補齊 shared-channel entry reference、purpose、rotation/revocation 與 raw token/reference 不落庫／不進 log assertions
+- [ ] T041 [P] [US6] 在 `tests/integration/test_line_webhook_session.py`、`tests/integration/test_line_postback_flow.py` 與 `tests/security/test_line_cross_tenant_postback.py` 驗證已確認 context 的 dog-first flow、未確認 context 的 LIFF fallback 與不以 dog name/shelter number 推測 tenant
+- [ ] T042 [P] [US6] 在 `apps/web/e2e/liff-route-isolation.spec.ts` 與 `apps/web/e2e/volunteer-access-approval.spec.ts` 建立 local fixture 與 shared LIFF adapter 的相同 route/access matrix，確認 pending/rejected/revoked/expired 不會載入 animals/draft
 
 ### Implementation for User Story 6
 
-- [ ] T044 [US6] 在 `apps/web/lib/route-access.ts` 與 `apps/web/app/login/page.tsx` 共用同一 role-to-destination function，讓 credential login 不建立與 boundary／LIFF Session 不同的角色規則
-- [ ] T045 [US6] 在 `apps/web/e2e/fixtures.ts` 實作 credential／controlled-LIFF `authSource` 的共用 authenticated Session setup，使 T043 通過且不模擬真實 LINE deployment 或新增 client-side 授權規則
+- [ ] T043 [US6] 在 `apps/web/e2e/fixtures.ts`、`apps/web/e2e/volunteer-access-fixtures.ts` 與 `tests/fixtures/volunteer_access.py` 對齊 local-volunteer-a/b、ORG-A/B reference、membership state 與 formal-vs-local session source，讓兩種入口共用 observable policy
+- [ ] T044 [US6] 在 `services/api/app/application/line_webhook_session.py` 與 `services/api/app/application/authentication/line_identity_service.py` 對齊既有 effective Membership/Active Context check，維持 LINE Bot state machine、Webhook signature/idempotency 與 CRM write path 不變
+- [ ] T045 [US6] 在 `specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md` 記錄同一受控 LINE OA/channel/Webhook/LIFF App 的 ORG-A／ORG-B entry、cross-entry denial、360px dog selection 與回報入口驗收結果，遮罩所有 raw token/reference/PII
 
-**Checkpoint**：US6 可用 local fixture 完整判定 P0；真實 LINE channel、Rich Menu 與 production LIFF deployment 仍留在 P1。
+**Checkpoint**：US6 完成後，local fixture 可重跑同一矩陣，且受控共用 LINE／LIFF 已留下兩收容所獨立 context 的 P0 evidence。
 
----
+## Phase 9: User Story 7－遇到 session、context 或權限問題時知道下一步（Priority: P0）
 
-## Phase 9：User Story 7－遇到 session、context 或權限問題時知道下一步（Priority：P0）
+**Goal**：處理 local 401、formal LIFF 401、context 缺少、Membership 不一致、temporary error 與 entry failure，提供繁中安全終止與明確下一步，不形成 loop。
 
-**Goal**：Session 失效、context 缺少／撤銷、membership mismatch 與 temporary error 都終止於安全、繁中、可重試且可及的狀態，不形成 redirect loop。
+**Independent Test**：注入各類 failure，觀察 protected content 是否先卸載、exchange/navigation 次數、錯誤文案、keyboard/screen-reader 操作與 re-entry/back-to-LINE 結果。
 
-**Independent Test**：對 management 與 volunteer route 分別注入無 token、401、409、membership mismatch、network／5xx，使用鍵盤與 screen-reader semantics 驗證 retry、返回登入與終止狀態，並確認 children/request 未啟動。
+### Tests for User Story 7
 
-### Tests for User Story 7（先寫並確認失敗）
-
-- [ ] T046 [P] [US7] 在 `apps/web/components/auth/AuthenticatedRouteBoundary.test.tsx` 補齊 token 缺少、profile/context 401、409、membership mismatch、network／5xx、retry、auth-changed 與 destination-equals-path 的有限狀態 tests
-- [ ] T047 [P] [US7] 在 `apps/web/e2e/state-feedback.spec.ts` 與 `apps/web/e2e/role-route-isolation.spec.ts` 新增 Session/context/error 的終止 state、受保護 request = 0、cache 清除與無連續 navigation loop tests
-- [ ] T048 [P] [US7] 在 `apps/web/e2e/p0-keyboard.spec.ts` 與 `apps/web/e2e/p0-a11y.spec.ts` 新增 checking、context-required、error、retry、返回登入與 active draft prompt 的 keyboard／ARIA／axe tests
-- [ ] T049 [P] [US7] 在 `apps/web/e2e/p0-responsive.spec.ts` 新增 360x800、768x1024、1024x768、1440x900 下長繁中文案、status、error 與 draft prompt 無水平溢出的 tests
+- [ ] T046 [P] [US7] 在 `apps/web/lib/liff-session.test.ts` 與 `apps/web/components/auth/AuthenticatedRouteBoundary.test.tsx` 覆蓋 single-flight 401、並行 401、exchange failure、second 401、missing token/reference、local 401 與 terminal epoch transitions
+- [ ] T047 [P] [US7] 在 `apps/web/e2e/liff-route-isolation.spec.ts` 與 `apps/web/e2e/state-feedback.spec.ts` 驗證 redirect/navigation loop=0、formal recovery exchange<=1、mutation 不自動 replay、context-required、temporary error 與 re-entry/back-to-LINE actions
+- [ ] T048 [P] [US7] 在 `apps/web/e2e/p0-keyboard.spec.ts`、`apps/web/e2e/p0-a11y.spec.ts` 與 `apps/web/e2e/p0-responsive.spec.ts` 驗證 loading/status/alert/primary action 的 keyboard、screen-reader 與 360px 長中文可用性
 
 ### Implementation for User Story 7
 
-- [ ] T050 [US7] 在 `apps/web/components/auth/AuthenticatedRouteBoundary.tsx` 完成 401 清除 auth 並前往 `/login`、context-required 終止、temporary error retry、auth/context change 重新 checking 與 stale protected content 清除
-- [ ] T051 [US7] 在 `apps/web/components/management/StateViews.tsx` 與 `apps/web/app/globals.css` 完成 polite status、阻斷 alert、可見 focus、reduced-motion 與 360px 長中文安全狀態版面
+- [ ] T049 [US7] 在 `apps/web/lib/liff-session.ts` 與 `apps/web/features/liff/LiffSessionProvider.tsx` 實作 recovery epoch single-flight、原 entry reference exchange、成功後 profile/context recheck、mutation no-replay 與 terminal cleanup
+- [ ] T050 [US7] 在 `apps/web/lib/auth.ts` 與受保護 request helper 中區分 local/session 401 與 formal LIFF 401：local 清除 auth 導向 `/login`，formal 只觸發一次 LIFF recovery，禁止無限 retry
+- [ ] T051 [US7] 在 `apps/web/components/auth/ProtectedRouteState.tsx`、`apps/web/components/management/route-state.ts` 與 `apps/web/app/(volunteer-entry)/volunteer-entry/page.tsx` 完成 context-required、access-unavailable、temporary-error、re-entry、back-to-LINE 與 LIFF initialization failure 的台灣繁中 copy/accessibility
 
-**Checkpoint**：US7 每個錯誤分支都有單一可理解終點及下一步；鍵盤、axe 與四 viewport 驗證通過。
+**Checkpoint**：US7 的所有 failure state 可獨立驗收；受保護內容不 stale、不洩漏、不 loop，且每個失效事件自動 exchange 不超過一次。
 
----
+## Phase 10: Polish & Cross-Cutting Concerns
 
-## Phase 10：Polish & Cross-Cutting Concerns
+**目的**：完成跨 story 的品質、安全、文件與 release gate。
 
-**Purpose**：完成跨故事的 visual evidence、前後端 regression、contract 與最終驗收記錄。
-
-- [ ] T052 [P] 擴充 `apps/web/e2e/p0-visual.spec.ts` 的 checking、redirecting、volunteer entry、active draft、context-required 與 management regression 視覺案例；只有 reviewer 確認後才更新 `apps/web/e2e/p0-visual.spec.ts-snapshots/`
-- [ ] T053 [P] 執行 `npm --prefix apps/web run quality` 與 `npm --prefix apps/web run build`，修正 `apps/web/` 中由本功能造成的單元測試、型別、格式與 production build 問題
-- [ ] T054 執行 `npm --prefix apps/web run test:e2e:p0`、`npm --prefix apps/web run test:a11y:browser`、`npm --prefix apps/web run test:axe` 與 `npm --prefix apps/web run test:visual`，將 route/request/a11y/visual 結果記錄在 `specs/004-volunteer-entry-route-isolation/quickstart.md`
-- [ ] T055 [P] 執行 `env UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/security tests/isolation tests/contract -q`，確認 `tests/security/`、`tests/isolation/`、`tests/contract/` 的志工 API 拒絕與 Organization／Active Shelter Context 隔離未回歸
-- [ ] T056 [P] 執行 `npm --prefix packages/contracts run check` 並確認 `packages/contracts/src/openapi.ts` 無非預期變更，以證明本功能沒有 OpenAPI contract 漂移
-- [ ] T057 執行 `./scripts/verify_local.sh` 完成 CRM、LINE、LIFF exchange、AI 人工覆核、Ruff、Pytest 與完整 local regression，將結果記錄在 `specs/004-volunteer-entry-route-isolation/quickstart.md`
-- [ ] T058 檢查 `specs/004-volunteer-entry-route-isolation/spec.md` 的 FR-001～FR-017 與 SC-001～SC-008 均有對應自動化或人工證據，完成 `specs/004-volunteer-entry-route-isolation/quickstart.md` 的 P0 驗收摘要並明列 P1 未納入項目
-
-**Final Checkpoint**：全部 P0 stories、前端品質、browser、accessibility、visual、後端 authorization／isolation、OpenAPI 與完整 regression 通過；未以前端 redirect 取代後端安全邊界。
-
----
+- [ ] T052 [P] 在 `apps/web/e2e/p0-visual.spec.ts`、`apps/web/e2e/p0-visual.spec.ts-snapshots/` 與 `apps/web/e2e/p0-a11y.spec.ts` 完成 360/768/1024/1440 viewport visual、axe 與 reviewer-approved baseline，禁止未審查 snapshot 更新
+- [ ] T053 [P] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/isolation/test_liff_entry_isolation.py` 與 `tests/security/test_unauthenticated_internal_data.py` 完成 server-side authorization、RLS、no partial state、no stale protected content 與 raw secret logging regression
+- [ ] T054 在 `specs/004-volunteer-entry-route-isolation/quickstart.md`、`specs/004-volunteer-entry-route-isolation/contracts/README.md` 與 `specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md` 更新實際 command、controlled evidence location、known limitations 與 release checklist
+- [ ] T055 在 `specs/004-volunteer-entry-route-isolation/` 執行 quickstart 全部 validation commands，並在 `specs/004-volunteer-entry-route-isolation/validation/` 保存不含 secret/PII 的結果摘要
+- [ ] T056 在 repository root 執行 `ruff check .`、`ruff format --check .`、`pytest`、`npm --prefix apps/web run quality`、`npm --prefix apps/web run build`、P0 e2e/a11y/visual 與 `./scripts/verify_local.sh`，確認所有 constitution gate 通過後才標記 feature 完成
 
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
 
-- **Phase 1 Setup**：無依賴，可立即開始。
-- **Phase 2 Foundational**：依賴 Setup；完成前阻擋全部 user stories。
-- **US1**：依賴 Foundational；是最小可展示的角色導向入口。
-- **US2**：依賴 Foundational 與 US1 的 volunteer route gate；不依賴 management route 重組。
-- **US3**：依賴 Foundational；可與 US1／US2 由不同開發者平行，但 root／login 整合時需先同步共用 boundary contract。
-- **US4**：依賴 US3 的 `(management)` root composition。
-- **US5**：依賴 US3 的 management boundary 與 US1 的 role-directed login。
-- **US6**：依賴 Foundational 與 US1；不依賴真實 LINE deployment，也不依賴 US2 的 UI 完成。
-- **US7**：依賴 Foundational，最終整合需 US1 volunteer layout 與 US3 management layout。
-- **Polish**：依賴本次欲交付的所有 P0 stories。
+- **Phase 1 Setup**：無前置依賴；T001/T002/T004 可平行，T003 完成後才能進行 contract implementation。
+- **Phase 2 Foundational**：依賴 Setup；T006、T007、T009、T012 可在不互相修改同一檔案時平行，T010/T011 依賴 T005/T006。
+- **Phase 3 US1**：依賴 Phase 2；是 MVP 核心，T013–T016 應先於 T017–T023。
+- **Phase 4 US2**：依賴 US1 的 volunteer boundary 與 context label（T020–T022），可在 US1 checkpoint 後開始。
+- **Phase 5 US3**：依賴 Phase 2；與 US2 可平行，但 T031–T033 會修改 management route composition，整合時需先通過 US3 checkpoint。
+- **Phase 6 US4**：依賴 US3 的 management boundary；只保留 regression-safe management role behavior。
+- **Phase 7 US5**：依賴 US3/US4 的 management shell；T037 的 server regression 可與 T038 的 browser regression 平行。
+- **Phase 8 US6**：依賴 US1 的 exchange 與 US3 的 route isolation；local fixture tasks 可平行，controlled LINE evidence 必須在程式與測試完成後執行。
+- **Phase 9 US7**：依賴 US1 的 LIFF provider 與 protected fetch；T046–T048 可平行，T049–T051 依測試結果實作。
+- **Phase 10 Polish**：依賴所有要交付的 user stories；T052/T053 可平行，T055/T056 必須最後執行。
 
-### User Story Dependency Graph
+### User Story Completion Order
 
-```mermaid
-flowchart LR
-  S["Setup"] --> F["Foundational"]
-  F --> U1["US1 志工入口"]
-  F --> U3["US3 管理路由隔離"]
-  U1 --> U2["US2 active draft"]
-  U1 --> U6["US6 LIFF/local 一致"]
-  U3 --> U4["US4 Staff regression"]
-  U1 --> U5["US5 管理者 context"]
-  U3 --> U5
-  U1 --> U7["US7 錯誤與可及性"]
-  U3 --> U7
-  U2 --> P["Polish"]
-  U4 --> P
-  U5 --> P
-  U6 --> P
-  U7 --> P
+1. **US1 P0 MVP**：formal/local volunteer entry → atomic exchange → `/animal-confirmation`。
+2. **US2 P0**：active draft resume/later/unavailable。
+3. **US3 P0**：全部 management route isolation。
+4. **US4 P0**：STAFF management regression。
+5. **US5 P0**：SHELTER_ADMIN/PLATFORM_ADMIN context regression。
+6. **US6 P0**：shared LINE／LIFF + local fixture + Bot regression + controlled evidence。
+7. **US7 P0**：session/context failure and recovery UX。
+
+US2、US3、US6、US7 的部分工作可由不同開發者在 Foundation 完成後平行進行；涉及 `apps/web/e2e/liff-route-isolation.spec.ts` 的修改需集中整合避免 merge conflict。
+
+## Parallel Execution Examples
+
+### Foundation
+
+```text
+Task T006: route-access decision matrix in apps/web/lib/route-access.ts
+Task T007: entry resolver adapter in services/api/app/infrastructure/line/entry_reference_adapter.py
+Task T009: protected route states in apps/web/components/auth/ProtectedRouteState.tsx
+Task T012: shared ORG-A/ORG-B fixtures in tests/fixtures/volunteer_access.py
 ```
 
-### Within Each User Story
+### US1
 
-1. 先完成該故事的 tests，執行並確認因缺少新行為而失敗。
-2. 先完成純函式／view model，再完成 component／layout composition。
-3. 只有 boundary allow 後才允許 children 與業務 request。
-4. 執行該故事的 focused Vitest／Playwright 測試，通過後才進入 checkpoint。
-5. 不得以刪除測試、放寬 assertion、skip 或更新未審核 snapshot 宣稱完成。
+```text
+Task T013: authentication/OpenAPI contract tests
+Task T014: exchange success integration test
+Task T015: exchange authorization failure matrix
+Task T016: cross-tenant isolation test
+```
 
----
+### US2 / US3
 
-## Parallel Opportunities
+```text
+Task T024: volunteer page unit tests
+Task T029: pure route/boundary tests
+Task T030: management deep-link network assertions
+```
 
-- Setup 中 T002 與 T003 可平行；T001 的基準結果需在 production code 變更前完成。
-- Foundational 中 T004、T006、T009 可平行；T007/T008 依賴 T004–T006，T010 依賴 T009。
-- Foundational 完成後，US1、US3 可由不同開發者先行；US2／US6 可在 US1 gate 穩定後平行，US4／US5 在 US3 composition 完成後平行。
-- 各故事中標記 `[P]` 的 unit、component 與 browser test 位於不同檔案時可平行撰寫；同一檔案的後續 implementation 需串行整合。
-- Polish 中 frontend quality、backend regression 與 contract check 可平行；完整 browser suite、`verify_local.sh` 與最終證據摘要需在程式整合後執行。
+### US4 / US5
 
-## Parallel Examples by User Story
+```text
+Task T034: STAFF regression e2e
+Task T037: backend context switch security tests
+Task T038: management role/context browser tests
+```
 
-- **US1**：T011、T012、T013 可平行撰寫；完成後依序整合 T014、T015。
-- **US2**：T016、T017、T018、T019 可平行撰寫；T020 可與 care-report 的 T023 分工，T021/T022 依賴 T020。
-- **US3**：T024、T025、T026、T027 可平行撰寫；T028–T031 會共同改變 composition，應依序整合後再完成 T032。
-- **US4**：T033、T034 可平行；T035 與 T036 分屬 Dashboard content 與 Shell，可在共用 contract 固定後平行實作。
-- **US5**：T037、T038、T039 可平行；T040 與 T041 分屬 login 與 management shell，可平行實作後合併驗證。
-- **US6**：T042 與 T043 可平行；T044 固定共用 destination 後再完成 T045 regression。
-- **US7**：T046、T047、T048、T049 可平行；T050 與 T051 分屬 state logic 與 presentation，可平行實作後整合。
+### US6 / US7
 
----
+```text
+Task T040: shared entry reference contract/security tests
+Task T041: LINE Bot context regression tests
+Task T046: LIFF recovery unit tests
+Task T048: keyboard/a11y/responsive tests
+```
 
 ## Implementation Strategy
 
-### MVP First（US1）
+### MVP First
 
-1. 完成 Setup。
-2. 完成 Foundational，固定有效角色、route decision 與 child-mount gate。
-3. 完成 US1，讓志工登入後直達 `/animal-confirmation`。
-4. 停下並以兩個 volunteer fixture 驗證登入目的地、首次可見內容與 request ordering。
-5. 此時可展示入口 MVP；必須再完成 US3 才達到本功能完整的管理 deep-link isolation 目標。
+1. 完成 Phase 1–2，先固定 atomic exchange、route decision 與 boundary。
+2. 完成 Phase 3 US1，驗證 local fixture + controlled LIFF 的最短可用路徑。
+3. 執行 US1 checkpoint；只有 contract、security、isolation 與 first-visible/network assertions 全通過，才進入 US2/US3。
 
 ### Incremental Delivery
 
-1. Setup + Foundational → 共用安全 route boundary。
-2. US1 → 志工角色導向入口 MVP。
-3. US3 + US4 + US5 → 完整 management isolation 與管理角色 regression。
-4. US2 → 單一 active draft 的安全恢復選擇。
-5. US6 + US7 → 通道一致性與完整 failure/accessibility 狀態。
-6. Polish → 全面 P0、視覺、後端與 contract gate。
+1. US2 增加 draft resume，不改變 US1 的 entry/access boundary。
+2. US3 增加 management isolation，US4/US5 立即做 management regression。
+3. US6 補齊共用 LINE／LIFF 與 Bot evidence。
+4. US7 補齊 failure/recovery/accessibility。
+5. 最後執行 Phase 10 全部 quality/security/release gates。
 
-### Scope Guardrails
+### Completion Rules
 
-- 不新增或修改 database migration、OpenAPI schema、CRM entity、後端 authorization、JWT claims、LINE Bot state machine、Webhook 或 LIFF exchange contract。
-- 不建立多筆 active draft P0 UI；維持每位志工／Active Shelter Context 最多一筆 current draft。
-- 不新增「管理角色不能進志工 route」的反向限制。
-- 前端 role gate 只縮小畫面與 request 啟動時機；後端 security／tenant isolation tests 不得省略。
-- 真實 LINE channel、Rich Menu、production LIFF deployment 與多筆草稿策略保持 P1，不得成為 P0 完成依賴。
-
-## Notes
-
-- 每個 task 都包含實際檔案路徑，task ID 依執行順序遞增。
-- `[P]` 表示檔案與依賴允許平行，不表示可略過前一 phase gate。
-- 測試任務必須先失敗再實作；已有 regression test 不應因新 route composition 被弱化。
-- 建議在每個 story checkpoint 後提交一個可回滾的 logical commit。
+- 每個 story 的 independent test criteria 必須獨立通過，不能以後續 story 的輸出代替。
+- 任何前端 redirect 測試不得取代後端 authorization、RLS、Membership/Grant 或 transaction tests。
+- 任何受控 LINE evidence 不得保存 raw token、entry reference、LINE user id、個資或 protected animal/report content。
+- 只有 T056 所列 constitution gates 全部通過，才能將 004 標記完成。

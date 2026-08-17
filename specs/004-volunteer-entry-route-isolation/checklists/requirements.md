@@ -33,6 +33,6 @@
 
 ## Validation Notes
 
-- 逐節檢查 `spec.md`：角色邊界、P0／P1、7 個 user stories、edge cases、17 項 FR、key entities、8 項 SC、assumptions 與 out-of-scope 均已填寫。
+- 逐節檢查 `spec.md`：角色邊界、P0／P1、7 個 user stories、edge cases、22 項 FR、key entities、12 項 SC、assumptions 與 out-of-scope 均已填寫。
 - Active draft 的 UX 決策採安全預設：context 驗證後先顯示恢復選擇；沒有草稿直接進入動物確認；P0 沿用單一 active draft 規則；context 不一致不得顯示內容。
-- 未建立新的資料模型或 API contract；規格明確要求沿用既有後端授權、CRM 與租戶隔離契約。
+- 未建立新的 CRM 資料模型；唯一 additive API contract 是 LIFF exchange request 新增 shelter entry reference，且規格明確要求沿用既有後端授權、005 Membership／Grant、CRM 與租戶隔離契約。

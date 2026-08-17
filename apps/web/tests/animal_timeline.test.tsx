@@ -42,7 +42,7 @@ describe("AnimalTimeline", () => {
     });
 
     expect(container?.textContent).toContain("2026-08-08");
-    expect(container?.textContent).toContain("當日無回報");
+    expect(container?.textContent).toContain("當日沒有事件");
     expect(container?.textContent).toContain("有回報：2 筆");
   });
 

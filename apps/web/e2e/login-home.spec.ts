@@ -49,12 +49,18 @@ test("登入後可選擇多收容所 Active Shelter Context", async ({ page }) =
       code: "ORG-A",
       name: "浪浪森友會 A",
       role: "STAFF",
+      status: "active",
+      timezone: "Asia/Taipei",
+      timezone_version: 1,
     },
     {
       id: "org-b",
       code: "ORG-B",
       name: "浪浪森友會 B",
       role: "STAFF",
+      status: "active",
+      timezone: "Asia/Taipei",
+      timezone_version: 1,
     },
   ]);
   await page.goto("/login");

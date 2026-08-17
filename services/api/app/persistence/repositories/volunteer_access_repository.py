@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy import Select, and_, func, select, text, tuple_
@@ -27,6 +28,8 @@ from services.api.app.persistence.models.volunteer_access import (
     VolunteerNotificationRetryBatch,
     VolunteerNotificationRetryBatchItem,
 )
+
+T = TypeVar("T")
 
 
 class VolunteerAccessRepository:
@@ -68,7 +71,7 @@ class VolunteerAccessRepository:
         await set_organization_scope(session, organization_id)
         return resolved
 
-    async def add(self, value: object) -> object:
+    async def add(self, value: T) -> T:
         value_organization_id = getattr(value, "organization_id", None)
         if value_organization_id != self.organization_id:
             raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
@@ -383,10 +386,10 @@ class VolunteerAccessRepository:
             if result not in {"pending", "succeeded", "conflict", "failed"}:
                 raise DomainError("invalid_batch_item_result", "逐筆結果篩選無效", 422)
             statement = statement.where(VolunteerDecisionBatchItem.result == result)
-        result = await self.session.execute(
+        query_result = await self.session.execute(
             statement.order_by(VolunteerDecisionBatchItem.id).limit(min(max(limit, 1), 500))
         )
-        return list(result.scalars())
+        return list(query_result.scalars())
 
     async def notification_by_idempotency_key(
         self, idempotency_key: str

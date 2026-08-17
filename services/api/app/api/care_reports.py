@@ -267,7 +267,8 @@ async def create_care_report(
 ) -> CareReportResponse:
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
-    draft_repository = CareReportDraftRepository(session, context.organization_id)
+    organization_id = context.organization_id
+    draft_repository = CareReportDraftRepository(session, organization_id)
     draft = await draft_repository.get(payload.draft_id)
     if draft is None or draft.volunteer_user_id != context.user_id:
         raise DomainError("draft_not_found", "草稿不存在或無法存取", 404)
@@ -317,7 +318,7 @@ async def create_care_report(
         answer_validator=validator,
         scope_validator=lambda animal_id: _validate_report_scope(
             session,
-            context.organization_id,
+            organization_id,
             context.role,
             context.user_id,
             animal_id,

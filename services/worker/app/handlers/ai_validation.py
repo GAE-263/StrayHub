@@ -68,8 +68,8 @@ def _all_keys(value: object) -> set[str]:
             keys.update(_all_keys(nested))
         return keys
     if isinstance(value, list):
-        keys: set[str] = set()
+        nested_keys: set[str] = set()
         for nested in value:
-            keys.update(_all_keys(nested))
-        return keys
+            nested_keys.update(_all_keys(nested))
+        return nested_keys
     return set()

@@ -29,6 +29,23 @@ def test_access_token_rejects_unknown_key_id() -> None:
         adapter.verify(token)
 
 
+def test_access_token_normalizes_malformed_token_error() -> None:
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
+    public_pem = (
+        private.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode()
+    )
+    adapter = JwtAccessTokenAdapter(
+        private_key=private_pem,
+        public_keys={"active": public_pem},
+        issuer="strayhub-test",
+        audience="strayhub-api",
+    )
+
+    with pytest.raises(ValueError, match="malformed access token"):
+        adapter.verify("test-access")
+
+
 def test_access_token_rejects_algorithm_confusion_and_wrong_issuer() -> None:
     private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = private.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()

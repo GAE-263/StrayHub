@@ -1,153 +1,203 @@
-# UI 行為契約：角色導向入口與管理路由隔離
+# UI／流程契約：角色導向入口與管理路由隔離
 
-本文件定義使用者、輔助科技與自動化測試可觀察的 route 行為。它不取代後端 authorization，也不修改既有 HTTP schema。
+本文件定義使用者、輔助科技與自動化測試可觀察的 route 行為，以及 LIFF exchange 的 transaction 結果。前端 redirect 只縮小可見性，不取代 FastAPI authorization、Membership/Grant predicate 或 PostgreSQL RLS。
 
-## 1. 既有介面依賴
+## 1. 正式收容所專屬入口
+
+正式 URL 形態：
+
+```text
+https://<LIFF host>/volunteer-entry?entry=<opaque-shelter-entry-reference>
+```
+
+所有一般收容所共用同一個 LINE Official Account、Messaging API channel、Webhook 與 LIFF App。ORG-A／ORG-B 的差異只在 entry reference；不得建立每 shelter 的 LIFF credential 或 client-side role。
+
+### Bootstrap 順序
+
+1. 顯示「正在開啟 LINE 志工入口」的安全 status，不掛載 animals/draft/management children。
+2. 從 server runtime config 取得 `LIFF_ID`，執行 `liff.init()`。
+3. 外部瀏覽器若未登入，使用 LIFF login flow；返回後重新初始化。
+4. 以 `liff.getIDToken()` 取得 raw token；不得把 decoded profile 送 server。
+5. `POST /v1/auth/liff/exchange`，body 只含 `id_token + shelter_entry_reference`。
+6. 成功後保存既有 auth tokens、Session id 與 transient LIFF recovery hint。
+7. 重新取得後端 Active Context／scoped organization label，`replace('/animal-confirmation')`。
+
+缺少 entry、LIFF 設定錯誤、初始化失敗、使用者取消登入或無 raw token 時，顯示繁中安全錯誤與「重新進入」「回到 LINE」，不得呼叫 protected API。
+
+## 2. LIFF exchange transaction contract
+
+後端固定順序：
+
+1. digest raw entry，以 005 fixed-purpose resolver 取得候選 organization，立即設定該 organization RLS scope。
+2. 驗證 raw LINE id token，取得 line user id。
+3. 驗證 active LineUserBinding、active User 與 active Organization。
+4. 只查候選 organization 的 exact Membership；必須是 `VOLUNTEER`、active、已開始、未到期，且有同 organization／Membership 的 active Grant。
+5. 鎖定 Membership/Grant，以 database time 重做 effective predicate。
+6. 建立 `SessionRecord(user_id, active_organization_id=候選 organization)`。
+7. 建立 Refresh Token record 並簽發 access token。
+8. 同一 transaction commit 後才回既有 AuthResponse。
+
+### 失敗矩陣
+
+| 狀態 | 結果 | 禁止結果 |
+| --- | --- | --- |
+| entry 無效／撤銷／purpose 不符 | 安全 403 | 不揭露 organization 是否存在 |
+| LINE token 無效／過期／audience 不符 | 安全 401 | 不查 Membership、不建立 Binding |
+| Binding 缺少／停用 | 安全 403 + 綁定／報名下一步 | 不自動建立 Binding |
+| User 或 Organization 停用 | 安全 403 | 不建立 Session/context |
+| 沒有申請／pending／rejected | 安全 403 + 等待／報名下一步 | 不建立 Membership |
+| future Membership/Grant | 安全 403 + 尚未開始 | 不提早建立 context |
+| expired／revoked／disabled／缺 Grant | 安全 403 + 重新報名／聯絡管理者 | 不延長或重新啟用 |
+| ORG-A entry + ORG-B-only access | 安全 403 | ORG-A/ORG-B Session/context 都為 0 |
+| database/dependency failure | 503 + 重試 | 不留下 partial row |
+| active-unexpired exact access | 200 | Session/context 不得分兩次 commit |
+
+每個非 200 案例都必須 assert 新增 SessionRecord=0、RefreshTokenRecord=0、Active Context=0，且 Application/Membership/Grant mutation=0。
+
+## 3. 既有介面依賴
 
 | Interface | 用途 | 本功能限制 |
 | --- | --- | --- |
-| `POST /v1/auth/login` | 建立 local Web Session 並取得可選 organization + role | 不修改 response schema；context 建立成功後才依 selected role 導向 |
-| `POST /v1/auth/liff/exchange` | 既有 LIFF 身分交換 | P0 不新增真實 LINE deployment；交換結果遵循相同入口 policy |
-| `GET /v1/auth/me` | 取得目前 user、platform role 與 Membership | deep link／reload 的角色來源；不得以 client cache 取代 |
-| `GET /v1/auth/active-shelter-context` | 取得目前 Session 的 organization | 必須先通過才能掛載受保護 children |
-| `PUT /v1/auth/active-shelter-context` | 建立或切換目前 context | 成功後才進行 role-directed navigation |
-| `GET /v1/organizations` | 管理 Shell 的 context selector | 只有 management role 通過 boundary 後才能載入 |
-| `GET /v1/animals` | 目前 context 的今日可回報動物 | volunteer boundary 通過後載入；同時提供 draft prompt 的動物辨識資料 |
-| `GET /v1/line/care-report/drafts/current` | 目前 context 的單一 active draft | P0 恢復提示；null 代表沒有可恢復草稿 |
-| `GET /v1/management/dashboard` | 管理首頁摘要 | 志工 route decision 完成前不得呼叫；志工 deep link request count 必須為 0 |
+| `POST /v1/auth/login` | local Web/LIFF fixture Session + organizations/role | context 成功後依 selected role 導向；正式志工不使用帳密 |
+| `POST /v1/auth/liff/exchange` | 正式 identity + entry exchange | 唯一 additive request；原子建立 Session/context |
+| `GET /v1/auth/me` | profile/platform role/Memberships | deep link/reload 的 role 來源；client cache 不取代 |
+| `GET /v1/auth/active-shelter-context` | server Session context | protected children 掛載前必須通過 |
+| `PUT /v1/auth/active-shelter-context` | local/management context switch | 成功後才換資料；失敗保留仍有效舊 context |
+| `GET /v1/organizations` | scoped organization label/management selector | volunteer 只在 auth/context 通過後取 label；management 只在 role 通過後載入 |
+| `GET /v1/animals` | 今日可回報動物 | volunteer boundary 通過後載入 |
+| `GET /v1/line/care-report/drafts/current` | 單一 current draft | context 通過後載入 |
+| management page APIs | Dashboard/animals/reports/settings 等 | 志工 request count 必須為 0 |
 
-直接呼叫任何 management API 的志工仍必須收到既有後端拒絕；前端 redirect 通過不代表 API 已授權。
+直接呼叫 management API 的志工仍必須由後端拒絕；UI redirect 成功不代表 API 已授權。
 
-## 2. 登入目的地契約
+## 4. 登入目的地
 
-完成 credential login 或既有 LIFF exchange 後：
+### Local fixture
 
-1. Session 必須先保存。
-2. 若有多個 organization，使用者必須先完成既有 Active Shelter Context 選擇。
-3. `PUT /v1/auth/active-shelter-context` 成功後，才依選定 organization 的後端 role 決定目的地。
-4. `VOLUNTEER` → `replace('/animal-confirmation')`。
-5. `STAFF`、`SHELTER_ADMIN`、`PLATFORM_ADMIN` → `replace('/')`。
-6. Context 建立失敗時留在登入流程，清除不可繼續使用的 client auth cache，顯示台灣繁體中文錯誤與重試方式。
+1. credential login 成功後保存 Session。
+2. 使用者完成既有 Active Shelter Context 選擇。
+3. `PUT /active-shelter-context` 成功後，依 selected organization 的 server role：
+   - `VOLUNTEER` → `replace('/animal-confirmation')`
+   - `STAFF`／`SHELTER_ADMIN`／`PLATFORM_ADMIN` → `replace('/')`
+4. Context 建立失敗停留在登入流程，不宣稱已進入任何工作台。
 
-登入按鈕與 context 確認文案不得一律宣稱「進入管理工作台」；文案必須適用於志工與管理使用者，或依 selected role 顯示正確目的地。
+正式志工一律使用前述 LIFF bootstrap，不輸入 StrayHub 帳密。
 
-## 3. 有效角色契約
+## 5. 有效角色與 context
 
-Deep link、reload 與 browser back 必須重新取得 profile/context：
+Deep link、reload、browser back 與 recovery 成功後必須重取 profile/context：
 
-- `user.platform_role === PLATFORM_ADMIN` → `PLATFORM_ADMIN`。
-- 其餘使用者 → 找到 `membership.organization_id === activeContext.organization_id && membership.status === active`，使用該 Membership role。
-- 找不到 matching Membership 時，不得 fallback 為 `STAFF` 或使用 sessionStorage role；結果為安全的 context/authorization state。
+- `user.platform_role == PLATFORM_ADMIN` → `PLATFORM_ADMIN`。
+- 其他使用者只採 `membership.organization_id == activeContext.organization_id` 的 active Membership role。
+- 找不到 matching Membership 時，不得 fallback 為 `STAFF` 或使用 sessionStorage role。
+- URL entry、pathname、organization cache、QR、動物名稱與 shelter number 都不能改變 effective role/context。
 
-前端 role 只縮小 route 可見性；後端可以對單一管理功能施加更窄權限。
+## 6. Route access matrix
 
-## 4. Route access matrix
-
-| Route | `VOLUNTEER` | `STAFF` | `SHELTER_ADMIN` | `PLATFORM_ADMIN` |
+| Route area／代表 route | `VOLUNTEER` | `STAFF` | `SHELTER_ADMIN` | `PLATFORM_ADMIN` |
 | --- | --- | --- | --- | --- |
-| `/` | 導回 `/animal-confirmation` | 允許 | 允許 | 有 context 後允許 |
-| `/animals` | 導回志工入口 | 允許 | 允許 | 允許 |
-| `/animals/[animalId]` | 導回志工入口 | 允許 | 允許 | 允許 |
-| `/animals/[animalId]/timeline` | 導回志工入口 | 允許 | 允許 | 允許 |
-| `/reports` | 導回志工入口 | 允許 | 允許 | 允許 |
-| `/reports/[reportId]` | 導回志工入口 | 允許 | 允許 | 允許 |
-| `/ai-review` | 導回志工入口 | 依既有 API 權限 | 依既有 API 權限 | 依既有 API 權限 |
-| `/settings/*` | 導回志工入口 | 依既有 API 權限 | 依既有 API 權限 | 依既有 API 權限 |
-| `/shelters` | 導回志工入口 | 依既有 API 權限 | 依既有 API 權限 | 依既有 API 權限 |
-| `/animal-confirmation` | 有 Session/context 後允許 | 不新增反向限制 | 不新增反向限制 | 有 context 後不新增反向限制 |
-| `/care-report` | 有 Session/context 後允許 | 不新增反向限制 | 不新增反向限制 | 有 context 後不新增反向限制 |
+| `/`、`/animals/**`、`/reports/**` | 導回 `/animal-confirmation` | 允許 | 允許 | 有 context 後允許 |
+| `/ai-review`、`/care-calendar` | 導回志工入口 | 依既有 API 權限 | 依既有 API 權限 | 依既有 API 權限 |
+| `/settings/**`、`/volunteers/**`、`/shelters` | 導回志工入口 | 依既有 API 權限 | 依既有 API 權限 | 依既有 API 權限 |
+| 任何未來 `(management)` child route | 導回志工入口 | 依既有 API 權限 | 依既有 API 權限 | 依既有 API 權限 |
+| `/animal-confirmation`、`/care-report` | 有 Session/context 後允許 | 不新增反向限制 | 不新增反向限制 | 有 context 後不新增反向限制 |
+| `/volunteer-entry?entry=…` | 公開 bootstrap | 公開 bootstrap | 公開 bootstrap | 公開 bootstrap |
 
-Query string、hash、尾端斜線、dynamic id 與 browser history 不能改變 route area 或繞過此 matrix。
+Query、hash、尾端斜線、dynamic id、reload 與 browser history 不改變 route area。公開 bootstrap 不顯示任何 protected data。
 
-## 5. Management request ordering
+## 7. Management request ordering
 
-Management route 的可觀察順序必須是：
+1. 顯示「正在確認登入角色與目前收容所」。
+2. 只取得 `/auth/me` + `/auth/active-shelter-context`。
+3. 推導 effective role。
+4. 志工：不掛載 Management Shell/children，顯示 redirect status 並 replace 到 volunteer entry；organizations、Dashboard 與 page-specific management request 全為 0。
+5. 管理角色：才取得 organizations，掛載 Shell，再掛載 child 並開始 page request。
 
-1. 顯示「正在確認登入角色與目前收容所」等安全 status。
-2. 取得 `/auth/me` 與 `/auth/active-shelter-context`。
-3. 推導有效角色。
-4. 志工：顯示 redirect status 並 replace 到 `/animal-confirmation`；不發出 organizations、Dashboard 或 page-specific management request。
-5. 管理角色：取得 organizations，掛載 Management Shell，再掛載 page children 並開始 page-specific request。
+`/` 必須由 `(management)` route group 接管，不可保留第二套先掛載 Dashboard 的 composition。
 
-測試必須觀察 request URL，而不只檢查最終畫面。志工情境中的 `/v1/management/dashboard`、`/v1/management/animals*`、`/v1/management/reports*`、AI／setting／shelter management request 數必須為 0。
+## 8. Volunteer request ordering與 shelter label
 
-## 6. Volunteer request ordering
+1. 顯示 Session/context checking status。
+2. 取得 profile + Active Context 並確認 matching role/access。
+3. 取得 scoped organization label；context cycle 未完成前不得顯示前一 shelter label。
+4. 才掛載 volunteer child。
+5. `/animal-confirmation` 可並行讀 animals + current draft；`/care-report` 沿用 current draft/save flow。
 
-Volunteer route 的可觀察順序必須是：
+兩頁都必須清楚顯示目前收容所名稱。context/recovery 改變時先移除舊 protected view，全部重新驗證後才顯示新資料。
 
-1. 顯示安全的 Session／Context loading status。
-2. 取得 profile + Active Context 並確認有效。
-3. 才掛載 `/animal-confirmation` 或 `/care-report` children。
-4. `/animal-confirmation` 可並行取得今日動物與 current draft。
-5. `/care-report` 沿用既有 current draft 恢復與保存流程。
-
-Boundary 通過前不得發出 `/v1/animals`、QR、draft 或 care report request。
-
-## 7. Active draft 恢復契約
-
-P0 沿用單一 active draft invariant。
+## 9. Active draft resume
 
 ### 沒有 current draft
 
-- 直接顯示今日名單、QR Code 與收容編號搜尋。
-- 不顯示空的恢復 card 或誤導性錯誤。
+- 直接顯示今日名單、QR 與 shelter number 搜尋。
+- 不顯示空 prompt。
 
-### 有可恢復 current draft
+### 可恢復
 
-- 只有 `status=active`、尚未過期、organization 與目前 context 一致，且 animal 在今日授權名單內時可恢復。
-- 提示至少顯示動物名稱、可用時顯示收容編號，以及轉為繁中文案的目前進度。
-- 提供「繼續回報」與「稍後處理」。
-- 「繼續回報」前往 `/care-report`；該頁重新向後端取得 current draft。
-- 「稍後處理」只關閉本次提示並留在 `/animal-confirmation`，不得 cancel、delete 或修改 Draft。
+- 必須 active、未過期、同 Active Context，且 animal 在今日授權名單。
+- 顯示 animal name、可用時顯示 shelter number、繁中 progress。
+- 「繼續回報」→ `/care-report`，由後端重讀 current draft。
+- 「稍後處理」→ 留在 `/animal-confirmation`；不得 cancel/delete/modify Draft。
 
-### 不可恢復 current draft
+### 不可恢復
 
-- 過期、非 active、context 不一致或 animal 不在授權名單時，不顯示答案、動物詳細資訊或其他收容所資訊。
-- 顯示安全的「目前無法恢復」與重試／聯絡管理者下一步。
-- 不自動切換 Active Shelter Context。
+- 不顯示答案、其他 tenant animal/detail 或 stale shelter label。
+- 顯示安全 unavailable + 重試／聯絡管理者。
+- 不自動切換 context，不刪歷史資料。
 
-多筆 active draft 選擇不屬於 P0；若未來改變既有 domain invariant，必須另行更新 spec、contract 與安全驗證。
+## 10. Session 401 與 single-flight recovery
 
-## 8. Session、Context 與錯誤契約
+### Local/management session
 
-| Condition | UI 結果 | Navigation／資料結果 |
-| --- | --- | --- |
-| 沒有 token | 安全 redirect status | 清除可用 cache，replace `/login`；children 不掛載 |
-| profile/context 401 | Session 已失效繁中 status | 清除 auth，replace `/login`；受保護內容不可繼續查看 |
-| context 缺少／409 | 不含資料的 context-required state | 提供返回登入／選擇、重試或聯絡管理者；不自動 loop |
-| Membership/context 不一致 | 不含資料的安全限制 state | 不使用前一次 sessionStorage context；不載入 children |
-| profile/context network／5xx | 可理解 error state | 提供重試、返回或重新登入；不得顯示 stale protected content |
-| 志工開啟 management route | redirecting status | replace `/animal-confirmation`；management request 為 0 |
+- protected 401 → clear auth → `replace('/login')`。
+- 不執行 LIFF exchange。
 
-所有錯誤不得顯示受保護資料是否存在、資料筆數、動物／回報內容或其他收容所名稱。
+### Formal LIFF session
 
-## 9. Redirect 與 browser history 契約
+1. 第一個 protected 401 建立 recovery epoch，卸載 protected children。
+2. 並行 401 共用同一 in-flight Promise；exchange request count 仍為 1。
+3. 以已初始化 LIFF 的 raw ID token + transient original entry reference exchange。
+4. 成功：重取 profile/context/label，回到原 volunteer pathname；不回到被拒 management deep link。
+5. 原 request 若為 mutation，不自動重播；保留可恢復輸入並要求明確重試。
+6. exchange 失敗、缺 token/reference、或恢復後再次 401：terminal state，停止自動 request/navigation，顯示「重新進入」「回到 LINE」。
 
-- Login destination 與 role mismatch 使用 `replace`，避免 back 回到已完成登入頁或被拒 management route 後直接顯示舊內容。
-- Redirect destination 與目前 pathname 相同時不得再次 redirect。
-- Redirecting state 不掛載 children。
-- Reload 與 browser back 必須重新執行 profile/context gate。
-- 無 token、session 401、context-required、temporary error 與 role mismatch 的 flow 都必須在有限 state 終止；自動化測試不得觀察到連續 navigation loop。
+每個 epoch `exchangeAttempts <= 1`；測試必須同時觀察 exchange count 與 navigation count。
 
-## 10. 可及性與響應式契約
+## 11. Context switch failure
 
-- Checking、redirecting、context-required 與 error 都有可理解的台灣繁體中文 title、description 與下一步。
-- Loading／redirecting 使用適當的 polite status announcement；阻斷錯誤使用可讀取的 alert 語意，但不得重複播報。
-- 「繼續回報」、「稍後處理」、「重試」、「返回登入」等控制可用鍵盤操作且有可見 focus。
-- 360px 寬度下，status、draft prompt、長中文錯誤與主要操作不得重疊、被截斷或造成非必要水平捲動。
-- 必要資訊不可只靠 color、icon 或 animation 表達；reduced motion 不影響流程理解。
+- management 使用者切換成功後才卸載舊 context 並載入新資料。
+- switch 失敗時，保留後端仍確認有效的舊 context 與舊 view，顯示錯誤並可重試。
+- 不把任何新 context 的部分 organizations/page response 合併到舊 view。
+- 若舊 context 也已失效，進入不含 protected data 的 context-required/重新登入狀態。
 
-## 11. 驗收證據契約
+## 12. LINE Bot regression
+
+- 已有有效 organization context：先提供該 shelter 可回報狗狗選擇。
+- context 未確認、多個可能 context 或有效 Membership 不唯一：先進入既有 LIFF/context verification。
+- 不以 dog name、shelter number、client state 或轉傳 URL 推測 tenant。
+- 不修改 Webhook Signature、Event Idempotency 或 Conversation State Machine schema。
+
+## 13. 可及性與響應式
+
+- initializing、logging-in、exchanging、checking、redirecting、recovering、context-required、error 與 terminal 都有繁中 title、description、next action。
+- Loading/recovery 使用 polite status；阻斷錯誤使用可讀取 alert，避免重複播報。
+- 「繼續回報」「稍後處理」「重試」「重新進入」「回到 LINE」可鍵盤操作並有可見 focus。
+- 360px 下長中文、shelter name、draft prompt 與 error actions 不截斷、不重疊、不產生非必要水平捲動。
+- 不只以 color/icon/animation 表達狀態；reduced motion 不影響理解。
+
+## 14. 驗收證據
 
 P0 至少留下：
 
-- 4 個角色的 login destination matrix。
-- 志工對全部 management route pattern 的 deep link、reload 與 back 結果。
-- 志工 management request count = 0 的 network assertion。
-- 工作人員、收容所管理者與平台管理員的 `/` regression。
-- 無 draft、可恢復 draft、過期／不可恢復 draft、save failure 的結果。
-- Session 401、context 缺少與 temporary error 的終止 state。
-- 360／768／1024／1440 viewport、keyboard、axe 與 reviewer-approved visual evidence。
-- 既有後端 authorization、tenant isolation、OpenAPI、CRM、LINE 與 AI regression 結果。
+- canonical OpenAPI + generated type drift 為 0。
+- exchange success/entry/identity/access/concurrency/failure matrix，失敗 partial state 為 0。
+- ORG-A／ORG-B exact context 與 cross-entry isolation tests。
+- 4 角色 local login destination matrix。
+- 志工對全部 `(management)` route 的 deep link/reload/back 結果，management request count=0。
+- no/resumable/unavailable draft 與 save failure。
+- local 401 與正式 LIFF single-flight 401 matrix；每 epoch exchange <=1、loop=0。
+- 既有 LINE Bot context/dog-first regression。
+- 360/768/1024/1440、keyboard、axe 與 reviewer-approved visual evidence。
+- 同一受控 LINE OA/channel/Webhook/LIFF App 的 ORG-A/ORG-B 專屬 URL、正確 context、跨收容所拒絕及 360px 實機證據。
 
-Browser mock 只證明 UI contract；不得取代真實後端 security／isolation tests。
+Browser mock 不取代真實後端 security/isolation 或受控 LINE／LIFF 驗收；受控 evidence 不得保存 raw token/reference、LINE user id 或其他個資。

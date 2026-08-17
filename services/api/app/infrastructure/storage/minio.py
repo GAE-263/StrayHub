@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import boto3
 
 from services.api.app.config.settings import get_settings
@@ -7,7 +9,7 @@ from services.api.app.infrastructure.storage.ports import ObjectMetadata, Object
 
 
 class MinioStorageAdapter:
-    def __init__(self, *, client: object | None = None, bucket: str | None = None) -> None:
+    def __init__(self, *, client: Any | None = None, bucket: str | None = None) -> None:
         settings = get_settings()
         self.bucket = bucket or settings.minio_bucket
         self.client = client or boto3.client(

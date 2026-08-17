@@ -18,7 +18,7 @@ test("dashboard loading and empty states provide a next step", async ({
 test("saving failure preserves volunteer input and retry can succeed", async ({
   page,
 }) => {
-  const mock = mockVolunteerApi(page, { saveStatus: 500 });
+  const mock = await mockVolunteerApi(page, { saveStatus: 500 });
   await page.goto("/care-report");
   const note = page.getByLabel("補充心得（選填）");
   await note.fill("現場原始觀察，不應在保存失敗時消失。");

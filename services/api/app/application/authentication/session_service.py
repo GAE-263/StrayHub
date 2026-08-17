@@ -154,6 +154,16 @@ class SessionService:
                     "organization_id": membership.organization_id,
                     "role": membership.role,
                     "status": membership.status,
+                    "medical_care_access": membership.medical_care_access,
+                    "capabilities": {
+                        "can_view_medical_care": membership.status == "active"
+                        and (
+                            membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"}
+                            or (membership.role == "STAFF" and membership.medical_care_access)
+                        ),
+                        "can_manage_series": membership.status == "active"
+                        and membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"},
+                    },
                 }
                 for membership in await self.repository.memberships(user.id)
             ],

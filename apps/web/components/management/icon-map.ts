@@ -10,6 +10,7 @@ import {
   HelpCircle,
   History,
   KeyRound,
+  CalendarDays,
   Menu,
   Pencil,
   RefreshCw,
@@ -40,6 +41,7 @@ export const iconMap = {
   help: HelpCircle,
   audit: FileSearch,
   access: KeyRound,
+  calendar: CalendarDays,
 } as const;
 
 export type IconName = keyof typeof iconMap;

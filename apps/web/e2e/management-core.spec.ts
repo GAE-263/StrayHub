@@ -181,7 +181,7 @@ test("detail 與 Timeline 保留 Breadcrumb、同日多筆與 AI／人工狀態"
   await expect(page.getByText("同日第二筆")).toBeVisible();
   await expect(page.getByText(/AI 處理：AI 處理中/)).toBeVisible();
   await expect(page.getByText(/AI 處理：AI 處理失敗/)).toBeVisible();
-  await expect(page.getByText("當日無回報")).toBeVisible();
+  await expect(page.getByText("當日沒有事件")).toBeVisible();
 });
 
 test("較慢的舊查詢不得覆蓋最新回報篩選結果", async ({ page }) => {

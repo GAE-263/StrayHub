@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy import select
@@ -9,6 +11,8 @@ from services.api.app.persistence.models.identity import Organization, Organizat
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
 )
+
+T = TypeVar("T")
 
 
 class OrganizationRepository:
@@ -22,7 +26,7 @@ class OrganizationRepository:
         result = await self.session.execute(select(Organization).order_by(Organization.name))
         return list(result.scalars())
 
-    async def add(self, value: object) -> object:
+    async def add(self, value: T) -> T:
         self.session.add(value)
         await self.session.flush()
         return value
@@ -60,7 +64,7 @@ class OrganizationRepository:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
 
-    async def memberships(self, organization_id: UUID) -> list[OrganizationMembership]:
+    async def memberships(self, organization_id: UUID) -> builtins.list[OrganizationMembership]:
         result = await self.session.execute(
             select(OrganizationMembership)
             .where(OrganizationMembership.organization_id == organization_id)

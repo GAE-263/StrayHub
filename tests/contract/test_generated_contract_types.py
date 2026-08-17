@@ -11,6 +11,10 @@ def test_generated_contract_types_exist_for_openapi_source_of_truth() -> None:
     assert "export interface paths" in content
     assert "CareReportAnswers" in content
     assert "DraftAnswers" in content
+    assert "MedicalRecordCreate" in content
+    assert "CareReminderSeriesCreate" in content
+    assert "OccurrenceAction" in content
+    assert '"/v1/management/care-agenda"' in content
 
 
 def test_volunteer_access_contract_has_expected_operation_and_schema_surface() -> None:

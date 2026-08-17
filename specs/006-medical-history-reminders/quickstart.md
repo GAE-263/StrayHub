@@ -13,6 +13,12 @@ uv run python -m scripts.seed_medical_care
 npm --prefix apps/web install
 ```
 
+`scripts.seed_medical_care` 無參數時即使用可重複執行的 `full` profile；本機權限矩陣帳號沿用 `local-only-password`。若要保存可機器比對的 occurrence ID、畫面欄位與各 bucket 精確總數，執行：
+
+```bash
+uv run python -m scripts.seed_medical_care --expected-output /tmp/medical-care-full-manifest.json
+```
+
 seed 必須固定建立：
 
 - ORG-A（`Asia/Taipei`）與 ORG-B，且兩者都有相同格式但不同 id 的動物／紀錄／提醒。
@@ -210,26 +216,26 @@ Playwright 需將 `/care-calendar`、動物今日摘要／Timeline、管理 dial
 
 ## 12. 驗收紀錄
 
-實作完成後在本節保留實際結果；不得只寫「通過」，需填入可重現的版本、環境、樣本與證據。尚未執行的欄位維持「待執行」，不得預先標示成功。
+實作完成後在本節保留實際結果；不得只寫「通過」，需填入可重現的版本、環境、樣本與證據。2026-08-16 的完整紀錄見 [`evidence/t097-validation-2026-08-16.md`](evidence/t097-validation-2026-08-16.md)。自動化 gate 已通過；正式 10 名管理員及 10 名工作人員的人工樣本尚未執行，因此 T097 與 release gate 維持未完成。
 
 ### 執行基準
 
 | 項目 | 實際值 |
 |---|---|
-| 驗收日期／執行人 | 待執行 |
-| Commit／branch | 待執行 |
-| 作業系統、CPU／RAM | 待執行 |
-| PostgreSQL／Python／Node 版本 | 待執行 |
-| Seed profile／固定 seed 識別／資料筆數 | 待執行 |
+| 驗收日期／執行人 | 2026-08-16／Codex 自動化與探索性操作；正式真人驗收待執行 |
+| Commit／branch | `ea400d6bb5fe30beab6835bb4ba40ba126bd0e8c`／`dev/animal_record`，驗收工作樹含未提交功能變更 |
+| 作業系統、CPU／RAM | macOS 15.5 arm64／Apple M4 Pro 14 cores／24 GB |
+| PostgreSQL／Python／Node 版本 | PostgreSQL 16.13／Python 3.14.3／Node 22.23.1 |
+| Seed profile／固定 seed 識別／資料筆數 | `agenda-e2e`／manifest SHA-256 `c0b90c3b35689bb1c766bb43059962e442a671784f3a53af3c54ffa99493a0bd`／100 隻動物、500 筆 occurrence，四區各 125 |
 
 ### 自動化與效能證據
 
 | 證據 | 實際指令或 profile | 結果與統計 | Log／artifact |
 |---|---|---|---|
-| Ruff／Pytest／mypy | 待執行 | 待執行 | 待執行 |
-| Vitest／Playwright／axe／visual | 待執行 | 待執行 | 待執行 |
-| OpenAPI drift／migration／隔離矩陣 | 待執行 | 待執行 | 待執行 |
-| Agenda 三輪效能 | 待執行 | 每輪 p50／p95／max、查詢數、分類正確率待填 | 待執行 |
+| Ruff／Pytest／mypy | repo-root 完整 Ruff、pytest、mypy | Ruff 通過；pytest 431 passed；mypy 197 source files、0 issues | [`evidence/t097-validation-2026-08-16.md`](evidence/t097-validation-2026-08-16.md) |
+| Vitest／Playwright／axe／visual | web Vitest、production Playwright、獨立 axe／visual | Vitest 46 files／87 tests；Playwright 123 passed／6 opt-in skipped；axe 15 passed；visual 15 passed／6 opt-in skipped；0 failed | [`evidence/t097-validation-2026-08-16.md`](evidence/t097-validation-2026-08-16.md) |
+| OpenAPI drift／migration／隔離矩陣 | canonical generate/check；完整 pytest contract、migration、isolation/security | 通過；跨 tenant 測試無資料洩漏 | [`evidence/t097-validation-2026-08-16.md`](evidence/t097-validation-2026-08-16.md) |
+| Agenda 三輪效能 | `scripts/measure_care_agenda.py`；每輪 5 warmups + 100 samples | p95 25.313／23.640／24.894 ms；每 sample 7 queries；三輪分類 100%、遺漏 0、誤列 0 | [`evidence/t097-agenda-performance.json`](evidence/t097-agenda-performance.json) |
 
 ### 代表性使用者證據
 
@@ -237,4 +243,10 @@ Playwright 需將 `/care-calendar`、動物今日摘要／Timeline、管理 dial
 
 | 匿名編號 | 角色群體 | SC | 開始／完成時間 | 耗時 | 主要步驟 | Expected／actual／遺漏／誤列 | 是否求助 | 通過 | 備註 |
 |---|---|---|---|---|---|---|---|---|---|
-| 待執行 | 管理員或授權工作人員 | 待執行 | 待執行 | 待執行 | 待執行 | 待執行 | 待執行 | 待執行 | 待執行 |
+| EXP-A01 | 管理員（agent 探索） | SC-001 | 未保留精確 wall-clock | 21.872s | 動物頁→新增醫療歷史→送出 | 建立成功；未見產品錯誤 | 否；工具 locator 修正 1 次 | 探索成功 | 非真人，不計正式通過率 |
+| EXP-A01 | 管理員（agent 探索） | SC-002 | 未保留精確 wall-clock | 133.495s | 建立每三月提醒 | native datetime 未觸發 React state，沒有 API POST | 是，嘗試工具 fallback | 無法判定 | 工具限制，不判產品成敗 |
+| EXP-A01 | 管理員（agent 探索） | SC-009 | 未保留精確 wall-clock | 0.752s | 查看動物今日摘要 | 正確辨識有逾期待辦 | 否 | 探索成功 | 非真人，不計正式通過率 |
+| EXP-S01 | 工作人員（agent 探索） | SC-003 | 未保留精確 wall-clock | 3.980s | 查看 Agenda 四區 | 發現每區 50 筆截斷；修正後自動核對 125／125／125／125、遺漏 0、誤列 0 | 否 | 發現缺陷後已修正 | 真人 expected／actual 尚待驗收 |
+| EXP-S01 | 工作人員（agent 探索） | SC-004 | 未保留精確 wall-clock | 12.991s | 2 個主要步驟完成提醒 | 完成後移入已完成區，待處理區不再顯示 | 否 | 探索成功 | 非真人，不計正式通過率 |
+| FORMAL-A01～A10 | 管理員 | SC-001／002／009 | 待真人驗收 | 待真人驗收 | 依第 9 節 | 待真人驗收 | 待真人驗收 | 待真人驗收 | 正式樣本 0／10 |
+| FORMAL-S01～S10 | 授權工作人員 | SC-003／004 | 待真人驗收 | 待真人驗收 | 依第 9 節 | 待真人驗收 | 待真人驗收 | 待真人驗收 | 正式樣本 0／10 |

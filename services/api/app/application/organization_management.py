@@ -88,7 +88,9 @@ class OrganizationManagementService:
         organization.status = "suspended"
         return organization
 
-    async def create_membership(self, *, organization_id, user_id, role: str):
+    async def create_membership(
+        self, *, organization_id, user_id, role: str
+    ) -> OrganizationMembership:
         if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
             raise DomainError("invalid_role", "收容所角色無效", 422)
         if role == "VOLUNTEER":
@@ -116,7 +118,14 @@ class OrganizationManagementService:
             )
         )
 
-    async def update_membership(self, membership, *, role: str | None, status: str | None):
+    async def update_membership(
+        self,
+        membership,
+        *,
+        role: str | None,
+        status: str | None,
+        medical_care_access: bool | None = None,
+    ):
         if role is not None:
             if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
                 raise DomainError("invalid_role", "收容所角色無效", 422)
@@ -131,4 +140,8 @@ class OrganizationManagementService:
             if status not in {"invited", "active", "disabled"}:
                 raise DomainError("invalid_membership_status", "Membership 狀態無效", 422)
             membership.status = status
+        if medical_care_access is not None:
+            if membership.role != "STAFF":
+                raise DomainError("medical_care_access_staff_only", "醫療權限只能授予 STAFF", 422)
+            membership.medical_care_access = medical_care_access
         return membership

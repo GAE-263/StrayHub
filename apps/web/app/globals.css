@@ -405,10 +405,7 @@ td {
   justify-content: center;
   min-height: 44px;
   padding: 10px 15px;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    opacity 120ms ease;
+  transition: border-color 120ms ease;
 }
 .ui-button-default {
   background: var(--primary);
@@ -433,8 +430,11 @@ td {
   text-decoration: underline;
 }
 .ui-button:disabled {
+  background: var(--surface-muted);
+  border-color: var(--border);
+  color: var(--muted);
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 1;
 }
 .ui-card {
   background: var(--surface);

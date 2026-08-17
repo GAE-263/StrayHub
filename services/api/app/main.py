@@ -3,8 +3,10 @@ from fastapi import FastAPI
 from services.api.app.api.ai_observations import router as ai_observations_router
 from services.api.app.api.animal_selection import router as animal_selection_router
 from services.api.app.api.animal_timeline import router as animal_timeline_router
+from services.api.app.api.assigned_care import router as assigned_care_router
 from services.api.app.api.audit import router as audit_router
 from services.api.app.api.authentication import router as authentication_router
+from services.api.app.api.care_reminders import router as care_reminders_router
 from services.api.app.api.care_reports import router as care_reports_router
 from services.api.app.api.dashboard import router as dashboard_router
 from services.api.app.api.errors import DomainError, domain_error_handler
@@ -13,6 +15,7 @@ from services.api.app.api.line_drafts import router as line_drafts_router
 from services.api.app.api.line_webhook import router as line_webhook_router
 from services.api.app.api.management_animals import router as management_animals_router
 from services.api.app.api.media import router as media_router
+from services.api.app.api.medical_records import router as medical_records_router
 from services.api.app.api.observation_options import router as observation_options_router
 from services.api.app.api.organization_management import router as organization_management_router
 from services.api.app.api.qr_codes import router as qr_codes_router
@@ -40,6 +43,9 @@ app.include_router(media_router)
 app.include_router(line_binding_router)
 app.include_router(line_drafts_router)
 app.include_router(volunteer_access_router)
+app.include_router(medical_records_router)
+app.include_router(care_reminders_router)
+app.include_router(assigned_care_router)
 
 
 @app.get("/healthz", tags=["Health"])

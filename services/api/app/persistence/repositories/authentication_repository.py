@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select, update
@@ -17,6 +18,8 @@ from services.api.app.persistence.models.identity import (
     WebhookSession,
 )
 from services.api.app.persistence.models.volunteer_access import VolunteerAccessGrant
+
+T = TypeVar("T")
 
 
 class AuthenticationRepository:
@@ -191,7 +194,7 @@ class AuthenticationRepository:
         for record in result.scalars():
             record.status = "revoked"
 
-    async def add(self, value: object) -> object:
+    async def add(self, value: T) -> T:
         self.session.add(value)
         await self.session.flush()
         return value

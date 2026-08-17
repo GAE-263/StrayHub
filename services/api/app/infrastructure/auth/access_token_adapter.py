@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -23,7 +24,7 @@ class JwtAccessTokenAdapter:
         self.ttl_seconds = ttl_seconds
         self.active_kid = active_kid
 
-    def issue(self, claims: dict[str, Any]) -> str:
+    def issue(self, claims: Mapping[str, object]) -> str:
         now = datetime.now(timezone.utc)
         safe_claims = {
             key: value
@@ -48,21 +49,27 @@ class JwtAccessTokenAdapter:
         )
 
     def verify(self, token: str) -> dict[str, Any]:
-        header = jwt.get_unverified_header(token)
+        try:
+            header = jwt.get_unverified_header(token)
+        except jwt.InvalidTokenError as exc:
+            raise ValueError("malformed access token") from exc
         if header.get("alg") != "RS256" or header.get("typ") != "JWT":
             raise ValueError("unsupported access token header")
         kid = header.get("kid")
         public_key = self.public_keys.get(kid)
         if not public_key:
             raise ValueError("unknown access token key")
-        payload = jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            issuer=self.issuer,
-            audience=self.audience,
-            leeway=30,
-        )
+        try:
+            payload = jwt.decode(
+                token,
+                public_key,
+                algorithms=["RS256"],
+                issuer=self.issuer,
+                audience=self.audience,
+                leeway=30,
+            )
+        except jwt.InvalidTokenError as exc:
+            raise ValueError("invalid access token") from exc
         if payload.get("typ") != "access":
             raise ValueError("unexpected token type")
         return payload

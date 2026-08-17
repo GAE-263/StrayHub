@@ -14,6 +14,7 @@ from services.api.app.api.dependencies import (
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.organization_management import OrganizationManagementService
+from services.api.app.domain.organization_timezone import validate_timezone
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership
 from services.api.app.persistence.models.shelter_area import ShelterArea
@@ -34,6 +35,8 @@ class OrganizationResponse(BaseModel):
     address: str | None
     service_area: str | None
     contact: str | None
+    timezone: str = "Asia/Taipei"
+    timezone_version: int = 1
 
 
 class OrganizationCreateRequest(BaseModel):
@@ -53,6 +56,7 @@ class OrganizationUpdateRequest(BaseModel):
     service_area: str | None = None
     contact: str | None = None
     status: Literal["pending_setup", "active", "suspended"] | None = None
+    timezone: str | None = None
 
 
 class InitialAdminCreateRequest(BaseModel):
@@ -71,6 +75,7 @@ class MembershipResponse(BaseModel):
     valid_from: datetime | None = None
     expires_at: datetime | None = None
     access_version: int = 1
+    medical_care_access: bool = False
 
 
 class MembershipCreateRequest(BaseModel):
@@ -81,6 +86,7 @@ class MembershipCreateRequest(BaseModel):
 class MembershipUpdateRequest(BaseModel):
     role: str | None = None
     status: str | None = None
+    medical_care_access: bool | None = None
 
 
 class AccountCreateRequest(BaseModel):
@@ -120,11 +126,36 @@ def _require_platform(context: RequestContext) -> None:
 
 
 def _response(organization: Organization) -> OrganizationResponse:
-    return OrganizationResponse.model_validate(organization, from_attributes=True)
+    data = OrganizationResponse.model_validate(
+        {
+            "id": organization.id,
+            "code": organization.code,
+            "name": organization.name,
+            "status": organization.status,
+            "address": organization.address,
+            "service_area": organization.service_area,
+            "contact": organization.contact,
+            "timezone": getattr(organization, "timezone", None) or "Asia/Taipei",
+            "timezone_version": getattr(organization, "timezone_version", None) or 1,
+        }
+    )
+    return data
 
 
 def _membership_response(membership: OrganizationMembership) -> MembershipResponse:
-    return MembershipResponse.model_validate(membership, from_attributes=True)
+    return MembershipResponse.model_validate(
+        {
+            "id": membership.id,
+            "organization_id": membership.organization_id,
+            "user_id": membership.user_id,
+            "role": membership.role,
+            "status": membership.status,
+            "valid_from": membership.valid_from,
+            "expires_at": membership.expires_at,
+            "access_version": getattr(membership, "access_version", None) or 1,
+            "medical_care_access": getattr(membership, "medical_care_access", False) or False,
+        }
+    )
 
 
 def _area_response(area: ShelterArea) -> ShelterAreaResponse:
@@ -245,6 +276,9 @@ async def update_organization(
         value = getattr(payload, field)
         if value is not None:
             setattr(organization, field, value)
+    if payload.timezone is not None:
+        organization.timezone = validate_timezone(payload.timezone)
+        organization.timezone_version += 1
     await AuditService(session).record(
         organization_id=organization.id,
         actor_user_id=context.user_id,
@@ -421,6 +455,7 @@ async def update_membership(
         membership,
         role=payload.role,
         status=payload.status,
+        medical_care_access=payload.medical_care_access,
     )
     await AuditService(session).record(
         organization_id=organizationId,

@@ -16,6 +16,12 @@ class Organization(IdentityMixin, AuditMixin, Base):
     service_area: Mapped[str | None] = mapped_column(String(200), nullable=True)
     contact: Mapped[str | None] = mapped_column(String(300), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_setup", index=True)
+    timezone: Mapped[str] = mapped_column(
+        String(64), default="Asia/Taipei", server_default="Asia/Taipei", nullable=False
+    )
+    timezone_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
 
 
 class User(IdentityMixin, AuditMixin, Base):
@@ -48,6 +54,9 @@ class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     access_version: Mapped[int] = mapped_column(
         Integer, default=0, server_default=text("0"), nullable=False
+    )
+    medical_care_access: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
     )
 
 

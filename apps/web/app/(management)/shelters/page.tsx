@@ -20,6 +20,8 @@ type Shelter = {
   code: string;
   name: string;
   status: "pending_setup" | "active" | "suspended";
+  timezone: string;
+  timezone_version: number;
 };
 
 type Membership = {
@@ -28,6 +30,7 @@ type Membership = {
   user_id: string;
   role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
   status: "invited" | "active" | "disabled";
+  medical_care_access: boolean;
 };
 
 type Area = {
@@ -68,12 +71,17 @@ export default function SheltersManagementPage() {
   const [accountRole, setAccountRole] = useState<Membership["role"]>("STAFF");
   const [areaName, setAreaName] = useState("");
   const [areaType, setAreaType] = useState<Area["area_type"]>("area");
+  const [timezone, setTimezone] = useState("Asia/Taipei");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const selectedShelter = useMemo(
     () => shelters.find((shelter) => shelter.id === selectedShelterId),
     [shelters, selectedShelterId],
   );
+
+  useEffect(() => {
+    if (selectedShelter) setTimezone(selectedShelter.timezone || "Asia/Taipei");
+  }, [selectedShelter]);
 
   const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -188,7 +196,9 @@ export default function SheltersManagementPage() {
 
   const updateMembership = async (
     membershipId: string,
-    changes: Partial<Pick<Membership, "role" | "status">>,
+    changes: Partial<
+      Pick<Membership, "role" | "status" | "medical_care_access">
+    >,
   ) => {
     await request<Membership>(
       `/v1/organizations/${selectedShelterId}/memberships/${membershipId}`,
@@ -199,6 +209,16 @@ export default function SheltersManagementPage() {
     );
     setMessage("Membership 已更新並寫入 Audit。");
     await loadShelterDetails();
+  };
+
+  const updateTimezone = async () => {
+    if (!selectedShelterId) return;
+    await request<Shelter>(`/v1/organizations/${selectedShelterId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ timezone }),
+    });
+    setMessage("收容所時區已更新，後續提醒與今日日期會依新時區計算。");
+    await loadShelters(selectedShelterId);
   };
 
   const createArea = async () => {
@@ -248,6 +268,33 @@ export default function SheltersManagementPage() {
               啟用收容所
             </Button>
           )}
+          <div className="stack-sm">
+            <h3>照護日期與時區</h3>
+            <p className="muted">
+              目前版本的今日待辦、提醒與動物時間軸都使用此收容所時區。
+            </p>
+            <Field>
+              <label htmlFor="shelter-timezone">收容所時區</label>
+              <Select
+                id="shelter-timezone"
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+              >
+                <option value="Asia/Taipei">Asia/Taipei（台灣）</option>
+                <option value="Asia/Tokyo">Asia/Tokyo（日本）</option>
+                <option value="UTC">UTC</option>
+              </Select>
+            </Field>
+            <Button
+              type="button"
+              disabled={
+                !selectedShelterId || timezone === selectedShelter?.timezone
+              }
+              onClick={() => void runAction(updateTimezone)}
+            >
+              儲存時區
+            </Button>
+          </div>
           <form onSubmit={(event) => void submit(event, createShelter)}>
             <h3>建立收容所</h3>
             <Field>
@@ -322,6 +369,31 @@ export default function SheltersManagementPage() {
                   <option value="STAFF">STAFF</option>
                   <option value="VOLUNTEER">VOLUNTEER</option>
                 </Select>
+                {membership.role === "STAFF" ? (
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={membership.medical_care_access}
+                      aria-label={`${membership.user_id} 醫療資料權限`}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        if (
+                          !enabled &&
+                          !window.confirm("確定撤銷此 STAFF 的醫療資料權限嗎？")
+                        ) {
+                          event.target.checked = true;
+                          return;
+                        }
+                        void runAction(() =>
+                          updateMembership(membership.id, {
+                            medical_care_access: enabled,
+                          }),
+                        );
+                      }}
+                    />
+                    醫療資料權限
+                  </label>
+                ) : null}
                 <Button
                   variant="secondary"
                   type="button"

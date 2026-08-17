@@ -10,6 +10,8 @@ class TimelineDay:
     has_report: bool
     report_count: int
     reports: list[object] = field(default_factory=list)
+    events: list[object] = field(default_factory=list)
+    scheduled: list[object] = field(default_factory=list)
 
     @property
     def state(self) -> str:

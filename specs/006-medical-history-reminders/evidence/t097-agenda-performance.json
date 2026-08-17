@@ -1,0 +1,114 @@
+{
+  "generated_at": "2026-08-16T09:21:37.024136+00:00",
+  "command": {
+    "rounds": 3,
+    "warmups_per_round": 5,
+    "samples_per_round": 100,
+    "page_size": 1000
+  },
+  "environment": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "platform": "macOS-15.5-arm64-arm-64bit-Mach-O"
+  },
+  "source": {
+    "manifest": "/private/tmp/t097-agenda-manifest.json",
+    "manifest_sha256": "c0b90c3b35689bb1c766bb43059962e442a671784f3a53af3c54ffa99493a0bd",
+    "organization_id": "567688df-15dc-45a7-aa1d-918f51eec62b",
+    "target_day": "2026-08-16",
+    "expected_occurrence_count": 500,
+    "expected_bucket_totals": {
+      "today_pending": 125,
+      "overdue": 125,
+      "today_resolved": 125,
+      "next_seven_days": 125
+    }
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "warmups": 5,
+      "samples": 100,
+      "latency_ms": {
+        "p50": 16.883,
+        "p95": 25.313,
+        "max": 27.091
+      },
+      "sql_queries": {
+        "min": 7,
+        "max": 7
+      },
+      "serialized_bytes": {
+        "min": 715778,
+        "max": 715778
+      },
+      "bucket_totals": {
+        "today_pending": 125,
+        "overdue": 125,
+        "today_resolved": 125,
+        "next_seven_days": 125
+      },
+      "missing_occurrence_ids": [],
+      "unexpected_occurrence_ids": [],
+      "classification_pass_rate": 1.0
+    },
+    {
+      "round": 2,
+      "warmups": 5,
+      "samples": 100,
+      "latency_ms": {
+        "p50": 16.426,
+        "p95": 23.64,
+        "max": 25.544
+      },
+      "sql_queries": {
+        "min": 7,
+        "max": 7
+      },
+      "serialized_bytes": {
+        "min": 715778,
+        "max": 715778
+      },
+      "bucket_totals": {
+        "today_pending": 125,
+        "overdue": 125,
+        "today_resolved": 125,
+        "next_seven_days": 125
+      },
+      "missing_occurrence_ids": [],
+      "unexpected_occurrence_ids": [],
+      "classification_pass_rate": 1.0
+    },
+    {
+      "round": 3,
+      "warmups": 5,
+      "samples": 100,
+      "latency_ms": {
+        "p50": 16.473,
+        "p95": 24.894,
+        "max": 26.284
+      },
+      "sql_queries": {
+        "min": 7,
+        "max": 7
+      },
+      "serialized_bytes": {
+        "min": 715778,
+        "max": 715778
+      },
+      "bucket_totals": {
+        "today_pending": 125,
+        "overdue": 125,
+        "today_resolved": 125,
+        "next_seven_days": 125
+      },
+      "missing_occurrence_ids": [],
+      "unexpected_occurrence_ids": [],
+      "classification_pass_rate": 1.0
+    }
+  ],
+  "overall": {
+    "missing_occurrence_ids": [],
+    "unexpected_occurrence_ids": [],
+    "classification_pass_rate": 1.0
+  }
+}

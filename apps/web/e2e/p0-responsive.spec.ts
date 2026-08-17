@@ -15,6 +15,8 @@ const routes = [
   "/animals",
   "/animals/animal-a",
   "/animals/animal-a/timeline",
+  "/care-calendar",
+  "/assigned-care/occ-1",
   "/reports",
   "/reports/report-a",
   "/animal-confirmation",

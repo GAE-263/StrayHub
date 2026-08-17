@@ -5,6 +5,9 @@ const organization = {
   code: "ORG-A",
   name: "浪浪森友會 A",
   role: "STAFF",
+  status: "active",
+  timezone: "Asia/Taipei",
+  timezone_version: 1,
 };
 
 type FixtureStatus = number | "network";
@@ -80,13 +83,13 @@ async function respond(
   await json(route, body, status);
 }
 
-export function mockManagementApi(
+export async function mockManagementApi(
   page: Page,
   options: ManagementFixtureOptions = {},
 ) {
   const organizations = options.organizations ?? [organization];
   const contextSwitchStatus = options.contextSwitchStatus ?? 200;
-  page.route("**/v1/**", async (route) => {
+  await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/auth/me")) {
       await json(route, {
@@ -324,6 +327,64 @@ export function mockManagementApi(
       });
       return;
     }
+    if (url.pathname === "/v1/management/care-agenda") {
+      await json(route, {
+        local_today: "2026-08-16",
+        today_state: "no_activity",
+        organization_timezone: "Asia/Taipei",
+        timezone: "Asia/Taipei",
+        timezone_version: 1,
+        buckets: {
+          today_pending: [],
+          overdue: [],
+          today_resolved: [],
+          next_seven_days: [],
+        },
+        totals: {
+          today_pending: 0,
+          overdue: 0,
+          today_resolved: 0,
+          next_seven_days: 0,
+        },
+        pages: Object.fromEntries(
+          ["today_pending", "overdue", "today_resolved", "next_seven_days"].map(
+            (bucket) => [
+              bucket,
+              { items: [], total_count: 0, next_cursor: null },
+            ],
+          ),
+        ),
+      });
+      return;
+    }
+    if (url.pathname.match(/\/v1\/assigned-care-reminders\/[^/]+$/)) {
+      await json(route, {
+        occurrence_id: "00000000-0000-4000-8000-000000000001",
+        version: 0,
+        status: "pending",
+        animal: {
+          id: "animal-a",
+          name: "小森",
+          shelter_number: "A-001",
+          photo_url: null,
+        },
+        reminder_type: "medication",
+        title: "今日照護指派",
+        instructions: "依管理員指示執行。",
+        display_local_at: "2026-08-16T09:00:00+08:00",
+        can_complete: true,
+        can_skip: true,
+      });
+      return;
+    }
+    if (url.pathname.match(/\/management\/animals\/[^/]+\/medical-records$/)) {
+      await json(route, {
+        items: [],
+        total_count: 0,
+        next_cursor: null,
+      });
+      return;
+    }
     if (url.pathname.endsWith("/management/animals")) {
       const params = url.searchParams;
       const data = options.animals
@@ -405,12 +466,12 @@ export function mockManagementApi(
   });
 }
 
-export function mockVolunteerApi(
+export async function mockVolunteerApi(
   page: Page,
   options: { saveStatus?: number } = {},
 ) {
   let saveStatus = options.saveStatus ?? 200;
-  page.route("**/v1/**", async (route) => {
+  await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (
       url.pathname === "/v1/animals" ||

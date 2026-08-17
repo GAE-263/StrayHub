@@ -1,152 +1,276 @@
-# 資料模型：志工角色導向入口與管理路由隔離
+# Data Model：志工角色導向入口與管理路由隔離
 
-本功能不新增 CRM table、API entity 或正式前端資料副本。以下模型是 route 判斷與驗收所需的 runtime view；所有 Session、User、Membership、Active Shelter Context、Animal 與 Draft 仍以既有後端服務及 CRM 為唯一事實來源。
+本功能不新增 CRM 資料表。下列模型分為「既有持久化 entity」與「前端 runtime view/state」。正式授權只來自既有 CRM entity；runtime state 不得成為角色、Membership、期限或 organization scope 的事實來源。
 
-## EffectiveRole（有效角色）
+## 1. 既有持久化 entities
 
-### 值域
+### ShelterEntryReference（由 005 提供）
 
-- `PLATFORM_ADMIN`
-- `SHELTER_ADMIN`
-- `STAFF`
-- `VOLUNTEER`
+收容所專屬 LIFF URL／QR Code 的 opaque reference。
 
-### 推導規則
-
-1. `user.platform_role` 為 `PLATFORM_ADMIN` 時，有效角色為 `PLATFORM_ADMIN`。
-2. 其他使用者必須在目前 Active Shelter Context 找到 status 為 active 的 Membership，並以該 Membership role 為有效角色。
-3. 找不到目前 context、Membership 不存在／停用或 organization id 不一致時，不得使用預設 `STAFF`；結果為 context／authorization failure。
-4. 登入後第一次導向可使用後端 Login response 中已選定 organization 的 role；後續 reload、deep link 與 back 必須重新依 profile/context 推導。
-
-### 不變條件
-
-- pathname、query string、sessionStorage 與 UI state 不能產生或提升角色。
-- 前端有效角色只決定可見入口；不能取代後端 API authorization。
-- `VOLUNTEER` 不能通過 management route policy。
-
-## AuthenticatedRouteContext（已驗證路由情境）
-
-| 欄位 | 型別／值 | 來源與規則 |
+| 欄位 | 用途 | 004 規則 |
 | --- | --- | --- |
-| `sessionState` | `authenticated` | 既有 access token 對應的 server-side Session 已通過 `/auth/me` 驗證 |
-| `userId` | user id | `/auth/me`；只用於目前使用者 view，不由 client 建立 |
-| `activeOrganizationId` | organization id | `/auth/active-shelter-context`；必須是非空且後端已驗證 |
-| `effectiveRole` | `EffectiveRole` | 依平台角色或目前 context 的 active Membership 推導 |
-| `profile` | current user + memberships | `/auth/me` 的既有回應；僅保留目前 render 所需資料 |
-| `pathname` | current pathname | 只用於 route policy 與避免導向相同目的地，不作授權來源 |
+| `id` | reference identity | resolver 的最小輸出之一；不回 client |
+| `organization_id` | 候選收容所 | 只作 exchange 的候選 scope |
+| `token_digest` | raw reference digest | raw reference 不落庫、不寫 log |
+| `purpose` | 使用目的 | 必須符合 volunteer entry purpose |
+| `status` | active/revoked | 只有 active 可解析 |
+| rotation metadata | 發行／撤銷／輪替 | 004 只消費，不管理 lifecycle |
 
-### 驗證規則
+**驗證規則**：
 
-- 缺少 access token：不建立此 view，結果為 `redirect-login`。
-- `/auth/me` 或 Active Context 回應 401：清除既有 client auth cache，結果為 `redirect-login`。
-- Active Context organization id 為空、Membership 不一致或 context response 表示需要選擇：結果為 `context-required`，不掛載受保護 children。
-- 暫時 network／5xx error：結果為 `error`，保留安全重試與返回／重新登入操作。
-- View 只存在於目前頁面生命週期，不持久化為新的 auth record。
+- 只透過 005 的 fixed-purpose resolver 解析。
+- resolver 只回 `reference_id + organization_id`，不得回 Membership、user 或內部設定。
+- reference 無效、撤銷、purpose 不符或 organization 停用時不得建立 Session/context。
+- reference 被轉傳不授權；同一 reference 對不同 LINE identity 必須分別驗證。
 
-## ProtectedRoutePolicy（受保護路由政策）
+### LineUserBinding
 
-| `area` | Route patterns | 允許條件 | Role mismatch 結果 |
-| --- | --- | --- | --- |
-| `management` | `/`、`/animals`、`/animals/*`、`/reports`、`/reports/*`、`/ai-review`、`/settings/*`、`/shelters` | Session/context 有效且角色為 `PLATFORM_ADMIN`、`SHELTER_ADMIN` 或 `STAFF` | `VOLUNTEER` → `redirect-volunteer` |
-| `volunteer` | `/animal-confirmation`、`/care-report` | Session/context 有效；頁面內的資料操作仍由後端 role/scope 判定 | 不新增管理角色反向 redirect |
-| `public-auth` | `/login` | 不要求既有 Session；成功登入後依 selected organization role 決定目的地 | 不適用 |
+已驗證 LINE user id 與 StrayHub User 的綁定。
 
-### 管理 route normalization
-
-- Query string、hash 與尾端斜線不改變 route area。
-- `/settings/*` 的所有既有與未來巢狀頁面預設屬於 management。
-- 動態 `animalId`／`reportId` 不參與角色判斷，也不能改變 policy。
-- 未知 route 仍由既有 Next.js not-found 行為處理；本功能不建立全域公開錯誤 route。
-
-## RouteAccessDecision（路由存取決策）
-
-| 狀態 | 必要條件 | 可見內容 | 下一步 |
-| --- | --- | --- | --- |
-| `checking` | token/profile/context 尚在確認 | 安全且繁中 loading/status | 等待；不掛載 page children |
-| `allow-management` | management policy 通過 | Management Shell 與 page children | 載入 organizations 與頁面資料 |
-| `allow-volunteer` | volunteer policy 通過 | volunteer page children；不顯示管理 Shell | 載入動物／draft 等志工資料 |
-| `redirect-login` | token 缺少或 Session 401 | 安全 redirect status | `replace('/login')` |
-| `redirect-volunteer` | management route 的有效角色為 `VOLUNTEER` | 安全 redirect status；無管理內容 | `replace('/animal-confirmation')` |
-| `context-required` | Session 有效但 Active Context 缺少／不一致 | 不含資料的繁中錯誤狀態 | 返回登入／context 選擇、重試或聯絡管理者 |
-| `error` | network、5xx 或不可分類錯誤 | 不含受保護資料的繁中錯誤狀態 | 重試、返回或重新登入 |
-
-### 狀態轉換
-
-| From | Event | To |
+| 欄位 | 用途 | 004 規則 |
 | --- | --- | --- |
-| `checking` | 無 token | `redirect-login` |
-| `checking` | profile/context 401 | `redirect-login` |
-| `checking` | context 缺少或 Membership 不一致 | `context-required` |
-| `checking` | management + `VOLUNTEER` | `redirect-volunteer` |
-| `checking` | management + management role | `allow-management` |
-| `checking` | volunteer + valid context | `allow-volunteer` |
-| `checking` | network／5xx | `error` |
-| `error` | 使用者選擇重試 | `checking` |
-| 任一 allow state | pathname、auth event 或 context 變更 | `checking` |
+| `line_user_id` | LINE verifier 解析結果 | 不信任 client profile/sub claim |
+| `user_id` | CRM User | 必須指向 active User |
+| `status` | binding 狀態 | 只有 active binding 可 exchange |
 
-### Loop 防護
+004 不建立或修復 Binding；缺少/停用時回安全錯誤，由既有報名/綁定流程處理。
 
-- Destination 與目前 pathname 相同時不得再次 redirect。
-- Redirect state 不掛載 children，也不啟動頁面資料查詢。
-- `context-required` 與 `error` 是終止狀態，不自動在 `/login`、`/` 與 `/animal-confirmation` 間來回。
-- Browser back／reload 重新從 `checking` 開始，不能沿用先前 allow decision。
+### User
 
-## ActiveDraftResumeView（active draft 恢復 view）
-
-此 view 只在 volunteer boundary 通過後，由目前草稿與今日可回報動物資料組合；不新增持久化 entity。
-
-| 欄位 | 來源 | 規則／用途 |
+| 欄位 | 用途 | 驗證 |
 | --- | --- | --- |
-| `draftId` | current draft | 只作既有草稿識別；後端仍重新驗證使用者與 context |
-| `organizationId` | current draft | 必須等於 `AuthenticatedRouteContext.activeOrganizationId` |
-| `animalId` | current draft | 用於與今日可回報動物名單比對 |
-| `animalName` | `/v1/animals` match | 可辨識的動物名稱；沒有授權 match 時不顯示詳細資料 |
-| `shelterNumber` | `/v1/animals` match | 可選的收容編號，用於避免同名動物混淆 |
-| `currentStep` | current draft | 轉為台灣繁體中文進度文案，不直接把 wire value 當主要文案 |
-| `expiresAt` | current draft | 必須晚於目前時間，否則不可恢復 |
-| `status` | current draft | P0 只有 `active` 可恢復 |
-| `resumeState` | derived | `available`、`unavailable` 或 `none` |
+| `id` | Membership/Session owner | 必須與 Binding 一致 |
+| `status` | active/disabled | 只有 active 可建立 Session |
+| `platform_role` | 平台角色 | route boundary 用於 local 管理流程；正式 volunteer entry 不用它繞過 Membership |
 
-### 可恢復條件
+### Organization
 
-`resumeState = available` 必須同時符合：
+| 欄位 | 用途 | 驗證 |
+| --- | --- | --- |
+| `id` | exact tenant scope | 必須等於 resolver organization |
+| `name` | volunteer route 顯示名稱 | context 通過後才可顯示 |
+| `code` | local/diagnostic label | 不授權 |
+| `status` | active/suspended 等 | 只有 active 可 exchange/讀取資料 |
 
-1. current draft 存在。
-2. `status` 為 `active`。
-3. `expiresAt` 尚未到期。
-4. `organizationId` 等於目前 Active Shelter Context。
-5. `animalId` 能在目前 `/v1/animals` 授權結果中找到且 `can_report` 為 true。
+### OrganizationMembership（由 005 擴充）
 
-任一條件不符合時，不得載入草稿答案或動物詳細資訊。使用者只看到安全的 unavailable／聯絡管理者下一步。
+| 欄位 | 用途 | 004 驗證 |
+| --- | --- | --- |
+| `id` | Membership identity | 與 active Grant 關聯 |
+| `organization_id` | tenant | 必須等於 resolver organization |
+| `user_id` | member | 必須等於 Binding User |
+| `role` | organization role | 正式 volunteer entry 必須為 `VOLUNTEER` |
+| `status` | active/revoked/expired/disabled | 必須為 active |
+| `valid_from` | 授權開始 | `valid_from <= database_now` |
+| `expires_at` | 授權到期 | `database_now < expires_at` |
+| `access_version` | lifecycle version | 由 005 mutation/cleanup 管理；004 只讀 |
 
-### 使用者動作
+**Effective predicate**：
 
-- `continue`：前往既有 `/care-report`；該頁再次由後端取得目前草稿並驗證。
-- `later`：只關閉本次頁面的提示，留在 `/animal-confirmation`；不修改 Draft 狀態。
-- `retry`：重新取得 current draft 與今日動物名單；不得使用前一次失敗的資料冒充成功。
+```text
+user.status == active
+AND organization.status == active
+AND membership.user_id == bound_user.id
+AND membership.organization_id == resolved_organization.id
+AND membership.role == VOLUNTEER
+AND membership.status == active
+AND membership.valid_from <= database_now
+AND database_now < membership.expires_at
+AND matching active VolunteerAccessGrant exists for the same interval
+```
 
-### P1 邊界
+pending/rejected Application 不會形成有效 Membership；future、expired、revoked、disabled 或缺少 Grant 全部拒絕。
 
-P0 沿用每位志工、每個 Active Shelter Context 最多一筆 active draft。多筆 active draft view、跨裝置同步與跨 context 選擇只有在後續規格明確修改既有 domain rule 後才可加入。
+### VolunteerAccessGrant（由 005 提供）
 
-## RequestLifecycle（請求生命週期）
+| 欄位 | 用途 | 004 驗證 |
+| --- | --- | --- |
+| `membership_id` | 對應 Membership | 必須等於 exact Membership |
+| `organization_id` | tenant | 必須等於 resolver organization |
+| `status` | active/expired/revoked | 必須為 active |
+| `valid_from` | grant start | `valid_from <= database_now` |
+| `expires_at` | grant end | `database_now < expires_at` |
+| `version` | concurrency | 由 005 管理；exchange lock 只穩定 commit ordering |
 
-### Management route
+### SessionRecord
 
-1. Boundary 取得 profile + Active Context。
-2. 推導 `RouteAccessDecision`。
-3. 只有 `allow-management` 才取得 organizations 並掛載 Management Shell。
-4. Shell 通過後才掛載 Dashboard／Animals／Reports／Settings 等 page children。
+既有 server-side Session，也是 Active Shelter Context 的持久化載體。
 
-### Volunteer route
+| 欄位 | 用途 | 004 寫入規則 |
+| --- | --- | --- |
+| `id` | Session identity | exchange transaction 內產生 |
+| `user_id` | authenticated user | Binding User |
+| `active_organization_id` | Active Shelter Context | 必須直接寫入 resolver organization，不可先為 null 再切換 |
+| `status` | active/revoked/expired | 新 exchange 為 active |
+| `expires_at` | Session lifetime | 沿用既有 refresh TTL |
 
-1. Boundary 取得 profile + Active Context。
-2. 只有 `allow-volunteer` 才掛載 page children。
-3. `/animal-confirmation` 再取得今日動物與 current draft。
-4. `/care-report` 再取得既有 current draft。
+### RefreshTokenRecord
 
-### 不變條件
+| 欄位 | 用途 | 004 寫入規則 |
+| --- | --- | --- |
+| `session_id` | 所屬 Session | 與新 Session 同 transaction |
+| `token_digest` | refresh token digest | raw token 只回 client |
+| `family_id` | rotation family | 沿用既有 SessionService |
+| `status` | active/rotated/revoked | 新 exchange 為 active |
+| `expires_at` | refresh expiry | 沿用既有 TTL |
 
-- `VOLUNTEER` 開啟 management route 時，management page request count 必須是 0。
-- Role/context 尚未完成時，管理與志工業務 children 都不掛載。
-- 任何前端 request 的 organization／resource id 都不能取代後端 scope 驗證。
+### 原子關係與 lock ordering
+
+```text
+ShelterEntryReference --resolve--> Organization
+LINE raw ID token --verify--> LineUserBinding --> User
+User + Organization --> OrganizationMembership --> VolunteerAccessGrant
+有效且鎖定的 Membership/Grant --> SessionRecord(active_organization_id)
+SessionRecord --> RefreshTokenRecord
+```
+
+固定順序：
+
+1. resolve reference，取得單一 organization 並設定 organization RLS scope；
+2. verify LINE identity，讀 Binding/User；
+3. 驗證 Organization active；
+4. `FOR UPDATE`（或等價穩定 lock）取得 exact Membership 與 active Grant；
+5. 以 database time 重做 effective predicate；
+6. insert SessionRecord（含 context）；
+7. insert RefreshTokenRecord；
+8. commit 後才回 AuthResponse。
+
+任一步驟失敗：transaction rollback，新增 SessionRecord=0、RefreshTokenRecord=0、Active Shelter Context=0；不得更新 Membership/Grant/Application。
+
+## 2. Runtime view/state
+
+### LiffEntryBootstrap
+
+正式 `/volunteer-entry` 單次 bootstrap input/state。
+
+| 欄位 | 型別 | 來源／規則 |
+| --- | --- | --- |
+| `liffId` | string | server runtime `LIFF_ID`；public app identifier，不是 secret |
+| `entryReference` | string | URL `entry`；非空；只送 exchange，不解碼 |
+| `idToken` | string/null | `liff.getIDToken()` raw result；不得從 query 取得 |
+| `phase` | enum | `initializing`、`logging-in`、`exchanging`、`redirecting`、`error` |
+| `errorKind` | enum/null | entry、identity、access、dependency、configuration |
+
+**不變條件**：`idToken` 與 `entryReference` 不出現在 UI、analytics、console、error description 或 permanent URL；exchange 成功前不掛載 protected volunteer children。
+
+### AuthenticatedRouteContext
+
+| 欄位 | 型別 | 來源 |
+| --- | --- | --- |
+| `profile` | CurrentUser | `GET /v1/auth/me` |
+| `organizationId` | UUID | `GET /v1/auth/active-shelter-context` |
+| `organizationName` | string/null | role/context 通過後由 scoped organization list 對應 |
+| `effectiveRole` | EffectiveRole/null | profile + active context 純函式推導 |
+| `sessionSource` | `local`/`liff` | client workflow hint；不授權 |
+
+### EffectiveRole
+
+```text
+PLATFORM_ADMIN | SHELTER_ADMIN | STAFF | VOLUNTEER
+```
+
+推導規則：
+
+1. active profile 的 `platform_role == PLATFORM_ADMIN` → `PLATFORM_ADMIN`；
+2. 否則找 `membership.organization_id == activeContext.organization_id`；
+3. matching Membership 必須是 server response 中 active；
+4. 找不到 matching Membership → 不產生 fallback role，進入安全 context/access state。
+
+前端 role 只決定可見 route；後端 endpoint 仍可施加更窄權限。
+
+### ProtectedRoutePolicy
+
+| `area` | 允許角色 | 通過前可發出的業務 request |
+| --- | --- | --- |
+| `management` | STAFF、SHELTER_ADMIN、PLATFORM_ADMIN | 0；只允許 profile/context |
+| `volunteer` | VOLUNTEER；既有管理角色不新增反向限制 | 0；只允許 profile/context |
+
+`(management)` route group 自動涵蓋所有 child route，不使用易漏的 pathname allowlist。
+
+### RouteAccessDecision
+
+```text
+checking
+allow-management
+allow-volunteer
+redirect-volunteer
+redirect-login
+context-required
+access-unavailable
+temporary-error
+liff-recovery
+liff-reentry-required
+```
+
+| Decision | Children | Navigation／操作 |
+| --- | --- | --- |
+| `checking` | 不掛載 | 顯示 polite status |
+| `allow-management` | 掛載 management shell + child | 之後才讀 organizations/page data |
+| `allow-volunteer` | 掛載 volunteer child | 之後才讀 shelter/animals/draft |
+| `redirect-volunteer` | 不掛載 | `replace('/animal-confirmation')` |
+| `redirect-login` | 不掛載 | clear auth，`replace('/login')` |
+| `context-required` | 不掛載 | 重試／返回／聯絡管理者 |
+| `access-unavailable` | 不掛載 | 等待核准／重新報名／聯絡管理者 |
+| `temporary-error` | 不掛載 | 重試／返回，不顯示 stale data |
+| `liff-recovery` | 不掛載 | 同一 epoch exchange 一次 |
+| `liff-reentry-required` | 不掛載 | 重新進入／回到 LINE；不再自動 exchange |
+
+### LiffRecoveryEpoch
+
+| 欄位 | 型別 | 規則 |
+| --- | --- | --- |
+| `epochId` | monotonically increasing integer | 第一個 protected 401 建立 |
+| `exchangeAttempts` | 0/1 | 同一 epoch 最大 1 |
+| `inFlight` | Promise/null | 並行 401 共用 |
+| `entryReference` | string/null | 來自同 session 的 transient hint |
+| `originalPath` | safe volunteer pathname | 只允許 volunteer route；不保存 management deep link |
+| `state` | idle/recovering/recovered/terminal | terminal 不再自動重試 |
+
+**狀態轉移**：
+
+```text
+idle --first protected 401--> recovering(attempt=1)
+recovering --exchange success--> recovered --profile/context recheck--> idle
+recovering --token/ref/exchange failure--> terminal
+recovered --same recovery cycle receives 401--> terminal
+terminal --user taps re-enter--> full /volunteer-entry bootstrap
+terminal --user taps back to LINE--> close/back action
+```
+
+Mutation request 在 401 後不自動 replay；保留可恢復 client input，要求使用者在新 Session 下明確重試。
+
+### ActiveDraftResumeView
+
+| 欄位 | 來源 | 規則 |
+| --- | --- | --- |
+| `draftId` | current draft response | 不放 URL、不用 client id 改 scope |
+| `organizationId` | draft/context | 必須與 Active Context 一致 |
+| `animalId` | draft | animal 必須仍在今日可回報清單 |
+| `animalName` | scoped animals response | context 通過後顯示 |
+| `shelterNumber` | scoped animals response | 可為 null |
+| `progressLabel` | draft step 的繁中映射 | 不改 Draft state |
+| `canResume` | derived boolean | active、未過期、同 context、animal 可回報 |
+
+**操作**：
+
+- `continue`：前往 `/care-report`，由該頁重新讀取 current draft。
+- `later`：只關閉本次 prompt，留在 `/animal-confirmation`。
+- unavailable：不顯示答案或其他 tenant 資料，提供重試／聯絡管理者。
+
+## 3. Context 與 stale data 規則
+
+- organization label、animals、draft、report form data 必須由同一已驗證 context cycle 產生。
+- pathname、entry reference、QR、animal id、shelter number、sessionStorage organization id 不得改變後端 scope。
+- context switch/recovery 開始時先卸載或遮蔽前一 context 的 protected children；新 context 全部驗證成功後才顯示新資料。
+- management context switch 失敗時保留後端仍確認有效的舊 context/view；不得把部分新 context response 合併進舊 view。
+- Membership 到期/撤銷後，Draft/Report/Media 保留；request-time access 成功率為 0。
+
+## 4. 資料模型完成條件
+
+- 新資料表與 migration 數量為 0。
+- `LiffExchangeRequest` 只新增 `shelter_entry_reference`。
+- 所有 exchange 失敗案例新增 Session/Refresh/context 數量為 0。
+- 成功 exchange 的 Session 與 Active Context 在同一 commit 可見。
+- transient client state 不含可替代 server authorization 的 role/status/expiry。
+- ORG-A entry + ORG-B-only Membership 不得建立任一 organization context。

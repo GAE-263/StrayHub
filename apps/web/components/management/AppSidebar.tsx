@@ -14,6 +14,7 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       { href: "/", label: "總覽", icon: "view" },
       { href: "/animals", label: "動物檔案", icon: "search" },
       { href: "/reports", label: "報告收件匣", icon: "audit" },
+      { href: "/care-calendar", label: "照護行事曆", icon: "calendar" },
       { href: "/ai-review", label: "AI Review Queue", icon: "ai" },
     ],
   },

@@ -2,139 +2,158 @@
 
 **功能**：[spec.md](spec.md)
 
-**研究日期**：2026-08-14
+**研究日期**：2026-08-16
 
-## 決策 1：使用不掛載 children 的 client route boundary
+## 決策 1：正式入口由 LIFF SDK 取得 raw ID token
 
-**決策**：在 `apps/web` 建立共用 authenticated route boundary。Boundary 在 client 端先讀取既有 access token，再向後端取得目前使用者與 Active Shelter Context；判定完成前只呈現安全的 loading／status，不掛載管理或志工 page children。
+**決策**：收容所專屬 URL／QR Code 指向共用 LIFF App 的 `/volunteer-entry?entry=<opaque-reference>`。頁面每次開啟先執行 `liff.init({ liffId })`；外部瀏覽器若未登入，使用 LIFF login flow。初始化完成且已登入後，以 `liff.getIDToken()` 取得 raw ID token，連同 `entry` 送至後端。正式流程不接受 query string 傳入的 id token，也不把 `getDecodedIDToken()` 的 profile 當 server identity。
 
-**理由**：
-
-- 現有 access token 儲存在 sessionStorage，Next middleware 與 Server Component 無法取得，若強行使用 server redirect 就必須同時遷移 auth storage，會超出本功能範圍。
-- 只在 child 掛載前完成判斷，才能保證 Dashboard effect、管理資料查詢與管理畫面不會先執行或短暫顯示。
-- 管理與志工 route group 可以共用 Session／Context 驗證及有限狀態，減少 redirect loop 與錯誤文案分歧。
+**理由**：LINE 官方文件要求每次開啟頁面初始化 LIFF，並明確區分 raw ID token（可送 server）與 decoded profile（只供 client 顯示）。ID token 只有在 LIFF App 啟用 `openid` scope 且使用者授權時可取得。參考 [LIFF API reference](https://developers.line.biz/en/reference/liff/) 與 [Developing a LIFF app](https://developers.line.biz/en/docs/liff/developing-liff-apps/)。
 
 **考慮過的替代方案**：
 
-- **Next middleware 依角色 redirect**：不採用；middleware 目前無法取得 sessionStorage token，引入 cookie session 是獨立的 authentication migration。
-- **每個 page 自行 useEffect redirect**：不採用；child 已掛載並可能先發出資料查詢，也會複製角色與錯誤處理。
-- **只隱藏管理 Sidebar**：不採用；無法阻止 Dashboard 與 deep-link page 查詢，也不是安全邊界。
+- **把 id token 放在 shelter URL query**：不採用；token 會出現在歷史、log、分享連結與截圖，也無法代表當次 LIFF 初始化結果。
+- **送 decoded ID token payload**：不採用；client 可修改，LINE 官方亦要求 server 使用 raw token。
+- **為每個收容所建立 LIFF App**：不採用；FR-018 明定 P0 共用一個 LINE OA／channel／Webhook／LIFF App。
 
-## 決策 2：有效角色由後端 profile 與 Active Shelter Context 推導
+## 決策 2：entry reference 只解析候選 organization
 
-**決策**：登入完成後使用已選定的 `organizations[].role` 決定第一個 route；deep link、reload 與 browser back 則使用 `/v1/auth/me` 及 `/v1/auth/active-shelter-context` 重新推導 `EffectiveRole`。`PLATFORM_ADMIN` 優先於 Membership；其餘使用者只採目前 organization 的 active Membership role。
+**決策**：沿用 005 的 `VolunteerEntryResolverPort` 與 digest-at-rest `ShelterEntryReference`。後端先對 raw reference 計算 digest，透過固定 purpose、最小輸出的 resolver 取得 `reference_id + organization_id`，隨即設定該 organization 的 RLS scope。reference 不包含 user、role、Membership、期限或授權結果。
 
-**理由**：
-
-- Login response 已提供每個可選 organization 的後端角色，可在 context switch 成功後立即決定 `/` 或 `/animal-confirmation`，不需額外查詢。
-- `/auth/me` 提供 `platform_role` 與 Membership；Active Context 提供目前 organization，兩者組合可處理 direct URL、重新整理與角色撤銷。
-- sessionStorage 中的 organization id／code 只用於既有顯示 cache，不能成為角色或 scope 來源。
+**理由**：入口 URL 必然可能被轉傳；把 reference 限制為 organization selector，才能保證同一 URL 對未授權 LINE identity 不產生存取權。005 已提供 rotation、revocation、cross-purpose 拒絕與 runtime 無跨租戶 SELECT 的 contract，004 不應建立第二套解析規則。
 
 **考慮過的替代方案**：
 
-- **只相信 login response 並永久保存 role**：不採用；Membership 或 Session 狀態可能在 reload 前改變。
+- **URL 直接帶 organization UUID/code**：不採用；容易形成 client-controlled scope，且無法輪替或撤銷入口。
+- **reference 自帶簽名與 Membership claim**：不採用；會建立第二個授權事實來源並可能在 Membership 撤銷後仍有效。
+- **先查所有 Membership 再猜 organization**：不採用；多 Membership 使用者會產生歧義，也違反專屬入口語意。
+
+## 決策 3：exchange 以 exact organization 的有效 Membership／Grant 原子建立 Session/context
+
+**決策**：`POST /v1/auth/liff/exchange` 在同一 AsyncSession transaction 依序完成：resolve/scope entry → 驗證 LINE id token → 讀取 active Binding/User/Organization → 以候選 organization 鎖定 exact `VOLUNTEER` Membership 與目前 active Grant → 套用 005 的 `status=active && valid_from <= db_now < expires_at` predicate → 建立 `SessionRecord(active_organization_id=organization_id)` 與 `RefreshTokenRecord` → commit。任一驗證或 flush 失敗即 rollback。
+
+**理由**：Session 與 Active Shelter Context 實際由同一 `SessionRecord` 表示；把 context 一起寫入同一 row，可避免「有 Session、無 context」或反向部分狀態。鎖定 Membership/Grant 使 concurrent revoke/expire mutation 與 exchange 具備明確 commit 順序；commit 後的撤銷仍由 request-time predicate 與 005 cleanup 阻止後續存取。
+
+**考慮過的替代方案**：
+
+- **先 exchange 建 Session，再呼叫 context switch**：不採用；第二步失敗會留下可用 Session 或錯誤 context，違反 FR-022。
+- **只檢查 Membership.role**：不採用；忽略 valid_from、expires_at、Grant、user/org status 與撤銷狀態。
+- **由 client 再送 organization_id**：不採用；重複且可竄改，候選 organization 只能來自 resolver。
+
+## 決策 4：LIFF exchange 不管理 Membership lifecycle
+
+**決策**：exchange 只讀取並鎖定 005 已建立的有效 Membership/Grant；pending、rejected、future、expired、revoked、disabled 或缺少 Grant 一律拒絕，且不建立、修復、延長、重新啟用或撤銷任何 access record。錯誤只回安全狀態與下一步，既有 Draft／Report／Media 不刪除。
+
+**理由**：人工核准與限時授權是 005 的 CRM/Audit 邊界。若 exchange 自動修復或授權，會繞過管理員決定與期限治理。
+
+**考慮過的替代方案**：
+
+- **第一次 exchange 自動建立 VOLUNTEER Membership**：不採用；繞過核准。
+- **expired 時自動延長 7 天**：不採用；繞過政策與 Audit。
+- **失敗時刪除草稿**：不採用；授權失效不等於原始資料可刪除。
+
+## 決策 5：正式 LIFF Session recovery 採 single-flight epoch
+
+**決策**：volunteer layout 持有 `LiffRecoveryEpoch`。同一頁面在尚未進入 recovery 時遇到第一個 protected 401，建立唯一 in-flight Promise；同時到達的其他 401 共用該 Promise，不增加 exchange 次數。使用已初始化 LIFF 的新 raw ID token 與原 entry reference exchange 一次。成功後重新驗證 profile/context 並 reload/replace 回原 volunteer route；原 mutation 不自動重播。若 exchange 失敗、無法取得 token/reference，或恢復後再次 401，epoch 進入 terminal state，顯示「重新進入」與「回到 LINE」。
+
+**理由**：頁面可能同時載入 animals、draft 與 profile；沒有 single-flight 會產生多次 exchange。禁止自動重播 mutation 可避免建立重複 Draft、回報或保存。有限 epoch 可直接證明每次失效事件 exchange 次數不超過 1 且沒有 loop。
+
+**考慮過的替代方案**：
+
+- **每個 `authFetch` 自行 refresh/exchange**：不採用；並行 401 會重複建立 Session。
+- **無限重試直到成功**：不採用；可能形成 exchange/redirect loop。
+- **自動重播所有 request**：不採用；非冪等 mutation 可能重做。
+
+## 決策 6：entry reference 可作 transient recovery hint，但不是授權 cache
+
+**決策**：正式 exchange 成功後，client 可在 sessionStorage 保存原 entry reference 與「LIFF session」來源標記，僅供同一 browser session 的一次 recovery。它不得保存 Membership status/expiry 或直接指定 Active Shelter Context；每次 recovery 後端仍完整 resolve 與驗證。logout、entry 變更、terminal cross-context/entry error 時清除。local credential fixture 不建立 LIFF recovery hint。
+
+**理由**：FR-012 要求使用原 entry reference 自動 exchange；在導向 `/animal-confirmation` 後仍需可取得它。reference 本身不授權，短期 client 保存不改變 server security boundary。
+
+**考慮過的替代方案**：
+
+- **把 entry 永久留在所有 volunteer URL**：不採用；容易被複製到 deep link 並污染分析/log。
+- **只放 React memory**：不採用；reload 後無法依規格恢復。
+- **保存 role/expiry 避免 server call**：不採用；會使用 stale authorization。
+
+## 決策 7：使用不掛載 children 的 client authenticated boundary
+
+**決策**：access token 仍沿用 sessionStorage，因此 management 與 volunteer route group 共用 client boundary。Boundary 先取得 `/v1/auth/me` 與 `/v1/auth/active-shelter-context`，推導有效角色與 context；判定完成前只顯示安全 status，不掛載 page children。management role 通過後才取得 organizations 並掛載 Management Shell；volunteer route 通過後才取得 shelter label、animals、draft 或 care-report。
+
+**理由**：Next middleware/Server Component 無法直接使用 sessionStorage token。client boundary 若不 render children，仍可阻止 child effect 與管理 request 在角色判斷前發生，且不需擴張成 cookie auth migration。
+
+**考慮過的替代方案**：
+
+- **Next middleware 依角色 redirect**：不採用；必須先遷移 auth storage，超出 004。
+- **每個 page 自行 `useEffect` redirect**：不採用；會先掛載 children、重複查詢並可能 flash 管理資料。
+- **只隱藏 Sidebar**：不採用；不能阻止 Dashboard/detail request。
+
+## 決策 8：有效角色由 profile + Active Shelter Context 推導
+
+**決策**：local login 在 context switch 成功後以 selected organization 的後端 role 決定目的地；deep link/reload/back 則由 `/auth/me` 的 platform role／Membership 與 `/auth/active-shelter-context` 的 organization 重新推導。`PLATFORM_ADMIN` 優先；其他角色必須有 matching active Membership。sessionStorage 的 organization id/code 只作 label cache。
+
+**理由**：Membership 或 context 可在頁面間被撤銷、到期或切換，不能永久相信 login response。由 server response 組合可保持 direct URL 與 reload 一致。
+
+**考慮過的替代方案**：
+
+- **永久保存 role**：不採用；會 stale。
 - **由 pathname 推測角色**：不採用；網址不是權限來源。
-- **先呼叫管理 Dashboard 以 403 判斷志工**：不採用；違反「不先發出管理查詢」與低摩擦目標。
+- **用 management API 的 403 猜角色**：不採用；會先發出不必要管理 request。
 
-## 決策 3：管理資料 request 必須排在角色判斷之後
+## 決策 9：`/` 與全部管理 route 共用 route-group gate
 
-**決策**：管理 route 的固定順序為：檢查 token → 同批取得 profile 與 Active Context → 推導有效角色 → 志工導回／錯誤終止，或管理角色繼續 → 取得 organizations → 掛載 Management Shell 與 page children。志工路徑不得發出 `/v1/management/*` 或任何管理 page-specific request。
+**決策**：將 root page 移到 `app/(management)/page.tsx`，`management-home.tsx` 只 render Dashboard content。`app/(management)/layout.tsx` 包住現有與未來全部管理 routes，包括 animals、reports、care calendar、AI review、settings、volunteers 與 shelters。角色未通過前不取得 organizations、Dashboard 或 page-specific data。
 
-**理由**：
-
-- 現有 `ManagementLayout` 同時取得 profile、context 與 organizations，`/` 的 `ManagementHome` 又會在外層 gate 判定前執行 Dashboard effect。
-- 先完成最小 profile/context 判定，能避免 volunteer deep link 取得管理摘要、筆數或 detail request。
-- management role 通過後才載入 organizations，不會改變工作人員與管理者的 context selector 行為。
+**理由**：route group 不改 URL；統一 gate 可涵蓋 dynamic route、query、尾端斜線與未來子路由，不需維護易漏的 pathname allowlist。
 
 **考慮過的替代方案**：
 
-- **保留所有並行 request，再忽略結果**：不採用；仍會產生不必要管理查詢，也擴大資料暴露面。
-- **只阻擋 Dashboard render**：不採用；network request 已經發生，其他 deep link 仍有相同問題。
+- **在 root 保留第二個 guard**：不採用；形成兩套掛載順序與重複 profile/context request。
+- **逐頁加 guard**：不採用；新 route 容易漏加。
 
-## 決策 4：將 `/` 納入 `(management)` route group
+## 決策 10：current draft 在 context gate 後以既有單一 contract 組合
 
-**決策**：實作時由 `apps/web/app/(management)/page.tsx` 接管 `/`，並讓 `management-home.tsx` 只渲染 Dashboard content，不再自行包 `ManagementLayout`。所有管理 route 由 `(management)/layout.tsx` 一次套用 route boundary 與 Management Shell。
+**決策**：`/animal-confirmation` 在 volunteer boundary 通過後並行取得目前 context 的 shelter label、今日動物與 `/v1/line/care-report/drafts/current`。只有 active、未過期、同 context 且 animal 仍可回報時顯示「繼續回報／稍後處理」。繼續前往 `/care-report` 並由該頁重新讀 current draft；稍後只關閉本次提示，不修改 Draft。
 
-**理由**：
-
-- `/animals`、`/reports`、`/settings/*` 與 `/shelters` 已在同一 route group，只有 `/` 位於 group 外，造成兩種不一致的掛載順序。
-- route group 不改變 URL，可保留 `/` deep link 與現有管理使用者行為。
-- 統一 layout 後，Dashboard child 不會在 boundary 回傳 loading／redirect 時掛載，因此可驗證 Dashboard request 為 0。
+**理由**：既有 domain 限制每位志工／context 最多一筆 active draft；不需要新 API 或資料模型。重新讀取可避免 prompt 到 navigation 間的 stale state。
 
 **考慮過的替代方案**：
 
-- **在 `app/page.tsx` 再包一個獨立 guard**：不採用；會形成第二套管理入口 composition，容易再次重複 profile/context 查詢。
-- **保留 `ManagementHome` 內層 layout**：不採用；child effect 的生命週期無法由內層 layout 阻止。
+- **login 直接自動導向 draft**：不採用；可能在錯誤 context 載入內容，也剝奪志工選擇。
+- **將完整 draft 放進 client route state**：不採用；易 stale 且擴大敏感資料生命週期。
+- **P0 支援多筆草稿**：不採用；需另行修改 domain invariant。
 
-## 決策 5：志工 route 驗證 Session／Context，但不新增反向角色封鎖
+## 決策 11：LINE Bot 維持既有狀態機，只增加 regression 證據
 
-**決策**：新增 `(volunteer)/layout.tsx`，在 `/animal-confirmation` 與 `/care-report` 掛載前驗證 Session 與 Active Shelter Context。志工角色可進入；管理角色若直接開啟志工輔助 route，仍沿用既有後端權限，不由本功能新增禁止規則。管理角色登入後的預設入口仍是 `/`。
+**決策**：不修改 Webhook signature、idempotency 或 Conversation State Machine。已由 entry/existing conversation 確認 organization 的 session 沿用現有 dog-first 選擇；沒有唯一有效 context 時沿用 `requires_liff`／選擇收容所流程。測試確保名稱、收容編號與 client state 不會推測 organization。
 
-**理由**：
-
-- 規格要求志工 route 必須先有有效 context，且 session 失效時前往 `/login`。
-- 既有後端允許被授權工作人員使用部分回報流程；本功能只隔離「志工不能進管理 route」，沒有授權封鎖管理角色使用志工輔助流程。
-- Boundary 不掛載 child，可避免在 context 驗證前先查詢動物或草稿。
+**理由**：FR-020 描述既有應維持的入口邊界，且 Out of Scope 明確排除重做 LINE Bot state machine。005 的有效 Membership predicate 已成為 session resolution 基礎。
 
 **考慮過的替代方案**：
 
-- **只在 management layout 加 guard**：不採用；無法處理直接開啟志工 route 時的 session/context 缺少。
-- **管理角色一律從志工 route 導回 `/`**：不採用；會新增規格未要求的反向限制，可能破壞既有工作人員回報能力。
+- **讓 Bot 直接解析 entry query**：不採用；Webhook event 沒有可信 browser context。
+- **以狗狗名稱推測收容所**：不採用；跨收容所可能同名。
 
-## 決策 6：P0 沿用單一 current draft contract
+## 決策 12：local fixture 與受控 LINE／LIFF 分層驗收
 
-**決策**：P0 在 route boundary 通過後，由 `/animal-confirmation` 組合既有 `/v1/animals` 與 `/v1/line/care-report/drafts/current`。Current draft 為 null 時直接顯示動物確認；有 active、未過期且 animal 仍在今日可回報名單的草稿時顯示「繼續回報／稍後處理」。繼續後前往既有 `/care-report`，由該頁沿用目前草稿恢復流程。
+**決策**：自動化使用 deterministic local LINE verifier、ORG-A/ORG-B entry reference 與 access-state matrix，證明 transaction、route、recovery、request ordering 與租戶隔離。P0 release gate 另使用一個共用受控 LINE OA/channel/Webhook/LIFF App、兩個 organization entry URL 與至少兩個測試 identity，驗證真實 `liff.init/getIDToken`、正確 context、跨收容所拒絕及 360px 流程。受控證據不含 raw token/reference 或個資。
 
-**理由**：
-
-- 既有 domain 與 tests 明確限制每位志工、每個 Active Shelter Context 最多一筆 active draft。
-- Current draft endpoint 已由後端按使用者與 organization scope 查詢，並有既有 resume／expire 驗證；不需要新增 API 或資料模型。
-- 與今日名單比對可以提供動物名稱／收容編號，同時避免對已不可回報或不在 scope 的動物顯示詳細草稿資訊。
+**理由**：browser mock 無法證明 LINE SDK、channel audience 與真實 ID token verifier；真實 LIFF 驗收也不適合取代可重跑的 failure matrix。兩層證據共同滿足 FR-017 與 SC-008～SC-012。
 
 **考慮過的替代方案**：
 
-- **使用 OpenAPI 中的 draft list 做多筆 P0 選擇**：不採用；原始需求把多筆策略放在 P1，而且現有 domain 只允許單一 active draft。
-- **登入後直接自動前往 `/care-report`**：不採用；使用者沒有明確選擇，且會讓登入動作意外改變目前工作脈絡。
-- **把 draft id 存進 sessionStorage 作為恢復依據**：不採用；client state 不是授權來源，也可能在 context 切換後殘留。
+- **只做 Playwright mock**：不採用；無法證明共用 LIFF/channel integration。
+- **所有 CI 使用真實 LINE account**：不採用；不穩定、需要個人互動與正式憑證。
+- **每個 shelter 獨立 channel 測試**：不採用；與 P0 infrastructure 決策相反。
 
-## 決策 7：使用有限 route state 防止 redirect loop
+## 研究結論
 
-**決策**：`RouteAccessDecision` 僅允許 `checking`、`allow-management`、`allow-volunteer`、`redirect-login`、`redirect-volunteer`、`context-required`、`error`。Redirecting state 不掛載 children；`router.replace` 只在 destination 與目前 pathname 不同時執行。reload 與 browser back 都重新從 `checking` 開始。
+- 正式身分：LIFF SDK 取得的 raw ID token，由後端既有 LINE verifier 驗證。
+- 收容所判定：005 的 opaque entry reference 只解析候選 organization。
+- 授權判定：exact organization 的 active、已開始、未到期 `VOLUNTEER` Membership + active Grant + active user/org。
+- 原子邊界：Session、Refresh Token 與 Active Shelter Context 同 transaction commit；失敗部分狀態為 0。
+- 前端邊界：children mount 前完成 profile/context/role gate；管理 request ordering 可觀察。
+- 恢復邊界：每個失效 epoch 至多一次 exchange，mutation 不自動重播，terminal state 不 loop。
+- 驗收邊界：local deterministic matrix + 共用受控 LINE／LIFF 雙層證據。
 
-**理由**：
-
-- 有限 state 能以純函式 matrix 測試所有角色與錯誤分支。
-- `replace` 可避免登入後或被拒管理 deep link 長期留在 history 中，back 仍會重新經過 boundary。
-- context 缺少與暫時錯誤採終止畫面，而不是在 `/login`、`/`、`/animal-confirmation` 間自動來回。
-
-**考慮過的替代方案**：
-
-- **任何錯誤都直接前往 `/login`**：不採用；暫時錯誤或 context 缺少不等於 Session 失效，容易造成 loop 與不必要清除。
-- **使用 `push` 保留每次 redirect**：不採用；browser back 容易反覆回到被拒的 management URL。
-
-## 決策 8：不修改 OpenAPI、資料庫或後端授權
-
-**決策**：本功能只新增 UI／route contract 與前端 composition。所有後端 endpoint、Pydantic schema、OpenAPI generated types、CRM model、Session、Membership、Active Context、Draft 與 management access checks 保持不變。
-
-**理由**：
-
-- 角色與單一 current draft 所需資訊已由既有 contract 提供。
-- 前端 guard 是 UX 優化；直接呼叫管理 API 的志工仍由 `require_management_context` 與資料存取 scope 拒絕。
-- 避免把 route UX 變更擴大成 authentication、CRM 或 LINE domain migration。
-
-**考慮過的替代方案**：
-
-- **新增專用 route-decision API**：不採用；profile/context 已足夠，會重複授權語意。
-- **修改 JWT 加入可直接信任的 role/org claims**：不採用；既有設計要求每個 request 重新驗證 server-side Session 與 scope。
-
-## 已解決的未知事項
-
-- Route guard 執行位置：client boundary，先判斷再掛載 children。
-- Role source：登入時使用 selected organization role；reload/deep link 使用 profile + Active Context。
-- Root route：移入 `(management)` route group。
-- 志工 route：必須驗證 Session／Context；不新增管理角色反向封鎖。
-- Draft 策略：P0 單一 current draft，明確選擇後恢復；多筆留在 P1。
-- API／資料：不新增 endpoint、schema、table 或正式前端資料副本。
-- 驗證：Vitest decision matrix + Playwright route/network/back/reload + axe／responsive／visual + 既有後端 security/isolation regression。
-
-本研究沒有未解決的設計問題。
+所有 Technical Context 的未知事項均已解決，沒有 `[NEEDS CLARIFICATION]`。

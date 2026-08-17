@@ -37,6 +37,12 @@ async def test_a_b_resource_matrix_hides_business_resources_and_signed_media() -
     category_a, category_b = uuid4(), uuid4()
     option_a, option_b = uuid4(), uuid4()
     audit_a, audit_b = uuid4(), uuid4()
+    medical_a, medical_b = uuid4(), uuid4()
+    medical_media_a, medical_media_b = uuid4(), uuid4()
+    series_a, series_b = uuid4(), uuid4()
+    lineage_a, lineage_b = uuid4(), uuid4()
+    occurrence_a, occurrence_b = uuid4(), uuid4()
+    action_a, action_b = uuid4(), uuid4()
     now = datetime.now(timezone.utc).replace(microsecond=0)
     answers = json.dumps({"feeding": "feeding.normal"})
     try:
@@ -242,6 +248,80 @@ async def test_a_b_resource_matrix_hides_business_resources_and_signed_media() -
             user_b,
             animal_b,
         )
+        for values in (
+            (medical_a, org_a, animal_a, user_a),
+            (medical_b, org_b, animal_b, user_b),
+        ):
+            await connection.execute(
+                """
+                INSERT INTO medical_records
+                    (id, organization_id, animal_id, occurred_at, occurred_timezone,
+                     record_type, title, content, status, version, created_by_user_id,
+                     updated_by_user_id, created_at, updated_at)
+                VALUES ($1, $2, $3, now(), 'Asia/Taipei', 'visit', 'Matrix medical',
+                        'tenant scoped', 'active', 1, $4, $4, now(), now())
+                """,
+                *values,
+            )
+        for values in (
+            (medical_media_a, org_a, medical_a, media_a, user_a),
+            (medical_media_b, org_b, medical_b, media_b, user_b),
+        ):
+            await connection.execute(
+                """
+                INSERT INTO medical_record_media
+                    (id, organization_id, medical_record_id, media_asset_id,
+                     attached_by_user_id, attached_at)
+                VALUES ($1, $2, $3, $4, $5, now())
+                """,
+                *values,
+            )
+        for values in (
+            (series_a, lineage_a, org_a, animal_a, user_a),
+            (series_b, lineage_b, org_b, animal_b, user_b),
+        ):
+            await connection.execute(
+                """
+                INSERT INTO care_reminder_series
+                    (id, lineage_id, organization_id, animal_id, reminder_type, title,
+                     anchor_local_date, anchor_local_time, frequency, created_by_user_id,
+                     updated_by_user_id, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, 'follow_up', 'Matrix reminder', current_date,
+                        '09:00', 'none', $5, $5, now(), now())
+                """,
+                *values,
+            )
+        for values in (
+            (occurrence_a, org_a, lineage_a, series_a, user_a),
+            (occurrence_b, org_b, lineage_b, series_b, user_b),
+        ):
+            await connection.execute(
+                """
+                INSERT INTO care_reminder_occurrences
+                    (id, organization_id, lineage_id, series_id, occurrence_index,
+                     nominal_local_date, nominal_local_time, original_scheduled_at,
+                     scheduled_at, effective_timezone, timezone_version, title_snapshot,
+                     type_snapshot, last_action_by_user_id, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, 0, current_date, '09:00', now(), now(),
+                        'Asia/Taipei', 1, 'Matrix reminder', 'follow_up', $5, now(), now())
+                """,
+                *values,
+            )
+        for values in (
+            (action_a, org_a, occurrence_a, lineage_a, series_a, user_a, str(action_a)),
+            (action_b, org_b, occurrence_b, lineage_b, series_b, user_b, str(action_b)),
+        ):
+            await connection.execute(
+                """
+                INSERT INTO care_reminder_actions
+                    (id, organization_id, occurrence_id, lineage_id, series_id,
+                     occurrence_index, action_type, actor_user_id, acted_at,
+                     idempotency_key, request_fingerprint)
+                VALUES ($1, $2, $3, $4, $5, 0, 'created_override', $6, now(),
+                        $7, repeat('a', 64))
+                """,
+                *values,
+            )
         await connection.execute("SET ROLE strayhub_runtime")
         await connection.execute("SELECT set_config('app.current_org_id', $1, true)", str(org_a))
         await connection.execute("SELECT set_config('app.auth_user_id', $1, true)", str(user_a))
@@ -256,6 +336,11 @@ async def test_a_b_resource_matrix_hides_business_resources_and_signed_media() -
             ("ai_processing_jobs", job_b),
             ("observation_options", option_b),
             ("audit_records", audit_b),
+            ("medical_records", medical_b),
+            ("medical_record_media", medical_media_b),
+            ("care_reminder_series", series_b),
+            ("care_reminder_occurrences", occurrence_b),
+            ("care_reminder_actions", action_b),
         )
         for table, value in checks:
             id_column = "id"

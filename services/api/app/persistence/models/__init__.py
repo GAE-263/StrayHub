@@ -22,6 +22,13 @@ from services.api.app.persistence.models.identity import (
     User,
     WebhookSession,
 )
+from services.api.app.persistence.models.medical_care import (
+    CareReminderAction,
+    CareReminderOccurrence,
+    CareReminderSeries,
+    MedicalRecord,
+    MedicalRecordMedia,
+)
 from services.api.app.persistence.models.observation import ObservationCategory, ObservationOption
 from services.api.app.persistence.models.observation_usage import ObservationOptionUsage
 from services.api.app.persistence.models.qr_code import AnimalQrCode
@@ -75,4 +82,9 @@ __all__ = [
     "VolunteerNotificationDelivery",
     "VolunteerNotificationRetryBatch",
     "VolunteerNotificationRetryBatchItem",
+    "MedicalRecord",
+    "MedicalRecordMedia",
+    "CareReminderSeries",
+    "CareReminderOccurrence",
+    "CareReminderAction",
 ]

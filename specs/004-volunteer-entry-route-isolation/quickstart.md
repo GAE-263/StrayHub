@@ -1,28 +1,29 @@
 # 快速開始：志工角色入口與管理路由隔離驗證
 
-本指南用於實作後驗證 [spec.md](spec.md) 與 [route-access contract](contracts/route-access.md)。P0 先以 local Web／LIFF fixture 完成，不依賴真實 LINE channel、Rich Menu 或 LIFF production deployment。
+本指南用於實作後驗證 [spec.md](spec.md)、[LIFF exchange contract](contracts/liff-exchange.openapi.yaml) 與 [route contract](contracts/route-access.md)。P0 必須同時完成可重跑的 local fixture matrix 與共用受控 LINE／LIFF 驗收。
 
-## 前置條件
+## 1. 前置條件
 
 - Docker Desktop／Docker Compose
-- Python 3.11+ 與 `uv`
+- Python 3.11+、`uv`
 - Node.js、npm
-- 已依 `.env.example` 建立本機 `.env` 與 local-only JWT keys
-- 可使用下列虛構帳號，密碼均為 `local-only-password`
+- 已依 `.env.example` 建立 local-only `.env` 與 JWT keys
+- 005 migrations、entry references、Membership/Grant fixtures 已可用
+- 正式驗收另需一個受控 LINE OA/channel/Webhook/LIFF App，且 LIFF 啟用 `openid` scope
 
-| 帳號 | 角色／用途 |
+Local 帳號密碼均為 `local-only-password`：
+
+| 帳號 | 用途 |
 | --- | --- |
-| `local-volunteer-a` | ORG-A 志工入口、草稿與管理 deep-link 隔離 |
-| `local-volunteer-b` | ORG-B 志工與 tenant regression |
-| `local-staff-a` | 工作人員管理首頁 regression |
-| `local-shelter-admin-a` | 收容所管理者入口與設定權限 regression |
-| `local-platform-admin` | 多 context 選擇與平台管理入口 regression |
+| `local-volunteer-a` | ORG-A 志工入口、draft、管理 route isolation |
+| `local-volunteer-b` | ORG-B 與 cross-tenant regression |
+| `local-staff-a` | 工作人員 `/` regression |
+| `local-shelter-admin-a` | 收容所管理者入口與設定 regression |
+| `local-platform-admin` | 多 context 與平台管理入口 regression |
 
-Local fixture 只代表 Web／LIFF 測試帳號，不是真正 LINE 身分。
+Local fixture 不是正式 LINE 身分，不能取代受控 LIFF 驗收。
 
-## 啟動本機服務
-
-先準備資料與基礎服務：
+## 2. 啟動 local stack
 
 ```bash
 docker compose -f infra/local/docker-compose.yml up -d postgres minio
@@ -30,62 +31,175 @@ uv run alembic upgrade head
 uv run python -m scripts.seed_local
 ```
 
-分別啟動 API、Web 與 Worker：
+確認 `.env` 至少包含 local `LINE_CHANNEL_ID`、`LIFF_ID`、JWT keys 與 database settings。分別啟動 API 與 Web：
 
 ```bash
 uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8000
 npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
-uv run python services/worker/worker.py
 ```
 
 入口：
 
 - Web：<http://127.0.0.1:3000>
-- Login：<http://127.0.0.1:3000/login>
+- Local login：<http://127.0.0.1:3000/login>
+- LIFF bootstrap（fixture）：`http://127.0.0.1:3000/volunteer-entry?entry=<local-reference>`
 - API health：<http://127.0.0.1:8000/healthz>
 
-## 自動化驗證順序
+不得把 raw ID token 或 entry reference 貼入 issue、snapshot、test report 或錄影。local seed 的 deterministic reference 只可用於非正式環境。
 
-### 1. 純角色／route decision
+## 3. Contract 與純規則驗證
 
 ```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest \
+  tests/contract/test_authentication_contract.py \
+  tests/contract/test_openapi_contract.py \
+  tests/contract/test_generated_contract_types.py -q
+npm --prefix packages/contracts run check
 npm --prefix apps/web run test
 npm --prefix apps/web run typecheck
 ```
 
-預期結果：
+預期：
 
-- `VOLUNTEER` + management area → `redirect-volunteer`。
-- `STAFF`／`SHELTER_ADMIN`／`PLATFORM_ADMIN` + valid context → `allow-management`。
-- 所有角色缺少 token／Session 401 → `redirect-login`。
-- Context 缺少或 Membership 不一致 → `context-required`，不得 fallback 為 `STAFF`。
-- Volunteer area + valid context → `allow-volunteer`；不新增管理角色反向限制。
+- canonical `LiffExchangeRequest` 必填 `id_token` + `shelter_entry_reference`，拒絕額外 client role/org 欄位。
+- `packages/contracts/src/openapi.ts` 與 canonical OpenAPI 無 drift。
+- `VOLUNTEER + management` → `redirect-volunteer`。
+- management roles + valid context → `allow-management`。
+- missing token／local 401 → `redirect-login`。
+- formal LIFF 401 → `liff-recovery`；同 epoch attempt 最大 1。
+- Membership/context mismatch 不 fallback 為 `STAFF`。
 
-### 2. 角色入口與管理 deep-link suite
+## 4. LIFF exchange transaction matrix
 
-實作後，直接執行本功能的 browser spec：
+執行專屬 tests：
 
 ```bash
-npm --prefix apps/web exec -- playwright test e2e/role-route-isolation.spec.ts
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest \
+  tests/integration/test_authentication_session.py \
+  tests/security/test_liff_exchange_authorization.py \
+  tests/isolation/test_liff_entry_isolation.py -q
 ```
 
-並確認它已納入 P0 script：
+必要矩陣：
+
+| Entry／identity／access | HTTP/結果 | 新 Session/Refresh/context |
+| --- | --- | --- |
+| valid ORG-A entry + matching active-unexpired access | 200 | 各 1；context=ORG-A |
+| valid ORG-B entry + matching active-unexpired access | 200 | 各 1；context=ORG-B |
+| malformed／unknown／revoked／cross-purpose entry | safe deny | 各 0 |
+| invalid/expired/wrong-audience LINE token | safe deny | 各 0 |
+| missing/disabled Binding、disabled User/Org | safe deny | 各 0 |
+| no application、pending、rejected | safe deny | 各 0 |
+| future、expired、revoked、disabled、missing Grant | safe deny | 各 0 |
+| ORG-A entry + ORG-B-only Membership | safe deny | ORG-A/ORG-B 都為 0 |
+| database failure after Session flush | 503/rollback | 各 0 |
+
+另外驗證 concurrent exchange vs revoke/expiry：結果必須有明確 commit ordering；revoke commit 後 protected request 成功率為 0，且不得建立新的有效 context。
+
+## 5. Local role-directed login
 
 ```bash
+npm --prefix apps/web exec -- playwright test e2e/login-home.spec.ts
+```
+
+手動確認：
+
+1. `local-volunteer-a` context 成功後進入 `/animal-confirmation`，不經過 `/`。
+2. `local-staff-a`、`local-shelter-admin-a` 進入 `/`。
+3. `local-platform-admin` 先選擇 context，成功後進入 `/`。
+4. context 建立失敗不宣稱已進入工作台，也不顯示 protected data。
+5. Login/context action 文案對志工不寫成「進入管理工作台」。
+
+## 6. 管理 route isolation
+
+實作後執行：
+
+```bash
+npm --prefix apps/web exec -- playwright test e2e/liff-route-isolation.spec.ts
 npm --prefix apps/web run test:e2e:p0:list
 npm --prefix apps/web run test:e2e:p0
 ```
 
-預期至少涵蓋：
+以志工對下列代表 routes 驗證 deep link、query、尾端斜線、dynamic id、reload 與 back：
 
-- 志工登入後前往 `/animal-confirmation`。
-- 工作人員、收容所管理者、平台管理員前往 `/`；平台管理員先完成 context 選擇。
-- 志工直接開啟全部管理 route pattern 時導回志工入口。
-- 志工情境沒有 `/v1/management/dashboard` 或 page-specific management request。
-- Reload、browser back、query string、尾端斜線與 dynamic id 不能繞過 gate。
-- Session 401 導向 `/login`；context 缺少與 temporary error 進入安全終止 state，沒有 redirect loop。
+```text
+/
+/animals
+/animals/<animal-id>
+/animals/<animal-id>/timeline
+/reports
+/reports/<report-id>
+/ai-review
+/care-calendar
+/settings/observation-options
+/settings/reportable-scope
+/settings/qr-codes
+/settings/audit
+/settings/volunteer-access
+/volunteers/applications
+/volunteers/access
+/volunteers/notifications
+/shelters
+```
 
-### 3. Responsive、keyboard、axe 與 visual
+每條 route 預期：
+
+- first visible state 只有安全 checking/redirect status。
+- 最終為 `/animal-confirmation`。
+- Management Shell、Sidebar、Breadcrumb、metrics、count、detail 與 permission-denied management view 都不可見。
+- `/v1/organizations`（在 management gate 階段）、Dashboard 與 page-specific management request count 都為 0。
+- back/reload 不顯示 stale management content，也不形成 loop。
+
+再以 management roles 確認 `/` 與既有 route 不被誤導到 volunteer flow。
+
+## 7. Volunteer context、shelter label 與 draft
+
+| 狀態 | 預期 |
+| --- | --- |
+| context 尚未驗證 | 不發 animals/draft request；不顯示舊 shelter |
+| ORG-A 成功 | `/animal-confirmation`、`/care-report` 顯示 ORG-A 名稱且只讀 ORG-A data |
+| recovery 後變成 ORG-B | 先卸載 ORG-A view；完整驗證後只顯示 ORG-B |
+| no current draft | 直接顯示今日 animals/QR/search；無空 prompt |
+| active、未過期、same context、animal allowed | 顯示 name/number/progress +「繼續／稍後」 |
+| continue | 前往 `/care-report` 並重讀 current draft |
+| later | 留在 confirmation；Draft 無 mutation |
+| expired/non-active/cross-context/animal unavailable | 不顯示 answers/detail；安全 unavailable |
+| save failure | 保留既有輸入、可明確重試；不自動重播 mutation |
+
+Cross-context 測試必須同時觀察 response body、visible UI 與 network request；交叉顯示率為 0%。
+
+## 8. Formal LIFF 401 recovery
+
+Playwright 使用可控 LIFF adapter 模擬：
+
+1. first protected request 回 401，另外兩個並行 request 同時回 401。
+2. assert `/v1/auth/liff/exchange` request count 為 1。
+3. success：重新驗證 context，回到原 volunteer route；原 management deep link 不恢復。
+4. failed exchange：進入 terminal「重新進入／回到 LINE」，count 維持 1。
+5. exchange 成功後 protected request 再 401：terminal，count 不增加。
+6. 401 發生在 save mutation：不自動重播；form input 仍可恢復，要求使用者重試。
+
+Local credential Session 遇 401 必須直接 `/login`，不得呼叫 LIFF exchange。
+
+## 9. LINE Bot regression
+
+```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest \
+  tests/e2e/test_local_line_bot_vertical_flow.py \
+  tests/integration/test_line_webhook*.py \
+  tests/security/test_line*.py -q
+```
+
+預期：
+
+- 已確認且有效 context 先提供該 shelter 可回報狗狗。
+- 多 context、無 context 或 Membership 無效時先 requires-LIFF/context verification。
+- 不以狗名、shelter number 或 client state 推測 organization。
+- Webhook signature、event idempotency、Draft/Report flow 無回歸。
+
+若 shell glob 在環境中無匹配，改以 `rg --files tests` 取得實際檔案後明確列出，不可靜默略過。
+
+## 10. Responsive、keyboard、axe、visual
 
 ```bash
 npm --prefix apps/web run test:a11y:browser
@@ -93,111 +207,52 @@ npm --prefix apps/web run test:axe
 npm --prefix apps/web run test:visual
 ```
 
-P0 route matrix 必須在 360x800、768x1024、1024x768 與 1440x900 驗證。Visual baseline 只有在 reviewer 確認預期變更後才能更新：
+P0 matrix：360x800、768x1024、1024x768、1440x900。
+
+必須涵蓋 initializing、logging-in、exchanging、checking、redirecting、recovering、context-required、error、terminal、draft prompt。Axe critical/serious 為 0；所有主要 action 可鍵盤操作且有可見 focus；長 shelter name／中文錯誤不截斷或重疊。
+
+Visual baseline 只在 reviewer 確認預期變更後更新：
 
 ```bash
 npm --prefix apps/web run test:visual:update
 ```
 
-預期結果：
+## 11. 共用受控 LINE／LIFF 驗收
 
-- Checking／redirecting／context-required／error 與 active draft prompt 在四個 viewport 無必要水平溢出。
-- 鍵盤可操作登入、context 選擇、繼續回報、稍後處理、重試與返回登入。
-- Axe critical／serious violations 為 0。
-- 志工 route 不顯示 Management Shell、Sidebar 或 Breadcrumb。
-- 既有管理 route visual 只因合理的掛載順序調整產生 reviewer 可解釋的變化。
+### 準備
 
-## 手動驗收流程
+1. 一個受控 LINE Official Account、Messaging API channel、Webhook、LIFF App；記錄其非敏感識別與配置版本。
+2. LIFF App `openid` scope、Endpoint URL 與允許的 redirect URL 正確。
+3. 受控 ORG-A／ORG-B active organizations，各自發行 entry reference：
 
-### 1. 志工登入目的地
-
-1. 清除目前 browser session，開啟 `/login`。
-2. 使用 `local-volunteer-a` 登入。
-3. 確認 Active Shelter Context 成功後，最終 URL 為 `/animal-confirmation`。
-4. 確認過程沒有顯示「管理工作台總覽」、Dashboard metrics、管理 Sidebar、Breadcrumb 或管理 permission denied 畫面。
-5. 在 browser network panel 確認沒有 `/v1/management/dashboard` request。
-
-### 2. 志工管理 route matrix
-
-登入 `local-volunteer-a` 後，逐一貼上：
-
-```text
-/
-/animals
-/animals/<known-animal-id>
-/animals/<known-animal-id>/timeline
-/reports
-/reports/<known-report-id>
-/ai-review
-/settings/observation-options
-/settings/reportable-scope
-/settings/qr-codes
-/settings/audit
-/shelters
+```bash
+env UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/issue_volunteer_entry_reference.py <organization-uuid>
 ```
 
-每一條 route 的預期結果：
+raw reference 只顯示一次；立刻放入受控 URL/QR 管理流程，不寫入 evidence。
 
-- 首次可見內容只有安全的角色／context checking 或 redirect status。
-- 最終前往 `/animal-confirmation`。
-- 不顯示管理資料、筆數、metrics、操作或 permission denied 管理畫面。
-- Network panel 沒有該管理 page-specific request。
-- Reload 與 browser back 仍重新執行 gate，不會顯示舊管理內容或形成 loop。
+4. 至少準備：ORG-A-only active volunteer、ORG-B-only active volunteer、跨兩 org volunteer，以及 pending/expired/revoked 對照 identity。
 
-再以 query string、尾端斜線與不同 dynamic id 重複代表性案例，結果必須一致。
+### 實機 matrix
 
-### 3. 管理使用者 regression
-
-1. 以 `local-staff-a` 登入，確認進入 `/` 且 Dashboard、Sidebar 與既有管理 route 可用。
-2. 以 `local-shelter-admin-a` 登入，確認進入 `/` 且設定／收容所操作仍依既有權限顯示。
-3. 以 `local-platform-admin` 登入，確認先選擇 ORG-A／ORG-B；context 成功後才進入 `/`。
-4. 切換 context 後 reload 管理 deep link，確認只顯示新 context 資料。
-5. 模擬 context switch 失敗，確認保留舊 context 或安全 error，不混合兩個收容所資料。
-
-### 4. Active draft 恢復
-
-以 Playwright fixture 或 local API 準備下列狀態：
-
-| 狀態 | 預期結果 |
+| 情境 | 預期 |
 | --- | --- |
-| 沒有 current draft | 直接顯示今日動物、QR 與收容編號搜尋，不顯示空恢復提示 |
-| 單一 active、未過期且 animal 可回報 | 顯示動物名稱／收容編號／進度，以及「繼續回報」「稍後處理」 |
-| 選擇繼續 | 前往 `/care-report`，由後端重新取得 current draft |
-| 選擇稍後 | 留在 `/animal-confirmation`，Draft 狀態與內容不變 |
-| Draft 過期／非 active | 不顯示為可恢復，不載入答案 |
-| Draft context 不一致或 animal 不在今日授權名單 | 不顯示受保護內容；提供安全重試／聯絡管理者下一步 |
-| `/care-report` 保存失敗 | 保留既有輸入並可重試；不導向管理頁 |
+| ORG-A identity + ORG-A URL | 無帳密、context=ORG-A、只見 ORG-A dogs/draft |
+| ORG-B identity + ORG-B URL | 無帳密、context=ORG-B、只見 ORG-B dogs/draft |
+| ORG-B-only identity + ORG-A URL | 安全拒絕；任何 context/data 為 0 |
+| 同一 identity 依序開 A/B URL | 每次後端重驗 exact Membership；無 stale data |
+| pending/revoked/expired URL flow | 不建 context；顯示適用下一步 |
+| Session 失效 | 每事件自動 exchange <=1；成功回原 flow，失敗 terminal |
 
-P0 不建立多筆 active draft；現有單一 active draft invariant 必須保留。
+至少在約 360px 實機完成 dog selection 與 report entry。Evidence 只記錄時間、app/channel configuration reference、測試 case、結果與遮罩後截圖；不得保存 raw token/reference、LINE user id、個人名稱或 protected animal/report content。
 
-### 5. Session 與 Context failure
-
-- 移除 access token 後開啟任一受保護 route：前往 `/login`，children 不掛載。
-- 將 profile 或 context response 設為 401：清除 client auth cache並前往 `/login`。
-- 將 Active Context 設為缺少／409：顯示 context-required state，可返回登入／重試／聯絡管理者；不自動 loop。
-- 將 profile/context 設為 network failure／5xx：顯示繁中 error 與重試，不顯示 stale protected content。
-- 將 Active Context 與 Membership organization 設為不一致：不得 fallback 為管理角色，也不得顯示任一收容所資料。
-
-## 後端安全與資料回歸
-
-前端測試不能代替後端 authorization。至少執行：
+## 12. 後端安全與完整 gate
 
 ```bash
-env UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/security tests/isolation tests/contract -q
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format --check .
+env UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q
 npm --prefix packages/contracts run check
-```
-
-預期結果：
-
-- 志工直接呼叫 management API 仍由後端拒絕。
-- ORG-A／ORG-B 不因相同 shelter number、id 輸入或錯誤訊息洩漏資料。
-- Active Shelter Context、Session 撤銷與 Membership 規則不變。
-- OpenAPI generated types 無漂移。
-- CRM 原始回報、LINE Bot、AI 人工覆核與歷史資料不受 route 變更影響。
-
-## 完整品質 Gate
-
-```bash
 npm --prefix apps/web run quality
 npm --prefix apps/web run build
 npm --prefix apps/web run test:e2e:p0
@@ -208,10 +263,10 @@ npm --prefix apps/web run test:visual
 
 完成條件：
 
-- 所有角色入口與 route matrix 通過。
-- 志工 management request assertion 全部為 0。
-- 沒有 redirect loop、管理內容 flash 或 stale protected content。
-- Active draft 的 continue／later／unavailable 流程通過。
-- 360px 與 keyboard／screen reader 可完成主要下一步。
-- 既有管理、後端權限、租戶隔離、OpenAPI、CRM、LINE 與 AI regression 全部通過。
-- P0 不依賴真實 LINE／LIFF deployment 或 P1 多筆草稿策略。
+- exchange 全矩陣與 partial-state=0 通過。
+- ORG-A/ORG-B cross-entry/cross-data 成功率為 0%。
+- local 4-role destination 與全部 management route isolation 通過。
+- 正式 401 recovery 每 epoch exchange<=1、mutation replay=0、loop=0。
+- shelter label、draft、animals/report 無 stale/cross-context data。
+- LINE Bot、CRM、原始資料、AI、OpenAPI 與 management regression 全通過。
+- 共用受控 LINE／LIFF 實機證據完成，且不含 secret/PII。
