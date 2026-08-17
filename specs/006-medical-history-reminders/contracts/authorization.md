@@ -1,5 +1,23 @@
 # Authorization Contract
 
+## 平台與收容所管理
+
+組織生命週期與目前收容所業務管理是不同層級的權限。建立收容所會同時建立新的租戶與初始管理員，因此只能由平台管理員執行。
+
+`PLATFORM_ADMIN` 不需要隸屬單一收容所；平台權限由 `/v1/auth/me` 的 `User.roles` 與 platform scope 表示。`LoginOrganization.role` 只表示使用者在特定收容所的 Membership role。
+
+| 操作 | PLATFORM_ADMIN | SHELTER_ADMIN | STAFF | VOLUNTEER |
+|---|---:|---:|---:|---:|
+| 建立收容所與初始管理員 | 允許 | 拒絕 | 拒絕 | 拒絕 |
+| 啟用／停用或跨收容所管理 | 允許 | 拒絕 | 拒絕 | 拒絕 |
+| 管理目前收容所帳號／時區／區域 | 依平台 scope | 允許目前收容所 | 拒絕 | 拒絕 |
+
+- 前端只對 `PLATFORM_ADMIN` 顯示建立收容所入口；隱藏按鈕不是安全邊界。
+- 每次建立、啟用、停用或管理操作都由 API 重新驗證最新角色、active organization context 與 scope。建立／初始管理員／啟用／停用／跨收容所操作只允許 `PLATFORM_ADMIN`；目前收容所帳號／時區／區域操作只允許同 organization 的 `SHELTER_ADMIN`。
+- 未授權建立請求必須在任何租戶、初始管理員或部分設定寫入前拒絕，且不得留下部分副作用。
+- 成功與拒絕的組織生命週期操作都需留下 actor、時間、scope、結果及必要原因的 Audit。
+- STAFF 可依既有 medical care capability 使用醫療功能，但不具收容所帳號、時區、區域或組織生命週期管理權限。
+
 ## 權限矩陣
 
 | 操作 | SHELTER_ADMIN | STAFF + medical_care_access | STAFF 未授權 | 指派 VOLUNTEER | 其他 VOLUNTEER |

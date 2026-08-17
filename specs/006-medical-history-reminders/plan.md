@@ -1,12 +1,12 @@
 # Implementation Plan：動物就醫歷史與照護提醒行事曆
 
-**Branch**: `dev/animal_record` | **Date**: 2026-08-15 | **Spec**: [spec.md](./spec.md)
+**Branch**: `dev/animal_record` | **Date**: 2026-08-17 | **Spec**: [spec.md](./spec.md)
 
 **Input**: `/specs/006-medical-history-reminders/spec.md`
 
 ## Summary
 
-在既有多收容所 CRM 中加入簡單的自由文字醫療歷史、單次與週期照護提醒、今日 Agenda、指定日期行事曆及動物整合時間軸。實作沿用 FastAPI／PostgreSQL、Next.js 管理工作台、Media、Audit、RLS 與 OpenAPI 產生流程；週期 occurrence 由後端依收容所時區在查詢時計算，只持久化單次覆寫與人工處理結果，不依賴 Worker 或外部通知。完整醫療資料由單一 capability 保護，志工只取得被指派事項的最小 projection。本功能不提供診斷、處方或藥量計算。
+在既有多收容所 CRM 中加入簡單的自由文字醫療歷史、單次與週期照護提醒、今日 Agenda、指定日期行事曆及動物整合時間軸，並明確區分平台與收容所管理權限。實作沿用 FastAPI／PostgreSQL、Next.js 管理工作台、Media、Audit、RLS 與 OpenAPI 產生流程；週期 occurrence 由後端依收容所時區在查詢時計算，只持久化單次覆寫與人工處理結果，不依賴 Worker 或外部通知。完整醫療資料由單一 capability 保護，志工只取得被指派事項的最小 projection。本功能不提供診斷、處方或藥量計算。
 
 ## Technical Context
 
@@ -17,8 +17,8 @@
 **Target Platform**: Linux API／Worker、PostgreSQL、現代桌面與行動瀏覽器（360–1440px）；提醒核心不依賴 Worker  
 **Project Type**: Monorepo web application（FastAPI API + Next.js web + shared generated contracts）  
 **Performance Goals**: 固定 100 隻動物／500 筆 mixed-state occurrence 驗收資料，以單一服務程序與已暖機的本機 PostgreSQL 執行 Agenda server-side 查詢、recurrence projection 及 response serialization；每輪先暖機 5 次，再連續量測 100 次並完整執行 3 輪，每輪 p95 均 MUST ≤ 1 秒。量測不含 migration、seed、程序啟動、網路傳輸或瀏覽器 render；行事曆單次範圍 ≤ 366 日、page ≤ 100；長期 daily series 不逐日全展開  
-**Constraints**: CRM 為唯一事實來源；UTC instant + IANA 收容所時區；歷史不可無痕刪除；所有正式資料異動需稽核；修改或結案既有正式資料需 optimistic concurrency，高風險 occurrence action 另需冪等；首次建立以租戶範圍、驗證及唯一約束防止重複或錯誤關聯；跨租戶回應不可洩漏存在性；附件第一階段僅沿用安全圖片 allowlist；不得產生醫療判斷  
-**Scale/Scope**: 5 個可獨立驗收 User Stories、4 類角色、7 種醫療歷史類型、6 種提醒類型、6 種週期表示；驗收 fixture 至少 2 個收容所、100 隻動物、500 筆不同狀態 occurrence
+**Constraints**: CRM 為唯一事實來源；UTC instant + IANA 收容所時區；歷史不可無痕刪除；所有正式資料異動需稽核；修改或結案既有正式資料需 optimistic concurrency，高風險 occurrence action 另需冪等；首次建立以租戶範圍、驗證及唯一約束防止重複或錯誤關聯；跨租戶回應不可洩漏存在性；附件第一階段僅沿用安全圖片 allowlist；不得產生醫療判斷；建立、初始管理員、啟用、停用及跨收容所操作只限 `PLATFORM_ADMIN`；目前 organization 的帳號、時區與區域操作只限同 organization 的 `SHELTER_ADMIN`；UI 可見性不得取代後端授權，拒絕不得產生部分副作用
+**Scale/Scope**: 6 個可獨立驗收 User Stories、4 類角色、7 種醫療歷史類型、6 種提醒類型、6 種週期表示；另涵蓋平台／收容所管理頁角色可見性與組織生命週期授權；驗收 fixture 至少 2 個收容所、100 隻動物、500 筆不同狀態 occurrence
 
 ## Constitution Check
 
@@ -33,7 +33,7 @@ _Gate：Phase 0 前檢查；Phase 1 後再次檢查。_
 | V. 志工回填必須低摩擦 | PASS | 指派頁只顯示單次任務最少資訊，完成可在三個主要步驟內提交。 |
 | VI. 歷史紀錄必須完整且可追溯 | PASS | 正式紀錄只封存；所有 before／after、action、actor、時間與來源均可稽核，Timeline 至少涵蓋 14 日。 |
 | VII. LINE Bot 只是輸入通道 | PASS（不適用） | 第一階段沒有 LINE 或外部通知依賴。 |
-| VIII. 權限、隱私與稽核預設啟用 | PASS | Active Organization context、醫療 capability、最小志工 projection、重要拒絕與 mutation audit。 |
+| VIII. 權限、隱私與稽核預設啟用 | PASS | Active Organization context、平台／收容所生命週期角色邊界、醫療 capability、最小志工 projection、重要拒絕與 mutation audit；未授權建立不得留下副作用。 |
 | IX. P0 不得依賴 P1 或 P2 | PASS | 功能 additive；既有志工回報與動物流程不依賴本功能。 |
 | X. 文件語言一致性與 Python 品質門檻 | PASS | 規格與介面採台灣正體中文；Python 變更通過 Ruff、mypy、Pytest。 |
 | XI. 多收容所資料隔離 | PASS | 所有新 tenant table 顯式帶 organization_id、複合約束、repository predicate 與 FORCE RLS。 |
@@ -61,7 +61,7 @@ specs/006-medical-history-reminders/
 └── tasks.md
 ```
 
-`tasks.md` 已由 `$speckit-tasks` 產生，作為依賴排序的實作清單。
+`tasks.md` 原由 `$speckit-tasks` 產生；本次新增的組織管理權限邊界需在下一輪 `$speckit-tasks` 同步後，才作為完整的依賴排序實作清單。
 
 ### Source Code (repository root)
 
@@ -77,7 +77,7 @@ services/api/
     │   ├── care_reminders.py
     │   ├── assigned_care.py
     │   ├── animal_timeline.py              # additive response
-    │   └── organization_management.py      # timezone / capability administration
+    │   └── organization_management.py      # lifecycle 與 current-organization settings policy
     ├── main.py                             # router registration
     ├── application/
     │   ├── medical_record_service.py
@@ -101,6 +101,7 @@ services/api/
 apps/web/
 ├── app/(management)/
 │   ├── care-calendar/page.tsx
+│   ├── shelters/page.tsx                   # 依角色顯示平台或目前收容所管理功能
 │   └── animals/[animalId]/
 │       ├── page.tsx                        # 今日摘要與快速動作
 │       └── timeline/page.tsx               # 整合既有時間軸
@@ -132,7 +133,8 @@ tests/
 │   ├── test_care_reminders.py
 │   ├── test_care_agenda.py
 │   ├── test_medical_timeline.py
-│   └── test_assigned_care.py
+│   ├── test_assigned_care.py
+│   └── test_organization_creation_authorization.py
 ├── isolation/test_cross_tenant_resource_matrix.py
 └── performance/test_care_agenda_performance.py
 
@@ -141,6 +143,7 @@ apps/web/features/medical-care/
 
 apps/web/e2e/
 ├── medical-care.spec.ts
+├── organization-management.spec.ts
 ├── p0-responsive.spec.ts
 ├── p0-keyboard.spec.ts
 ├── p0-a11y.spec.ts
@@ -162,6 +165,7 @@ scripts/
 4. 醫療紀錄使用 current projection + 既有 Audit before／after；不提供 hard delete。
 5. 附件沿用已清理的 JPEG／PNG／WebP；任意文件另立規格。
 6. Agenda 採 mobile-first 卡片清單；完整歷史整合既有 Timeline；不新增大型行事曆套件。
+7. 組織建立、初始管理員、啟用、停用及跨收容所操作維持 platform-only；目前 organization 的帳號、時區與區域由同 organization 的 SHELTER_ADMIN 管理，STAFF／VOLUNTEER 拒絕；前端隱藏建立表單並以後端 403 作最終防線。
 
 ## Phase 1：Design 產物
 
@@ -169,7 +173,7 @@ scripts/
 - [contracts/medical-care.openapi.yaml](./contracts/medical-care.openapi.yaml)：additive HTTP 契約；實作時併入 canonical OpenAPI 後重新產生 TypeScript。
 - [contracts/authorization.md](./contracts/authorization.md)：角色／capability／指派資料的可見性與拒絕語意。
 - [contracts/timeline-and-calendar.md](./contracts/timeline-and-calendar.md)：Agenda bucket、時區、virtual occurrence 與 Timeline actual／scheduled union。
-- [quickstart.md](./quickstart.md)：本機啟動、seed、主要流程、隔離／衝突／時區／效能與 UI 驗收；以固定 100／500 fixture 對授權工作人員執行 SC-003 兩分鐘找齊待辦的真人計時驗收，expected manifest 同時保留內部 occurrence identity 與畫面可見比對欄位；另固定 Playwright 真實 API 的 repo-root、loopback test DB 與 `/healthz` 前置條件，並提供可追溯的驗收紀錄區。
+- [quickstart.md](./quickstart.md)：本機啟動、seed、主要流程、隔離／衝突／時區／效能與 UI 驗收；以固定 100／500 fixture 對授權工作人員執行 SC-003 兩分鐘找齊待辦的真人計時驗收，expected manifest 同時保留內部 occurrence identity 與畫面可見比對欄位；另固定 Playwright 真實 API 的 repo-root、loopback test DB 與 `/healthz` 前置條件，並提供平台／收容所角色邊界與可追溯的驗收紀錄區。
 
 ## Implementation Sequence
 
@@ -180,8 +184,9 @@ scripts/
 5. 實作 medical records、series、Agenda／Calendar、occurrence actions，以及獨立 assigned volunteer API。
 6. 以收容所 local day 擴充既有 Timeline，保留舊 `reports` 欄位並新增 actual events／scheduled items／open reminders。
 7. 建立 `/care-calendar` agenda-first UI、動物今日摘要、醫療紀錄與提醒 dialogs，統一使用 `apiFetch` 與 generated DTO。
-8. 完成 Pytest、RLS、contract、Vitest、Playwright、responsive、keyboard、axe、visual、500 occurrence performance gate，以及 SC-001～SC-004／SC-009 的代表性使用者計時驗收與證據紀錄。
+8. 收斂 organization mutation policy 與 `/shelters` 管理頁角色可見性：API 將平台生命週期 mutation 與 current-organization settings mutation 分開授權；僅 `PLATFORM_ADMIN` 顯示建立收容所表單，SHELTER_ADMIN 只顯示目前收容所帳號／時區／區域管理，STAFF／VOLUNTEER 對設定 mutation 回 403；保留後端 403，並補 platform／shelter authorization contract、integration 與 E2E tests。
+9. 完成 Pytest、RLS、contract、Vitest、Playwright、responsive、keyboard、axe、visual、500 occurrence performance gate，以及 SC-001～SC-004／SC-009／SC-010 的代表性使用者計時驗收與證據紀錄。
 
 ## Post-Design Constitution Check
 
-Phase 1 設計後重新檢查 11 項原則，結果全部 PASS。資料模型為每個 tenant resource 保存 `organization_id` 並要求 FORCE RLS；契約不接受 client organization scope；Agenda 是 projection 而非第二事實來源；人工結果、原始文字、附件及稽核均可追溯；志工 API 與完整醫療 API 分離；核心提醒不依賴 Worker、外部通知或 AI。因此沒有新增 Complexity Tracking 例外。
+Phase 1 設計後重新檢查 11 項原則，結果全部 PASS。資料模型為每個 tenant resource 保存 `organization_id` 並要求 FORCE RLS；契約不接受 client organization scope；平台生命週期與目前收容所設定 mutation 分別套用 PLATFORM_ADMIN／SHELTER_ADMIN policy，STAFF／VOLUNTEER 不得提升設定權限，且未授權建立不留下租戶或初始帳號副作用；Agenda 是 projection 而非第二事實來源；人工結果、原始文字、附件及稽核均可追溯；志工 API 與完整醫療 API 分離；核心提醒不依賴 Worker、外部通知或 AI。因此沒有新增 Complexity Tracking 例外。

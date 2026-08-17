@@ -183,3 +183,17 @@ API cursor page 預設 50、上限 100，calendar 日期範圍上限 366 日。�
 **Rationale**：這些能力具有不同安全與治理風險，會破壞本次「自由文字歷史＋行事曆提醒＋人工結果」的可維護邊界。
 
 **Alternatives considered**：一次建立完整醫療系統；因範圍、醫療安全與維護成本過高而拒絕。
+
+## 14. 平台與收容所管理權限（本次變更）
+
+**Decision**：保留後端既有的 platform-only organization lifecycle guard，並補上前端角色可見性與自動化授權驗收。只有 `PLATFORM_ADMIN` 顯示「建立收容所」表單並可建立收容所與初始管理員；`SHELTER_ADMIN` 只顯示目前收容所的帳號、時區與區域管理。所有 API mutation 仍重新檢查最新角色與 active organization context，未授權請求在寫入前回傳 403 且不得留下部分副作用。
+
+**Rationale**：建立收容所會新增租戶、初始帳號與資料隔離邊界，是高影響的平台層級操作。最小權限可避免收容所管理員意外建立未受治理的租戶；前端隱藏表單改善操作直覺，但不能取代伺服器授權。
+
+**既有實作觀察**：`organization_management` API 已由 `_require_platform` 保護建立／啟用／停用；目前管理頁仍可能對所有管理角色渲染建立表單，因此本次只需收斂 UI 可見性並補齊 contract、integration 與 E2E 測試。`local-shelter-admin-a` 作為 SHELTER_ADMIN 應可用於拒絕路徑驗收。
+
+**Alternatives considered**：
+
+- 讓 SHELTER_ADMIN 建立收容所：拒絕，會混淆平台與租戶管理邊界並增加資料隔離風險。
+- 只隱藏前端表單、不保留後端 guard：拒絕，任何直接網址或手動 request 都可繞過 UI。
+- 在本次導入通用 ACL／permission catalog：拒絕，現有 role guard 已足夠，新增通用權限模型會擴大維護範圍。

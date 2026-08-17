@@ -28,6 +28,17 @@
 
 `STAFF` 需為 active membership 且此欄為 true 才可讀／維護完整醫療資料。`VOLUNTEER` 即使誤設 true 也不得取得完整醫療權限；其存取只由單次有效指派決定。
 
+### 2.3 平台／收容所管理權限
+
+本次不新增組織管理專用 entity 或可由前端控制的布林欄位。既有已驗證的使用者平台角色、`OrganizationMembership` role 與 active organization context 是組織管理授權來源：
+
+- `PLATFORM_ADMIN` 可建立、啟用、停用及跨收容所管理組織，並可建立初始管理員。
+- `SHELTER_ADMIN` 只可管理目前已驗證收容所的帳號、時區與區域，不能建立新收容所或操作其他收容所。
+- STAFF 與 VOLUNTEER 不具組織生命週期管理權限。
+- UI 可依角色隱藏建立入口，但 API 每次 mutation 仍須重新判定；拒絕不得產生租戶、帳號或部分設定。
+
+組織建立、初始管理員建立、啟用／停用與未授權拒絕沿用既有 `AuditRecord`，保存 actor、時間、scope、結果及必要原因；不另建第二套權限或稽核資料表。
+
 ## 3. 新增 Entity
 
 ### 3.1 MedicalRecord

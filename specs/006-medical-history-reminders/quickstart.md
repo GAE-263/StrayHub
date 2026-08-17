@@ -122,6 +122,23 @@ npm --prefix packages/contracts run check
 uv run pytest tests/isolation/test_cross_tenant_resource_matrix.py -q
 ```
 
+### 5A. 平台與收容所管理權限
+
+1. 以 `local-shelter-admin-a` 登入並開啟 `/shelters`；確認只看到目前收容所的帳號、時區與區域管理，不看到「建立收容所」表單或平台層級收容所清單。
+2. 使用同一帳號直接開啟舊建立頁、猜測建立路徑或手動送出建立收容所 request；預期回傳 403，畫面顯示需要平台管理員權限，且資料庫沒有新增收容所、初始管理員或部分設定。
+3. 以 `local-platform-admin` 登入並開啟 `/shelters`；確認可看到建立表單，建立一個待啟用收容所與初始管理員，並能在平台管理範圍追溯兩者及 Audit。
+4. 在收容所管理員頁面嘗試填入其他收容所識別或修改平台設定；預期只作用於目前已驗證收容所，其他範圍回安全的 403／404，且不洩漏存在性。
+
+可用下列既有組織管理與稽核測試先驗證基線；本次新增的 SHELTER_ADMIN 403／無副作用案例，以及前端角色可見性與直接網址流程，應另由授權 integration／管理頁 E2E 覆蓋：
+
+```bash
+uv run pytest \
+  tests/contract/test_organization_management_contract.py \
+  tests/integration/test_organization_management.py \
+  tests/integration/test_organization_api_audit.py \
+  tests/security/test_management_workbench_authorization.py -q
+```
+
 ## 6. 並行、冪等與附件
 
 - 兩位人員以相同 `expected_version` 同時完成同一 virtual occurrence：只允許一位成功；另一位收到 409 與最新安全狀態，且只有一筆正常 terminal projection。

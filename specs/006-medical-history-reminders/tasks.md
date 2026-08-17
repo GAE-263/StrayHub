@@ -6,12 +6,12 @@
 
 **Organization**：任務按 User Story 分階段，使每個故事都能獨立實作、驗收與交付。
 
-**Implementation status (2026-08-16)**：核心功能與自動化 release gate 已完成；Ruff、pytest、mypy、Vitest、production Playwright、axe、visual、OpenAPI、build 與三輪 Agenda production DB 效能均通過。驗收期間發現並修正 Agenda 每區只顯示前 50 筆的漏列問題，真實 UI／API 對 500 筆 manifest 的遺漏／誤列為 0、分類正確率 100%。T097 仍只因正式 10 名管理員＋10 名授權工作人員人工驗收尚未執行而維持未完成。
+**Implementation status (2026-08-17)**：核心功能與自動化 release gate 已完成；Ruff、pytest、mypy、Vitest、production Playwright、axe、visual、OpenAPI、build 與三輪 Agenda production DB 效能均通過。驗收期間發現並修正 Agenda 每區只顯示前 50 筆的漏列問題，真實 UI／API 對 500 筆 manifest 的遺漏／誤列為 0、分類正確率 100%。T097 仍只因正式 10 名管理員＋10 名授權工作人員人工驗收尚未執行而維持未完成；本次新增 T098～T104 對應平台／收容所管理權限邊界。
 
 ## Format：`[ID] [P?] [Story] Description`
 
 - **[P]**：在同一階段的必要前置完成後，可在不同檔案平行進行。
-- **[US1]～[US5]**：對應 `spec.md` 的使用者故事。
+- **[US1]～[US6]**：對應 `spec.md` 的使用者故事；US6 為本次新增的 P0 權限邊界。
 - 每個任務均包含明確檔案路徑；若列出多個路徑，代表該任務必須保持這些邊界同步。
 
 ---
@@ -209,7 +209,32 @@
 
 ---
 
-## Phase 8：Polish & Cross-Cutting Concerns
+## Phase 8：User Story 6－區分平台與收容所管理權限（Priority：P0）
+
+**Goal**：只有 `PLATFORM_ADMIN` 能建立、啟用、停用及跨收容所管理；`SHELTER_ADMIN` 只看到並操作目前收容所的帳號、時區與區域，且任何直接 request 都由後端 403 防線拒絕。
+
+**Independent Test**：以 `local-shelter-admin-a` 登入管理頁，確認不顯示建立收容所表單，直接送出建立 request 回 403 且沒有收容所、初始管理員或部分設定副作用；再以 `local-platform-admin` 建立待啟用收容所與初始管理員，確認成功、Audit 可追溯，並確認其他收容所範圍不可操作。
+
+### Tests for User Story 6（先寫並確認失敗）
+
+- [ ] T098 [P] [US6] 擴充 `tests/contract/test_organization_management_contract.py`，驗證組織建立、初始管理員、狀態與目前收容所帳號／時區／區域路由的 request 不接受 client `organization_id`，固定 403／安全錯誤契約，並驗證 `/v1/auth/me` 以 `User.roles`／platform scope 表示 `PLATFORM_ADMIN`，`LoginOrganization.role` 僅表示收容所 Membership role。
+- [ ] T099 [P] [US6] 建立 `tests/integration/test_organization_creation_authorization.py`，驗證 SHELTER_ADMIN 建立收容所必須回 403 且不建立租戶、初始管理員、政策或部分設定；驗證 PLATFORM_ADMIN 可成功建立收容所與初始管理員並寫入建立／membership Audit；另驗證 SHELTER_ADMIN 可修改目前收容所時區、帳號與區域，STAFF 修改上述設定回 403，且拒絕後由獨立 Audit transaction 保存操作者、時間、目前收容所 scope、結果與原因。
+- [ ] T100 [P] [US6] 建立 `tests/security/test_organization_lifecycle_authorization.py`，驗證直接網址、手動 body、過期角色／context 與其他收容所識別不能擴張管理範圍；驗證 SHELTER_ADMIN 對其他 organization 的帳號／時區／區域操作回 403／404，拒絕回應不洩漏平台或其他租戶資料，且所有拒絕事件均有不含不可見 payload 的 durable Audit。
+- [ ] T101 [P] [US6] 擴充 `apps/web/app/(management)/shelters/page.test.tsx`，先驗證 PLATFORM_ADMIN 看得到「建立收容所」表單，SHELTER_ADMIN 只看到目前收容所管理，且角色切換／403 狀態不殘留舊表單或資料。
+
+### Implementation for User Story 6
+
+- [ ] T102 [US6] 在 `services/api/app/api/organization_management.py` 與 `services/api/app/application/organization_management.py` 拆分 organization mutation policy：建立／初始管理員／啟用／停用／跨收容所操作套用 `_require_platform`；目前 organization 的帳號／時區／區域操作只允許 SHELTER_ADMIN；STAFF／VOLUNTEER 拒絕。所有判定必須先於寫入，成功與拒絕均依既有 Audit lifecycle 記錄，並保持 atomic rollback。
+- [ ] T103 [US6] 在 `apps/web/app/(management)/shelters/page.tsx` 沿用既有 `/v1/auth/me` 與 active shelter context 的角色資料；只有 `role === "PLATFORM_ADMIN"` 渲染建立收容所與平台層級選擇，SHELTER_ADMIN 只渲染目前收容所帳號、時區與區域管理，並以安全狀態處理 403／載入失敗，不以 UI 隱藏取代 API 授權。
+- [ ] T104 [US6] 建立 `apps/web/e2e/organization-management.spec.ts`，以 local-shelter-admin-a 驗證表單隱藏、直接建立請求 403／無副作用及目前收容所範圍，以 local-platform-admin 驗證建立收容所與初始管理員成功及 Audit 可追溯。
+
+**Checkpoint**：平台／收容所管理權限可由 API、管理頁與真人操作獨立驗收；SHELTER_ADMIN 無法建立租戶，PLATFORM_ADMIN 可完成完整建立流程。
+
+**執行優先序備註**：US6 是本次新增的 P0 待辦。US1～US5 的既有任務已完成，因此 T098～T104 應優先於 T097 執行；T097 必須等 US6 權限驗收完成後，才能作為最終 release gate。
+
+---
+
+## Phase 9：Polish & Cross-Cutting Concerns
 
 **Purpose**：補齊跨故事的種子資料、隔離、效能、內容安全、responsive／a11y 與完整品質證據。
 
@@ -221,7 +246,7 @@
 - [X] T094 [P] 在 `tests/security/test_medical_content_boundaries.py` 驗證體重不改提醒或藥量、管理員文字不呈現為系統建議、逾期不自動宣稱給藥／漏藥，且沒有診斷、處方、庫存、外部通知或 AI side effect
 - [X] T095 將 `/care-calendar`、動物頁／Timeline、medical／reminder dialogs 與 assigned-care 納入 `apps/web/e2e/p0-responsive.spec.ts`、`apps/web/e2e/p0-keyboard.spec.ts`、`apps/web/e2e/p0-a11y.spec.ts` 與 `apps/web/e2e/p0-visual.spec.ts` 的 360／768／1024／1440、focus、axe、文字非只靠顏色及 visual baselines
 - [X] T096 在 `tests/integration/test_empty_database_bootstrap.py` 與 `tests/contract/test_generated_contract_types.py` 補齊 0027 空庫／upgrade、canonical/runtime/generated drift 與完整 feature quality regression
-- [ ] T097 依 `specs/006-medical-history-reminders/quickstart.md` 先以 repo-root、loopback test DB、seed opt-in、`API_INTERNAL_URL` 及 `/healthz` 前置執行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，再執行 mypy、Vitest、Playwright、axe、visual 與 OpenAPI check；依第 10 節執行三輪 Agenda 效能量測；至少邀請 10 名管理員驗收 SC-001／SC-002／SC-009，另以 T017 manifest 讓至少 10 名授權工作人員分別計時驗收 SC-003／SC-004，SC-003 以畫面可見欄位、重複筆數及 bucket totals 核對且每人均須在 120 秒內，不要求辨識內部 ID；Playwright 另以 occurrence IDs 證明無遺漏／重複及分類 100%，SC-004 至少 9 人於三步內完成；依第 12 節將指令、版本、匿名樣本、時間、步驟、expected／actual、遺漏／誤列、求助、通過率與證據連結取代「待執行」內容
+- [ ] T097 依 `specs/006-medical-history-reminders/quickstart.md` 先以 repo-root、loopback test DB、seed opt-in、`API_INTERNAL_URL` 及 `/healthz` 前置執行 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，再執行 mypy、Vitest、Playwright、axe、visual 與 OpenAPI check；依第 10 節執行三輪 Agenda 效能量測；至少邀請 10 名管理員驗收 SC-001／SC-002／SC-009，另以 T017 manifest 讓至少 10 名授權工作人員分別計時驗收 SC-003／SC-004，SC-003 以畫面可見欄位、重複筆數及 bucket totals 核對且每人均須在 120 秒內，不要求辨識內部 ID；Playwright 另以 occurrence IDs 證明無遺漏／重複及分類 100%，SC-004 至少 9 人於三步內完成；依第 12 節記錄 SC-010 的平台管理員／收容所管理員角色可見性、403／無副作用與成功建立結果；將指令、版本、匿名樣本、時間、步驟、expected／actual、遺漏／誤列、求助、通過率與證據連結取代「待執行」內容
   - 2026-08-16 狀態：自動化與三輪效能已通過；1 名管理員及 1 名工作人員的 agent 探索操作已留存，但不計正式樣本。正式樣本仍為管理員 0／10、工作人員 0／10，故不得勾選。證據：[`evidence/t097-validation-2026-08-16.md`](evidence/t097-validation-2026-08-16.md)。
 
 **Checkpoint**：所有成功標準、憲章門檻與跨故事風險都有可重複的自動或人工證據。
@@ -240,7 +265,8 @@ Phase 2 Foundational（阻塞全部故事）
     └──→ Phase 4 US2 週期提醒 ──┬──→ Phase 5 US3 Agenda ──┐
                                └──→ Phase 6 US4 結果回報 ─┤
 US1 + US2 + US4 ───────────────────────────→ Phase 7 US5 Timeline
-US1～US5 完成範圍 ─────────────────────────→ Phase 8 Polish
+US1～US5 完成範圍 ─────────────────────────→ Phase 9 Polish
+Foundational ─────────────────────────────→ Phase 8 US6（可與 US1～US5 平行）
 ```
 
 ### User Story Dependencies
@@ -250,6 +276,7 @@ US1～US5 完成範圍 ───────────────────
 - **US3（P1）**：依賴 US2 的 series、recurrence 與 virtual occurrence；只讀 Agenda 不依賴 US4 action。
 - **US4（P1）**：核心 action API 依賴 US2；管理端卡片整合 T075 另依賴 US3，志工 assigned flow 不依賴 US3。
 - **US5（P2）**：依賴 US1 的 medical records、US2 的 scheduled occurrence 及 US4 的 actual action events；可在 US3 之前開始 repository／mapping，但完整驗收需上述來源完成。
+- **US6（P0）**：只依賴既有 organization management、authentication 與 active context；可與 US1～US5 平行，且不應等待醫療功能完成。
 
 ### Within Each User Story
 
@@ -304,6 +331,14 @@ US1～US5 完成範圍 ───────────────────
 收斂：T080 → T081 → T082；T083／T084 → T085 → T086／T087 → T088
 ```
 
+### User Story 6
+
+```text
+平行：T098 contract、T099 integration、T100 security、T101 frontend tests
+平行：T102 backend authorization、T103 shelter management UI（均依賴對應測試先建立）
+收斂：T102／T103 → T104 organization-management Playwright
+```
+
 ---
 
 ## Implementation Strategy
@@ -323,7 +358,8 @@ US1～US5 完成範圍 ───────────────────
 3. **US3**：提供跨動物的只讀今日 Agenda／Calendar。
 4. **US4**：加入人工結果、並行防重與志工最小指派流程。
 5. **US5**：把所有來源整合到單一動物 Timeline／今日摘要。
-6. **Polish**：完成 100／500、長期 daily、隔離、a11y、visual 與全品質 gate。
+6. **US6**：收斂平台／收容所管理權限，先完成 403、無副作用與前端表單可見性驗收。
+7. **Polish**：完成 100／500、長期 daily、隔離、a11y、visual 與全品質 gate。
 
 ### Scope Discipline
 
