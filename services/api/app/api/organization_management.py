@@ -76,6 +76,8 @@ class MembershipResponse(BaseModel):
     expires_at: datetime | None = None
     access_version: int = 1
     medical_care_access: bool = False
+    username: str | None = None
+    display_name: str | None = None
 
 
 class MembershipCreateRequest(BaseModel):
@@ -181,9 +183,7 @@ async def _require_platform_with_audit(
         raise
 
 
-def _require_organization_settings_admin(
-    context: RequestContext, organization_id: UUID
-) -> None:
+def _require_organization_settings_admin(context: RequestContext, organization_id: UUID) -> None:
     OrganizationManagementService.require_settings_admin(
         role=context.role,
         platform_scope=context.platform_scope,
@@ -225,7 +225,7 @@ def _response(organization: Organization) -> OrganizationResponse:
     return data
 
 
-def _membership_response(membership: OrganizationMembership) -> MembershipResponse:
+def _membership_response(membership: OrganizationMembership, user=None) -> MembershipResponse:
     return MembershipResponse.model_validate(
         {
             "id": membership.id,
@@ -237,6 +237,8 @@ def _membership_response(membership: OrganizationMembership) -> MembershipRespon
             "expires_at": membership.expires_at,
             "access_version": getattr(membership, "access_version", None) or 1,
             "medical_care_access": getattr(membership, "medical_care_access", False) or False,
+            "username": getattr(user, "username", None),
+            "display_name": getattr(user, "display_name", None),
         }
     )
 
@@ -306,9 +308,7 @@ async def create_organization(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> OrganizationResponse:
-    await _require_platform_with_audit(
-        context, session, resource_type="organization"
-    )
+    await _require_platform_with_audit(context, session, resource_type="organization")
     repository = OrganizationRepository(session)
     service = OrganizationManagementService(repository, Argon2PasswordHasher())
     organization = await service.create(
@@ -485,8 +485,8 @@ async def list_memberships(
         organizationId,
         resource_type="organization_membership",
     )
-    memberships = await OrganizationRepository(session).memberships(organizationId)
-    return {"items": [_membership_response(value) for value in memberships]}
+    memberships = await OrganizationRepository(session).memberships_with_users(organizationId)
+    return {"items": [_membership_response(membership, user) for membership, user in memberships]}
 
 
 @router.post(

@@ -1831,6 +1831,8 @@ export interface components {
             access_version: number;
             /** @default false */
             medical_care_access: boolean;
+            username?: string | null;
+            display_name?: string | null;
         };
         MembershipCreateRequest: {
             /** Format: uuid */

@@ -35,8 +35,10 @@ type Membership = {
   organization_id: string;
   user_id: string;
   role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
-  status: "invited" | "active" | "disabled";
+  status: "invited" | "active" | "disabled" | "expired" | "revoked";
   medical_care_access: boolean;
+  username?: string | null;
+  display_name?: string | null;
 };
 
 type Area = {
@@ -44,6 +46,20 @@ type Area = {
   name: string;
   area_type: "area" | "cage";
   status: "active" | "inactive";
+};
+
+const roleLabels: Record<Membership["role"], string> = {
+  SHELTER_ADMIN: "收容所管理員",
+  STAFF: "工作人員",
+  VOLUNTEER: "志工",
+};
+
+const membershipStatusLabels: Record<string, string> = {
+  invited: "待接受",
+  active: "啟用中",
+  disabled: "已停用",
+  expired: "已過期",
+  revoked: "已撤銷",
 };
 
 async function responseData<T>(response: Response): Promise<T> {
@@ -78,7 +94,6 @@ export default function SheltersManagementPage() {
   const [accountRole, setAccountRole] = useState<Membership["role"]>("STAFF");
   const [areaName, setAreaName] = useState("");
   const [areaType, setAreaType] = useState<Area["area_type"]>("area");
-  const [timezone, setTimezone] = useState("Asia/Taipei");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const selectedShelter = useMemo(
@@ -97,10 +112,6 @@ export default function SheltersManagementPage() {
   const canManageShelterSettings = ["PLATFORM_ADMIN", "SHELTER_ADMIN"].includes(
     currentRole ?? "",
   );
-
-  useEffect(() => {
-    if (selectedShelter) setTimezone(selectedShelter.timezone || "Asia/Taipei");
-  }, [selectedShelter]);
 
   const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -245,16 +256,6 @@ export default function SheltersManagementPage() {
     await loadShelterDetails();
   };
 
-  const updateTimezone = async () => {
-    if (!selectedShelterId) return;
-    await request<Shelter>(`/v1/organizations/${selectedShelterId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ timezone }),
-    });
-    setMessage("收容所時區已更新，後續提醒與今日日期會依新時區計算。");
-    await loadShelters(selectedShelterId);
-  };
-
   const createArea = async () => {
     await request<Area>(`/v1/organizations/${selectedShelterId}/areas`, {
       method: "POST",
@@ -266,9 +267,17 @@ export default function SheltersManagementPage() {
   };
 
   return (
-    <main aria-labelledby="shelter-management-title">
-      <h1 id="shelter-management-title">收容所與帳號管理</h1>
-      <p>所有資料操作都由後端依驗證後的機構範圍判定。</p>
+    <main
+      className="shelter-management-page"
+      aria-labelledby="shelter-management-title"
+    >
+      <div className="page-heading shelter-management-heading">
+        <div>
+          <span className="eyebrow">SHELTER ADMINISTRATION</span>
+          <h1 id="shelter-management-title">權限管理</h1>
+          <p>管理目前收容所的帳號角色、狀態與資料存取權限。</p>
+        </div>
+      </div>
       {errorMessage && (
         <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
       )}
@@ -304,32 +313,9 @@ export default function SheltersManagementPage() {
               </Button>
             )}
           {canManageShelterSettings && (
-            <div className="stack-sm">
-              <h3>照護日期與時區</h3>
-              <p className="muted">
-                目前版本的今日待辦、提醒與動物時間軸都使用此收容所時區。
-              </p>
-              <Field>
-                <label htmlFor="shelter-timezone">收容所時區</label>
-                <Select
-                  id="shelter-timezone"
-                  value={timezone}
-                  onChange={(event) => setTimezone(event.target.value)}
-                >
-                  <option value="Asia/Taipei">Asia/Taipei（台灣）</option>
-                  <option value="Asia/Tokyo">Asia/Tokyo（日本）</option>
-                  <option value="UTC">UTC</option>
-                </Select>
-              </Field>
-              <Button
-                type="button"
-                disabled={
-                  !selectedShelterId || timezone === selectedShelter?.timezone
-                }
-                onClick={() => void runAction(updateTimezone)}
-              >
-                儲存時區
-              </Button>
+            <div className="shelter-timezone-note">
+              <strong>時區</strong>
+              <span>台灣各地收容所統一使用 Asia/Taipei（台灣時間）</span>
             </div>
           )}
           {canManageOrganizations && (
@@ -390,66 +376,86 @@ export default function SheltersManagementPage() {
             <CardTitle id="account-list-title">帳號與 Membership</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul>
+            <ul className="membership-list">
               {memberships.map((membership) => (
-                <li key={membership.id}>
-                  <span>
-                    {membership.user_id}（<Badge>{membership.status}</Badge>）
-                  </span>
-                  <Select
-                    aria-label={`${membership.user_id} 角色`}
-                    defaultValue={membership.role}
-                    onChange={(event) =>
-                      void runAction(() =>
-                        updateMembership(membership.id, {
-                          role: event.target.value as Membership["role"],
-                        }),
-                      )
-                    }
-                  >
-                    <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
-                    <option value="STAFF">STAFF</option>
-                    <option value="VOLUNTEER">VOLUNTEER</option>
-                  </Select>
-                  {membership.role === "STAFF" ? (
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={membership.medical_care_access}
-                        aria-label={`${membership.user_id} 醫療資料權限`}
-                        onChange={(event) => {
-                          const enabled = event.target.checked;
-                          if (
-                            !enabled &&
-                            !window.confirm(
-                              "確定撤銷此 STAFF 的醫療資料權限嗎？",
-                            )
-                          ) {
-                            event.target.checked = true;
-                            return;
-                          }
-                          void runAction(() =>
-                            updateMembership(membership.id, {
-                              medical_care_access: enabled,
-                            }),
-                          );
-                        }}
-                      />
-                      醫療資料權限
-                    </label>
-                  ) : null}
-                  <Button
-                    variant="secondary"
-                    type="button"
-                    disabled={membership.status === "disabled"}
-                    onClick={() =>
-                      void runAction(() =>
-                        updateMembership(membership.id, { status: "disabled" }),
-                      )
-                    }
-                  >
-                    停用
-                  </Button>
+                <li className="membership-item" key={membership.id}>
+                  <div className="membership-identity">
+                    <strong>
+                      {membership.display_name ||
+                        membership.username ||
+                        "未命名使用者"}
+                    </strong>
+                    {membership.username && (
+                      <span className="membership-username">
+                        帳號：{membership.username}
+                      </span>
+                    )}
+                  </div>
+                  <div className="membership-meta">
+                    <Badge>{roleLabels[membership.role]}</Badge>
+                    <Badge>
+                      {membershipStatusLabels[membership.status] ??
+                        membership.status}
+                    </Badge>
+                  </div>
+                  <div className="membership-actions">
+                    <Select
+                      aria-label={`${membership.display_name || membership.username || membership.user_id} 角色`}
+                      defaultValue={membership.role}
+                      onChange={(event) =>
+                        void runAction(() =>
+                          updateMembership(membership.id, {
+                            role: event.target.value as Membership["role"],
+                          }),
+                        )
+                      }
+                    >
+                      <option value="SHELTER_ADMIN">收容所管理員</option>
+                      <option value="STAFF">工作人員</option>
+                      <option value="VOLUNTEER">志工</option>
+                    </Select>
+                    {membership.role === "STAFF" ? (
+                      <label className="membership-permission">
+                        <input
+                          type="checkbox"
+                          checked={membership.medical_care_access}
+                          aria-label={`${membership.display_name || membership.username || membership.user_id} 醫療資料權限`}
+                          onChange={(event) => {
+                            const enabled = event.target.checked;
+                            if (
+                              !enabled &&
+                              !window.confirm(
+                                "確定撤銷此工作人員的醫療資料權限嗎？",
+                              )
+                            ) {
+                              event.target.checked = true;
+                              return;
+                            }
+                            void runAction(() =>
+                              updateMembership(membership.id, {
+                                medical_care_access: enabled,
+                              }),
+                            );
+                          }}
+                        />
+                        醫療資料權限
+                      </label>
+                    ) : null}
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      disabled={membership.status === "disabled"}
+                      onClick={() =>
+                        void runAction(() =>
+                          updateMembership(membership.id, {
+                            status: "disabled",
+                          }),
+                        )
+                      }
+                    >
+                      停用帳號
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

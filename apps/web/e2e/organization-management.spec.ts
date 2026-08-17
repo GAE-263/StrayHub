@@ -104,7 +104,22 @@ async function mockOrganizationManagement(page: Page, role: string) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ items: [] }),
+        body: JSON.stringify({
+          items: url.pathname.endsWith("/memberships")
+            ? [
+                {
+                  id: "membership-a",
+                  organization_id: "org-a",
+                  user_id: "user-a-id",
+                  username: "local-staff-a",
+                  display_name: "本機工作人員 A",
+                  role: "STAFF",
+                  status: "active",
+                  medical_care_access: false,
+                },
+              ]
+            : [],
+        }),
       });
       return;
     }
@@ -122,9 +137,7 @@ test("PLATFORM_ADMIN 可看到建立收容所表單", async ({ page }) => {
   );
   await mockOrganizationManagement(page, "PLATFORM_ADMIN");
   await page.goto("/shelters");
-  await expect(
-    page.getByRole("heading", { name: "收容所與帳號管理" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "權限管理" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "建立收容所" })).toBeVisible();
   await page.getByLabel("機構代碼").fill("ORG-NEW");
   await page.getByLabel("收容所名稱").fill("新收容所");
@@ -147,8 +160,15 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   );
   await mockOrganizationManagement(page, "SHELTER_ADMIN");
   await page.goto("/shelters");
-  await expect(page.getByText("照護日期與時區")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "權限管理" })).toBeVisible();
   await expect(page.getByText("帳號與 Membership")).toBeVisible();
+  await expect(page.getByText("本機工作人員 A")).toBeVisible();
+  await expect(page.getByText("帳號：local-staff-a")).toBeVisible();
+  await expect(
+    page.getByText("台灣各地收容所統一使用 Asia/Taipei（台灣時間）"),
+  ).toBeVisible();
+  await expect(page.getByLabel("收容所時區")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "儲存時區" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "建立收容所" })).toHaveCount(
     0,
   );

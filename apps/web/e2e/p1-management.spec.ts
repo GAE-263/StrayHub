@@ -3,7 +3,7 @@ import { mockManagementApi } from "./fixtures";
 
 const p1Routes = [
   ["/ai-review", "AI Review Queue"],
-  ["/shelters", "收容所與帳號管理"],
+  ["/shelters", "權限管理"],
   ["/settings/observation-options", "觀察詞彙"],
   ["/settings/qr-codes", "QR 綁定"],
   ["/settings/reportable-scope", "可回報範圍"],
@@ -56,8 +56,11 @@ test.describe("P1 management routes", () => {
     await expect(page.getByText("observation_option.created")).toBeVisible();
 
     await page.goto("/shelters");
-    await expect(page.getByText("帳號與 Membership")).toBeVisible();
-    await expect(page.getByText("Cage / Area")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "權限管理", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("帳號與 Membership")).toHaveCount(0);
+    await expect(page.getByText("Cage / Area")).toHaveCount(0);
   });
 
   test("AI Queue permission denied 顯示繁中下一步且不渲染資料", async ({

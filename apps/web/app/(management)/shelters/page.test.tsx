@@ -50,7 +50,20 @@ function mockFetch(role: string) {
       return jsonResponse({ items: [organization] });
     }
     if (path.endsWith("/memberships")) {
-      return jsonResponse({ items: [] });
+      return jsonResponse({
+        items: [
+          {
+            id: "membership-a",
+            organization_id: "org-a",
+            user_id: "user-a-id",
+            username: "local-staff-a",
+            display_name: "本機工作人員 A",
+            role: "STAFF",
+            status: "active",
+            medical_care_access: false,
+          },
+        ],
+      });
     }
     if (path.endsWith("/areas")) {
       return jsonResponse({ items: [] });
@@ -90,9 +103,15 @@ describe("shelter management page authorization", () => {
 
   it("shows current shelter settings but not organization creation to SHELTER_ADMIN", async () => {
     await renderPage("SHELTER_ADMIN");
-    expect(container?.textContent).toContain("照護日期與時區");
+    expect(container?.textContent).toContain(
+      "台灣各地收容所統一使用 Asia/Taipei",
+    );
     expect(container?.textContent).toContain("帳號與 Membership");
     expect(container?.textContent).not.toContain("建立收容所");
+    expect(container?.textContent).toContain("本機工作人員 A");
+    expect(container?.textContent).toContain("帳號：local-staff-a");
+    expect(container?.textContent).not.toContain("照護日期與時區");
+    expect(container?.textContent).not.toContain("儲存時區");
   });
 
   it("does not expose shelter settings to STAFF", async () => {

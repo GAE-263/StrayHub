@@ -1,4 +1,6 @@
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import yaml
 from fastapi.routing import APIRoute
@@ -8,6 +10,7 @@ from services.api.app.api.organization_management import (
     OrganizationCreateRequest,
     OrganizationUpdateRequest,
     ShelterAreaCreateRequest,
+    _membership_response,
     router,
 )
 
@@ -65,7 +68,28 @@ def test_membership_contract_exposes_finite_volunteer_projection() -> None:
     )
     properties = document["components"]["schemas"]["Membership"]["properties"]
     assert {"valid_from", "expires_at", "access_version"} <= properties.keys()
+    assert {"username", "display_name"} <= properties.keys()
     assert {"valid_from", "expires_at", "access_version"} <= MembershipResponse.model_fields.keys()
+
+
+def test_membership_response_includes_user_identity_projection() -> None:
+    response = _membership_response(
+        SimpleNamespace(
+            id=uuid4(),
+            organization_id=uuid4(),
+            user_id=uuid4(),
+            role="STAFF",
+            status="active",
+            valid_from=None,
+            expires_at=None,
+            access_version=1,
+            medical_care_access=False,
+        ),
+        SimpleNamespace(username="local-staff-a", display_name="本機工作人員 A"),
+    )
+
+    assert response.username == "local-staff-a"
+    assert response.display_name == "本機工作人員 A"
 
 
 def test_auth_contract_distinguishes_platform_role_from_shelter_membership_role() -> None:

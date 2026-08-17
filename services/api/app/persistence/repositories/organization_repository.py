@@ -72,6 +72,17 @@ class OrganizationRepository:
         )
         return list(result.scalars())
 
+    async def memberships_with_users(
+        self, organization_id: UUID
+    ) -> builtins.list[tuple[OrganizationMembership, User]]:
+        result = await self.session.execute(
+            select(OrganizationMembership, User)
+            .join(User, User.id == OrganizationMembership.user_id)
+            .where(OrganizationMembership.organization_id == organization_id)
+            .order_by(OrganizationMembership.created_at)
+        )
+        return list(result.all())
+
     async def membership_by_id(
         self, membership_id: UUID, organization_id: UUID
     ) -> OrganizationMembership | None:

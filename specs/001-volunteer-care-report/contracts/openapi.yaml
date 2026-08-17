@@ -2516,6 +2516,8 @@ components:
           format: date-time
         access_version: { type: integer, minimum: 1, default: 1 }
         medical_care_access: { type: boolean, default: false }
+        username: { type: [string, "null"] }
+        display_name: { type: [string, "null"] }
     MembershipCreateRequest:
       type: object
       required: [user_id, role]
