@@ -121,8 +121,91 @@ class ShelterAreaUpdateRequest(BaseModel):
 
 
 def _require_platform(context: RequestContext) -> None:
-    if context.role != "PLATFORM_ADMIN" and not context.platform_scope:
-        raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
+    OrganizationManagementService.require_platform(
+        role=context.role, platform_scope=context.platform_scope
+    )
+
+
+async def _record_authorization_denial(
+    session: AsyncSession,
+    context: RequestContext,
+    *,
+    resource_type: str,
+    resource_id: UUID | None = None,
+    reason: str,
+) -> None:
+    """Persist an authorization denial without exposing another tenant's id."""
+
+    safe_resource_id = resource_id
+    if (
+        context.organization_id is not None
+        and resource_id is not None
+        and resource_id != context.organization_id
+    ):
+        safe_resource_id = None
+    try:
+        await AuditService(session).record_denial(
+            organization_id=context.organization_id,
+            actor_user_id=context.user_id,
+            resource_type=resource_type,
+            resource_id=safe_resource_id,
+            reason=reason,
+        )
+        await session.commit()
+    except Exception:
+        # Authorization must remain a 403 even when audit storage is unavailable.
+        rollback = getattr(session, "rollback", None)
+        if rollback is not None:
+            result = rollback()
+            if hasattr(result, "__await__"):
+                await result
+
+
+async def _require_platform_with_audit(
+    context: RequestContext,
+    session: AsyncSession,
+    *,
+    resource_type: str,
+    resource_id: UUID | None = None,
+) -> None:
+    try:
+        _require_platform(context)
+    except DomainError as exc:
+        await _record_authorization_denial(
+            session,
+            context,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            reason=exc.code,
+        )
+        raise
+
+
+def _require_organization_settings_admin(
+    context: RequestContext, organization_id: UUID
+) -> None:
+    OrganizationManagementService.require_settings_admin(
+        role=context.role,
+        platform_scope=context.platform_scope,
+        current_organization_id=context.organization_id,
+        target_organization_id=organization_id,
+    )
+
+
+def _require_update_permission(
+    context: RequestContext, organization_id: UUID, payload: OrganizationUpdateRequest
+) -> None:
+    """Allow shelter admins to change only their current shelter timezone."""
+
+    platform_fields = ("name", "address", "service_area", "contact", "status")
+    has_platform_field = any(getattr(payload, field) is not None for field in platform_fields)
+    OrganizationManagementService.require_update_permission(
+        role=context.role,
+        platform_scope=context.platform_scope,
+        current_organization_id=context.organization_id,
+        target_organization_id=organization_id,
+        has_platform_field=has_platform_field,
+    )
 
 
 def _response(organization: Organization) -> OrganizationResponse:
@@ -177,6 +260,26 @@ def _require_membership_admin(context: RequestContext, organization_id: UUID) ->
         raise DomainError("membership_management_denied", "無法管理此收容所 Membership", 403)
 
 
+async def _require_membership_admin_with_audit(
+    context: RequestContext,
+    session: AsyncSession,
+    organization_id: UUID,
+    *,
+    resource_type: str,
+) -> None:
+    try:
+        _require_membership_admin(context, organization_id)
+    except DomainError as exc:
+        await _record_authorization_denial(
+            session,
+            context,
+            resource_type=resource_type,
+            resource_id=organization_id,
+            reason=exc.code,
+        )
+        raise
+
+
 @router.get("/v1/organizations")
 async def list_organizations(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
@@ -203,7 +306,9 @@ async def create_organization(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> OrganizationResponse:
-    _require_platform(context)
+    await _require_platform_with_audit(
+        context, session, resource_type="organization"
+    )
     repository = OrganizationRepository(session)
     service = OrganizationManagementService(repository, Argon2PasswordHasher())
     organization = await service.create(
@@ -268,7 +373,17 @@ async def update_organization(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> OrganizationResponse:
-    _require_platform(context)
+    try:
+        _require_update_permission(context, organizationId, payload)
+    except DomainError as exc:
+        await _record_authorization_denial(
+            session,
+            context,
+            resource_type="organization",
+            resource_id=organizationId,
+            reason=exc.code,
+        )
+        raise
     organization = await OrganizationRepository(session).get(organizationId)
     if organization is None:
         raise DomainError("organization_not_found", "收容所不存在", 404)
@@ -298,7 +413,12 @@ async def disable_organization(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> Response:
-    _require_platform(context)
+    await _require_platform_with_audit(
+        context,
+        session,
+        resource_type="organization",
+        resource_id=organizationId,
+    )
     await OrganizationManagementService(
         OrganizationRepository(session), Argon2PasswordHasher()
     ).disable(organizationId)
@@ -321,7 +441,12 @@ async def create_initial_admin(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    _require_platform(context)
+    await _require_platform_with_audit(
+        context,
+        session,
+        resource_type="organization_membership",
+        resource_id=organizationId,
+    )
     user = await OrganizationManagementService(
         OrganizationRepository(session), Argon2PasswordHasher()
     ).create_initial_admin(
@@ -354,7 +479,12 @@ async def list_memberships(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
     memberships = await OrganizationRepository(session).memberships(organizationId)
     return {"items": [_membership_response(value) for value in memberships]}
 
@@ -370,7 +500,12 @@ async def create_membership(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> MembershipResponse:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
     membership = await OrganizationManagementService(
         OrganizationRepository(session), Argon2PasswordHasher()
     ).create_membership(
@@ -402,7 +537,12 @@ async def create_account(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> MembershipResponse:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
     service = OrganizationManagementService(OrganizationRepository(session), Argon2PasswordHasher())
     user, membership = await service.create_account(
         organization_id=organizationId,
@@ -444,7 +584,12 @@ async def update_membership(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> MembershipResponse:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
     repository = OrganizationRepository(session)
     membership = await repository.membership_by_id(membershipId, organizationId)
     if membership is None:
@@ -476,7 +621,12 @@ async def list_shelter_areas(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="shelter_area",
+    )
     _require_active_organization(await OrganizationRepository(session).get(organizationId))
     areas = await ShelterAreaRepository(session, organizationId).list()
     return {"items": [_area_response(area) for area in areas]}
@@ -493,7 +643,12 @@ async def create_shelter_area(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> ShelterAreaResponse:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="shelter_area",
+    )
     _require_active_organization(await OrganizationRepository(session).get(organizationId))
     area = await ShelterAreaRepository(session, organizationId).add(
         name=payload.name, area_type=payload.area_type, parent_id=payload.parent_id
@@ -522,7 +677,12 @@ async def update_shelter_area(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> ShelterAreaResponse:
-    _require_membership_admin(context, organizationId)
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="shelter_area",
+    )
     _require_active_organization(await OrganizationRepository(session).get(organizationId))
     area = await ShelterAreaRepository(session, organizationId).update(
         areaId, **payload.model_dump(exclude_none=True)

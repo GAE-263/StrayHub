@@ -1,7 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { authFetch } from "../../../lib/auth";
+import React, {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { authFetch, type CurrentUser } from "../../../lib/auth";
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -57,6 +63,7 @@ async function responseData<T>(response: Response): Promise<T> {
 }
 
 export default function SheltersManagementPage() {
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [selectedShelterId, setSelectedShelterId] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -77,6 +84,18 @@ export default function SheltersManagementPage() {
   const selectedShelter = useMemo(
     () => shelters.find((shelter) => shelter.id === selectedShelterId),
     [shelters, selectedShelterId],
+  );
+  const currentRole = useMemo(() => {
+    if (currentUser?.user.platform_role) return currentUser.user.platform_role;
+    return (
+      currentUser?.memberships.find(
+        (membership) => membership.organization_id === selectedShelterId,
+      )?.role ?? null
+    );
+  }, [currentUser, selectedShelterId]);
+  const canManageOrganizations = currentRole === "PLATFORM_ADMIN";
+  const canManageShelterSettings = ["PLATFORM_ADMIN", "SHELTER_ADMIN"].includes(
+    currentRole ?? "",
   );
 
   useEffect(() => {
@@ -128,11 +147,26 @@ export default function SheltersManagementPage() {
   }, [loadShelters]);
 
   useEffect(() => {
-    const shelter = shelters.find((item) => item.id === selectedShelterId);
+    void request<CurrentUser>("/v1/auth/me")
+      .then(setCurrentUser)
+      .catch((error: Error) => setErrorMessage(error.message));
+  }, [request]);
+
+  useEffect(() => {
+    if (!canManageShelterSettings) {
+      setMemberships([]);
+      setAreas([]);
+      return;
+    }
     void loadShelterDetails().catch((error: Error) =>
       setErrorMessage(error.message),
     );
-  }, [loadShelterDetails, selectedShelterId, shelters]);
+  }, [
+    canManageShelterSettings,
+    loadShelterDetails,
+    selectedShelterId,
+    shelters,
+  ]);
 
   const submit = async (event: FormEvent, action: () => Promise<void>) => {
     event.preventDefault();
@@ -260,253 +294,268 @@ export default function SheltersManagementPage() {
               ))}
             </Select>
           </Field>
-          {selectedShelter?.status === "pending_setup" && (
-            <Button
-              type="button"
-              onClick={() => void runAction(activateShelter)}
-            >
-              啟用收容所
-            </Button>
-          )}
-          <div className="stack-sm">
-            <h3>照護日期與時區</h3>
-            <p className="muted">
-              目前版本的今日待辦、提醒與動物時間軸都使用此收容所時區。
-            </p>
-            <Field>
-              <label htmlFor="shelter-timezone">收容所時區</label>
-              <Select
-                id="shelter-timezone"
-                value={timezone}
-                onChange={(event) => setTimezone(event.target.value)}
+          {canManageOrganizations &&
+            selectedShelter?.status === "pending_setup" && (
+              <Button
+                type="button"
+                onClick={() => void runAction(activateShelter)}
               >
-                <option value="Asia/Taipei">Asia/Taipei（台灣）</option>
-                <option value="Asia/Tokyo">Asia/Tokyo（日本）</option>
-                <option value="UTC">UTC</option>
-              </Select>
-            </Field>
-            <Button
-              type="button"
-              disabled={
-                !selectedShelterId || timezone === selectedShelter?.timezone
-              }
-              onClick={() => void runAction(updateTimezone)}
-            >
-              儲存時區
-            </Button>
-          </div>
-          <form onSubmit={(event) => void submit(event, createShelter)}>
-            <h3>建立收容所</h3>
-            <Field>
-              <label htmlFor="shelter-code">機構代碼</label>
-              <Input
-                id="shelter-code"
-                value={organizationCode}
-                onChange={(event) => setOrganizationCode(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="shelter-name">收容所名稱</label>
-              <Input
-                id="shelter-name"
-                value={newShelterName}
-                onChange={(event) => setNewShelterName(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="initial-admin-username">初始管理員帳號</label>
-              <Input
-                id="initial-admin-username"
-                value={initialAdminUsername}
-                onChange={(event) =>
-                  setInitialAdminUsername(event.target.value)
+                啟用收容所
+              </Button>
+            )}
+          {canManageShelterSettings && (
+            <div className="stack-sm">
+              <h3>照護日期與時區</h3>
+              <p className="muted">
+                目前版本的今日待辦、提醒與動物時間軸都使用此收容所時區。
+              </p>
+              <Field>
+                <label htmlFor="shelter-timezone">收容所時區</label>
+                <Select
+                  id="shelter-timezone"
+                  value={timezone}
+                  onChange={(event) => setTimezone(event.target.value)}
+                >
+                  <option value="Asia/Taipei">Asia/Taipei（台灣）</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo（日本）</option>
+                  <option value="UTC">UTC</option>
+                </Select>
+              </Field>
+              <Button
+                type="button"
+                disabled={
+                  !selectedShelterId || timezone === selectedShelter?.timezone
                 }
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="initial-admin-password">初始管理員暫時密碼</label>
-              <Input
-                id="initial-admin-password"
-                type="password"
-                value={initialAdminPassword}
-                onChange={(event) =>
-                  setInitialAdminPassword(event.target.value)
-                }
-                required
-              />
-            </Field>
-            <Button type="submit">建立收容所</Button>
-          </form>
+                onClick={() => void runAction(updateTimezone)}
+              >
+                儲存時區
+              </Button>
+            </div>
+          )}
+          {canManageOrganizations && (
+            <form onSubmit={(event) => void submit(event, createShelter)}>
+              <h3>建立收容所</h3>
+              <Field>
+                <label htmlFor="shelter-code">機構代碼</label>
+                <Input
+                  id="shelter-code"
+                  value={organizationCode}
+                  onChange={(event) => setOrganizationCode(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="shelter-name">收容所名稱</label>
+                <Input
+                  id="shelter-name"
+                  value={newShelterName}
+                  onChange={(event) => setNewShelterName(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="initial-admin-username">初始管理員帳號</label>
+                <Input
+                  id="initial-admin-username"
+                  value={initialAdminUsername}
+                  onChange={(event) =>
+                    setInitialAdminUsername(event.target.value)
+                  }
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="initial-admin-password">
+                  初始管理員暫時密碼
+                </label>
+                <Input
+                  id="initial-admin-password"
+                  type="password"
+                  value={initialAdminPassword}
+                  onChange={(event) =>
+                    setInitialAdminPassword(event.target.value)
+                  }
+                  required
+                />
+              </Field>
+              <Button type="submit">建立收容所</Button>
+            </form>
+          )}
         </CardContent>
       </Card>
 
-      <Card aria-labelledby="account-list-title">
-        <CardHeader>
-          <CardTitle id="account-list-title">帳號與 Membership</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul>
-            {memberships.map((membership) => (
-              <li key={membership.id}>
-                <span>
-                  {membership.user_id}（<Badge>{membership.status}</Badge>）
-                </span>
-                <Select
-                  aria-label={`${membership.user_id} 角色`}
-                  defaultValue={membership.role}
+      {canManageShelterSettings && (
+        <Card aria-labelledby="account-list-title">
+          <CardHeader>
+            <CardTitle id="account-list-title">帳號與 Membership</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul>
+              {memberships.map((membership) => (
+                <li key={membership.id}>
+                  <span>
+                    {membership.user_id}（<Badge>{membership.status}</Badge>）
+                  </span>
+                  <Select
+                    aria-label={`${membership.user_id} 角色`}
+                    defaultValue={membership.role}
+                    onChange={(event) =>
+                      void runAction(() =>
+                        updateMembership(membership.id, {
+                          role: event.target.value as Membership["role"],
+                        }),
+                      )
+                    }
+                  >
+                    <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
+                    <option value="STAFF">STAFF</option>
+                    <option value="VOLUNTEER">VOLUNTEER</option>
+                  </Select>
+                  {membership.role === "STAFF" ? (
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={membership.medical_care_access}
+                        aria-label={`${membership.user_id} 醫療資料權限`}
+                        onChange={(event) => {
+                          const enabled = event.target.checked;
+                          if (
+                            !enabled &&
+                            !window.confirm(
+                              "確定撤銷此 STAFF 的醫療資料權限嗎？",
+                            )
+                          ) {
+                            event.target.checked = true;
+                            return;
+                          }
+                          void runAction(() =>
+                            updateMembership(membership.id, {
+                              medical_care_access: enabled,
+                            }),
+                          );
+                        }}
+                      />
+                      醫療資料權限
+                    </label>
+                  ) : null}
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    disabled={membership.status === "disabled"}
+                    onClick={() =>
+                      void runAction(() =>
+                        updateMembership(membership.id, { status: "disabled" }),
+                      )
+                    }
+                  >
+                    停用
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <form onSubmit={(event) => void submit(event, createAccount)}>
+              <h3>建立機構帳號</h3>
+              <Field>
+                <label htmlFor="account-username">帳號</label>
+                <Input
+                  id="account-username"
+                  value={accountUsername}
+                  onChange={(event) => setAccountUsername(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="account-display-name">顯示名稱</label>
+                <Input
+                  id="account-display-name"
+                  value={accountDisplayName}
                   onChange={(event) =>
-                    void runAction(() =>
-                      updateMembership(membership.id, {
-                        role: event.target.value as Membership["role"],
-                      }),
-                    )
+                    setAccountDisplayName(event.target.value)
+                  }
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="account-password">暫時密碼</label>
+                <Input
+                  id="account-password"
+                  type="password"
+                  value={accountPassword}
+                  onChange={(event) => setAccountPassword(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="account-role">角色</label>
+                <Select
+                  id="account-role"
+                  value={accountRole}
+                  onChange={(event) =>
+                    setAccountRole(event.target.value as Membership["role"])
                   }
                 >
                   <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
                   <option value="STAFF">STAFF</option>
                   <option value="VOLUNTEER">VOLUNTEER</option>
                 </Select>
-                {membership.role === "STAFF" ? (
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={membership.medical_care_access}
-                      aria-label={`${membership.user_id} 醫療資料權限`}
-                      onChange={(event) => {
-                        const enabled = event.target.checked;
-                        if (
-                          !enabled &&
-                          !window.confirm("確定撤銷此 STAFF 的醫療資料權限嗎？")
-                        ) {
-                          event.target.checked = true;
-                          return;
-                        }
-                        void runAction(() =>
-                          updateMembership(membership.id, {
-                            medical_care_access: enabled,
-                          }),
-                        );
-                      }}
-                    />
-                    醫療資料權限
-                  </label>
-                ) : null}
-                <Button
-                  variant="secondary"
-                  type="button"
-                  disabled={membership.status === "disabled"}
-                  onClick={() =>
-                    void runAction(() =>
-                      updateMembership(membership.id, { status: "disabled" }),
-                    )
+              </Field>
+              <Button
+                type="submit"
+                disabled={selectedShelter?.status !== "active"}
+              >
+                建立帳號
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageShelterSettings && (
+        <Card aria-labelledby="area-list-title">
+          <CardHeader>
+            <CardTitle id="area-list-title">Cage / Area</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul>
+              {areas.map((area) => (
+                <li key={area.id}>
+                  {area.name}（{area.area_type}／<Badge>{area.status}</Badge>）
+                </li>
+              ))}
+            </ul>
+            <form onSubmit={(event) => void submit(event, createArea)}>
+              <Field>
+                <label htmlFor="area-name">區域名稱</label>
+                <Input
+                  id="area-name"
+                  value={areaName}
+                  onChange={(event) => setAreaName(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <label htmlFor="area-type">類型</label>
+                <Select
+                  id="area-type"
+                  value={areaType}
+                  onChange={(event) =>
+                    setAreaType(event.target.value as Area["area_type"])
                   }
                 >
-                  停用
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <form onSubmit={(event) => void submit(event, createAccount)}>
-            <h3>建立機構帳號</h3>
-            <Field>
-              <label htmlFor="account-username">帳號</label>
-              <Input
-                id="account-username"
-                value={accountUsername}
-                onChange={(event) => setAccountUsername(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="account-display-name">顯示名稱</label>
-              <Input
-                id="account-display-name"
-                value={accountDisplayName}
-                onChange={(event) => setAccountDisplayName(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="account-password">暫時密碼</label>
-              <Input
-                id="account-password"
-                type="password"
-                value={accountPassword}
-                onChange={(event) => setAccountPassword(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="account-role">角色</label>
-              <Select
-                id="account-role"
-                value={accountRole}
-                onChange={(event) =>
-                  setAccountRole(event.target.value as Membership["role"])
-                }
+                  <option value="area">Area</option>
+                  <option value="cage">Cage</option>
+                </Select>
+              </Field>
+              <Button
+                type="submit"
+                disabled={selectedShelter?.status !== "active"}
               >
-                <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
-                <option value="STAFF">STAFF</option>
-                <option value="VOLUNTEER">VOLUNTEER</option>
-              </Select>
-            </Field>
-            <Button
-              type="submit"
-              disabled={selectedShelter?.status !== "active"}
-            >
-              建立帳號
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card aria-labelledby="area-list-title">
-        <CardHeader>
-          <CardTitle id="area-list-title">Cage / Area</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul>
-            {areas.map((area) => (
-              <li key={area.id}>
-                {area.name}（{area.area_type}／<Badge>{area.status}</Badge>）
-              </li>
-            ))}
-          </ul>
-          <form onSubmit={(event) => void submit(event, createArea)}>
-            <Field>
-              <label htmlFor="area-name">區域名稱</label>
-              <Input
-                id="area-name"
-                value={areaName}
-                onChange={(event) => setAreaName(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <label htmlFor="area-type">類型</label>
-              <Select
-                id="area-type"
-                value={areaType}
-                onChange={(event) =>
-                  setAreaType(event.target.value as Area["area_type"])
-                }
-              >
-                <option value="area">Area</option>
-                <option value="cage">Cage</option>
-              </Select>
-            </Field>
-            <Button
-              type="submit"
-              disabled={selectedShelter?.status !== "active"}
-            >
-              建立區域
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+                建立區域
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }

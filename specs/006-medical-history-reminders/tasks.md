@@ -217,16 +217,16 @@
 
 ### Tests for User Story 6（先寫並確認失敗）
 
-- [ ] T098 [P] [US6] 擴充 `tests/contract/test_organization_management_contract.py`，驗證組織建立、初始管理員、狀態與目前收容所帳號／時區／區域路由的 request 不接受 client `organization_id`，固定 403／安全錯誤契約，並驗證 `/v1/auth/me` 以 `User.roles`／platform scope 表示 `PLATFORM_ADMIN`，`LoginOrganization.role` 僅表示收容所 Membership role。
-- [ ] T099 [P] [US6] 建立 `tests/integration/test_organization_creation_authorization.py`，驗證 SHELTER_ADMIN 建立收容所必須回 403 且不建立租戶、初始管理員、政策或部分設定；驗證 PLATFORM_ADMIN 可成功建立收容所與初始管理員並寫入建立／membership Audit；另驗證 SHELTER_ADMIN 可修改目前收容所時區、帳號與區域，STAFF 修改上述設定回 403，且拒絕後由獨立 Audit transaction 保存操作者、時間、目前收容所 scope、結果與原因。
-- [ ] T100 [P] [US6] 建立 `tests/security/test_organization_lifecycle_authorization.py`，驗證直接網址、手動 body、過期角色／context 與其他收容所識別不能擴張管理範圍；驗證 SHELTER_ADMIN 對其他 organization 的帳號／時區／區域操作回 403／404，拒絕回應不洩漏平台或其他租戶資料，且所有拒絕事件均有不含不可見 payload 的 durable Audit。
-- [ ] T101 [P] [US6] 擴充 `apps/web/app/(management)/shelters/page.test.tsx`，先驗證 PLATFORM_ADMIN 看得到「建立收容所」表單，SHELTER_ADMIN 只看到目前收容所管理，且角色切換／403 狀態不殘留舊表單或資料。
+- [X] T098 [P] [US6] 擴充 `tests/contract/test_organization_management_contract.py`，驗證組織建立、初始管理員、狀態與目前收容所帳號／時區／區域路由的 request 不接受 client `organization_id`，固定 403／安全錯誤契約，並驗證 `/v1/auth/me` 以 `User.roles`／platform scope 表示 `PLATFORM_ADMIN`，`LoginOrganization.role` 僅表示收容所 Membership role。
+- [X] T099 [P] [US6] 建立 `tests/integration/test_organization_creation_authorization.py`，驗證 SHELTER_ADMIN 建立收容所必須回 403 且不建立租戶、初始管理員、政策或部分設定；驗證 PLATFORM_ADMIN 可成功建立收容所與初始管理員並寫入建立／membership Audit；另驗證 SHELTER_ADMIN 可修改目前收容所時區、帳號與區域，STAFF 修改上述設定回 403，且拒絕後由獨立 Audit transaction 保存操作者、時間、目前收容所 scope、結果與原因。
+- [X] T100 [P] [US6] 建立 `tests/security/test_organization_lifecycle_authorization.py`，驗證直接網址、手動 body、過期角色／context 與其他收容所識別不能擴張管理範圍；驗證 SHELTER_ADMIN 對其他 organization 的帳號／時區／區域操作回 403／404，拒絕回應不洩漏平台或其他租戶資料，且所有拒絕事件均有不含不可見 payload 的 durable Audit。
+- [X] T101 [P] [US6] 擴充 `apps/web/app/(management)/shelters/page.test.tsx`，先驗證 PLATFORM_ADMIN 看得到「建立收容所」表單，SHELTER_ADMIN 只看到目前收容所管理，且角色切換／403 狀態不殘留舊表單或資料。
 
 ### Implementation for User Story 6
 
-- [ ] T102 [US6] 在 `services/api/app/api/organization_management.py` 與 `services/api/app/application/organization_management.py` 拆分 organization mutation policy：建立／初始管理員／啟用／停用／跨收容所操作套用 `_require_platform`；目前 organization 的帳號／時區／區域操作只允許 SHELTER_ADMIN；STAFF／VOLUNTEER 拒絕。所有判定必須先於寫入，成功與拒絕均依既有 Audit lifecycle 記錄，並保持 atomic rollback。
-- [ ] T103 [US6] 在 `apps/web/app/(management)/shelters/page.tsx` 沿用既有 `/v1/auth/me` 與 active shelter context 的角色資料；只有 `role === "PLATFORM_ADMIN"` 渲染建立收容所與平台層級選擇，SHELTER_ADMIN 只渲染目前收容所帳號、時區與區域管理，並以安全狀態處理 403／載入失敗，不以 UI 隱藏取代 API 授權。
-- [ ] T104 [US6] 建立 `apps/web/e2e/organization-management.spec.ts`，以 local-shelter-admin-a 驗證表單隱藏、直接建立請求 403／無副作用及目前收容所範圍，以 local-platform-admin 驗證建立收容所與初始管理員成功及 Audit 可追溯。
+- [X] T102 [US6] 在 `services/api/app/api/organization_management.py` 與 `services/api/app/application/organization_management.py` 拆分 organization mutation policy：建立／初始管理員／啟用／停用／跨收容所操作套用 `_require_platform`；目前 organization 的帳號／時區／區域操作只允許 SHELTER_ADMIN；STAFF／VOLUNTEER 拒絕。所有判定必須先於寫入，成功與拒絕均依既有 Audit lifecycle 記錄，並保持 atomic rollback。
+- [X] T103 [US6] 在 `apps/web/app/(management)/shelters/page.tsx` 沿用既有 `/v1/auth/me` 與 active shelter context 的角色資料；只有 `role === "PLATFORM_ADMIN"` 渲染建立收容所與平台層級選擇，SHELTER_ADMIN 只渲染目前收容所帳號、時區與區域管理，並以安全狀態處理 403／載入失敗，不以 UI 隱藏取代 API 授權。
+- [X] T104 [US6] 建立 `apps/web/e2e/organization-management.spec.ts`，以 local-shelter-admin-a 驗證表單隱藏、直接建立請求 403／無副作用及目前收容所範圍，以 local-platform-admin 驗證建立收容所與初始管理員成功及 Audit 可追溯。
 
 **Checkpoint**：平台／收容所管理權限可由 API、管理頁與真人操作獨立驗收；SHELTER_ADMIN 無法建立租戶，PLATFORM_ADMIN 可完成完整建立流程。
 

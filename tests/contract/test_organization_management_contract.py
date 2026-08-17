@@ -6,6 +6,8 @@ from services.api.app.api.organization_management import (
     AccountCreateRequest,
     MembershipResponse,
     OrganizationCreateRequest,
+    OrganizationUpdateRequest,
+    ShelterAreaCreateRequest,
     router,
 )
 
@@ -33,6 +35,16 @@ def test_organization_creation_requires_pending_status_and_initial_admin_credent
     assert AccountCreateRequest.model_fields["role"].is_required()
 
 
+def test_organization_mutation_payloads_never_accept_client_organization_id():
+    for model in (
+        OrganizationCreateRequest,
+        OrganizationUpdateRequest,
+        AccountCreateRequest,
+        ShelterAreaCreateRequest,
+    ):
+        assert "organization_id" not in model.model_fields
+
+
 def test_organization_router_exposes_account_area_status_and_initial_admin_operations():
     routes = {
         (route.path, method.upper())
@@ -54,3 +66,15 @@ def test_membership_contract_exposes_finite_volunteer_projection() -> None:
     properties = document["components"]["schemas"]["Membership"]["properties"]
     assert {"valid_from", "expires_at", "access_version"} <= properties.keys()
     assert {"valid_from", "expires_at", "access_version"} <= MembershipResponse.model_fields.keys()
+
+
+def test_auth_contract_distinguishes_platform_role_from_shelter_membership_role() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    user_role = document["components"]["schemas"]["User"]["properties"]["roles"]
+    assert "PLATFORM_ADMIN" in user_role["items"]["enum"]
+    login_role = document["components"]["schemas"]["LoginOrganization"]["properties"]["role"]
+    assert "PLATFORM_ADMIN" not in login_role["enum"]
+    access_scope = document["components"]["schemas"]["AccessScope"]["properties"]["type"]
+    assert {"PLATFORM", "SHELTER"} <= set(access_scope["enum"])

@@ -13,6 +13,40 @@ class OrganizationManagementService:
         self.repository = repository
         self.password_hasher = password_hasher
 
+    @staticmethod
+    def require_platform(*, role: str, platform_scope: bool) -> None:
+        if role != "PLATFORM_ADMIN" and not platform_scope:
+            raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
+
+    @staticmethod
+    def require_settings_admin(
+        *, role: str, platform_scope: bool, current_organization_id, target_organization_id
+    ) -> None:
+        if role in {"PLATFORM_ADMIN"} or platform_scope:
+            return
+        if role != "SHELTER_ADMIN" or current_organization_id != target_organization_id:
+            raise DomainError("organization_settings_denied", "無法管理此收容所設定", 403)
+
+    @classmethod
+    def require_update_permission(
+        cls,
+        *,
+        role: str,
+        platform_scope: bool,
+        current_organization_id,
+        target_organization_id,
+        has_platform_field: bool,
+    ) -> None:
+        if has_platform_field:
+            cls.require_platform(role=role, platform_scope=platform_scope)
+            return
+        cls.require_settings_admin(
+            role=role,
+            platform_scope=platform_scope,
+            current_organization_id=current_organization_id,
+            target_organization_id=target_organization_id,
+        )
+
     async def create(self, *, code: str, name: str, initial_admin_user_id=None) -> Organization:
         organization = await self.repository.create_with_volunteer_policy(code=code, name=name)
         if initial_admin_user_id:
