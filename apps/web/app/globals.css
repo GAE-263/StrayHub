@@ -1,6 +1,8 @@
+@import "tailwindcss";
+
 :root {
   --ink: #19332f;
-  --muted: #6a7b76;
+  --muted: #52635e;
   --line: #d9e5df;
   --surface: #ffffff;
   --surface-soft: #f4f8f5;
@@ -9,6 +11,18 @@
   --warning: #a86d24;
   --danger: #a34040;
   --shadow: 0 18px 50px rgba(28, 75, 60, 0.08);
+  --background: #f5f8f6;
+  --foreground: var(--ink);
+  --surface-muted: var(--surface-soft);
+  --border: var(--line);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --success: #16745c;
+  --destructive: var(--danger);
+  --ring: rgba(22, 116, 92, 0.28);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 }
 
 * {
@@ -27,6 +41,48 @@ body {
     "Noto Sans TC",
     sans-serif;
 }
+.login-page {
+  align-items: center;
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  max-width: 520px;
+  padding: clamp(24px, 5vw, 48px);
+  width: 100%;
+}
+.login-card form {
+  display: grid;
+  gap: 10px;
+  margin-top: 26px;
+}
+.login-card form > label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.login-card form > input,
+.login-card form > select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+  padding: 9px 11px;
+}
+.login-card form > button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+  min-height: 46px;
+}
 a {
   color: inherit;
   text-decoration: none;
@@ -39,6 +95,15 @@ textarea {
 }
 button {
   cursor: pointer;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
 }
 .app-frame {
   min-height: 100vh;
@@ -145,12 +210,15 @@ button {
   margin: 0 10px 8px;
 }
 .nav-link {
+  align-items: center;
   border-radius: 10px;
   color: #4b635c;
   display: block;
   font-size: 14px;
   margin: 3px 0;
   padding: 10px;
+  display: flex;
+  gap: 8px;
 }
 .nav-link:hover,
 .nav-link.active {
@@ -164,6 +232,20 @@ button {
   max-width: 1440px;
   padding: 36px clamp(20px, 4vw, 56px) 72px;
   width: 100%;
+}
+.mobile-navigation {
+  display: none;
+}
+.mobile-menu-trigger {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  display: inline-flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
 }
 .page-heading {
   align-items: flex-end;
@@ -191,6 +273,7 @@ button {
   border-radius: 9px;
   color: white;
   font-weight: 700;
+  min-height: 44px;
   padding: 10px 15px;
 }
 .button:hover {
@@ -310,6 +393,252 @@ td {
   width: 1px;
 }
 
+/* UI foundation primitives. These classes are intentionally small and remain
+   compatible with the legacy CSS while routes migrate incrementally. */
+.ui-button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 15px;
+  transition: border-color 120ms ease;
+}
+.ui-button-default {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.ui-button-secondary {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.ui-button-ghost {
+  background: transparent;
+  color: var(--foreground);
+}
+.ui-button-destructive {
+  background: var(--destructive);
+  color: #fff;
+}
+.ui-button-link {
+  background: transparent;
+  color: var(--primary);
+  text-decoration: underline;
+}
+.ui-button:disabled {
+  background: var(--surface-muted);
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+.ui-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.ui-card-header {
+  padding: 22px 22px 0;
+}
+.ui-card-content {
+  padding: 22px;
+}
+.ui-card-title {
+  font-size: 1.15rem;
+  margin: 0;
+}
+.ui-badge {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 9px;
+}
+.ui-breadcrumb {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+.ui-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 15px;
+}
+.ui-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.ui-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  min-height: 44px;
+  padding: 9px 11px;
+  width: 100%;
+}
+.ui-textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.ui-checkbox {
+  accent-color: var(--primary);
+  min-height: 20px;
+  min-width: 20px;
+}
+.ui-separator {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+.ui-table-wrap {
+  overflow-x: auto;
+  width: 100%;
+}
+.ui-table {
+  border-collapse: collapse;
+  min-width: 580px;
+  width: 100%;
+}
+.timeline-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 16px;
+}
+.timeline-filters legend {
+  font-weight: 800;
+  padding: 0 6px;
+  width: 100%;
+}
+.timeline-filters .ui-field {
+  flex: 1 1 180px;
+  margin: 0;
+}
+.timeline-report {
+  margin-top: 14px;
+  padding: 16px;
+}
+.ui-table-head,
+.ui-table-cell {
+  border-bottom: 1px solid var(--border);
+  padding: 13px 10px;
+  text-align: left;
+}
+.ui-table-head {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ui-skeleton {
+  animation: pulse 1.4s ease-in-out infinite;
+  background: var(--surface-soft);
+  border-radius: var(--radius-sm);
+  min-height: 18px;
+}
+.ui-spinner {
+  animation: spin 0.8s linear infinite;
+  border: 2px solid var(--border);
+  border-right-color: var(--primary);
+  border-radius: 50%;
+  display: inline-block;
+  height: 18px;
+  width: 18px;
+}
+.ui-alert {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 15px;
+}
+.ui-toast {
+  background: var(--ink);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  padding: 12px 15px;
+}
+.ui-tooltip {
+  display: inline-flex;
+}
+.ui-sidebar {
+  background: #edf4ef;
+  border-right: 1px solid var(--border);
+  padding: 28px 18px;
+}
+.ui-dialog,
+.ui-sheet {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 24px;
+  width: 100%;
+}
+.ui-dialog::backdrop,
+.ui-sheet::backdrop {
+  background: rgba(25, 51, 47, 0.46);
+}
+.ui-sheet {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  margin: 0 0 0 auto;
+  min-height: 100vh;
+  max-width: min(420px, 100vw);
+}
+.ui-overlay-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+.ui-overlay-heading h2 {
+  margin: 0;
+}
+.ui-overlay-close {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 24px;
+  height: 44px;
+  justify-content: center;
+  line-height: 1;
+  margin: -8px -8px 0 0;
+  width: 44px;
+}
+.ui-overlay-close:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .observation-page-heading {
   align-items: center;
 }
@@ -338,38 +667,6 @@ td {
   gap: 14px;
   grid-template-columns: minmax(240px, 2fr) repeat(3, minmax(150px, 1fr));
   margin: 18px 0 12px;
-}
-.field {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 15px;
-}
-.field label,
-.checkbox-field {
-  font-size: 13px;
-  font-weight: 700;
-}
-.field input,
-.field select,
-.field textarea {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  min-height: 42px;
-  padding: 9px 11px;
-  width: 100%;
-}
-.field textarea {
-  min-height: 86px;
-  resize: vertical;
-}
-.field input:focus,
-.field select:focus,
-.field textarea:focus,
-button:focus-visible {
-  outline: 3px solid rgba(22, 116, 92, 0.26);
-  outline-offset: 2px;
 }
 .field-help {
   color: var(--muted);
@@ -456,14 +753,6 @@ button:focus-visible {
 .observation-option-meta code {
   color: var(--ink);
   font-size: 12px;
-}
-.badge {
-  background: var(--accent-soft);
-  border-radius: 999px;
-  color: var(--accent);
-  display: inline-block;
-  font-size: 12px;
-  padding: 4px 8px;
 }
 .badge-source {
   background: #f0f3f2;
@@ -554,6 +843,55 @@ button:focus-visible {
   white-space: pre-wrap;
 }
 
+/* P1 migration surfaces use the UI foundation without changing API or scope behavior. */
+.p1-page,
+.p1-section {
+  display: grid;
+  gap: 18px;
+}
+.p1-form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.p1-actions {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.p1-actions .ui-field {
+  flex: 1 1 220px;
+  margin: 0;
+}
+.p1-code-block {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 260px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.p1-error {
+  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
+}
+.p1-audit-dialog {
+  max-width: min(980px, calc(100vw - 32px));
+}
+.p1-audit-dialog .ui-table-wrap {
+  max-height: 60vh;
+}
+@media (max-width: 720px) {
+  .p1-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .p1-actions .ui-button {
+    flex: 1 1 auto;
+  }
+}
+
 @media (max-width: 900px) {
   .observation-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -574,6 +912,10 @@ button:focus-visible {
   }
   .app-sidebar {
     display: none;
+  }
+  .mobile-navigation {
+    display: block;
+    padding: 12px 14px 0;
   }
   .app-main {
     padding: 24px 14px 48px;
@@ -619,11 +961,15 @@ button:focus-visible {
   gap: 14px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+/* Legacy compatibility: P1 settings and observation vocabulary still use these
+   selectors until their independent migration tasks are complete. */
 .field {
   display: grid;
   gap: 6px;
+  margin-bottom: 15px;
 }
-.field label {
+.field label,
+.checkbox-field {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
@@ -637,9 +983,11 @@ button:focus-visible {
   color: var(--ink);
   min-height: 42px;
   padding: 9px 11px;
+  width: 100%;
 }
 .field textarea {
   min-height: 100px;
+  resize: vertical;
 }
 .toolbar {
   align-items: center;
@@ -652,6 +1000,7 @@ button:focus-visible {
   min-width: 160px;
 }
 .badge {
+  /* Retained for P1 settings/observation pages pending their migration. */
   background: var(--accent-soft);
   border-radius: 999px;
   color: var(--accent);

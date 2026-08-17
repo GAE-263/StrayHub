@@ -40,17 +40,24 @@ export default function CareReportPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers, note }),
     });
-    if (response.ok) setDraft(await response.json());
+    if (!response.ok) throw new Error("草稿保存失敗，已保留原始輸入，請重試。");
+    setDraft(await response.json());
   };
 
   return (
-    <main>
-      <h1>照護回報備援介面</h1>
-      {loading && <p>正在恢復回報草稿…</p>}
+    <main className="volunteer-page" aria-labelledby="care-report-title">
+      <h1 id="care-report-title">照護回報備援介面</h1>
+      {loading && (
+        <p role="status" aria-live="polite">
+          正在恢復回報草稿…
+        </p>
+      )}
       {offline && (
         <p role="alert">目前無法連線；已保留本頁內容，請稍後重試。</p>
       )}
-      {!loading && !draft && <p>目前沒有可恢復的照護回報。</p>}
+      {!loading && !draft && (
+        <p className="state-card empty-state">目前沒有可恢復的照護回報。</p>
+      )}
       {draft && (
         <>
           <p>目前步驟：{draft.current_step}</p>

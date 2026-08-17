@@ -24,6 +24,72 @@ try {
     console.error("Generated contract types are stale; run npm run generate.");
     process.exit(1);
   }
+
+  const volunteerOperations = [
+    "resolveVolunteerApplicationStatus",
+    "submitVolunteerApplication",
+    "withdrawVolunteerApplication",
+    "getVolunteerAccessPolicy",
+    "updateVolunteerAccessPolicy",
+    "listVolunteerApplications",
+    "createVolunteerDecisionBatch",
+    "getVolunteerDecisionBatch",
+    "listVolunteerDecisionBatchItems",
+    "listVolunteerAccessGrants",
+    "updateVolunteerAccessGrant",
+    "listVolunteerNotificationFailures",
+    "retryVolunteerNotifications",
+  ];
+  const volunteerSchemas = [
+    "ApplicationStatus",
+    "EffectiveAccessStatus",
+    "GrantStatus",
+    "BatchStatus",
+    "BatchItemResult",
+    "NotificationStatus",
+    "NotificationEventType",
+    "ErrorResponse",
+    "VolunteerIdentityRequest",
+    "VolunteerApplicationCreateRequest",
+    "VolunteerApplicationWithdrawRequest",
+    "VolunteerApplicationStatusResponse",
+    "PublicOrganization",
+    "VolunteerApplication",
+    "VolunteerApplicationListResponse",
+    "VolunteerAccessPolicy",
+    "VolunteerAccessPolicyUpdateRequest",
+    "VolunteerDecisionBatchRequest",
+    "ExplicitVolunteerDecisionSelection",
+    "AllFilteredVolunteerDecisionSelection",
+    "VolunteerApplicationBatchFilter",
+    "VolunteerDecisionItemRequest",
+    "VolunteerDecisionBatchResponse",
+    "VolunteerDecisionBatchItemListResponse",
+    "VolunteerDecisionItemResponse",
+    "VolunteerAccessGrantSummary",
+    "VolunteerAccessGrant",
+    "VolunteerAccessGrantListResponse",
+    "GrantPeriodUpdateRequest",
+    "GrantRevokeRequest",
+    "VolunteerNotification",
+    "VolunteerNotificationListResponse",
+    "VolunteerNotificationRetryRequest",
+    "VolunteerNotificationRetryResponse",
+    "VolunteerNotificationRetryItem",
+  ];
+
+  for (const operation of volunteerOperations) {
+    if (!current.includes(`    ${operation}: {`)) {
+      console.error(`Generated contract is missing volunteer operation: ${operation}`);
+      process.exit(1);
+    }
+  }
+  for (const schema of volunteerSchemas) {
+    if (!current.includes(`        ${schema}:`)) {
+      console.error(`Generated contract is missing volunteer schema: ${schema}`);
+      process.exit(1);
+    }
+  }
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import builtins
+from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
+from services.api.app.persistence.models.volunteer_access import (
+    OrganizationVolunteerAccessPolicy,
+)
+
+T = TypeVar("T")
 
 
 class OrganizationRepository:
@@ -19,10 +26,25 @@ class OrganizationRepository:
         result = await self.session.execute(select(Organization).order_by(Organization.name))
         return list(result.scalars())
 
-    async def add(self, value: object) -> object:
+    async def add(self, value: T) -> T:
         self.session.add(value)
         await self.session.flush()
         return value
+
+    async def create_with_volunteer_policy(self, *, code: str, name: str) -> Organization:
+        async with self.session.begin_nested():
+            organization = Organization(code=code, name=name, status="pending_setup")
+            self.session.add(organization)
+            await self.session.flush()
+            self.session.add(
+                OrganizationVolunteerAccessPolicy(
+                    organization_id=organization.id,
+                    applications_enabled=True,
+                    default_grant_duration_hours=168,
+                )
+            )
+            await self.session.flush()
+        return organization
 
     async def membership(
         self, user_id: UUID, organization_id: UUID
@@ -42,7 +64,7 @@ class OrganizationRepository:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
 
-    async def memberships(self, organization_id: UUID) -> list[OrganizationMembership]:
+    async def memberships(self, organization_id: UUID) -> builtins.list[OrganizationMembership]:
         result = await self.session.execute(
             select(OrganizationMembership)
             .where(OrganizationMembership.organization_id == organization_id)

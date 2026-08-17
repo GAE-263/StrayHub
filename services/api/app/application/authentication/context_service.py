@@ -37,13 +37,12 @@ class ActiveShelterContextService:
         if organization is None or organization.status != "active":
             raise DomainError("organization_access_denied", "無法存取此收容所資料", 404)
         if user.platform_role != "PLATFORM_ADMIN":
-            membership = await self.repository.get_membership(user.id, organization_id)
-            if (
-                membership is None
-                or membership.status != "active"
-                or organization is None
-                or organization.status != "active"
-            ):
+            effective_getter = getattr(self.repository, "get_effective_membership", None)
+            if effective_getter is None:
+                membership = await self.repository.get_membership(user.id, organization_id)
+            else:
+                membership = await effective_getter(user.id, organization_id)
+            if membership is None or organization is None or organization.status != "active":
                 raise DomainError("organization_access_denied", "無法存取此收容所資料", 404)
         previous_organization_id = session.active_organization_id
         session.active_organization_id = organization_id

@@ -1,4 +1,5 @@
 import type { TimelineDay } from "./AnimalTimeline";
+import type { TimelineEvent } from "./TimelineEventCard";
 
 export type ApiReport = {
   id: string;
@@ -17,7 +18,42 @@ export type ApiDay = {
   has_report: boolean;
   report_count: number;
   reports?: ApiReport[];
+  events?: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    summary?: string | null;
+    happened_at?: string;
+    occurrence?: "actual" | "scheduled";
+  }>;
+  scheduled?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    scheduled_at?: string;
+    occurrence?: "actual" | "scheduled";
+  }>;
 };
+
+export function mapTimelineEvents(day: ApiDay): TimelineEvent[] {
+  const actual = (day.events ?? []).map((event) => ({
+    id: event.id,
+    kind: event.kind,
+    title: event.title,
+    summary: event.summary,
+    happenedAt: event.happened_at,
+    occurrence: "actual" as const,
+  }));
+  const scheduled = (day.scheduled ?? []).map((item) => ({
+    id: item.id,
+    kind: "care_reminder",
+    title: item.title,
+    status: item.status ?? "pending",
+    scheduledAt: item.scheduled_at,
+    occurrence: "scheduled" as const,
+  }));
+  return [...scheduled, ...actual];
+}
 
 export function mapDays(days: ApiDay[]): TimelineDay[] {
   return days.map((day) => ({
@@ -47,5 +83,11 @@ export function mapDays(days: ApiDay[]): TimelineDay[] {
       aiJobStatus: report.ai_job_status,
       status: report.status,
     })),
+    events: mapTimelineEvents(day).filter(
+      (event) => event.occurrence === "actual",
+    ),
+    scheduled: mapTimelineEvents(day).filter(
+      (event) => event.occurrence === "scheduled",
+    ),
   }));
 }

@@ -42,7 +42,7 @@ describe("AnimalTimeline", () => {
     });
 
     expect(container?.textContent).toContain("2026-08-08");
-    expect(container?.textContent).toContain("當日無回報");
+    expect(container?.textContent).toContain("當日沒有事件");
     expect(container?.textContent).toContain("有回報：2 筆");
   });
 
@@ -95,8 +95,8 @@ describe("AnimalTimeline", () => {
     expect(container?.textContent).toContain("情緒");
     expect(container?.textContent).toContain("無法判斷");
     expect(container?.textContent).toContain("照片：2 張");
-    expect(container?.textContent).toContain("AI 處理：pending");
-    expect(container?.textContent).toContain("人工資料狀態：saved");
+    expect(container?.textContent).toContain("AI 處理：等待處理（pending）");
+    expect(container?.textContent).toContain("人工資料狀態：已保存（saved）");
   });
 
   it("keeps loading, empty and error states distinguishable", async () => {

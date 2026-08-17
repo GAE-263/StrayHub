@@ -35,18 +35,90 @@ class _Repository:
         self.memberships.append(value)
         return value
 
+    async def create_with_volunteer_policy(self, *, code, name):
+        from services.api.app.persistence.models.volunteer_access import (
+            OrganizationVolunteerAccessPolicy,
+        )
+
+        organization = await self.add(
+            Organization(id=uuid4(), code=code, name=name, status="pending_setup")
+        )
+        await self.add(
+            OrganizationVolunteerAccessPolicy(
+                organization_id=organization.id,
+                applications_enabled=True,
+                default_grant_duration_hours=168,
+            )
+        )
+        return organization
+
 
 @pytest.mark.asyncio
-async def test_shelter_admin_can_create_staff_or_volunteer_membership():
+async def test_shelter_admin_can_create_staff_membership():
     repository = _Repository()
     service = OrganizationManagementService(repository, Argon2PasswordHasher())
     membership = await service.create_membership(
         organization_id=repository.organization.id,
         user_id=repository.user_record.id,
-        role="VOLUNTEER",
+        role="STAFF",
     )
     assert membership.organization_id == repository.organization.id
-    assert membership.role == "VOLUNTEER"
+    assert membership.role == "STAFF"
+
+
+@pytest.mark.asyncio
+async def test_generic_membership_flow_rejects_unbounded_volunteer() -> None:
+    repository = _Repository()
+    service = OrganizationManagementService(repository, Argon2PasswordHasher())
+
+    with pytest.raises(DomainError, match="志工報名與限時授權"):
+        await service.create_membership(
+            organization_id=repository.organization.id,
+            user_id=repository.user_record.id,
+            role="VOLUNTEER",
+        )
+
+
+@pytest.mark.asyncio
+async def test_new_organization_always_creates_initial_volunteer_policy() -> None:
+    repository = _Repository()
+    service = OrganizationManagementService(repository, Argon2PasswordHasher())
+
+    organization = await service.create(code="ORG-NEW", name="新收容所")
+
+    policies = [
+        value
+        for value in repository.memberships
+        if value.__class__.__name__ == "OrganizationVolunteerAccessPolicy"
+    ]
+    assert organization.code == "ORG-NEW"
+    assert len(policies) == 1
+    assert policies[0].organization_id == organization.id
+    assert policies[0].applications_enabled is True
+    assert policies[0].default_grant_duration_hours == 168
+
+
+@pytest.mark.asyncio
+async def test_policy_insert_failure_does_not_return_partial_organization() -> None:
+    class FailingRepository(_Repository):
+        async def create_with_volunteer_policy(self, *, code, name):
+            original_values = list(self.memberships)
+            try:
+                await self.add(
+                    Organization(id=uuid4(), code=code, name=name, status="pending_setup")
+                )
+                raise RuntimeError("policy insert failed")
+            except Exception:
+                self.memberships = original_values
+                raise
+
+    repository = FailingRepository()
+    service = OrganizationManagementService(repository, Argon2PasswordHasher())
+
+    with pytest.raises(RuntimeError, match="policy insert failed"):
+        await service.create(code="ORG-ROLLBACK", name="回滾測試")
+
+    assert all(value.code != "ORG-ROLLBACK" for value in repository.memberships)
 
 
 @pytest.mark.asyncio

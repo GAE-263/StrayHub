@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.storage.ports import ObjectMetadata, ObjectScope, StoredObject
@@ -9,12 +10,12 @@ from services.api.app.infrastructure.storage.ports import ObjectMetadata, Object
 class GcsStorageAdapter:
     """Cloud Storage adapter with an injected official-client boundary."""
 
-    def __init__(self, *, client: object, bucket: str | None = None) -> None:
+    def __init__(self, *, client: Any, bucket: str | None = None) -> None:
         settings = get_settings()
         self.client = client
         self.bucket_name = bucket or settings.gcs_bucket
 
-    def _blob(self, scope: ObjectScope, key: str) -> object:
+    def _blob(self, scope: ObjectScope, key: str) -> Any:
         bucket = self.client.bucket(self.bucket_name)
         return bucket.blob(f"organizations/{scope.organization_id}/{key.lstrip('/')}")
 

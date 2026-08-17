@@ -3,6 +3,8 @@ import React from "react";
 import { AppSidebar } from "./AppSidebar";
 import { ErrorState, EmptyState, LoadingState } from "./StateViews";
 import { StatusBanner } from "./StatusBanner";
+import { Breadcrumbs } from "./Breadcrumbs";
+import { renderToStaticMarkup } from "react-dom/server";
 
 describe("management shell primitives", () => {
   it("exposes shared navigation and state components", () => {
@@ -27,5 +29,16 @@ describe("management shell primitives", () => {
   it("keeps volunteer out of management navigation", () => {
     const sidebar = React.createElement(AppSidebar, { role: "VOLUNTEER" });
     expect(sidebar.props.role).toBe("VOLUNTEER");
+  });
+
+  it("keeps breadcrumb hierarchy labelled for assistive technology", () => {
+    const html = renderToStaticMarkup(
+      <Breadcrumbs
+        items={[{ label: "動物檔案", href: "/animals" }, { label: "小森" }]}
+      />,
+    );
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain("動物檔案");
+    expect(html).toContain("小森");
   });
 });

@@ -1,4 +1,6 @@
 import React from "react";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import {
   ObservationOption,
   optionSourceLabel,
@@ -38,10 +40,10 @@ export function ObservationOptionCard({
         </p>
       </div>
       <div className="observation-option-meta">
-        <span className="badge">{optionStatusLabel(option.status)}</span>
-        <span className="badge badge-source">
+        <Badge>{optionStatusLabel(option.status)}</Badge>
+        <Badge className="badge-source">
           {optionSourceLabel(option.source)}
-        </span>
+        </Badge>
         <code>{option.code}</code>
         {option.requires_note ? <span>需要補充說明</span> : null}
         <span>最後修改：{option.last_modified_by ?? "系統"}</span>
@@ -59,60 +61,56 @@ export function ObservationOptionCard({
           className="observation-option-actions"
           aria-label={`${option.display_name} 操作`}
         >
-          <button
-            className="button button-secondary"
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => onEdit(option)}
           >
             編輯
-          </button>
-          <button
-            className="button button-secondary"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => onMove(option, -1)}
           >
             上移
-          </button>
-          <button
-            className="button button-secondary"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => onMove(option, 1)}
           >
             下移
-          </button>
+          </Button>
           {option.status === "active" ? (
             <>
-              <button
-                className="button button-danger"
+              <Button
+                variant="destructive"
                 type="button"
                 onClick={() => onLifecycle(option, "disable")}
               >
                 停用
-              </button>
-              <button
-                className="button button-secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 type="button"
                 onClick={() => onLifecycle(option, "archive")}
               >
                 封存
-              </button>
+              </Button>
             </>
           ) : (
-            <button
-              className="button button-secondary"
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => onLifecycle(option, "restore")}
             >
               恢復
-            </button>
+            </Button>
           )}
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={() => onAudit(option)}
-          >
+          <Button variant="ghost" type="button" onClick={() => onAudit(option)}>
             查看變更紀錄
-          </button>
+          </Button>
         </div>
       ) : null}
     </article>

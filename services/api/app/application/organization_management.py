@@ -13,10 +13,42 @@ class OrganizationManagementService:
         self.repository = repository
         self.password_hasher = password_hasher
 
-    async def create(self, *, code: str, name: str, initial_admin_user_id=None) -> Organization:
-        organization = await self.repository.add(
-            Organization(code=code, name=name, status="pending_setup")
+    @staticmethod
+    def require_platform(*, role: str, platform_scope: bool) -> None:
+        if role != "PLATFORM_ADMIN" and not platform_scope:
+            raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
+
+    @staticmethod
+    def require_settings_admin(
+        *, role: str, platform_scope: bool, current_organization_id, target_organization_id
+    ) -> None:
+        if role in {"PLATFORM_ADMIN"} or platform_scope:
+            return
+        if role != "SHELTER_ADMIN" or current_organization_id != target_organization_id:
+            raise DomainError("organization_settings_denied", "無法管理此收容所設定", 403)
+
+    @classmethod
+    def require_update_permission(
+        cls,
+        *,
+        role: str,
+        platform_scope: bool,
+        current_organization_id,
+        target_organization_id,
+        has_platform_field: bool,
+    ) -> None:
+        if has_platform_field:
+            cls.require_platform(role=role, platform_scope=platform_scope)
+            return
+        cls.require_settings_admin(
+            role=role,
+            platform_scope=platform_scope,
+            current_organization_id=current_organization_id,
+            target_organization_id=target_organization_id,
         )
+
+    async def create(self, *, code: str, name: str, initial_admin_user_id=None) -> Organization:
+        organization = await self.repository.create_with_volunteer_policy(code=code, name=name)
         if initial_admin_user_id:
             await self.repository.add(
                 OrganizationMembership(
@@ -90,9 +122,17 @@ class OrganizationManagementService:
         organization.status = "suspended"
         return organization
 
-    async def create_membership(self, *, organization_id, user_id, role: str):
+    async def create_membership(
+        self, *, organization_id, user_id, role: str
+    ) -> OrganizationMembership:
         if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
             raise DomainError("invalid_role", "收容所角色無效", 422)
+        if role == "VOLUNTEER":
+            raise DomainError(
+                "volunteer_access_flow_required",
+                "請使用志工報名與限時授權流程建立志工權限",
+                422,
+            )
         organization = await self.repository.get(organization_id)
         user = await self.repository.user(user_id)
         if organization is None or user is None:
@@ -112,13 +152,30 @@ class OrganizationManagementService:
             )
         )
 
-    async def update_membership(self, membership, *, role: str | None, status: str | None):
+    async def update_membership(
+        self,
+        membership,
+        *,
+        role: str | None,
+        status: str | None,
+        medical_care_access: bool | None = None,
+    ):
         if role is not None:
             if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
                 raise DomainError("invalid_role", "收容所角色無效", 422)
+            if role == "VOLUNTEER" and membership.role != "VOLUNTEER":
+                raise DomainError(
+                    "volunteer_access_flow_required",
+                    "請使用志工報名與限時授權流程轉換志工權限",
+                    422,
+                )
             membership.role = role
         if status is not None:
             if status not in {"invited", "active", "disabled"}:
                 raise DomainError("invalid_membership_status", "Membership 狀態無效", 422)
             membership.status = status
+        if medical_care_access is not None:
+            if membership.role != "STAFF":
+                raise DomainError("medical_care_access_staff_only", "醫療權限只能授予 STAFF", 422)
+            membership.medical_care_access = medical_care_access
         return membership

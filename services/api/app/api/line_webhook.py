@@ -297,10 +297,10 @@ async def _reply_next_step(
             ],
         )
     elif state == DraftState.REVIEWING:
-        options = await ObservationRepository(session, organization_id).effective_options(
+        review_options = await ObservationRepository(session, organization_id).effective_options(
             include_disabled_history=True
         )
-        labels = {option.code: option.display_name for option in options}
+        labels = {option.code: option.display_name for option in review_options}
         summary_lines = [
             f"{key}：{labels.get(value, value)}" for key, value in draft.answers.items()
         ]
@@ -385,7 +385,11 @@ async def _handle_postback(
         return None
     if action == "select_animal":
         animal_id = _uuid_value(values.get("animal_id", [""])[0])
-        animal = animal_id and await AnimalRepository(session, organization_id).get(animal_id)
+        animal = (
+            None
+            if animal_id is None
+            else await AnimalRepository(session, organization_id).get(animal_id)
+        )
         if (
             animal is None
             or animal.status != "active"
@@ -421,7 +425,11 @@ async def _handle_postback(
         return None
     if action == "confirm_animal":
         animal_id = _uuid_value(values.get("animal_id", [""])[0])
-        animal = animal_id and await AnimalRepository(session, organization_id).get(animal_id)
+        animal = (
+            None
+            if animal_id is None
+            else await AnimalRepository(session, organization_id).get(animal_id)
+        )
         if (
             animal is None
             or animal.status != "active"
@@ -466,7 +474,7 @@ async def _handle_postback(
         )
         if draft is None:
             await _reply(line, event, [_text("目前沒有可繼續的回報。")])
-            return
+            return None
         await _reply(line, event, [_text("已恢復未完成回報，請繼續回答目前問題。")])
         await _reply_next_step(
             session,
@@ -476,7 +484,7 @@ async def _handle_postback(
             draft=draft,
             raw_token="",
         )
-        return
+        return None
     if not token and action not in {
         "answer",
         "back",
@@ -499,7 +507,7 @@ async def _handle_postback(
         draft.current_step = DraftState.CANCELLED.value
         await session.flush()
         await _reply(line, event, [_text("已取消這次回報，沒有建立正式紀錄。")])
-        return
+        return None
     validator = None
     note_validator = None
     if action in {"answer", "submit", "submit_current"}:

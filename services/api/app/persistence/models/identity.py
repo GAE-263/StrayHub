@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin, utc_now
@@ -16,6 +16,12 @@ class Organization(IdentityMixin, AuditMixin, Base):
     service_area: Mapped[str | None] = mapped_column(String(200), nullable=True)
     contact: Mapped[str | None] = mapped_column(String(300), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_setup", index=True)
+    timezone: Mapped[str] = mapped_column(
+        String(64), default="Asia/Taipei", server_default="Asia/Taipei", nullable=False
+    )
+    timezone_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
 
 
 class User(IdentityMixin, AuditMixin, Base):
@@ -32,11 +38,26 @@ class User(IdentityMixin, AuditMixin, Base):
 
 class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     __tablename__ = "organization_memberships"
+    __table_args__ = (
+        CheckConstraint(
+            "role <> 'VOLUNTEER' OR "
+            "(valid_from IS NOT NULL AND expires_at IS NOT NULL AND expires_at > valid_from)",
+            name="ck_organization_memberships_volunteer_finite_period",
+        ),
+    )
 
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    access_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    medical_care_access: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
 
 
 class SessionRecord(IdentityMixin, AuditMixin, Base):

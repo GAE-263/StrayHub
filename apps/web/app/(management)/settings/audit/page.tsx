@@ -4,9 +4,25 @@ import { useEffect, useState } from "react";
 import { authFetch } from "../../../../lib/auth";
 import {
   EmptyState,
-  ErrorState,
   LoadingState,
 } from "../../../../components/management/StateViews";
+import { Alert } from "../../../../components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../../components/ui/card";
+import { Field } from "../../../../components/ui/field";
+import { Input } from "../../../../components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../../components/ui/table";
 
 type Audit = {
   id: string;
@@ -56,62 +72,69 @@ export default function AuditPage() {
           </p>
         </div>
       </div>
-      <section className="panel">
-        <div className="toolbar">
-          <div className="field">
-            <label htmlFor="audit-action">Action</label>
-            <input
-              id="audit-action"
-              value={action}
-              onChange={(event) => setAction(event.target.value)}
-              placeholder="例如 care_report.corrected"
-            />
+      <Card>
+        <CardHeader>
+          <CardTitle>唯讀查詢條件</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="p1-form-grid">
+            <Field>
+              <label htmlFor="audit-action">Action</label>
+              <Input
+                id="audit-action"
+                value={action}
+                onChange={(event) => setAction(event.target.value)}
+                placeholder="例如 care_report.corrected"
+              />
+            </Field>
+            <Field>
+              <label htmlFor="audit-resource">Resource type</label>
+              <Input
+                id="audit-resource"
+                value={resourceType}
+                onChange={(event) => setResourceType(event.target.value)}
+                placeholder="例如 CareReport"
+              />
+            </Field>
           </div>
-          <div className="field">
-            <label htmlFor="audit-resource">Resource type</label>
-            <input
-              id="audit-resource"
-              value={resourceType}
-              onChange={(event) => setResourceType(event.target.value)}
-              placeholder="例如 CareReport"
-            />
-          </div>
-        </div>
-        {loading ? (
-          <LoadingState title="正在查詢 Audit…" />
-        ) : error ? (
-          <ErrorState title="無法查詢 Audit" description={error} />
-        ) : items.length === 0 ? (
-          <EmptyState title="目前沒有符合條件的 Audit" />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+          {loading ? (
+            <LoadingState title="正在查詢 Audit…" />
+          ) : error ? (
+            <Alert role="alert">{error}</Alert>
+          ) : items.length === 0 ? (
+            <EmptyState title="目前沒有符合條件的 Audit" />
+          ) : (
+            <Table>
+              <TableHeader>
                 <tr>
-                  <th>時間</th>
-                  <th>Action</th>
-                  <th>資源</th>
-                  <th>操作者</th>
-                  <th>原因</th>
+                  <TableHead>時間</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>資源</TableHead>
+                  <TableHead>操作者</TableHead>
+                  <TableHead>原因</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{new Date(item.created_at).toLocaleString("zh-TW")}</td>
-                    <td>{item.action}</td>
-                    <td>
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      {new Date(item.created_at).toLocaleString("zh-TW")}
+                    </TableCell>
+                    <TableCell>{item.action}</TableCell>
+                    <TableCell>
                       {item.resource_type} {item.resource_id?.slice(0, 8)}
-                    </td>
-                    <td>{item.actor_user_id?.slice(0, 8) ?? "system"}</td>
-                    <td>{item.reason ?? "—"}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>
+                      {item.actor_user_id?.slice(0, 8) ?? "system"}
+                    </TableCell>
+                    <TableCell>{item.reason ?? "—"}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }

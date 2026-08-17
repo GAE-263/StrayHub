@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Button } from "../../components/ui/button";
 import {
   Category,
   categoryLabel,
@@ -95,8 +96,8 @@ export function ObservationCategoryGroup({
           ) : null}
           {platformOptions.length > 0 ? (
             <div className="observation-option-section platform-option-section">
-              <button
-                className="button button-quiet"
+              <Button
+                variant="ghost"
                 type="button"
                 aria-expanded={platformExpanded}
                 aria-controls={`platform-options-${category.id}`}
@@ -104,7 +105,7 @@ export function ObservationCategoryGroup({
               >
                 平台預設（{platformOptions.length}）
                 {platformExpanded ? "收合" : "展開查看"}
-              </button>
+              </Button>
               {platformExpanded ? (
                 <div id={`platform-options-${category.id}`}>
                   {platformOptions.map((option) => (

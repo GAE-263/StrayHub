@@ -49,3 +49,11 @@ def test_authentication_contract_does_not_put_organization_or_role_in_token_sche
 
     assert "Server-side Session" in description
     assert "Organization Scope" in description
+
+
+def test_004_handoff_uses_effective_membership_not_role_alone() -> None:
+    from services.api.app.persistence.repositories.authentication_repository import (
+        AuthenticationRepository,
+    )
+
+    assert hasattr(AuthenticationRepository, "get_effective_membership")

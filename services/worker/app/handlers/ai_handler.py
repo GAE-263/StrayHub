@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from typing import Any
 
 from services.api.app.api.errors import DomainError
 from services.worker.app.handlers.ai_validation import validate_ai_output
@@ -14,18 +15,18 @@ class AIJobHandler:
 
     async def handle(
         self,
-        job: object,
+        job: Any,
         *,
         note: str | None,
         cleaned_images: list[bytes],
         allowed_codes: set[str],
-        observation: object | None = None,
+        observation: Any | None = None,
         organization_id: object | None = None,
-        report: object | None = None,
-        media_assets: list[object] | None = None,
+        report: Any | None = None,
+        media_assets: list[Any] | None = None,
         source_type: str | None = None,
         source_id: object | None = None,
-    ) -> object:
+    ) -> Any:
         if getattr(job, "status", None) in {"succeeded", "invalid"}:
             return job
         self._validate_context(
@@ -87,10 +88,14 @@ class AIJobHandler:
             self._mark_failure(job, observation, report, "ai_interrupted")
         except Exception as error:
             # Preserve a safe error code, not provider response or source content.
-            failure_reason = getattr(error, "code", None) or {
-                TimeoutError: "TimeoutError",
-                ConnectionError: "ConnectionError",
-            }.get(type(error), "ai_provider_error")
+            failure_reason = getattr(error, "code", None)
+            if not failure_reason:
+                if isinstance(error, TimeoutError):
+                    failure_reason = "TimeoutError"
+                elif isinstance(error, ConnectionError):
+                    failure_reason = "ConnectionError"
+                else:
+                    failure_reason = "ai_provider_error"
             self._mark_failure(job, observation, report, failure_reason)
         job.completed_at = datetime.now(timezone.utc)
         return job
@@ -114,8 +119,8 @@ class AIJobHandler:
         source_type: str | None,
         source_id: object | None,
         note: str | None,
-        report: object | None,
-        media_assets: list[object],
+        report: Any | None,
+        media_assets: list[Any],
     ) -> None:
         if observation is None:
             return

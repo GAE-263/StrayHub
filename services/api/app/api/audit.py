@@ -10,6 +10,8 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.management_access import require_admin_context, require_staff_or_admin
+from services.api.app.application.medical_care_common import medical_permission
+from services.api.app.domain.medical_care_access import require_medical_view
 from services.api.app.persistence.models.audit import AuditRecord
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +49,19 @@ async def query_audit(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    if resource_type == "ObservationOption":
+    if resource_type in {
+        "MedicalRecord",
+        "CareReminderSeries",
+        "CareReminderOccurrence",
+        "CareReminderAction",
+    }:
+        organization_id = context.organization_id
+        if organization_id is None:
+            from services.api.app.api.errors import DomainError
+
+            raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
+        require_medical_view(await medical_permission(session, context))
+    elif resource_type == "ObservationOption":
         organization_id = require_admin_context(context)
     else:
         organization_id = require_staff_or_admin(context)

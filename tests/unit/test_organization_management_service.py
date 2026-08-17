@@ -59,6 +59,17 @@ async def test_shelter_membership_can_be_created_once() -> None:
         await service.create_membership(
             organization_id=repository.organization.id,
             user_id=repository.user_record.id,
+            role="STAFF",
+        )
+
+
+@pytest.mark.asyncio
+async def test_volunteer_membership_requires_access_approval_flow() -> None:
+    repository = _Repository()
+    with pytest.raises(DomainError, match="志工報名與限時授權流程"):
+        await OrganizationManagementService(repository, Argon2PasswordHasher()).create_membership(
+            organization_id=repository.organization.id,
+            user_id=repository.user_record.id,
             role="VOLUNTEER",
         )
 

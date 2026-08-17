@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy import select
@@ -12,6 +13,8 @@ from services.api.app.persistence.models.identity import (
     LineWebhookEvent,
     WebhookSession,
 )
+
+T = TypeVar("T")
 
 
 class LineIdentityRepository:
@@ -37,7 +40,7 @@ class LineIdentityRepository:
         )
         return list(result.scalars())
 
-    async def add(self, value: object) -> object:
+    async def add(self, value: T) -> T:
         self.session.add(value)
         await self.session.flush()
         return value

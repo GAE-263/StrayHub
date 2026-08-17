@@ -29,6 +29,9 @@ describe("AIObservationPanel", () => {
     expect(html).toContain("確認");
     expect(html).toContain("拒絕");
     expect(html).toContain("修正");
+    expect(html).toContain("ui-card");
+    expect(html).toContain("ui-badge");
+    expect(html).toContain('aria-live="polite"');
   });
 
   it("keeps failed processing separate from normal results", () => {
@@ -47,6 +50,7 @@ describe("AIObservationPanel", () => {
     );
 
     expect(html).toContain("AI 處理失敗");
+    expect(html).toContain('role="alert"');
     expect(html).not.toContain("正常");
   });
 });

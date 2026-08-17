@@ -1,0 +1,234 @@
+"use client";
+
+import React from "react";
+import { useEffect, useState } from "react";
+
+import {
+  formatRemainingDuration,
+  formatTaiwanDateTime,
+  safeVolunteerError,
+  type VolunteerStatus,
+} from "./volunteerAccess";
+
+type Props = {
+  idToken: string;
+  shelterEntryReference: string;
+  initialStatus?: VolunteerStatus | null;
+};
+
+const STATUS_COPY: Record<string, { title: string; detail: string }> = {
+  none: { title: "成為志工", detail: "送出報名後，由收容所管理員進行審核。" },
+  pending: {
+    title: "等待收容所審核",
+    detail: "你的報名已送出，審核前不會取得照護資料。",
+  },
+  rejected: {
+    title: "本次報名未通過",
+    detail: "你可以查看說明，或在合適時再次報名。",
+  },
+  withdrawn: { title: "報名已撤回", detail: "需要時可以建立一筆新的報名。" },
+  upcoming: { title: "授權即將開始", detail: "到開始時間後才能進入照護流程。" },
+  active: {
+    title: "志工授權使用中",
+    detail: "你現在可以進入收容所的照護流程。",
+  },
+  expired: { title: "授權已到期", detail: "如要再次協助，請重新報名。" },
+  revoked: { title: "授權已撤銷", detail: "如有疑問，請聯絡收容所管理員。" },
+};
+
+async function readStatus(response: Response): Promise<VolunteerStatus> {
+  const body = await response.json();
+  if (!response.ok) throw body;
+  return body as VolunteerStatus;
+}
+
+export function VolunteerApplicationPage({
+  idToken,
+  shelterEntryReference,
+  initialStatus = null,
+}: Props) {
+  const [status, setStatus] = useState<VolunteerStatus | null>(initialStatus);
+  const [loading, setLoading] = useState(initialStatus === null);
+  const [submitting, setSubmitting] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialStatus !== null) return;
+    if (!idToken || !shelterEntryReference) {
+      setError("請從收容所提供的 LINE／LIFF 志工入口開啟此頁面。");
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    fetch("/v1/volunteer-applications/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id_token: idToken,
+        shelter_entry_reference: shelterEntryReference,
+      }),
+    })
+      .then(readStatus)
+      .then((value) => active && setStatus(value))
+      .catch((reason) => active && setError(safeVolunteerError(reason?.code)))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [idToken, initialStatus, shelterEntryReference]);
+
+  async function submit() {
+    if (submitting || !consent) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch("/v1/volunteer-applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_token: idToken,
+          shelter_entry_reference: shelterEntryReference,
+          client_request_id: crypto.randomUUID(),
+          consent_acknowledged: true,
+        }),
+      });
+      setStatus(await readStatus(response));
+    } catch (reason) {
+      setError(safeVolunteerError((reason as { code?: string })?.code));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function withdraw() {
+    if (submitting || !status?.application) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/v1/volunteer-applications/${status.application.id}/withdraw`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id_token: idToken,
+            shelter_entry_reference: shelterEntryReference,
+            expected_version: status.application.version,
+          }),
+        },
+      );
+      setStatus(await readStatus(response));
+    } catch (reason) {
+      setError(safeVolunteerError((reason as { code?: string })?.code));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const effectiveStatus = status?.effective_status ?? "none";
+  const copy = STATUS_COPY[effectiveStatus] ?? STATUS_COPY.none;
+  const canApply = [
+    "none",
+    "rejected",
+    "withdrawn",
+    "expired",
+    "revoked",
+  ].includes(effectiveStatus);
+
+  return (
+    <main className="mx-auto min-h-screen max-w-lg bg-white px-5 py-10 text-slate-900">
+      <p className="text-sm font-semibold text-emerald-700">
+        {status?.organization.name ?? "StrayHub"}
+      </p>
+      <h1 className="mt-2 text-3xl font-bold">志工報名</h1>
+      {loading ? (
+        <p className="mt-8" role="status" aria-live="polite">
+          正在確認 LINE 身分與報名狀態…
+        </p>
+      ) : (
+        <section
+          className="mt-8 rounded-2xl border border-slate-200 p-5"
+          aria-live="polite"
+        >
+          <h2 className="text-xl font-bold">{copy.title}</h2>
+          <p className="mt-2 text-slate-600">{copy.detail}</p>
+          {status?.application?.decision_reason ? (
+            <p className="mt-4 rounded-lg bg-slate-50 p-3">
+              {status.application.decision_reason}
+            </p>
+          ) : null}
+          {status?.grant ? (
+            <dl className="mt-4 grid gap-2 rounded-lg bg-emerald-50 p-4">
+              <div>
+                <dt className="font-semibold">目前收容所</dt>
+                <dd>{status.organization.name}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold">授權期間（台灣時間）</dt>
+                <dd>
+                  {formatTaiwanDateTime(status.grant.valid_from)} ～{" "}
+                  {formatTaiwanDateTime(status.grant.expires_at)}
+                </dd>
+              </div>
+              {effectiveStatus === "active" ||
+              effectiveStatus === "upcoming" ? (
+                <div>
+                  <dt className="font-semibold">距離到期</dt>
+                  <dd>{formatRemainingDuration(status.grant.expires_at)}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+          {canApply && status?.organization.applications_enabled !== false ? (
+            <div className="mt-6 space-y-4">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(event) => setConsent(event.target.checked)}
+                />
+                <span>我確認送出志工報名，並同意由此收容所審核。</span>
+              </label>
+              <button
+                type="button"
+                disabled={!consent || submitting}
+                onClick={submit}
+                className="min-h-11 w-full rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white disabled:opacity-50"
+              >
+                {submitting
+                  ? "送出中…"
+                  : effectiveStatus === "none"
+                    ? "立即報名"
+                    : "再次報名"}
+              </button>
+            </div>
+          ) : null}
+          {effectiveStatus === "pending" ? (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={withdraw}
+              className="mt-6 min-h-11 w-full rounded-xl border border-slate-400 px-4 py-3 font-semibold"
+            >
+              撤回報名
+            </button>
+          ) : null}
+          {effectiveStatus === "active" ? (
+            <a
+              href="/animal-confirmation"
+              className="mt-6 block min-h-11 w-full rounded-xl bg-emerald-700 px-4 py-3 text-center font-semibold text-white"
+            >
+              進入照護流程
+            </a>
+          ) : null}
+        </section>
+      )}
+      {error ? (
+        <p className="mt-5 rounded-xl bg-red-50 p-4 text-red-800" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </main>
+  );
+}

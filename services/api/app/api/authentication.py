@@ -17,7 +17,9 @@ from services.api.app.application.authentication.session_service import SessionS
 from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
-from services.api.app.infrastructure.line.identity_verification_adapter import LineIdentityVerifier
+from services.api.app.infrastructure.line.identity_verification_adapter import (
+    configured_line_identity_verifier,
+)
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
@@ -65,7 +67,10 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
             ttl_seconds=settings.session_access_token_ttl_seconds,
             active_kid=settings.auth_jwt_active_public_key_reference,
         ),
-        line_verifier=LineIdentityVerifier(settings.line_channel_id),
+        line_verifier=configured_line_identity_verifier(
+            app_env=settings.app_env,
+            channel_id=settings.line_channel_id,
+        ),
         refresh_ttl_seconds=settings.session_refresh_token_ttl_seconds,
         access_ttl_seconds=settings.session_access_token_ttl_seconds,
     )

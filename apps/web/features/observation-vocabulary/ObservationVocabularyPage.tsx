@@ -22,6 +22,14 @@ import {
 } from "./ObservationLifecycleDialog";
 import { ObservationOptionForm, FormValue } from "./ObservationOptionForm";
 import { ObservationSummary } from "./ObservationSummary";
+import { Alert } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import {
   Category,
   emptyFilters,
@@ -233,8 +241,7 @@ export default function ObservationVocabularyPage() {
           </p>
         </div>
         {canManage ? (
-          <button
-            className="button"
+          <Button
             type="button"
             onClick={(event) => {
               formTrigger.current = event.currentTarget;
@@ -242,7 +249,7 @@ export default function ObservationVocabularyPage() {
             }}
           >
             新增選項
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -252,19 +259,15 @@ export default function ObservationVocabularyPage() {
         </p>
       ) : null}
       {error ? (
-        <div className="state-card error-state" role="alert">
+        <Alert role="alert" className="p1-error">
           <div>
             <strong>觀察詞彙載入或操作失敗</strong>
             <p>{error}</p>
           </div>
-          <button
-            className="button button-secondary"
-            type="button"
-            onClick={() => void load()}
-          >
+          <Button variant="secondary" type="button" onClick={() => void load()}>
             重新載入
-          </button>
-        </div>
+          </Button>
+        </Alert>
       ) : null}
       {loading && !summary ? (
         <LoadingState
@@ -281,21 +284,27 @@ export default function ObservationVocabularyPage() {
 
       <ObservationSummary summary={summary} loading={loading} />
       {summary?.scope === "admin_full" ? (
-        <section
-          className="panel source-explanation"
+        <Card
+          className="source-explanation"
           aria-labelledby="source-explanation-title"
         >
-          <h2 id="source-explanation-title">平台預設與收容所自訂</h2>
-          <p>
-            <strong>平台預設</strong>
-            是平台提供的共同基礎詞彙，收容所可以查看與使用，但不能從本頁改寫。
-          </p>
-          <p>
-            <strong>收容所自訂</strong>
-            只屬於目前收容所，具設定管理權限者可以新增、編輯、排序、停用、恢復或封存。
-          </p>
-          <p>停用或封存不會刪除歷史回報；只會影響新的回報表單是否顯示。</p>
-        </section>
+          <CardHeader>
+            <CardTitle id="source-explanation-title">
+              平台預設與收容所自訂
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>
+              <strong>平台預設</strong>
+              是平台提供的共同基礎詞彙，收容所可以查看與使用，但不能從本頁改寫。
+            </p>
+            <p>
+              <strong>收容所自訂</strong>
+              只屬於目前收容所，具設定管理權限者可以新增、編輯、排序、停用、恢復或封存。
+            </p>
+            <p>停用或封存不會刪除歷史回報；只會影響新的回報表單是否顯示。</p>
+          </CardContent>
+        </Card>
       ) : null}
 
       {summary ? (

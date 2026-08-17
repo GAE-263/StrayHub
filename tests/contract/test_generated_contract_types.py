@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yaml
+
 GENERATED_TYPES = Path("packages/contracts/src/openapi.ts")
 
 
@@ -9,3 +11,28 @@ def test_generated_contract_types_exist_for_openapi_source_of_truth() -> None:
     assert "export interface paths" in content
     assert "CareReportAnswers" in content
     assert "DraftAnswers" in content
+    assert "MedicalRecordCreate" in content
+    assert "CareReminderSeriesCreate" in content
+    assert "OccurrenceAction" in content
+    assert '"/v1/management/care-agenda"' in content
+
+
+def test_volunteer_access_contract_has_expected_operation_and_schema_surface() -> None:
+    feature = yaml.safe_load(
+        Path(
+            "specs/005-volunteer-access-approval/contracts/volunteer-access.openapi.yaml"
+        ).read_text()
+    )
+    methods = {"get", "post", "patch", "put", "delete"}
+    operation_count = sum(
+        sum(method in methods for method in path_item) for path_item in feature["paths"].values()
+    )
+    assert operation_count == 13
+    assert len(feature["components"]["schemas"]) == 35
+    canonical = Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    for operation_id in (
+        "createVolunteerDecisionBatch",
+        "updateVolunteerAccessGrant",
+        "retryVolunteerNotifications",
+    ):
+        assert operation_id in canonical

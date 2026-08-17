@@ -6,7 +6,7 @@ import argparse
 import asyncio
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
 def load_definition(path: Path) -> dict:

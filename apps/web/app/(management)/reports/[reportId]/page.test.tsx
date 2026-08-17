@@ -1,12 +1,32 @@
 import { describe, expect, it } from "vitest";
-import React from "react";
-import ReportDetailPage from "./page";
+import { reportAIStatusSummary } from "../../report-detail-state";
 
-describe("management report detail", () => {
-  it("renders the correction and archive route", () => {
-    const page = React.createElement(ReportDetailPage, {
-      params: Promise.resolve({ reportId: "report-1" }),
-    });
-    expect(page.type).toBe(ReportDetailPage);
+describe("report detail state mapping", () => {
+  it("maps processing, failed and succeeded AI observations to user states", () => {
+    const summary = reportAIStatusSummary([
+      {
+        id: "processing",
+        status: "running",
+      },
+      {
+        id: "failed",
+        status: "failed",
+      },
+      {
+        id: "review",
+        status: "succeeded",
+      },
+    ]);
+
+    expect(summary.map((item) => item.kind)).toEqual([
+      "processing",
+      "ai-failed",
+      "needs-review",
+    ]);
+    expect(summary.map((item) => item.label)).toEqual([
+      "AI 處理中",
+      "AI 處理失敗",
+      "需要人工覆核",
+    ]);
   });
 });

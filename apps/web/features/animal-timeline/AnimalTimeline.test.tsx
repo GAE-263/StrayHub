@@ -19,7 +19,7 @@ describe("AnimalTimeline", () => {
       ],
     });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain("當日無回報");
+    expect(markup).toContain("當日沒有事件");
     expect(markup).toContain("有回報");
   });
 

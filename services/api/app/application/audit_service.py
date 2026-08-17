@@ -18,6 +18,7 @@ class AuditService:
         *,
         organization_id: UUID | None,
         actor_user_id: UUID | None,
+        actor_reference: str | None = None,
         action: str,
         resource_type: str,
         resource_id: UUID | None = None,
@@ -32,9 +33,15 @@ class AuditService:
             raise ValueError("audit action, resource_type and source_channel are required")
         if organization_id is None and resource_type not in {"organization", "platform"}:
             raise ValueError("tenant business audit records require an organization scope")
+        if actor_user_id is None and not (actor_reference or "").strip():
+            raise ValueError("system audit records require actor_reference")
+        if actor_user_id is not None and actor_reference is not None:
+            raise ValueError("audit record must use exactly one actor identity")
         record = AuditRecord(
             organization_id=organization_id,
             actor_user_id=actor_user_id,
+            actor_type="system" if actor_user_id is None else "user",
+            actor_reference=(actor_reference or "").strip() or None,
             operation_id=operation_id or uuid4(),
             action=action,
             resource_type=resource_type,

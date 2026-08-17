@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { LogOut } from "lucide-react";
+import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 
 type Props = {
   displayName: string;
@@ -32,7 +35,8 @@ export function AppHeader({
         {organizations.length > 1 ? (
           <label className="context-selector">
             <span className="sr-only">切換目前收容所</span>
-            <select
+            <Select
+              className="context-select"
               aria-label="切換目前收容所"
               value={activeOrganizationId}
               onChange={(event) => onSwitchOrganization(event.target.value)}
@@ -42,7 +46,7 @@ export function AppHeader({
                   {organization.name}（{organization.code}）
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : (
           <span className="context-pill" aria-label="目前收容所">
@@ -50,13 +54,16 @@ export function AppHeader({
           </span>
         )}
         <span className="user-label">{displayName}</span>
-        <button
-          className="button button-quiet"
+        <Button
+          className="button-quiet"
+          variant="ghost"
           type="button"
+          aria-label="登出管理工作台"
           onClick={onLogout}
         >
+          <LogOut size={16} aria-hidden="true" />
           登出
-        </button>
+        </Button>
       </div>
     </header>
   );

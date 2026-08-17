@@ -1,33 +1,100 @@
 import React from "react";
+import { getStatusSemantics, type UIStatusKind } from "./ui-status";
 
-type StateProps = { title: string; description?: string };
+type StateProps = {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  kind?: UIStatusKind;
+};
 
-export function LoadingState({ title, description }: StateProps) {
+function StateView({
+  title,
+  description,
+  action,
+  kind,
+  role,
+}: StateProps & { role?: "status" | "alert" }) {
+  const semantics = kind ? getStatusSemantics(kind) : null;
   return (
-    <div className="state-card" role="status" aria-live="polite">
+    <div
+      className={`state-card ${kind ? `state-${semantics?.tone}` : ""}`}
+      role={role}
+      aria-live={semantics?.ariaLive ?? "polite"}
+    >
       <span className="loading-dot" aria-hidden="true" />
       <div>
         <strong>{title}</strong>
         {description ? <p>{description}</p> : null}
+        {action ? <div className="state-action">{action}</div> : null}
       </div>
     </div>
   );
 }
 
-export function EmptyState({ title, description }: StateProps) {
+export function LoadingState({ title, description }: StateProps) {
   return (
-    <div className="state-card empty-state">
-      <strong>{title}</strong>
-      {description ? <p>{description}</p> : null}
-    </div>
+    <StateView
+      title={title}
+      description={description}
+      kind="loading"
+      role="status"
+    />
   );
 }
 
-export function ErrorState({ title, description }: StateProps) {
+export function SavingState({
+  title = "儲存中…",
+  description,
+  action,
+}: Partial<StateProps> = {}) {
   return (
-    <div className="state-card error-state" role="alert">
-      <strong>{title}</strong>
-      {description ? <p>{description}</p> : null}
-    </div>
+    <StateView
+      title={title}
+      description={description}
+      action={action}
+      kind="saving"
+      role="status"
+    />
+  );
+}
+
+export function EmptyState({ title, description, action }: StateProps) {
+  return (
+    <StateView
+      title={title}
+      description={description}
+      action={action}
+      kind="empty"
+      role="status"
+    />
+  );
+}
+
+export function ErrorState({ title, description, action }: StateProps) {
+  return (
+    <StateView
+      title={title}
+      description={description}
+      action={action}
+      kind="error"
+      role="alert"
+    />
+  );
+}
+
+export function PermissionDeniedState({
+  title = "沒有查看權限",
+  description,
+  action,
+}: Partial<StateProps> = {}) {
+  return (
+    <StateView
+      title={title}
+      description={description}
+      action={action}
+      kind="permission-denied"
+      role="status"
+    />
   );
 }

@@ -8,6 +8,7 @@ export function StatusBanner({ kind, children }: Props) {
     <div
       className={`status-banner status-${kind}`}
       role={kind === "error" ? "alert" : "status"}
+      aria-live={kind === "error" ? "assertive" : "polite"}
     >
       {children}
     </div>

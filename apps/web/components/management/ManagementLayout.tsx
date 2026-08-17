@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
 import { AppSidebar } from "./AppSidebar";
+import { MobileNavigation } from "./MobileNavigation";
 import {
   clearAuth,
   authFetch,
@@ -25,6 +26,7 @@ export function ManagementLayout({ children }: Props) {
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [contextSwitchError, setContextSwitchError] = useState("");
 
   useEffect(() => {
     const showContextRequired = () =>
@@ -110,7 +112,7 @@ export function ManagementLayout({ children }: Props) {
   const switchOrganization = async (nextOrganizationId: string) => {
     if (nextOrganizationId === organizationId) return;
     setLoading(true);
-    setError("");
+    setContextSwitchError("");
     try {
       const response = await authFetch("/v1/auth/active-shelter-context", {
         method: "PUT",
@@ -127,7 +129,7 @@ export function ManagementLayout({ children }: Props) {
       }
       window.location.reload();
     } catch (switchError: unknown) {
-      setError(
+      setContextSwitchError(
         switchError instanceof Error ? switchError.message : "Context 切換失敗",
       );
       setLoading(false);
@@ -151,6 +153,20 @@ export function ManagementLayout({ children }: Props) {
   }
 
   const role = profile.user.platform_role ?? activeMembership?.role ?? "STAFF";
+  const volunteerManagementPath =
+    pathname.startsWith("/volunteers/") ||
+    pathname === "/settings/volunteer-access";
+  if (
+    volunteerManagementPath &&
+    !["PLATFORM_ADMIN", "SHELTER_ADMIN"].includes(role)
+  ) {
+    return (
+      <ErrorState
+        title="無法開啟志工管理"
+        description="目前角色沒有志工報名、授權或通知管理權限。"
+      />
+    );
+  }
   const organizationLabel =
     typeof window !== "undefined"
       ? (window.sessionStorage.getItem("active_organization_code") ??
@@ -171,10 +187,13 @@ export function ManagementLayout({ children }: Props) {
         }
         onLogout={() => void logout()}
       />
+      <MobileNavigation role={role} />
       <div className="app-body">
         <AppSidebar role={role} />
         <main className="app-main">
-          {error ? <StatusBanner kind="warning">{error}</StatusBanner> : null}
+          {contextSwitchError ? (
+            <StatusBanner kind="warning">{contextSwitchError}</StatusBanner>
+          ) : null}
           {children}
         </main>
       </div>

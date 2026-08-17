@@ -1,6 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
+import { statusSummary } from "../../components/management/ui-status";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/management/StateViews";
+import { TimelineDaySection } from "./TimelineDaySection";
 
 type ObservationSnapshot = {
   code?: string;
@@ -21,6 +28,20 @@ export type TimelineDay = {
     mediaIds?: string[];
     aiJobStatus?: string;
     status?: string;
+  }>;
+  events?: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    summary?: string | null;
+    happenedAt?: string;
+    occurrence?: "actual" | "scheduled";
+  }>;
+  scheduled?: Array<{
+    id: string;
+    title: string;
+    status?: string;
+    scheduledAt?: string;
   }>;
 };
 
@@ -72,63 +93,71 @@ function observationEntries(
 export function AnimalTimeline({ days, loading = false, error }: Props) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
-  if (loading) return <p role="status">正在載入動物歷程…</p>;
-  if (error) return <p role="alert">歷程載入失敗：{error}</p>;
-  if (days.length === 0) return <p>目前沒有可顯示的歷程。</p>;
+  if (loading) return <LoadingState title="正在載入動物歷程…" />;
+  if (error) return <ErrorState title="歷程載入失敗" description={error} />;
+  if (days.length === 0) return <EmptyState title="目前沒有可顯示的歷程" />;
 
   return (
     <ol aria-label="動物近 14 天歷程">
       {days.map((day) => (
-        <li key={day.date}>
-          <h3>{day.date}</h3>
-          {day.hasReport ? (
-            <button
-              type="button"
-              aria-expanded={expandedDate === day.date}
-              onClick={() =>
-                setExpandedDate((current) =>
-                  current === day.date ? null : day.date,
-                )
-              }
-            >
-              有回報：{day.reportCount} 筆
-            </button>
-          ) : (
-            <p>當日無回報</p>
-          )}
-          {expandedDate === day.date &&
-            day.reports?.map((report) => {
-              const entries = observationEntries(
-                report.observations,
-                report.observationSnapshots,
-              );
-              return (
-                <article key={report.id} aria-label={`回報 ${report.id}`}>
-                  <p>
-                    回報時間：{report.submittedAt ?? "未提供"}
-                    {report.volunteerUserId
-                      ? `；回報者：${report.volunteerUserId}`
-                      : ""}
-                  </p>
-                  <p>心得：{report.note ?? "沒有心得"}</p>
-                  <p>結構化觀察：{entries.length} 項</p>
-                  {entries.length > 0 ? (
-                    <dl aria-label="結構化觀察答案" className="detail-list">
-                      {entries.map((entry) => (
-                        <div key={entry.key}>
-                          <dt>{entry.label}</dt>
-                          <dd>{entry.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                  <p>照片：{report.mediaIds?.length ?? 0} 張</p>
-                  <p>AI 處理：{report.aiJobStatus ?? "未提供"}</p>
-                  <p>人工資料狀態：{report.status ?? "未提供"}</p>
-                </article>
-              );
-            })}
-        </li>
+        <TimelineDaySection
+          key={day.date}
+          date={day.date}
+          hasReport={day.hasReport}
+          reportCount={day.reportCount}
+          events={[
+            ...(day.scheduled ?? []).map((item) => ({
+              ...item,
+              kind: "care_reminder",
+              occurrence: "scheduled" as const,
+            })),
+            ...(day.events ?? []).map((event) => ({
+              ...event,
+              occurrence: "actual" as const,
+            })),
+          ]}
+          reportsExpanded={expandedDate === day.date}
+          onToggleReports={() =>
+            setExpandedDate((current) =>
+              current === day.date ? null : day.date,
+            )
+          }
+          reports={day.reports?.map((report) => {
+            const entries = observationEntries(
+              report.observations,
+              report.observationSnapshots,
+            );
+            return (
+              <article
+                className="ui-card timeline-report"
+                key={report.id}
+                aria-label={`回報 ${report.id}`}
+              >
+                <p>
+                  回報時間：{report.submittedAt ?? "未提供"}
+                  {report.volunteerUserId
+                    ? `；回報者：${report.volunteerUserId}`
+                    : ""}
+                </p>
+                <p>心得：{report.note ?? "沒有心得"}</p>
+                <p>結構化觀察：{entries.length} 項</p>
+                {entries.length > 0 ? (
+                  <dl aria-label="結構化觀察答案" className="detail-list">
+                    {entries.map((entry) => (
+                      <div key={entry.key}>
+                        <dt>{entry.label}</dt>
+                        <dd>{entry.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                <p>照片：{report.mediaIds?.length ?? 0} 張</p>
+                <p>AI 處理：{statusSummary(report.aiJobStatus)}</p>
+                <p>人工資料狀態：{statusSummary(report.status)}</p>
+              </article>
+            );
+          })}
+        />
       ))}
     </ol>
   );

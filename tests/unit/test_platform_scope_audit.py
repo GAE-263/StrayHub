@@ -1,6 +1,12 @@
 from uuid import uuid4
 
 import pytest
+from services.api.app.api.dependencies import (
+    RequestContext,
+    platform_support_audit_lifecycle,
+    validate_platform_support_request,
+)
+from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
 
 
@@ -44,3 +50,49 @@ async def test_tenant_operation_audit_cannot_be_written_without_organization_sco
             resource_id=uuid4(),
             source_channel="api",
         )
+
+
+def test_platform_support_requires_one_target_and_trimmed_reason_before_query() -> None:
+    target = uuid4()
+    context = RequestContext(
+        user_id=uuid4(),
+        organization_id=None,
+        membership_id=None,
+        role="PLATFORM_ADMIN",
+        platform_scope=True,
+    )
+    assert validate_platform_support_request(context, target, "  協助排查通知  ") == "協助排查通知"
+    for reason in (None, "", "   "):
+        with pytest.raises(DomainError, match="支援原因"):
+            validate_platform_support_request(context, target, reason)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("result", ["success", "denied", "not_found", "validation", "exception"])
+async def test_platform_support_audit_lifecycle_records_every_result(result: str) -> None:
+    class RecordingAudit:
+        def __init__(self) -> None:
+            self.results = []
+
+        async def record(self, **kwargs):
+            self.results.append(kwargs)
+
+    context = RequestContext(
+        user_id=uuid4(),
+        organization_id=None,
+        membership_id=None,
+        role="PLATFORM_ADMIN",
+        platform_scope=True,
+    )
+    audit = RecordingAudit()
+    async with platform_support_audit_lifecycle(
+        audit,
+        context=context,
+        target_organization_id=uuid4(),
+        support_reason="支援測試",
+        resource_type="volunteer_application",
+    ) as lifecycle:
+        lifecycle.result = result
+
+    assert audit.results[0]["result"] == result
+    assert audit.results[0]["reason"] == "支援測試"

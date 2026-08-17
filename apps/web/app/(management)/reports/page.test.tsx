@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
-import React from "react";
-import ReportsPage from "./page";
+import { buildReportsQuery } from "../management-query";
 
-describe("management report inbox", () => {
-  it("renders report filters and inbox route", () => {
-    const page = React.createElement(ReportsPage);
-    expect(page.type).toBe(ReportsPage);
+describe("reports management query contract", () => {
+  it("preserves date and status filters", () => {
+    const query = buildReportsQuery({
+      fromDate: "2026-08-01",
+      toDate: "2026-08-14",
+      status: "saved",
+    });
+
+    expect(query.toString()).toBe(
+      "page=1&page_size=50&from_date=2026-08-01&to_date=2026-08-14&status=saved",
+    );
+  });
+
+  it("keeps the inbox query stable when filters are cleared", () => {
+    const query = buildReportsQuery({ fromDate: "", toDate: "", status: "" });
+    expect(query.toString()).toBe("page=1&page_size=50");
   });
 });

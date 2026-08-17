@@ -5,9 +5,27 @@ import Link from "next/link";
 import { authFetch } from "../../../lib/auth";
 import {
   EmptyState,
-  ErrorState,
   LoadingState,
 } from "../../../components/management/StateViews";
+import { Alert } from "../../../components/ui/alert";
+import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../components/ui/card";
+import { Field } from "../../../components/ui/field";
+import { Select } from "../../../components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../components/ui/table";
 
 type Observation = {
   id: string;
@@ -18,6 +36,17 @@ type Observation = {
   raw_ai_output: unknown;
   validated_ai_observation: unknown;
   human_review_result: unknown;
+};
+
+const statusLabels: Record<string, string> = {
+  pending: "待處理",
+  running: "AI 處理中",
+  succeeded: "需要人工覆核",
+  failed: "AI 處理失敗",
+  invalid: "AI 輸出無效",
+  confirmed: "人工已確認",
+  rejected: "人工已拒絕",
+  corrected: "人工已修正",
 };
 
 export default function AiReviewPage() {
@@ -73,11 +102,12 @@ export default function AiReviewPage() {
           <p>AI 只提供可追溯提示；人工決定另存，不改寫原始回報。</p>
         </div>
       </div>
-      <section className="panel">
-        <div className="toolbar">
-          <div className="field">
+      <Card>
+        <CardHeader>
+          <CardTitle>AI 待覆核清單</CardTitle>
+          <Field>
             <label htmlFor="ai-status">狀態</label>
-            <select
+            <Select
               id="ai-status"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
@@ -90,31 +120,34 @@ export default function AiReviewPage() {
               <option value="confirmed">已確認</option>
               <option value="rejected">已拒絕</option>
               <option value="corrected">已修正</option>
-            </select>
-          </div>
-        </div>
-        {loading ? (
-          <LoadingState title="正在載入 AI Queue…" />
-        ) : error ? (
-          <ErrorState title="無法載入 AI Queue" description={error} />
-        ) : items.length === 0 ? (
-          <EmptyState title="目前沒有符合條件的 AI Observation" />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+            </Select>
+          </Field>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <LoadingState title="正在載入 AI Queue…" />
+          ) : error ? (
+            <Alert role="alert">
+              <strong>無法載入 AI Queue</strong>
+              <p>{error}</p>
+            </Alert>
+          ) : items.length === 0 ? (
+            <EmptyState title="目前沒有符合條件的 AI Observation" />
+          ) : (
+            <Table>
+              <TableHeader>
                 <tr>
-                  <th>來源</th>
-                  <th>狀態</th>
-                  <th>失敗原因</th>
-                  <th>原始資料</th>
-                  <th>操作</th>
+                  <TableHead>來源</TableHead>
+                  <TableHead>狀態</TableHead>
+                  <TableHead>失敗原因</TableHead>
+                  <TableHead>原始資料</TableHead>
+                  <TableHead>操作</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
+                  <TableRow key={item.id}>
+                    <TableCell>
                       {item.source_type}{" "}
                       {item.source_id ? (
                         <Link
@@ -126,12 +159,12 @@ export default function AiReviewPage() {
                       ) : (
                         "—"
                       )}
-                    </td>
-                    <td>
-                      <span className="badge">{item.status}</span>
-                    </td>
-                    <td>{item.failure_reason ?? "—"}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
+                      <Badge>{statusLabels[item.status] ?? item.status}</Badge>
+                    </TableCell>
+                    <TableCell>{item.failure_reason ?? "—"}</TableCell>
+                    <TableCell>
                       <details>
                         <summary>查看</summary>
                         <pre className="json-view">
@@ -145,10 +178,10 @@ export default function AiReviewPage() {
                           )}
                         </pre>
                       </details>
-                    </td>
-                    <td>
-                      <button
-                        className="button button-secondary"
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="secondary"
                         type="button"
                         disabled={
                           item.status === "confirmed" ||
@@ -157,9 +190,9 @@ export default function AiReviewPage() {
                         onClick={() => void review(item, "confirm")}
                       >
                         確認
-                      </button>{" "}
-                      <button
-                        className="button button-secondary"
+                      </Button>{" "}
+                      <Button
+                        variant="secondary"
                         type="button"
                         disabled={
                           item.status === "confirmed" ||
@@ -168,15 +201,15 @@ export default function AiReviewPage() {
                         onClick={() => void review(item, "reject")}
                       >
                         拒絕
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }

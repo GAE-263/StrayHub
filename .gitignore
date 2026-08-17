@@ -25,3 +25,8 @@ apps/web/out/
 *.log
 *.tmp
 *.swp
+
+test-results/
+apps/web/test-results/
+playwright-report/
+screenshots/

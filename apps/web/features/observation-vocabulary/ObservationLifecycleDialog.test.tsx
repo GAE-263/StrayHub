@@ -39,6 +39,7 @@ describe("ObservationLifecycleDialog", () => {
     expect(html).toContain("不會出現在新的回報表單");
     expect(html).toContain("歷史回報仍會保留");
     expect(html).toContain("取消");
+    expect(html).toContain('role="alertdialog"');
   });
 
   it("uses a recovery message for restore", () => {

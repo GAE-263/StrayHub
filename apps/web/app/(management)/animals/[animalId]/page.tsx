@@ -8,6 +8,12 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../../components/management/StateViews";
+import { statusLabel } from "../../../../components/management/ui-status";
+import { Badge } from "../../../../components/ui/badge";
+import { Card } from "../../../../components/ui/card";
+import { Button } from "../../../../components/ui/button";
+import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFormDialog";
+import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
 
 type Props = { params: Promise<{ animalId: string }> };
 type Animal = {
@@ -24,6 +30,15 @@ export default function AnimalProfilePage({ params }: Props) {
   const { animalId } = use(params);
   const [animal, setAnimal] = useState<Animal | null>(null);
   const [error, setError] = useState("");
+  const [todaySummary, setTodaySummary] = useState({
+    hasActivity: false,
+    pending: 0,
+    overdue: 0,
+    today: "",
+    state: undefined as
+      "no_activity" | "events_no_todos" | "pending" | "overdue" | undefined,
+  });
+  const [reminderOpen, setReminderOpen] = useState(false);
 
   useEffect(() => {
     void authFetch(`/v1/management/animals/${animalId}`)
@@ -40,6 +55,56 @@ export default function AnimalProfilePage({ params }: Props) {
             : "動物檔案載入失敗",
         ),
       );
+  }, [animalId]);
+
+  useEffect(() => {
+    void Promise.all([
+      authFetch(`/v1/management/care-agenda?animal_id=${animalId}`),
+      authFetch(`/v1/animals/${animalId}/timeline`),
+    ]).then(async ([agendaResponse, timelineResponse]) => {
+      const data = agendaResponse.ok
+        ? ((await agendaResponse.json()) as {
+            local_today?: string;
+            totals?: {
+              today_pending?: number;
+              overdue?: number;
+              today_resolved?: number;
+            };
+            today_state?:
+              "no_activity" | "events_no_todos" | "pending" | "overdue";
+          })
+        : null;
+      if (!data) return;
+      const timeline = timelineResponse.ok
+        ? ((await timelineResponse.json()) as {
+            days?: Array<{
+              date: string;
+              has_activity?: boolean;
+              events?: unknown[];
+              scheduled?: unknown[];
+            }>;
+          })
+        : null;
+      const todayTimeline = timeline?.days?.find(
+        (day) => day.date === data.local_today,
+      );
+      const timelineHasActivity = Boolean(
+        todayTimeline?.has_activity ||
+        todayTimeline?.events?.length ||
+        todayTimeline?.scheduled?.length,
+      );
+      setTodaySummary({
+        hasActivity:
+          Boolean(
+            (data.totals?.today_resolved ?? 0) +
+            (data.totals?.today_pending ?? 0),
+          ) || timelineHasActivity,
+        pending: data.totals?.today_pending ?? 0,
+        overdue: data.totals?.overdue ?? 0,
+        today: data.local_today ?? "",
+        state: data.today_state,
+      });
+    });
   }, [animalId]);
 
   if (error)
@@ -71,12 +136,22 @@ export default function AnimalProfilePage({ params }: Props) {
             {animal.shelter_number} · {animal.area_name ?? "未分配區域"}
           </p>
         </div>
-        <Link className="button" href={`/animals/${animal.id}/timeline`}>
+        <Link
+          className="ui-button ui-button-default"
+          href={`/animals/${animal.id}/timeline`}
+        >
           開啟近期歷程
         </Link>
       </div>
       <div className="content-grid">
-        <section className="panel" aria-labelledby="animal-summary-title">
+        <AnimalTodaySummary
+          hasActivity={todaySummary.hasActivity}
+          pendingCount={todaySummary.pending}
+          overdueCount={todaySummary.overdue}
+          localToday={todaySummary.today}
+          state={todaySummary.state}
+        />
+        <Card className="panel" aria-labelledby="animal-summary-title">
           <h2 id="animal-summary-title">基本資料</h2>
           <dl className="detail-list">
             <div>
@@ -86,7 +161,7 @@ export default function AnimalProfilePage({ params }: Props) {
             <div>
               <dt>目前狀態</dt>
               <dd>
-                <span className="badge">{animal.status}</span>
+                <Badge>{statusLabel(animal.status)}</Badge>
               </dd>
             </div>
             <div>
@@ -101,19 +176,41 @@ export default function AnimalProfilePage({ params }: Props) {
               <dd>{animal.photo_key ? "已設定" : "尚未設定"}</dd>
             </div>
           </dl>
-        </section>
-        <section className="panel" aria-labelledby="animal-actions-title">
+        </Card>
+        <Card className="panel" aria-labelledby="animal-actions-title">
           <h2 id="animal-actions-title">工作入口</h2>
           <Link className="link-card" href={`/animals/${animal.id}/timeline`}>
             <strong>Timeline</strong>
             <p className="muted">查看近 14 日、多筆回報與 AI 狀態。</p>
           </Link>
+          <Link
+            className="link-card"
+            href={`/animals/${animal.id}/timeline?medical=1`}
+          >
+            <strong>醫療歷史</strong>
+            <p className="muted">查看就醫、用藥、疫苗與體重紀錄。</p>
+          </Link>
+          <Link
+            className="link-card"
+            href={`/care-calendar?animal_id=${animal.id}`}
+          >
+            <strong>照護提醒</strong>
+            <p className="muted">查看這隻動物今天與近期的待辦。</p>
+          </Link>
+          <Button type="button" onClick={() => setReminderOpen(true)}>
+            建立提醒
+          </Button>
           <Link className="link-card" href="/settings/qr-codes">
             <strong>QR 綁定</strong>
             <p className="muted">前往管理此收容所的 QR 綁定。</p>
           </Link>
-        </section>
+        </Card>
       </div>
+      <ReminderFormDialog
+        open={reminderOpen}
+        animalId={animal.id}
+        onClose={() => setReminderOpen(false)}
+      />
     </main>
   );
 }
