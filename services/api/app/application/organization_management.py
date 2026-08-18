@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.authentication import PasswordHasherPort
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
@@ -178,4 +180,40 @@ class OrganizationManagementService:
             if membership.role != "STAFF":
                 raise DomainError("medical_care_access_staff_only", "醫療權限只能授予 STAFF", 422)
             membership.medical_care_access = medical_care_access
+        return membership
+
+    async def archive_membership(self, membership, *, actor_user_id):
+        if membership.status == "archived":
+            raise DomainError("membership_already_archived", "Membership 已封存", 409)
+        if membership.user_id == actor_user_id:
+            raise DomainError("membership_self_archive_denied", "不能封存目前登入中的帳號", 409)
+        if membership.role == "SHELTER_ADMIN" and membership.status == "active":
+            remaining_admins = await self.repository.count_active_shelter_admins(
+                membership.organization_id,
+                exclude_membership_id=membership.id,
+            )
+            if remaining_admins == 0:
+                raise DomainError(
+                    "last_shelter_admin",
+                    "收容所至少需要一名啟用中的管理員",
+                    409,
+                )
+        membership.archived_from_status = membership.status
+        membership.status = "archived"
+        membership.archived_at = datetime.now(timezone.utc)
+        membership.archived_by_user_id = actor_user_id
+        return membership
+
+    async def restore_membership(self, membership):
+        if membership.status != "archived":
+            raise DomainError("membership_not_archived", "Membership 目前不是封存狀態", 409)
+        previous_status = membership.archived_from_status or "disabled"
+        if membership.role == "VOLUNTEER":
+            now = datetime.now(timezone.utc)
+            if membership.expires_at is not None and membership.expires_at <= now:
+                previous_status = "expired"
+        membership.status = previous_status
+        membership.archived_from_status = None
+        membership.archived_at = None
+        membership.archived_by_user_id = None
         return membership

@@ -4,7 +4,7 @@ import builtins
 from typing import TypeVar
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
@@ -73,15 +73,31 @@ class OrganizationRepository:
         return list(result.scalars())
 
     async def memberships_with_users(
-        self, organization_id: UUID
+        self, organization_id: UUID, *, include_archived: bool = False
     ) -> builtins.list[tuple[OrganizationMembership, User]]:
-        result = await self.session.execute(
+        statement = (
             select(OrganizationMembership, User)
             .join(User, User.id == OrganizationMembership.user_id)
             .where(OrganizationMembership.organization_id == organization_id)
             .order_by(OrganizationMembership.created_at)
         )
+        if not include_archived:
+            statement = statement.where(OrganizationMembership.status != "archived")
+        result = await self.session.execute(statement)
         return list(result.all())
+
+    async def count_active_shelter_admins(
+        self, organization_id: UUID, *, exclude_membership_id: UUID | None = None
+    ) -> int:
+        statement = select(func.count(OrganizationMembership.id)).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.role == "SHELTER_ADMIN",
+            OrganizationMembership.status == "active",
+        )
+        if exclude_membership_id is not None:
+            statement = statement.where(OrganizationMembership.id != exclude_membership_id)
+        result = await self.session.execute(statement)
+        return int(result.scalar_one())
 
     async def membership_by_id(
         self, membership_id: UUID, organization_id: UUID

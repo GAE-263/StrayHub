@@ -995,6 +995,8 @@ td {
 }
 .shelter-management-heading {
   align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
   margin-bottom: 0;
 }
 .shelter-management-heading p {
@@ -1014,6 +1016,80 @@ td {
 .shelter-timezone-note strong {
   color: var(--ink);
   white-space: nowrap;
+}
+.membership-card-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+.membership-header-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.membership-header-actions .field {
+  margin: 0;
+  min-width: 180px;
+}
+.card-description,
+.dialog-description,
+.membership-section-heading p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+.membership-section {
+  border-top: 1px solid var(--line);
+  padding: 22px 0 4px;
+}
+.membership-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.membership-section-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.membership-section-heading h2,
+.membership-section-heading h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.membership-section-heading .ui-badge {
+  flex: 0 0 auto;
+}
+.membership-empty {
+  background: var(--surface-soft);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  margin: 0 0 24px;
+  padding: 20px;
+  text-align: center;
+}
+.membership-history {
+  color: var(--muted);
+  font-size: 12px;
+}
+.archived-membership-item {
+  background: var(--surface);
+}
+.account-dialog {
+  max-height: min(720px, calc(100vh - 32px));
+  overflow-y: auto;
+}
+.account-dialog form {
+  margin-top: 18px;
+}
+.account-dialog .dialog-actions {
+  justify-content: flex-end;
+  margin-top: 22px;
 }
 .membership-list {
   display: grid;
@@ -1073,10 +1149,6 @@ td {
   height: 18px;
   width: 18px;
 }
-.membership-list + form {
-  border-top: 1px solid var(--line);
-  padding-top: 24px;
-}
 @media (max-width: 1080px) {
   .membership-item {
     align-items: flex-start;
@@ -1086,8 +1158,19 @@ td {
     grid-column: 1 / -1;
     justify-content: flex-start;
   }
+  .membership-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .membership-header-actions {
+    justify-content: flex-start;
+  }
 }
 @media (max-width: 600px) {
+  .shelter-management-heading {
+    flex-direction: column;
+    gap: 14px;
+  }
   .shelter-timezone-note {
     align-items: flex-start;
     flex-direction: column;
@@ -1095,6 +1178,14 @@ td {
   }
   .membership-item {
     grid-template-columns: 1fr;
+  }
+  .membership-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .membership-header-actions .field,
+  .membership-header-actions .ui-button {
+    width: 100%;
   }
   .membership-actions {
     grid-column: auto;

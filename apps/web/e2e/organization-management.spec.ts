@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function mockOrganizationManagement(page: Page, role: string) {
+  let archived = true;
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/auth/me")) {
@@ -97,6 +98,46 @@ async function mockOrganizationManagement(page: Page, role: string) {
       });
       return;
     }
+    if (url.pathname.endsWith("/memberships/archived")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: archived
+            ? [
+                {
+                  id: "membership-archived",
+                  organization_id: "org-a",
+                  user_id: "archived-user",
+                  username: "archived-staff",
+                  display_name: "已封存工作人員",
+                  role: "STAFF",
+                  status: "archived",
+                  archived_from_status: "disabled",
+                },
+              ]
+            : [],
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/restore")) {
+      archived = false;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "membership-archived",
+          organization_id: "org-a",
+          user_id: "archived-user",
+          username: "archived-staff",
+          display_name: "已封存工作人員",
+          role: "STAFF",
+          status: "disabled",
+        }),
+      });
+      return;
+    }
     if (
       url.pathname.endsWith("/memberships") ||
       url.pathname.endsWith("/areas")
@@ -161,7 +202,7 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   await mockOrganizationManagement(page, "SHELTER_ADMIN");
   await page.goto("/shelters");
   await expect(page.getByRole("heading", { name: "權限管理" })).toBeVisible();
-  await expect(page.getByText("帳號與 Membership")).toBeVisible();
+  await expect(page.getByText("帳號與權限")).toBeVisible();
   await expect(page.getByText("本機工作人員 A")).toBeVisible();
   await expect(page.getByText("帳號：local-staff-a")).toBeVisible();
   await expect(
@@ -172,6 +213,11 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "建立收容所" })).toHaveCount(
     0,
   );
+  await page.getByRole("button", { name: "建立帳號" }).click();
+  await expect(
+    page.getByRole("heading", { name: "建立機構帳號" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
   const denied = await page.evaluate(async () => {
     const response = await fetch("/v1/organizations", {
       method: "POST",
@@ -188,4 +234,20 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   });
   expect(denied.status).toBe(403);
   expect(denied.body.code).toBe("platform_admin_required");
+});
+
+test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("access_token", "test-access"),
+  );
+  await mockOrganizationManagement(page, "SHELTER_ADMIN");
+  await page.goto("/shelters/archived");
+  await expect(page.getByRole("heading", { name: "已封存成員" })).toBeVisible();
+  await expect(page.getByText("已封存工作人員")).toBeVisible();
+  await expect(page.getByText("封存前：已停用")).toBeVisible();
+  await page.getByRole("button", { name: "恢復成員" }).click();
+  await expect(page.getByRole("status")).toContainText("成員已恢復");
+  await expect(
+    page.getByText("目前沒有符合條件的封存管理人員。"),
+  ).toBeVisible();
 });

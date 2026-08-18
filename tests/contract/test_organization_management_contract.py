@@ -21,6 +21,9 @@ def test_organization_management_contract_declares_memberships_areas_and_isolati
     )
     paths = document["paths"]
     assert "/v1/organizations/{organizationId}/memberships" in paths
+    assert "/v1/organizations/{organizationId}/memberships/archived" in paths
+    assert "/v1/organizations/{organizationId}/memberships/{membershipId}/archive" in paths
+    assert "/v1/organizations/{organizationId}/memberships/{membershipId}/restore" in paths
     assert "/v1/organizations/{organizationId}/accounts" in paths
     assert "/v1/organizations/{organizationId}/areas" in paths
     assert "organization_id" in document["components"]["schemas"]["ShelterArea"]["properties"]
@@ -69,6 +72,8 @@ def test_membership_contract_exposes_finite_volunteer_projection() -> None:
     properties = document["components"]["schemas"]["Membership"]["properties"]
     assert {"valid_from", "expires_at", "access_version"} <= properties.keys()
     assert {"username", "display_name"} <= properties.keys()
+    assert {"archived_from_status", "archived_at", "archived_by_user_id"} <= properties.keys()
+    assert "archived" in properties["status"]["enum"]
     assert {"valid_from", "expires_at", "access_version"} <= MembershipResponse.model_fields.keys()
 
 
@@ -90,6 +95,24 @@ def test_membership_response_includes_user_identity_projection() -> None:
 
     assert response.username == "local-staff-a"
     assert response.display_name == "本機工作人員 A"
+
+
+def test_organization_router_exposes_membership_archive_lifecycle_operations():
+    routes = {
+        (route.path, method.upper())
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods or set()
+    }
+    assert ("/v1/organizations/{organizationId}/memberships/archived", "GET") in routes
+    assert (
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/archive",
+        "POST",
+    ) in routes
+    assert (
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/restore",
+        "POST",
+    ) in routes
 
 
 def test_auth_contract_distinguishes_platform_role_from_shelter_membership_role() -> None:

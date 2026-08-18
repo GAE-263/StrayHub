@@ -263,6 +263,49 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/organizations/{organizationId}/memberships/archived:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Memberships]
+      operationId: listArchivedMemberships
+      responses:
+        "200":
+          description: 收容所已封存 Membership
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MembershipListResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/organizations/{organizationId}/memberships/{membershipId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/MembershipId"
+    post:
+      tags: [Memberships]
+      operationId: archiveMembership
+      responses:
+        "200":
+          description: Membership 已封存
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/organizations/{organizationId}/memberships/{membershipId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/MembershipId"
+    post:
+      tags: [Memberships]
+      operationId: restoreMembership
+      responses:
+        "200":
+          description: Membership 已恢復
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/organizations/{organizationId}/areas:
     parameters:
       - $ref: "#/components/parameters/OrganizationId"
@@ -2507,7 +2550,7 @@ components:
         organization_id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
         role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
-        status: { type: string, enum: [invited, active, disabled, expired, revoked] }
+        status: { type: string, enum: [invited, active, disabled, expired, revoked, archived] }
         valid_from:
           type: [string, "null"]
           format: date-time
@@ -2518,6 +2561,9 @@ components:
         medical_care_access: { type: boolean, default: false }
         username: { type: [string, "null"] }
         display_name: { type: [string, "null"] }
+        archived_from_status: { type: [string, "null"] }
+        archived_at: { type: [string, "null"], format: date-time }
+        archived_by_user_id: { type: [string, "null"], format: uuid }
     MembershipCreateRequest:
       type: object
       required: [user_id, role]

@@ -186,6 +186,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/{organizationId}/memberships/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listArchivedMemberships"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/{organizationId}/accounts": {
         parameters: {
             query?: never;
@@ -221,6 +239,44 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateMembership"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/memberships/{membershipId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: components["parameters"]["MembershipId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archiveMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/memberships/{membershipId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: components["parameters"]["MembershipId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restoreMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/organizations/{organizationId}/areas": {
@@ -1822,7 +1878,7 @@ export interface components {
             /** @enum {string} */
             role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
             /** @enum {string} */
-            status: "invited" | "active" | "disabled" | "expired" | "revoked";
+            status: "invited" | "active" | "disabled" | "expired" | "revoked" | "archived";
             /** Format: date-time */
             valid_from?: string | null;
             /** Format: date-time */
@@ -1833,6 +1889,9 @@ export interface components {
             medical_care_access: boolean;
             username?: string | null;
             display_name?: string | null;
+            archived_from_status?: string | null;
+            archived_at?: string | null;
+            archived_by_user_id?: string | null;
         };
         MembershipCreateRequest: {
             /** Format: uuid */
@@ -3190,6 +3249,28 @@ export interface operations {
             };
         };
     };
+    listArchivedMemberships: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipListResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
     createMembership: {
         parameters: {
             query?: never;
@@ -3270,6 +3351,54 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    archiveMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: components["parameters"]["MembershipId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Membership"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: components["parameters"]["MembershipId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Membership"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     listShelterAreas: {

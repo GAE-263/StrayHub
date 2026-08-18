@@ -18,6 +18,24 @@ const organization = {
   timezone_version: 1,
 };
 
+if (!HTMLDialogElement.prototype.showModal) {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+    configurable: true,
+    value() {
+      this.open = true;
+    },
+  });
+}
+
+if (!HTMLDialogElement.prototype.close) {
+  Object.defineProperty(HTMLDialogElement.prototype, "close", {
+    configurable: true,
+    value() {
+      this.open = false;
+    },
+  });
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -106,10 +124,14 @@ describe("shelter management page authorization", () => {
     expect(container?.textContent).toContain(
       "台灣各地收容所統一使用 Asia/Taipei",
     );
-    expect(container?.textContent).toContain("帳號與 Membership");
+    expect(container?.textContent).toContain("帳號與權限");
     expect(container?.textContent).not.toContain("建立收容所");
     expect(container?.textContent).toContain("本機工作人員 A");
     expect(container?.textContent).toContain("帳號：local-staff-a");
+    expect(container?.textContent).toContain("管理人員");
+    expect(container?.textContent).toContain("志工");
+    expect(container?.textContent).toContain("查看已封存成員");
+    expect(container?.textContent).toContain("建立帳號");
     expect(container?.textContent).not.toContain("照護日期與時區");
     expect(container?.textContent).not.toContain("儲存時區");
   });
@@ -117,7 +139,25 @@ describe("shelter management page authorization", () => {
   it("does not expose shelter settings to STAFF", async () => {
     await renderPage("STAFF");
     expect(container?.textContent).not.toContain("照護日期與時區");
-    expect(container?.textContent).not.toContain("帳號與 Membership");
+    expect(container?.textContent).not.toContain("帳號與權限");
     expect(container?.textContent).not.toContain("建立收容所");
+  });
+
+  it("opens and closes the account creation modal from the page header", async () => {
+    await renderPage("SHELTER_ADMIN");
+    const createButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "建立帳號");
+    expect(createButton).toBeDefined();
+    await act(async () => createButton?.click());
+    expect(container?.textContent).toContain("建立機構帳號");
+    expect(container?.querySelector('[role="dialog"]')).not.toBeNull();
+    const cancelButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "取消");
+    await act(async () => cancelButton?.click());
+    expect(
+      container?.querySelector<HTMLDialogElement>('[role="dialog"]')?.open,
+    ).toBe(false);
   });
 });

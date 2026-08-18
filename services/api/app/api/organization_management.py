@@ -78,6 +78,9 @@ class MembershipResponse(BaseModel):
     medical_care_access: bool = False
     username: str | None = None
     display_name: str | None = None
+    archived_from_status: str | None = None
+    archived_at: datetime | None = None
+    archived_by_user_id: UUID | None = None
 
 
 class MembershipCreateRequest(BaseModel):
@@ -239,6 +242,9 @@ def _membership_response(membership: OrganizationMembership, user=None) -> Membe
             "medical_care_access": getattr(membership, "medical_care_access", False) or False,
             "username": getattr(user, "username", None),
             "display_name": getattr(user, "display_name", None),
+            "archived_from_status": getattr(membership, "archived_from_status", None),
+            "archived_at": getattr(membership, "archived_at", None),
+            "archived_by_user_id": getattr(membership, "archived_by_user_id", None),
         }
     )
 
@@ -489,6 +495,31 @@ async def list_memberships(
     return {"items": [_membership_response(membership, user) for membership, user in memberships]}
 
 
+@router.get(
+    "/v1/organizations/{organizationId}/memberships/archived",
+    response_model=dict,
+)
+async def list_archived_memberships(
+    organizationId: UUID,  # noqa: N803
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
+    memberships = await OrganizationRepository(session).memberships_with_users(
+        organizationId,
+        include_archived=True,
+    )
+    archived = [
+        (membership, user) for membership, user in memberships if membership.status == "archived"
+    ]
+    return {"items": [_membership_response(membership, user) for membership, user in archived]}
+
+
 @router.post(
     "/v1/organizations/{organizationId}/memberships",
     response_model=MembershipResponse,
@@ -612,7 +643,82 @@ async def update_membership(
         after=payload.model_dump(exclude_none=True),
     )
     await session.commit()
-    return _membership_response(membership)
+    return _membership_response(membership, await repository.user(membership.user_id))
+
+
+@router.post(
+    "/v1/organizations/{organizationId}/memberships/{membershipId}/archive",
+    response_model=MembershipResponse,
+)
+async def archive_membership(
+    organizationId: UUID,  # noqa: N803
+    membershipId: UUID,  # noqa: N803
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> MembershipResponse:
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
+    repository = OrganizationRepository(session)
+    membership = await repository.membership_by_id(membershipId, organizationId)
+    if membership is None:
+        raise DomainError("membership_not_found", "Membership 不存在或無法存取", 404)
+    membership = await OrganizationManagementService(
+        repository, Argon2PasswordHasher()
+    ).archive_membership(membership, actor_user_id=context.user_id)
+    await AuditService(session).record(
+        organization_id=organizationId,
+        actor_user_id=context.user_id,
+        action="membership.archived",
+        resource_type="organization_membership",
+        resource_id=membership.id,
+        source_channel="api",
+        before={"status": membership.archived_from_status},
+        after={"status": membership.status},
+    )
+    await session.commit()
+    return _membership_response(membership, await repository.user(membership.user_id))
+
+
+@router.post(
+    "/v1/organizations/{organizationId}/memberships/{membershipId}/restore",
+    response_model=MembershipResponse,
+)
+async def restore_membership(
+    organizationId: UUID,  # noqa: N803
+    membershipId: UUID,  # noqa: N803
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> MembershipResponse:
+    await _require_membership_admin_with_audit(
+        context,
+        session,
+        organizationId,
+        resource_type="organization_membership",
+    )
+    repository = OrganizationRepository(session)
+    membership = await repository.membership_by_id(membershipId, organizationId)
+    if membership is None:
+        raise DomainError("membership_not_found", "Membership 不存在或無法存取", 404)
+    previous_status = membership.archived_from_status
+    membership = await OrganizationManagementService(
+        repository, Argon2PasswordHasher()
+    ).restore_membership(membership)
+    await AuditService(session).record(
+        organization_id=organizationId,
+        actor_user_id=context.user_id,
+        action="membership.restored",
+        resource_type="organization_membership",
+        resource_id=membership.id,
+        source_channel="api",
+        before={"status": "archived", "archived_from_status": previous_status},
+        after={"status": membership.status},
+    )
+    await session.commit()
+    return _membership_response(membership, await repository.user(membership.user_id))
 
 
 @router.get("/v1/organizations/{organizationId}/areas", response_model=dict)
