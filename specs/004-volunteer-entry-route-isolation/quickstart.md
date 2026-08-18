@@ -34,16 +34,16 @@ uv run python -m scripts.seed_local
 確認 `.env` 至少包含 local `LINE_CHANNEL_ID`、`LIFF_ID`、JWT keys 與 database settings。分別啟動 API 與 Web：
 
 ```bash
-uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8000
-npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
+uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8001
+npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
 ```
 
 入口：
 
-- Web：<http://127.0.0.1:3000>
-- Local login：<http://127.0.0.1:3000/login>
-- LIFF bootstrap（fixture）：`http://127.0.0.1:3000/volunteer-entry?entry=<local-reference>`
-- API health：<http://127.0.0.1:8000/healthz>
+- Web：<http://127.0.0.1:3001>
+- Local login：<http://127.0.0.1:3001/login>
+- LIFF bootstrap（fixture）：`http://127.0.0.1:3001/volunteer-entry?entry=<local-reference>`
+- API health：<http://127.0.0.1:8001/healthz>
 
 不得把 raw ID token 或 entry reference 貼入 issue、snapshot、test report 或錄影。local seed 的 deterministic reference 只可用於非正式環境。
 

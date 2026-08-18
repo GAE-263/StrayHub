@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function mockOrganizationManagement(page: Page, role: string) {
+  let archived = true;
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/auth/me")) {
@@ -97,6 +98,48 @@ async function mockOrganizationManagement(page: Page, role: string) {
       });
       return;
     }
+    if (url.pathname.endsWith("/memberships/archived")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: archived
+            ? [
+                {
+                  id: "membership-archived",
+                  organization_id: "org-a",
+                  user_id: "archived-user",
+                  username: "archived-staff",
+                  display_name: "已封存工作人員",
+                  role: "STAFF",
+                  status: "archived",
+                  access_version: 1,
+                  archived_from_status: "disabled",
+                },
+              ]
+            : [],
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/restore")) {
+      archived = false;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "membership-archived",
+          organization_id: "org-a",
+          user_id: "archived-user",
+          username: "archived-staff",
+          display_name: "已封存工作人員",
+          role: "STAFF",
+          status: "disabled",
+          access_version: 2,
+        }),
+      });
+      return;
+    }
     if (
       url.pathname.endsWith("/memberships") ||
       url.pathname.endsWith("/areas")
@@ -104,7 +147,46 @@ async function mockOrganizationManagement(page: Page, role: string) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ items: [] }),
+        body: JSON.stringify({
+          items: url.pathname.endsWith("/memberships")
+            ? [
+                {
+                  id: "membership-admin",
+                  organization_id: "org-a",
+                  user_id: "admin-id",
+                  username: "local-admin-a",
+                  display_name: "本機管理員 A",
+                  role: "SHELTER_ADMIN",
+                  status: "active",
+                  access_version: 1,
+                  medical_care_access: false,
+                },
+                {
+                  id: "membership-staff",
+                  organization_id: "org-a",
+                  user_id: "staff-id",
+                  username: "local-staff-a",
+                  display_name: "本機工作人員 A",
+                  role: "STAFF",
+                  status: "disabled",
+                  access_version: 1,
+                  medical_care_access: false,
+                },
+                {
+                  id: "membership-volunteer",
+                  organization_id: "org-a",
+                  user_id: "volunteer-id",
+                  username: "local-volunteer-a",
+                  display_name: "本機志工 A",
+                  role: "VOLUNTEER",
+                  status: "disabled",
+                  access_version: 1,
+                  medical_care_access: false,
+                  volunteer_authorization_status: "revoked",
+                },
+              ]
+            : [],
+        }),
       });
       return;
     }
@@ -122,9 +204,7 @@ test("PLATFORM_ADMIN 可看到建立收容所表單", async ({ page }) => {
   );
   await mockOrganizationManagement(page, "PLATFORM_ADMIN");
   await page.goto("/shelters");
-  await expect(
-    page.getByRole("heading", { name: "收容所與帳號管理" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "權限管理" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "建立收容所" })).toBeVisible();
   await page.getByLabel("機構代碼").fill("ORG-NEW");
   await page.getByLabel("收容所名稱").fill("新收容所");
@@ -147,11 +227,24 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   );
   await mockOrganizationManagement(page, "SHELTER_ADMIN");
   await page.goto("/shelters");
-  await expect(page.getByText("照護日期與時區")).toBeVisible();
-  await expect(page.getByText("帳號與 Membership")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "權限管理" })).toBeVisible();
+  await expect(page.getByText("帳號與權限")).toBeVisible();
+  await expect(page.getByText("本機工作人員 A")).toBeVisible();
+  await expect(page.getByText("帳號：local-staff-a")).toBeVisible();
+  await expect(page.getByText("時區")).toHaveCount(0);
+  await expect(page.getByLabel("收容所時區")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "儲存時區" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "建立收容所" })).toHaveCount(
     0,
   );
+  await expect(page.getByRole("heading", { name: "志工" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "工作人員" })).toBeVisible();
+  await expect(page.getByText("授權已撤銷")).toBeVisible();
+  await page.getByRole("button", { name: "建立帳號" }).click();
+  await expect(
+    page.getByRole("heading", { name: "建立機構帳號" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
   const denied = await page.evaluate(async () => {
     const response = await fetch("/v1/organizations", {
       method: "POST",
@@ -168,4 +261,21 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   });
   expect(denied.status).toBe(403);
   expect(denied.body.code).toBe("platform_admin_required");
+});
+
+test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("access_token", "test-access"),
+  );
+  await mockOrganizationManagement(page, "SHELTER_ADMIN");
+  await page.goto("/shelters/archived");
+  await expect(page.getByRole("heading", { name: "已封存成員" })).toBeVisible();
+  await expect(page.getByText("已封存工作人員")).toBeVisible();
+  await expect(page.getByText("封存前：已停用")).toBeVisible();
+  await page.getByRole("button", { name: "恢復成員" }).click();
+  await page.getByRole("button", { name: "確認調整" }).click();
+  await expect(page.getByRole("status")).toContainText("已恢復成員");
+  await expect(
+    page.getByText("目前沒有符合條件的封存工作人員。"),
+  ).toBeVisible();
 });

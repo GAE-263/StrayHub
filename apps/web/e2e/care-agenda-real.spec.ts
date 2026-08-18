@@ -123,7 +123,9 @@ test.describe("Care Agenda 真實 API 100／500 驗收", () => {
         unexpected: 0,
         classification_pass_rate: 1,
       };
-      console.log(`[T097 agenda-500] ${JSON.stringify(classificationEvidence)}`);
+      console.log(
+        `[T097 agenda-500] ${JSON.stringify(classificationEvidence)}`,
+      );
       await testInfo.attach("care-agenda-500-classification.json", {
         body: JSON.stringify(classificationEvidence, null, 2),
         contentType: "application/json",

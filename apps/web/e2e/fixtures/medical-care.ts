@@ -18,7 +18,7 @@ export async function seedMedicalCareFixture(page: Page) {
   if (process.env.STRAYHUB_MEDICAL_E2E_SEED_ALLOWED !== "1") {
     throw new Error("setup error: 請設定 STRAYHUB_MEDICAL_E2E_SEED_ALLOWED=1");
   }
-  const healthUrl = `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000"}/healthz`;
+  const healthUrl = `${process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8001"}/healthz`;
   let healthy = false;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {

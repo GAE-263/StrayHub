@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import Link from "next/link";
 import { authFetch, type CurrentUser } from "../../../lib/auth";
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -18,8 +19,11 @@ import {
   CardTitle,
 } from "../../../components/ui/card";
 import { Field } from "../../../components/ui/field";
+import { Dialog } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Select } from "../../../components/ui/select";
+import { Toast } from "../../../components/ui/toast";
+import { MembershipPermissionDialog } from "../../../components/management/MembershipPermissionDialog";
 
 type Shelter = {
   id: string;
@@ -35,8 +39,15 @@ type Membership = {
   organization_id: string;
   user_id: string;
   role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
-  status: "invited" | "active" | "disabled";
+  status: "invited" | "active" | "disabled" | "expired" | "revoked";
+  access_version: number;
   medical_care_access: boolean;
+  username?: string | null;
+  display_name?: string | null;
+  archived_from_status?: string | null;
+  archived_at?: string | null;
+  archived_by_user_id?: string | null;
+  volunteer_authorization_status?: "active" | "expired" | "revoked" | null;
 };
 
 type Area = {
@@ -45,6 +56,72 @@ type Area = {
   area_type: "area" | "cage";
   status: "active" | "inactive";
 };
+
+type MembershipChanges = Partial<
+  Pick<Membership, "role" | "status" | "medical_care_access">
+>;
+
+type PendingMembershipChange = {
+  membership: Membership;
+  changes: MembershipChanges;
+  operation: string;
+  before: string;
+  after: string;
+  adminCountBefore: number;
+  adminCountAfter: number;
+};
+
+const roleLabels: Record<Membership["role"], string> = {
+  SHELTER_ADMIN: "收容所管理員",
+  STAFF: "工作人員",
+  VOLUNTEER: "志工",
+};
+
+const membershipStatusLabels: Record<string, string> = {
+  invited: "待接受",
+  active: "啟用中",
+  disabled: "已停用",
+  expired: "已過期",
+  revoked: "已撤銷",
+};
+
+const volunteerAuthorizationLabels: Record<string, string> = {
+  expired: "授權已到期",
+  revoked: "授權已撤銷",
+};
+
+const membershipStatusOrder: Record<string, number> = {
+  active: 0,
+  disabled: 1,
+  expired: 2,
+  revoked: 3,
+  invited: 4,
+};
+
+function sortMemberships(left: Membership, right: Membership) {
+  const leftStatus =
+    left.volunteer_authorization_status === "revoked"
+      ? "revoked"
+      : left.volunteer_authorization_status === "expired"
+        ? "expired"
+        : left.status;
+  const rightStatus =
+    right.volunteer_authorization_status === "revoked"
+      ? "revoked"
+      : right.volunteer_authorization_status === "expired"
+        ? "expired"
+        : right.status;
+  const statusOrder =
+    (membershipStatusOrder[leftStatus] ?? 99) -
+    (membershipStatusOrder[rightStatus] ?? 99);
+  if (statusOrder !== 0) return statusOrder;
+  if (left.role !== right.role) {
+    return left.role === "SHELTER_ADMIN" ? -1 : 1;
+  }
+  return (left.display_name ?? left.username ?? "").localeCompare(
+    right.display_name ?? right.username ?? "",
+  );
+}
 
 async function responseData<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -76,11 +153,16 @@ export default function SheltersManagementPage() {
   const [accountDisplayName, setAccountDisplayName] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
   const [accountRole, setAccountRole] = useState<Membership["role"]>("STAFF");
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [accountConfirmationOpen, setAccountConfirmationOpen] = useState(false);
+  const [pendingMembershipChange, setPendingMembershipChange] =
+    useState<PendingMembershipChange | null>(null);
+  const [confirmingChange, setConfirmingChange] = useState(false);
   const [areaName, setAreaName] = useState("");
   const [areaType, setAreaType] = useState<Area["area_type"]>("area");
-  const [timezone, setTimezone] = useState("Asia/Taipei");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
   const selectedShelter = useMemo(
     () => shelters.find((shelter) => shelter.id === selectedShelterId),
     [shelters, selectedShelterId],
@@ -97,10 +179,20 @@ export default function SheltersManagementPage() {
   const canManageShelterSettings = ["PLATFORM_ADMIN", "SHELTER_ADMIN"].includes(
     currentRole ?? "",
   );
-
-  useEffect(() => {
-    if (selectedShelter) setTimezone(selectedShelter.timezone || "Asia/Taipei");
-  }, [selectedShelter]);
+  const managementMemberships = useMemo(
+    () =>
+      memberships
+        .filter((membership) => membership.role !== "VOLUNTEER")
+        .sort(sortMemberships),
+    [memberships],
+  );
+  const volunteerMemberships = useMemo(
+    () =>
+      memberships
+        .filter((membership) => membership.role === "VOLUNTEER")
+        .sort(sortMemberships),
+    [memberships],
+  );
 
   const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -183,6 +275,54 @@ export default function SheltersManagementPage() {
     }
   };
 
+  const activeAdminCount = useMemo(
+    () =>
+      memberships.filter(
+        (membership) =>
+          membership.role === "SHELTER_ADMIN" && membership.status === "active",
+      ).length,
+    [memberships],
+  );
+
+  const adminCountAfter = (
+    membership: Membership,
+    changes: MembershipChanges,
+  ) => {
+    const wasActiveAdmin =
+      membership.role === "SHELTER_ADMIN" && membership.status === "active";
+    const willBeActiveAdmin =
+      (changes.role ?? membership.role) === "SHELTER_ADMIN" &&
+      (changes.status ?? membership.status) === "active";
+    return (
+      activeAdminCount - (wasActiveAdmin ? 1 : 0) + (willBeActiveAdmin ? 1 : 0)
+    );
+  };
+
+  const openMembershipChange = (
+    membership: Membership,
+    changes: MembershipChanges,
+    operation: string,
+  ) => {
+    const nextRole = changes.role ?? membership.role;
+    const nextStatus =
+      operation === "封存成員"
+        ? "archived"
+        : (changes.status ?? membership.status);
+    const nextMedical =
+      changes.medical_care_access ?? membership.medical_care_access;
+    setErrorMessage("");
+    setMessage("");
+    setPendingMembershipChange({
+      membership,
+      changes,
+      operation,
+      before: `${roleLabels[membership.role]}／${membershipStatusLabels[membership.status]}${membership.role === "STAFF" ? `／醫療資料權限${membership.medical_care_access ? "開啟" : "關閉"}` : ""}`,
+      after: `${roleLabels[nextRole]}／${membershipStatusLabels[nextStatus] ?? nextStatus}${nextRole === "STAFF" ? `／醫療資料權限${nextMedical ? "開啟" : "關閉"}` : ""}`,
+      adminCountBefore: activeAdminCount,
+      adminCountAfter: adminCountAfter(membership, changes),
+    });
+  };
+
   const createShelter = async () => {
     const data = await request<Shelter>("/v1/organizations", {
       method: "POST",
@@ -209,50 +349,210 @@ export default function SheltersManagementPage() {
   };
 
   const createAccount = async () => {
-    await request<Membership>(
-      `/v1/organizations/${selectedShelterId}/accounts`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          username: accountUsername,
-          display_name: accountDisplayName,
-          temporary_password: accountPassword,
-          role: accountRole,
-        }),
-      },
-    );
+    const createdIdentity = accountDisplayName || accountUsername;
+    const createdRole = accountRole;
+    try {
+      await request<Membership>(
+        `/v1/organizations/${selectedShelterId}/accounts`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            username: accountUsername,
+            display_name: accountDisplayName,
+            temporary_password: accountPassword,
+            role: accountRole,
+          }),
+        },
+      );
+    } catch (error) {
+      setAccountPassword("");
+      throw error;
+    }
     setMessage("帳號與 Membership 已建立。");
     setAccountUsername("");
     setAccountDisplayName("");
     setAccountPassword("");
+    setAccountDialogOpen(false);
     await loadShelterDetails();
+    setToastMessage(
+      createdRole === "SHELTER_ADMIN"
+        ? `已建立收容所管理員帳號「${createdIdentity}」`
+        : `已建立${roleLabels[createdRole]}帳號「${createdIdentity}」`,
+    );
   };
 
   const updateMembership = async (
-    membershipId: string,
-    changes: Partial<
-      Pick<Membership, "role" | "status" | "medical_care_access">
-    >,
+    membership: Membership,
+    changes: MembershipChanges,
   ) => {
     await request<Membership>(
-      `/v1/organizations/${selectedShelterId}/memberships/${membershipId}`,
+      `/v1/organizations/${selectedShelterId}/memberships/${membership.id}`,
       {
         method: "PATCH",
-        body: JSON.stringify(changes),
+        body: JSON.stringify({
+          ...changes,
+          expected_access_version: membership.access_version,
+        }),
       },
     );
-    setMessage("Membership 已更新並寫入 Audit。");
     await loadShelterDetails();
   };
 
-  const updateTimezone = async () => {
-    if (!selectedShelterId) return;
-    await request<Shelter>(`/v1/organizations/${selectedShelterId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ timezone }),
-    });
-    setMessage("收容所時區已更新，後續提醒與今日日期會依新時區計算。");
-    await loadShelters(selectedShelterId);
+  const archiveMembership = async (membership: Membership) => {
+    await request<Membership>(
+      `/v1/organizations/${selectedShelterId}/memberships/${membership.id}/archive`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          expected_access_version: membership.access_version,
+        }),
+      },
+    );
+    await loadShelterDetails();
+  };
+
+  const confirmMembershipChange = async () => {
+    if (!pendingMembershipChange) return;
+    const pending = pendingMembershipChange;
+    setConfirmingChange(true);
+    try {
+      if (pending.operation === "封存成員") {
+        await archiveMembership(pending.membership);
+      } else {
+        await updateMembership(pending.membership, pending.changes);
+      }
+      setPendingMembershipChange(null);
+      setToastMessage(
+        `已完成${pending.operation}：「${pending.membership.display_name || pending.membership.username || "未命名使用者"}」`,
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "操作失敗");
+      if (error instanceof Error && error.message.includes("409")) {
+        await loadShelterDetails();
+      }
+    } finally {
+      setConfirmingChange(false);
+    }
+  };
+
+  const submitAccountForm = (event: FormEvent) => {
+    event.preventDefault();
+    if (accountRole === "SHELTER_ADMIN") {
+      setAccountConfirmationOpen(true);
+      return;
+    }
+    void runAction(createAccount);
+  };
+
+  const renderMembership = (membership: Membership) => {
+    const identity =
+      membership.display_name || membership.username || "未命名使用者";
+    const isCurrentUser = membership.user_id === currentUser?.user.id;
+    const authorizationStatus = membership.volunteer_authorization_status;
+    const isAuthorizationInactive = ["expired", "revoked"].includes(
+      authorizationStatus ?? "",
+    );
+    const canReenable =
+      membership.status === "disabled" && !isAuthorizationInactive;
+    const isMuted = membership.status !== "active" || isAuthorizationInactive;
+    return (
+      <li
+        className={`membership-item${isMuted ? " membership-item-muted" : ""}`}
+        key={membership.id}
+      >
+        <div className="membership-identity">
+          <strong>{identity}</strong>
+          {membership.username && (
+            <span className="membership-username">
+              帳號：{membership.username}
+            </span>
+          )}
+        </div>
+        <div className="membership-meta">
+          <Badge>{roleLabels[membership.role]}</Badge>
+          <Badge>
+            {membershipStatusLabels[membership.status] ?? membership.status}
+          </Badge>
+          {authorizationStatus && authorizationStatus !== "active" ? (
+            <Badge>{volunteerAuthorizationLabels[authorizationStatus]}</Badge>
+          ) : null}
+        </div>
+        <div className="membership-actions">
+          <Select
+            aria-label={`${identity} 角色`}
+            value={membership.role}
+            onChange={(event) =>
+              openMembershipChange(
+                membership,
+                {
+                  role: event.target.value as Membership["role"],
+                },
+                "調整角色",
+              )
+            }
+          >
+            <option value="SHELTER_ADMIN">收容所管理員</option>
+            <option value="STAFF">工作人員</option>
+            <option value="VOLUNTEER">志工</option>
+          </Select>
+          {membership.role === "STAFF" ? (
+            <label className="membership-permission">
+              <input
+                type="checkbox"
+                checked={membership.medical_care_access}
+                aria-label={`${identity} 醫療資料權限`}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  openMembershipChange(
+                    membership,
+                    { medical_care_access: enabled },
+                    enabled ? "開啟醫療資料權限" : "停用醫療資料權限",
+                  );
+                }}
+              />
+              醫療資料權限
+            </label>
+          ) : null}
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={membership.status !== "active"}
+            onClick={() =>
+              openMembershipChange(
+                membership,
+                { status: "disabled" },
+                "停用成員",
+              )
+            }
+          >
+            停用
+          </Button>
+          {canReenable ? (
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() =>
+                openMembershipChange(
+                  membership,
+                  { status: "active" },
+                  "重新啟用成員",
+                )
+              }
+            >
+              重新啟用
+            </Button>
+          ) : null}
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={isCurrentUser}
+            onClick={() => openMembershipChange(membership, {}, "封存成員")}
+          >
+            封存
+          </Button>
+        </div>
+      </li>
+    );
   };
 
   const createArea = async () => {
@@ -266,13 +566,22 @@ export default function SheltersManagementPage() {
   };
 
   return (
-    <main aria-labelledby="shelter-management-title">
-      <h1 id="shelter-management-title">收容所與帳號管理</h1>
-      <p>所有資料操作都由後端依驗證後的機構範圍判定。</p>
+    <main
+      className="shelter-management-page"
+      aria-labelledby="shelter-management-title"
+    >
+      <div className="page-heading shelter-management-heading">
+        <div>
+          <span className="eyebrow">SHELTER ADMINISTRATION</span>
+          <h1 id="shelter-management-title">權限管理</h1>
+          <p>管理目前收容所的帳號角色、狀態與資料存取權限。</p>
+        </div>
+      </div>
       {errorMessage && (
         <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
       )}
       {message && <Alert role="status">{message}</Alert>}
+      {toastMessage && <Toast>{toastMessage}</Toast>}
 
       <Card aria-labelledby="shelter-list-title">
         <CardHeader>
@@ -303,35 +612,6 @@ export default function SheltersManagementPage() {
                 啟用收容所
               </Button>
             )}
-          {canManageShelterSettings && (
-            <div className="stack-sm">
-              <h3>照護日期與時區</h3>
-              <p className="muted">
-                目前版本的今日待辦、提醒與動物時間軸都使用此收容所時區。
-              </p>
-              <Field>
-                <label htmlFor="shelter-timezone">收容所時區</label>
-                <Select
-                  id="shelter-timezone"
-                  value={timezone}
-                  onChange={(event) => setTimezone(event.target.value)}
-                >
-                  <option value="Asia/Taipei">Asia/Taipei（台灣）</option>
-                  <option value="Asia/Tokyo">Asia/Tokyo（日本）</option>
-                  <option value="UTC">UTC</option>
-                </Select>
-              </Field>
-              <Button
-                type="button"
-                disabled={
-                  !selectedShelterId || timezone === selectedShelter?.timezone
-                }
-                onClick={() => void runAction(updateTimezone)}
-              >
-                儲存時區
-              </Button>
-            </div>
-          )}
           {canManageOrganizations && (
             <form onSubmit={(event) => void submit(event, createShelter)}>
               <h3>建立收容所</h3>
@@ -386,129 +666,171 @@ export default function SheltersManagementPage() {
 
       {canManageShelterSettings && (
         <Card aria-labelledby="account-list-title">
-          <CardHeader>
-            <CardTitle id="account-list-title">帳號與 Membership</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul>
-              {memberships.map((membership) => (
-                <li key={membership.id}>
-                  <span>
-                    {membership.user_id}（<Badge>{membership.status}</Badge>）
-                  </span>
-                  <Select
-                    aria-label={`${membership.user_id} 角色`}
-                    defaultValue={membership.role}
-                    onChange={(event) =>
-                      void runAction(() =>
-                        updateMembership(membership.id, {
-                          role: event.target.value as Membership["role"],
-                        }),
-                      )
-                    }
-                  >
-                    <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
-                    <option value="STAFF">STAFF</option>
-                    <option value="VOLUNTEER">VOLUNTEER</option>
-                  </Select>
-                  {membership.role === "STAFF" ? (
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={membership.medical_care_access}
-                        aria-label={`${membership.user_id} 醫療資料權限`}
-                        onChange={(event) => {
-                          const enabled = event.target.checked;
-                          if (
-                            !enabled &&
-                            !window.confirm(
-                              "確定撤銷此 STAFF 的醫療資料權限嗎？",
-                            )
-                          ) {
-                            event.target.checked = true;
-                            return;
-                          }
-                          void runAction(() =>
-                            updateMembership(membership.id, {
-                              medical_care_access: enabled,
-                            }),
-                          );
-                        }}
-                      />
-                      醫療資料權限
-                    </label>
-                  ) : null}
-                  <Button
-                    variant="secondary"
-                    type="button"
-                    disabled={membership.status === "disabled"}
-                    onClick={() =>
-                      void runAction(() =>
-                        updateMembership(membership.id, { status: "disabled" }),
-                      )
-                    }
-                  >
-                    停用
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            <form onSubmit={(event) => void submit(event, createAccount)}>
-              <h3>建立機構帳號</h3>
-              <Field>
-                <label htmlFor="account-username">帳號</label>
-                <Input
-                  id="account-username"
-                  value={accountUsername}
-                  onChange={(event) => setAccountUsername(event.target.value)}
-                  required
-                />
-              </Field>
-              <Field>
-                <label htmlFor="account-display-name">顯示名稱</label>
-                <Input
-                  id="account-display-name"
-                  value={accountDisplayName}
-                  onChange={(event) =>
-                    setAccountDisplayName(event.target.value)
-                  }
-                  required
-                />
-              </Field>
-              <Field>
-                <label htmlFor="account-password">暫時密碼</label>
-                <Input
-                  id="account-password"
-                  type="password"
-                  value={accountPassword}
-                  onChange={(event) => setAccountPassword(event.target.value)}
-                  required
-                />
-              </Field>
-              <Field>
-                <label htmlFor="account-role">角色</label>
-                <Select
-                  id="account-role"
-                  value={accountRole}
-                  onChange={(event) =>
-                    setAccountRole(event.target.value as Membership["role"])
-                  }
-                >
-                  <option value="SHELTER_ADMIN">SHELTER_ADMIN</option>
-                  <option value="STAFF">STAFF</option>
-                  <option value="VOLUNTEER">VOLUNTEER</option>
-                </Select>
-              </Field>
+          <CardHeader className="membership-card-header">
+            <div>
+              <CardTitle id="account-list-title">帳號與權限</CardTitle>
+              <p className="card-description">
+                管理目前收容所的工作人員與志工。
+              </p>
+            </div>
+            <div className="membership-header-actions">
+              <Link
+                className="ui-button ui-button-secondary"
+                href="/shelters/archived"
+              >
+                查看已封存成員
+              </Link>
               <Button
-                type="submit"
+                type="button"
                 disabled={selectedShelter?.status !== "active"}
+                onClick={() => setAccountDialogOpen(true)}
               >
                 建立帳號
               </Button>
-            </form>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <section
+              className="membership-section"
+              aria-labelledby="volunteer-title"
+            >
+              <div className="membership-section-heading">
+                <div>
+                  <h3 id="volunteer-title">志工</h3>
+                  <p>依既有報名與限時授權流程管理</p>
+                </div>
+                <Badge>{volunteerMemberships.length} 人</Badge>
+              </div>
+              {volunteerMemberships.length > 0 ? (
+                <ul className="membership-list">
+                  {volunteerMemberships.map(renderMembership)}
+                </ul>
+              ) : (
+                <p className="membership-empty">目前沒有志工。</p>
+              )}
+            </section>
+            <section
+              className="membership-section"
+              aria-labelledby="staff-title"
+            >
+              <div className="membership-section-heading">
+                <div>
+                  <h3 id="staff-title">工作人員</h3>
+                </div>
+                <Badge>{managementMemberships.length} 人</Badge>
+              </div>
+              {managementMemberships.length > 0 ? (
+                <ul className="membership-list">
+                  {managementMemberships.map(renderMembership)}
+                </ul>
+              ) : (
+                <p className="membership-empty">目前沒有工作人員。</p>
+              )}
+            </section>
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={accountDialogOpen}
+        title="建立機構帳號"
+        onClose={() => setAccountDialogOpen(false)}
+        className="account-dialog"
+      >
+        <form onSubmit={submitAccountForm}>
+          <p className="dialog-description">
+            建立後，帳號會立即出現在對應的權限區塊。
+          </p>
+          <Field>
+            <label htmlFor="account-username">帳號</label>
+            <Input
+              id="account-username"
+              value={accountUsername}
+              onChange={(event) => setAccountUsername(event.target.value)}
+              required
+            />
+          </Field>
+          <Field>
+            <label htmlFor="account-display-name">顯示名稱</label>
+            <Input
+              id="account-display-name"
+              value={accountDisplayName}
+              onChange={(event) => setAccountDisplayName(event.target.value)}
+              required
+            />
+          </Field>
+          <Field>
+            <label htmlFor="account-password">暫時密碼</label>
+            <Input
+              id="account-password"
+              type="password"
+              value={accountPassword}
+              onChange={(event) => setAccountPassword(event.target.value)}
+              required
+            />
+          </Field>
+          <Field>
+            <label htmlFor="account-role">角色</label>
+            <Select
+              id="account-role"
+              value={accountRole}
+              onChange={(event) =>
+                setAccountRole(event.target.value as Membership["role"])
+              }
+            >
+              <option value="SHELTER_ADMIN">收容所管理員</option>
+              <option value="STAFF">工作人員</option>
+              <option value="VOLUNTEER">志工</option>
+            </Select>
+          </Field>
+          <div className="dialog-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAccountDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button type="submit">建立帳號</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <MembershipPermissionDialog
+        open={Boolean(pendingMembershipChange)}
+        shelterName={selectedShelter?.name}
+        identity={
+          pendingMembershipChange?.membership.display_name ||
+          pendingMembershipChange?.membership.username ||
+          "未命名使用者"
+        }
+        operation={pendingMembershipChange?.operation ?? "調整權限"}
+        before={pendingMembershipChange?.before ?? ""}
+        after={pendingMembershipChange?.after ?? ""}
+        adminCountBefore={pendingMembershipChange?.adminCountBefore}
+        adminCountAfter={pendingMembershipChange?.adminCountAfter}
+        onClose={() => setPendingMembershipChange(null)}
+        onConfirm={() => void confirmMembershipChange()}
+        confirming={confirmingChange}
+      />
+
+      {accountRole === "SHELTER_ADMIN" ? (
+        <MembershipPermissionDialog
+          open={accountConfirmationOpen}
+          shelterName={selectedShelter?.name}
+          identity={accountDisplayName || accountUsername || "新帳號"}
+          operation="建立收容所管理員帳號"
+          before="尚未建立"
+          after="啟用中的 SHELTER_ADMIN"
+          adminCountBefore={activeAdminCount}
+          adminCountAfter={activeAdminCount + 1}
+          onClose={() => setAccountConfirmationOpen(false)}
+          onConfirm={() => {
+            setAccountConfirmationOpen(false);
+            void runAction(createAccount);
+          }}
+        />
+      ) : null}
 
       {canManageShelterSettings && (
         <Card aria-labelledby="area-list-title">

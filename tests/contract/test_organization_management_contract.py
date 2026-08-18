@@ -1,4 +1,6 @@
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import yaml
 from fastapi.routing import APIRoute
@@ -8,6 +10,7 @@ from services.api.app.api.organization_management import (
     OrganizationCreateRequest,
     OrganizationUpdateRequest,
     ShelterAreaCreateRequest,
+    _membership_response,
     router,
 )
 
@@ -18,6 +21,9 @@ def test_organization_management_contract_declares_memberships_areas_and_isolati
     )
     paths = document["paths"]
     assert "/v1/organizations/{organizationId}/memberships" in paths
+    assert "/v1/organizations/{organizationId}/memberships/archived" in paths
+    assert "/v1/organizations/{organizationId}/memberships/{membershipId}/archive" in paths
+    assert "/v1/organizations/{organizationId}/memberships/{membershipId}/restore" in paths
     assert "/v1/organizations/{organizationId}/accounts" in paths
     assert "/v1/organizations/{organizationId}/areas" in paths
     assert "organization_id" in document["components"]["schemas"]["ShelterArea"]["properties"]
@@ -65,7 +71,101 @@ def test_membership_contract_exposes_finite_volunteer_projection() -> None:
     )
     properties = document["components"]["schemas"]["Membership"]["properties"]
     assert {"valid_from", "expires_at", "access_version"} <= properties.keys()
-    assert {"valid_from", "expires_at", "access_version"} <= MembershipResponse.model_fields.keys()
+    assert {"username", "display_name"} <= properties.keys()
+    assert {
+        "archived_from_status",
+        "archived_at",
+        "archived_by_user_id",
+        "volunteer_authorization_status",
+    } <= properties.keys()
+    assert "archived" in properties["status"]["enum"]
+    assert {
+        "valid_from",
+        "expires_at",
+        "access_version",
+        "volunteer_authorization_status",
+    } <= MembershipResponse.model_fields.keys()
+
+
+def test_membership_mutations_require_expected_access_version() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    schemas = document["components"]["schemas"]
+    update_schema = schemas["MembershipUpdateRequest"]
+    version_schema = schemas["MembershipMutationVersionRequest"]
+    assert "expected_access_version" in update_schema["required"]
+    assert "expected_access_version" in update_schema["properties"]
+    assert version_schema["required"] == ["expected_access_version"]
+    for path in (
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/archive",
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/restore",
+    ):
+        assert (
+            document["paths"][path]["post"]["requestBody"]["content"]["application/json"]["schema"][
+                "$ref"
+            ]
+            == "#/components/schemas/MembershipMutationVersionRequest"
+        )
+
+
+def test_membership_response_includes_user_identity_projection() -> None:
+    response = _membership_response(
+        SimpleNamespace(
+            id=uuid4(),
+            organization_id=uuid4(),
+            user_id=uuid4(),
+            role="STAFF",
+            status="active",
+            valid_from=None,
+            expires_at=None,
+            access_version=1,
+            medical_care_access=False,
+        ),
+        SimpleNamespace(username="local-staff-a", display_name="本機工作人員 A"),
+    )
+
+    assert response.username == "local-staff-a"
+    assert response.display_name == "本機工作人員 A"
+
+
+def test_membership_response_distinguishes_revoked_volunteer_authorization() -> None:
+    response = _membership_response(
+        SimpleNamespace(
+            id=uuid4(),
+            organization_id=uuid4(),
+            user_id=uuid4(),
+            role="VOLUNTEER",
+            status="disabled",
+            valid_from=None,
+            expires_at=None,
+            access_version=1,
+            medical_care_access=False,
+        ),
+        SimpleNamespace(username="volunteer-a", display_name="志工 A"),
+        "revoked",
+    )
+
+    assert response.status == "disabled"
+    assert response.volunteer_authorization_status == "revoked"
+
+
+def test_organization_router_exposes_membership_archive_lifecycle_operations():
+    routes = {
+        (route.path, method.upper())
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods or set()
+    }
+    assert ("/v1/organizations/{organizationId}/memberships/archived", "GET") in routes
+    assert (
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/archive",
+        "POST",
+    ) in routes
+    assert (
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/restore",
+        "POST",
+    ) in routes
 
 
 def test_auth_contract_distinguishes_platform_role_from_shelter_membership_role() -> None:

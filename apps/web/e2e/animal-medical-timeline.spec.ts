@@ -43,7 +43,9 @@ test("動物時間軸同日顯示已發生醫療事件與預定提醒", async ({
   });
   await page.goto("/animals/animal-a/timeline");
   await expect(page.getByRole("heading", { name: "已發生事件" })).toBeVisible();
-  await expect(page.getByLabel("預定 吃藥").getByText("預定照護")).toBeVisible();
+  await expect(
+    page.getByLabel("預定 吃藥").getByText("預定照護"),
+  ).toBeVisible();
   await expect(page.getByText("量體重")).toBeVisible();
   await expect(page.getByText("吃藥")).toBeVisible();
 });

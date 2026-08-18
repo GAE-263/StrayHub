@@ -18,6 +18,9 @@ from services.api.app.api.media import router as media_router
 from services.api.app.api.medical_records import router as medical_records_router
 from services.api.app.api.observation_options import router as observation_options_router
 from services.api.app.api.organization_management import router as organization_management_router
+from services.api.app.api.platform_admin_management import (
+    router as platform_admin_management_router,
+)
 from services.api.app.api.qr_codes import router as qr_codes_router
 from services.api.app.api.report_inbox import router as report_inbox_router
 from services.api.app.api.reportable_scope import router as reportable_scope_router
@@ -38,6 +41,7 @@ app.include_router(animal_timeline_router)
 app.include_router(ai_observations_router)
 app.include_router(observation_options_router)
 app.include_router(organization_management_router)
+app.include_router(platform_admin_management_router)
 app.include_router(line_webhook_router)
 app.include_router(media_router)
 app.include_router(line_binding_router)

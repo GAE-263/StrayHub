@@ -2,7 +2,8 @@
 
 import React, { useMemo, useRef, useState } from "react";
 
-import { AlertDialog } from "../../components/ui/alert-dialog";
+import { MembershipPermissionDialog } from "../../components/management/MembershipPermissionDialog";
+import { Toast } from "../../components/ui/toast";
 
 type Application = {
   id: string;
@@ -61,6 +62,8 @@ export function ApplicationBatchWorkbench({
   const [defaultValidFrom, setDefaultValidFrom] = useState("");
   const [defaultExpiresAt, setDefaultExpiresAt] = useState("");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [batch, setBatch] = useState<Batch | null>(null);
   const [results, setResults] = useState<BatchItem[]>([]);
@@ -118,6 +121,7 @@ export function ApplicationBatchWorkbench({
   }
 
   async function createBatch(payload: object) {
+    setError("");
     try {
       const created = await onSubmit?.(payload);
       if (created) {
@@ -127,9 +131,14 @@ export function ApplicationBatchWorkbench({
       operationId.current = null;
       setConfirming(false);
       setMessage("批次已建立，可在逐筆結果查看進度、衝突與失敗項目。");
+      setToast(
+        `已建立志工${decision === "approve" ? "核准" : "拒絕"}批次（${
+          allFiltered ? matchingCount : selected.length
+        } 筆）`,
+      );
     } catch (error) {
       setConfirming(false);
-      setMessage(
+      setError(
         error instanceof Error ? error.message : "批次建立失敗，輸入已保留",
       );
     }
@@ -293,36 +302,27 @@ export function ApplicationBatchWorkbench({
       >
         確認並建立批次
       </button>
-      <AlertDialog
+      <MembershipPermissionDialog
         open={confirming}
         title="確認志工批次決策"
-        closeLabel="關閉批次確認"
-        onClose={() => setConfirming(false)}
-      >
-        <p>
-          {allFiltered
+        identity={
+          allFiltered ? "目前篩選結果" : `${selected.length} 筆志工報名`
+        }
+        operation={`批次${decision === "approve" ? "核准" : "拒絕"}`}
+        before="待審核"
+        after={decision === "approve" ? "建立核准授權" : "建立拒絕結果"}
+        authorizationImpact={
+          allFiltered
             ? `將鎖定目前篩選結果全部 ${matchingCount.toLocaleString("zh-TW")} 筆，不受分頁影響。`
-            : `將處理已選取的 ${selected.length} 筆。`}
-        </p>
-        <p>
-          決策：{decision === "approve" ? "核准" : "拒絕"}；期限：
-          {defaultValidFrom || defaultExpiresAt
-            ? `${defaultValidFrom || "依政策開始"} ～ ${defaultExpiresAt || "依政策到期"}`
-            : "依收容所政策快照"}
-        </p>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button type="button" onClick={() => setConfirming(false)}>
-            取消
-          </button>
-          <button
-            type="button"
-            className="min-h-11 rounded-lg bg-emerald-700 px-5 text-white"
-            onClick={() => void createBatch(buildPayload())}
-          >
-            送出完整快照
-          </button>
-        </div>
-      </AlertDialog>
+            : `將處理已選取的 ${selected.length} 筆。`
+        }
+        confirmLabel="送出完整快照"
+        onClose={() => setConfirming(false)}
+        onConfirm={() => void createBatch(buildPayload())}
+        confirming={false}
+      />
+      {error ? <p role="alert">{error}</p> : null}
+      {toast ? <Toast>{toast}</Toast> : null}
       <h3 className="mt-6">逐筆結果</h3>
       {batch ? (
         <div>

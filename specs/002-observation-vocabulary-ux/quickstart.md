@@ -21,11 +21,11 @@ uv run python -m scripts.seed_local
 分別啟動 API 與管理前端：
 
 ```bash
-uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8000
-npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
+uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8001
+npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
 ```
 
-開啟 <http://127.0.0.1:3000/login>，使用本機虛構帳號：
+開啟 <http://127.0.0.1:3001/login>，使用本機虛構帳號：
 
 | 測試帳號 | 用途 |
 | --- | --- |

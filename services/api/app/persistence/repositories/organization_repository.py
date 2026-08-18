@@ -4,12 +4,13 @@ import builtins
 from typing import TypeVar
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
+    VolunteerAccessGrant,
 )
 
 T = TypeVar("T")
@@ -21,6 +22,14 @@ class OrganizationRepository:
 
     async def get(self, organization_id: UUID) -> Organization | None:
         return await self.session.get(Organization, organization_id)
+
+    async def lock_organization(self, organization_id: UUID) -> Organization | None:
+        """Lock the tenant row while a membership mutation is validated and saved."""
+
+        result = await self.session.execute(
+            select(Organization).where(Organization.id == organization_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
 
     async def list(self) -> list[Organization]:
         result = await self.session.execute(select(Organization).order_by(Organization.name))
@@ -71,6 +80,51 @@ class OrganizationRepository:
             .order_by(OrganizationMembership.created_at)
         )
         return list(result.scalars())
+
+    async def memberships_with_users(
+        self, organization_id: UUID, *, include_archived: bool = False
+    ) -> builtins.list[tuple[OrganizationMembership, User]]:
+        statement = (
+            select(OrganizationMembership, User)
+            .join(User, User.id == OrganizationMembership.user_id)
+            .where(OrganizationMembership.organization_id == organization_id)
+            .order_by(OrganizationMembership.created_at)
+        )
+        if not include_archived:
+            statement = statement.where(OrganizationMembership.status != "archived")
+        result = await self.session.execute(statement)
+        return list(result.all())
+
+    async def count_active_shelter_admins(
+        self, organization_id: UUID, *, exclude_membership_id: UUID | None = None
+    ) -> int:
+        statement = select(func.count(OrganizationMembership.id)).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.role == "SHELTER_ADMIN",
+            OrganizationMembership.status == "active",
+        )
+        if exclude_membership_id is not None:
+            statement = statement.where(OrganizationMembership.id != exclude_membership_id)
+        result = await self.session.execute(statement)
+        return int(result.scalar_one())
+
+    async def volunteer_authorization_statuses(
+        self, organization_id: UUID, membership_ids: builtins.list[UUID]
+    ) -> dict[UUID, str]:
+        if not membership_ids:
+            return {}
+        result = await self.session.execute(
+            select(VolunteerAccessGrant.membership_id, VolunteerAccessGrant.status)
+            .where(
+                VolunteerAccessGrant.organization_id == organization_id,
+                VolunteerAccessGrant.membership_id.in_(membership_ids),
+            )
+            .order_by(VolunteerAccessGrant.approved_at.desc(), VolunteerAccessGrant.id.desc())
+        )
+        statuses: dict[UUID, str] = {}
+        for membership_id, grant_status in result.all():
+            statuses.setdefault(membership_id, grant_status)
+        return statuses
 
     async def membership_by_id(
         self, membership_id: UUID, organization_id: UUID

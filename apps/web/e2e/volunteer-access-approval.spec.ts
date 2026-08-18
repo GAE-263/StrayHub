@@ -223,7 +223,8 @@ test("shelter admin can revoke an active grant with a reason", async ({
   await page.goto("/volunteers/access");
   await page.getByLabel("志工 A 操作原因").fill("排班異動");
   await page.getByRole("button", { name: "撤銷授權" }).click();
-  await expect(page.getByText("授權已撤銷")).toBeVisible();
+  await page.getByRole("button", { name: "確認調整" }).click();
+  await expect(page.getByText("已撤銷「志工 A」的志工授權")).toBeVisible();
   await expect(page.getByText("歷史週期（不可修改）")).toBeVisible();
 });
 

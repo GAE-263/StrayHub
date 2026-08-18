@@ -44,25 +44,40 @@ export function ManagementLayout({ children }: Props) {
       router.replace("/login");
       return;
     }
-    const [profileResponse, contextResponse, organizationsResponse] =
-      await Promise.all([
-        authFetch("/v1/auth/me"),
-        authFetch("/v1/auth/active-shelter-context"),
-        authFetch("/v1/organizations"),
-      ]);
-    if (
-      !profileResponse.ok ||
-      !contextResponse.ok ||
-      !organizationsResponse.ok
-    ) {
-      if (profileResponse.status === 401 || contextResponse.status === 401) {
+    const profileResponse = await authFetch("/v1/auth/me");
+    if (!profileResponse.ok) {
+      if (profileResponse.status === 401) {
         clearAuth();
         router.replace("/login");
         return;
       }
       throw new Error("目前帳號尚未準備好管理工作台 Context。");
     }
-    setProfile((await profileResponse.json()) as CurrentUser);
+    const nextProfile = (await profileResponse.json()) as CurrentUser;
+    setProfile(nextProfile);
+    if (
+      pathname === "/platform-admins" &&
+      nextProfile.user.platform_role === "PLATFORM_ADMIN"
+    ) {
+      setOrganizationId(null);
+      setOrganizations([]);
+      return;
+    }
+    const [contextResponse, organizationsResponse] = await Promise.all([
+      authFetch("/v1/auth/active-shelter-context"),
+      authFetch("/v1/organizations"),
+    ]);
+    if (!contextResponse.ok || !organizationsResponse.ok) {
+      if (
+        contextResponse.status === 401 ||
+        organizationsResponse.status === 401
+      ) {
+        clearAuth();
+        router.replace("/login");
+        return;
+      }
+      throw new Error("目前帳號尚未準備好管理工作台 Context。");
+    }
     const context = (await contextResponse.json()) as {
       organization_id?: string;
     };
@@ -71,7 +86,7 @@ export function ManagementLayout({ children }: Props) {
       items: Array<{ id: string; code: string; name: string }>;
     };
     setOrganizations(organizationData.items);
-  }, [router]);
+  }, [pathname, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +114,9 @@ export function ManagementLayout({ children }: Props) {
       ),
     [organizationId, profile],
   );
+
+  const isPlatformGovernanceRoute = pathname === "/platform-admins";
+  const isPlatformAdmin = profile?.user.platform_role === "PLATFORM_ADMIN";
 
   const logout = async () => {
     try {
@@ -143,7 +161,11 @@ export function ManagementLayout({ children }: Props) {
         description="重新驗證 Session 與 Membership。"
       />
     );
-  if (error || !profile || !organizationId) {
+  if (
+    error ||
+    !profile ||
+    (!organizationId && !(isPlatformGovernanceRoute && isPlatformAdmin))
+  ) {
     return (
       <ErrorState
         title="無法開啟管理工作台"
@@ -167,11 +189,13 @@ export function ManagementLayout({ children }: Props) {
       />
     );
   }
-  const organizationLabel =
-    typeof window !== "undefined"
+  const organizationLabel = isPlatformGovernanceRoute
+    ? "平台治理"
+    : typeof window !== "undefined"
       ? (window.sessionStorage.getItem("active_organization_code") ??
-        organizationId.slice(0, 8))
-      : organizationId.slice(0, 8);
+        organizationId?.slice(0, 8) ??
+        "未選擇收容所")
+      : (organizationId?.slice(0, 8) ?? "未選擇收容所");
 
   return (
     <div className="app-frame">
@@ -180,8 +204,8 @@ export function ManagementLayout({ children }: Props) {
           profile.user.display_name ?? profile.user.username ?? "使用者"
         }
         organizationLabel={organizationLabel}
-        organizations={organizations}
-        activeOrganizationId={organizationId}
+        organizations={isPlatformGovernanceRoute ? [] : organizations}
+        activeOrganizationId={organizationId ?? ""}
         onSwitchOrganization={(nextOrganizationId) =>
           void switchOrganization(nextOrganizationId)
         }

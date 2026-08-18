@@ -38,19 +38,19 @@ openssl pkey -in /tmp/strayhub-private.pem -pubout -out /tmp/strayhub-public.pem
 
 ```bash
 # FastAPI
-uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8000
+uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8001
 
 # Next.js
-npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
+npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
 
 # Worker
 uv run python services/worker/worker.py
 ```
 
-- API health check：<http://127.0.0.1:8000/healthz>
-- 管理前端：<http://127.0.0.1:3000>
-- 管理登入頁：<http://127.0.0.1:3000/login>
-- Swagger：<http://127.0.0.1:8000/docs>
+- API health check：<http://127.0.0.1:8001/healthz>
+- 管理前端：<http://127.0.0.1:3001>
+- 管理登入頁：<http://127.0.0.1:3001/login>
+- Swagger：<http://127.0.0.1:8001/docs>
 - 本機資料帳號：`local-staff-a`、`local-volunteer-a`、`local-platform-admin`，密碼都是 `local-only-password`
 - 另一個租戶帳號：`local-staff-b`、`local-volunteer-b`
 
@@ -62,7 +62,7 @@ Seed 只建立虛構的 `ORG-A`／`ORG-B`，兩邊可以使用相同 Shelter Num
 uv run python -m scripts.reset_local --yes
 ```
 
-登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8000/v1/*`，再依登入帳號的 Membership 或平台管理員授權設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
+登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8001/v1/*`，再依登入帳號的 Membership 或平台管理員授權設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
 
 ## 一鍵本機展示
 

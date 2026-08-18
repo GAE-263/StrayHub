@@ -65,9 +65,15 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       },
       {
         href: "/shelters",
-        label: "收容所與 Membership",
+        label: "權限管理",
         roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
         icon: "history",
+      },
+      {
+        href: "/platform-admins",
+        label: "平台管理員",
+        roles: ["PLATFORM_ADMIN"],
+        icon: "settings",
       },
     ],
   },

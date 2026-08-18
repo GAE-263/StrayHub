@@ -21,6 +21,7 @@
     "test:axe": "npm run test:a11y:browser",
     "test:p1:e2e": "playwright test e2e/p1-management.spec.ts",
     "test:p1:a11y": "playwright test e2e/p1-a11y.spec.ts",
+    "format": "prettier --write .",
     "format:check": "prettier --check .",
     "quality": "npm run test && npm run typecheck && npm run test:mobile && npm run test:a11y && npm run format:check"
   },
