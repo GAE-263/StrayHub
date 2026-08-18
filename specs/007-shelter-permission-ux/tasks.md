@@ -84,7 +84,7 @@ description: "收容所權限管理介面改善的可執行任務"
 
 - [X] T015 [P] 重新產生並格式化 `packages/contracts/src/openapi.ts`，確認 canonical OpenAPI 與 runtime Membership response 欄位一致
 - [X] T016 [P] 執行 `apps/web/app/(management)/shelters/page.test.tsx`、`apps/web` TypeScript typecheck、`tests/contract/test_organization_management_contract.py` 與 `git diff --check`，修正所有因本 feature 造成的失敗
-- [X] T017 使用 `local-shelter-admin-a` 在 `http://127.0.0.1:3000/shelters` 以 1440px、768px、360px 完成 `specs/007-shelter-permission-ux/quickstart.md` 的真人驗收，記錄身份辨識、既有操作、固定時區與 layout 結果
+- [X] T017 使用 `local-shelter-admin-a` 在 `http://127.0.0.1:3001/shelters` 以 1440px、768px、360px 完成 `specs/007-shelter-permission-ux/quickstart.md` 的真人驗收，記錄身份辨識、既有操作、固定時區與 layout 結果
 
 ## Dependencies & Execution Order
 

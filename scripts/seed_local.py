@@ -407,6 +407,25 @@ async def seed() -> dict[str, dict[str, str]]:
                 "username": platform_admin.username,
                 "role": platform_admin.platform_role,
             }
+            disabled_platform_admin = await _get_or_create(
+                session,
+                User,
+                select(User).where(User.username == "local-platform-admin-disabled"),
+                lambda: User(
+                    username="local-platform-admin-disabled",
+                    display_name="本機已停用平台管理員",
+                    password_hash=hasher.hash("local-only-password"),
+                    platform_role="PLATFORM_ADMIN",
+                    status="disabled",
+                ),
+            )
+            disabled_platform_admin.display_name = "本機已停用平台管理員"
+            disabled_platform_admin.platform_role = "PLATFORM_ADMIN"
+            disabled_platform_admin.status = "disabled"
+            result["PLATFORM_DISABLED"] = {
+                "username": disabled_platform_admin.username,
+                "role": disabled_platform_admin.platform_role,
+            }
             for org_code, org_name in (("ORG-A", "虛構收容所 A"), ("ORG-B", "虛構收容所 B")):
                 organization = await _get_or_create(
                     session,

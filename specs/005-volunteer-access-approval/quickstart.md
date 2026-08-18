@@ -84,20 +84,20 @@ production-like migration 測試不得以 downgrade 刪除已建立的正式歷�
 分別啟動 API、Web 與 Worker：
 
 ```bash
-uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8000
-npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3000
+uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8001
+npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
 uv run python services/worker/worker.py
 ```
 
 入口：
 
-- Web：<http://127.0.0.1:3000>
-- 志工報名：`http://127.0.0.1:3000/volunteer-application?entry=<local-reference>`
-- 管理申請：<http://127.0.0.1:3000/volunteers/applications>
-- 授權管理：<http://127.0.0.1:3000/volunteers/access>
-- 通知失敗：<http://127.0.0.1:3000/volunteers/notifications>
-- 志工授權設定：<http://127.0.0.1:3000/settings/volunteer-access>
-- API health：<http://127.0.0.1:8000/healthz>
+- Web：<http://127.0.0.1:3001>
+- 志工報名：`http://127.0.0.1:3001/volunteer-application?entry=<local-reference>`
+- 管理申請：<http://127.0.0.1:3001/volunteers/applications>
+- 授權管理：<http://127.0.0.1:3001/volunteers/access>
+- 通知失敗：<http://127.0.0.1:3001/volunteers/notifications>
+- 志工授權設定：<http://127.0.0.1:3001/settings/volunteer-access>
+- API health：<http://127.0.0.1:8001/healthz>
 
 ## Contract 與靜態品質
 

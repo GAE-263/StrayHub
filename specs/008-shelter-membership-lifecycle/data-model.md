@@ -20,6 +20,12 @@
 | expires_at | datetime/null | no | 志工有效期間終點 |
 | medical_care_access | boolean | yes | STAFF 醫療資料權限，非 STAFF 不提供控制 |
 
+### Derived Membership View Fields
+
+| Field | Type | Required | Description |
+|---|---|---:|---|
+| volunteer_authorization_status | enum/null | no | 由目前收容所 Membership 對應的最新 VolunteerAccessGrant 推導；`active`、`expired`、`revoked` 或 null，不另建資料副本 |
+
 ### Validation Rules
 
 - `archived_from_status` 只有在 `status = archived` 時應有值。
@@ -27,6 +33,8 @@
 - 封存某一 Membership 不得改變同一 `user_id` 在其他 `organization_id` 的 Membership。
 - 恢復 STAFF／SHELTER_ADMIN 時使用 `archived_from_status`；恢復 VOLUNTEER 時另檢查 `valid_from` 與 `expires_at`。
 - 權限管理 API 的所有查詢與更新都必須同時限制 `organization_id` 與管理員授權。
+- 一般 Membership 重新啟用前，若 `role = VOLUNTEER` 且最新授權為 `expired` 或 `revoked`，必須拒絕直接設為 `active`。
+- 志工授權撤銷時 Membership 可維持 `disabled`；`volunteer_authorization_status = revoked` 只作為清單顯示與重新啟用判斷，不取代 Membership status。
 
 ### State Transitions
 
@@ -41,6 +49,8 @@ invited / active / disabled / expired / revoked
 ```
 
 實際恢復志工時，若有效期間已結束，結果為 `expired`；不得因恢復而繞過志工授權流程。
+
+清單排序規則為志工區塊在前、工作人員區塊在後；工作人員內先 SHELTER_ADMIN 再 STAFF；各區內依 `active`、`disabled`、`expired`、`revoked` 排序。撤銷狀態若來自 VolunteerAccessGrant，顯示為「授權已撤銷」。
 
 ## Archived Membership View
 

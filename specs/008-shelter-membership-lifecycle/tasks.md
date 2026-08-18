@@ -37,13 +37,13 @@
 
 ### Tests for User Story 1
 
-- [X] T008 [P] [US1] Add service tests for archive, restore, prior-status preservation, expired-volunteer restoration, self-archive rejection, and last-admin protection in `tests/unit/test_organization_management_service.py`
+- [X] T008 [P] [US1] Add service tests for archive, restore, disabled-membership re-enable rules, prior-status preservation, expired/revoked-volunteer protection, self-archive rejection, and last-admin protection in `tests/unit/test_organization_management_service.py`
 - [X] T009 [P] [US1] Validate default exclusion, archived listing, archive/restore audit events, and organization isolation through `tests/contract/test_organization_management_contract.py`, `apps/web/e2e/organization-management.spec.ts`, and `specs/008-shelter-membership-lifecycle/quickstart.md`
 - [X] T010 [P] [US1] Add frontend route tests for archived-member search, restore action, empty state, and safe identity fallback in `apps/web/app/(management)/shelters/archived/page.test.tsx`
 
 ### Implementation for User Story 1
 
-- [X] T011 [US1] Implement archive and restore domain rules, previous-status capture, volunteer-period checks, and administrator safety guards in `services/api/app/application/organization_management.py`
+- [X] T011 [US1] Implement archive, restore, and disabled-membership re-enable domain rules, previous-status capture, volunteer authorization checks, and administrator safety guards in `services/api/app/application/organization_management.py`
 - [X] T012 [US1] Implement organization-scoped archived listing, archive, and restore endpoints with audit events in `services/api/app/api/organization_management.py`
 - [X] T013 [US1] Update Membership response serialization and generated contracts for archive metadata in `services/api/app/api/organization_management.py`, `specs/001-volunteer-care-report/contracts/openapi.yaml`, and `packages/contracts/src/openapi.ts`
 - [X] T014 [US1] Add the `/shelters/archived` management route with search, role grouping, identity projection, restore feedback, and authorization error handling in `apps/web/app/(management)/shelters/archived/page.tsx`
@@ -54,22 +54,22 @@
 
 ---
 
-## Phase 4: User Story 2 - 分區檢視管理人員與志工 (Priority: P1)
+## Phase 4: User Story 2 - 分區檢視工作人員與志工 (Priority: P1)
 
-**Goal**: Present SHELTER_ADMIN and STAFF together under 管理人員, VOLUNTEER under 志工, with counts, empty states, and role-appropriate controls on both routes.
+**Goal**: Present VOLUNTEER above SHELTER_ADMIN and STAFF under 工作人員, with fixed role/status ordering, muted inactive cards, counts, empty states, and role-appropriate controls on both routes.
 
 **Independent Test**: Load normal and archived routes with mixed roles and verify every Membership appears in exactly one role section with correct controls.
 
 ### Tests for User Story 2
 
-- [X] T017 [P] [US2] Add unit coverage for role grouping, section counts, empty states, STAFF-only medical permission controls, and volunteer status labels in `apps/web/app/(management)/shelters/page.test.tsx`
+- [X] T017 [P] [US2] Add unit coverage for role grouping, section counts, empty states, STAFF-only medical permission controls, re-enable action, status ordering, revoked authorization labels, and muted card classes in `apps/web/app/(management)/shelters/page.test.tsx`
 - [X] T018 [P] [US2] Add end-to-end assertions for management-staff and volunteer sections in `apps/web/e2e/organization-management.spec.ts` and `apps/web/e2e/p1-management.spec.ts`
 
 ### Implementation for User Story 2
 
-- [X] T019 [P] [US2] Add reusable role labels, identity fallback, and section presentation helpers in `apps/web/app/(management)/shelters/page.tsx` and `apps/web/app/(management)/shelters/archived/page.tsx`
-- [X] T020 [US2] Refactor the normal Membership list into 管理人員 and 志工 sections, preserving role updates, medical permission updates, disable behavior, and existing volunteer authorization semantics in `apps/web/app/(management)/shelters/page.tsx`
-- [X] T021 [US2] Implement equivalent role sections, status presentation, and empty states on the archived route in `apps/web/app/(management)/shelters/archived/page.tsx`
+- [X] T019 [P] [US2] Add reusable role labels, identity fallback, status ordering, volunteer authorization labels, and section presentation helpers in `apps/web/app/(management)/shelters/page.tsx` and `apps/web/app/(management)/shelters/archived/page.tsx`
+- [X] T020 [US2] Refactor the normal Membership list into upper 志工 and lower 工作人員 sections, preserving role updates, medical permission updates, disable/re-enable behavior, and existing volunteer authorization semantics in `apps/web/app/(management)/shelters/page.tsx`
+- [X] T021 [US2] Implement equivalent section order, status presentation, muted revoked cards, and empty states on the archived route in `apps/web/app/(management)/shelters/archived/page.tsx`
 - [X] T022 [US2] Keep the management navigation label as 權限管理 and expose the archived route entry point from `apps/web/app/(management)/shelters/page.tsx` and `apps/web/components/management/AppSidebar.tsx`
 
 **Checkpoint**: User Story 2 is independently readable and does not change authorization behavior.
@@ -89,7 +89,7 @@
 
 ### Implementation for User Story 3
 
-- [X] T025 [US3] Rework membership page layout tokens, section spacing, cards, status treatments, action rows, mobile stacking, and archived-page styling in `apps/web/app/globals.css`
+- [X] T025 [US3] Rework membership page layout tokens, section spacing, active/inactive card treatments, action rows, mobile stacking, and archived-page styling in `apps/web/app/globals.css`
 - [X] T026 [US3] Update the normal and archived page structure to expose primary actions, section counts, search, empty states, and secondary actions with the new layout in `apps/web/app/(management)/shelters/page.tsx` and `apps/web/app/(management)/shelters/archived/page.tsx`
 - [X] T027 [US3] Validate keyboard focus, semantic labels, modal focus return, and error-safe layout behavior through `apps/web/components/ui/dialog.tsx`, `apps/web/app/(management)/shelters/page.test.tsx`, and browser review
 
@@ -101,7 +101,7 @@
 
 **Goal**: Move account creation into a first-class modal opened from the page header, with safe validation and reset behavior.
 
-**Independent Test**: Open the modal from the page header, create a STAFF account, verify it appears in 管理人員, and verify Escape/cancel/error behavior.
+**Independent Test**: Open the modal from the page header, create a STAFF account, verify it appears in 工作人員, and verify Escape/cancel/error behavior.
 
 ### Tests for User Story 4
 
@@ -125,8 +125,17 @@
 - [X] T033 [P] Update feature-specific API and UI documentation links in `specs/008-shelter-membership-lifecycle/quickstart.md` and `specs/008-shelter-membership-lifecycle/contracts/membership-lifecycle.md`
 - [X] T034 [P] Run focused Python formatting and static checks for changed backend files in `services/api/app/api/organization_management.py`, `services/api/app/application/organization_management.py`, `services/api/app/persistence/models/identity.py`, `services/api/app/persistence/repositories/organization_repository.py`, and `services/api/migrations/versions/0028_membership_archiving.py`
 - [X] T035 [P] Run focused frontend typecheck, unit tests, responsive checks, accessibility checks, and formatting for changed frontend files in `apps/web/app/(management)/shelters/page.tsx`, `apps/web/app/(management)/shelters/archived/page.tsx`, `apps/web/components/management/`, and `apps/web/app/globals.css`
-- [X] T036 Execute the manual archive, archived-route, restore, modal, responsive, identity, and timezone scenarios in `specs/008-shelter-membership-lifecycle/quickstart.md` with `local-shelter-admin-a`
+- [X] T036 Execute the manual archive, archived-route, restore, modal, responsive, identity, and timezone-removal scenarios in `specs/008-shelter-membership-lifecycle/quickstart.md` with the local management fixture
 - [X] T037 Verify `git diff --check`, migration head `0028_membership_archiving`, tenant-scoped API behavior, and the relevant regression suite before marking `specs/008-shelter-membership-lifecycle/tasks.md` complete
+
+- [X] T038 [P] [US1] Add contract coverage for `volunteer_authorization_status`, disabled-membership re-enable behavior, and revoked/expired volunteer rejection in `tests/contract/test_organization_management_contract.py` and `services/api/app/api/organization_management.py`
+- [X] T039 [US1] Add organization-scoped latest volunteer grant status projection and re-enable guard support in `services/api/app/persistence/repositories/organization_repository.py`, `services/api/app/application/organization_management.py`, and `services/api/app/api/organization_management.py`
+- [X] T040 [US2] Update normal and archived membership response types, labels, action controls, and sorting so revoked authorization is distinct from account status in `apps/web/app/(management)/shelters/page.tsx` and `apps/web/app/(management)/shelters/archived/page.tsx`
+- [X] T041 [US2] Remove timezone presentation from the permission management page while retaining backend organization timezone data and unrelated settings behavior in `apps/web/app/(management)/shelters/page.tsx` and `apps/web/app/globals.css`
+- [X] T042 [US2] Add focused tests for re-enable controls, section order, status order, revoked authorization presentation, and timezone removal in `apps/web/app/(management)/shelters/page.test.tsx`, `apps/web/app/(management)/shelters/archived/page.test.tsx`, and `apps/web/e2e/organization-management.spec.ts`
+- [X] T043 [US3] Update the responsive and visual treatment assertions for muted disabled, expired, and revoked cards at 1440px, 768px, and 360px in `specs/008-shelter-membership-lifecycle/quickstart.md` and `apps/web/e2e/organization-management.spec.ts`
+- [X] T044 [P] Update feature data model and API lifecycle documentation for separate volunteer authorization status and Membership re-enable semantics in `specs/008-shelter-membership-lifecycle/data-model.md`, `specs/008-shelter-membership-lifecycle/contracts/membership-lifecycle.md`, and `specs/008-shelter-membership-lifecycle/research.md`
+- [X] T045 Verify all requirements, checklists, task completion markers, and constitution gates after implementation using the Spec-Kit analysis workflow in `specs/008-shelter-membership-lifecycle/spec.md`, `specs/008-shelter-membership-lifecycle/checklists/requirements.md`, and `specs/008-shelter-membership-lifecycle/tasks.md`
 
 ---
 

@@ -34,6 +34,7 @@ tags:
   - name: Volunteer Applications
   - name: Volunteer Access Management
   - name: Volunteer Notification Management
+  - name: Platform Administrators
 security:
   - bearerAuth: []
 paths:
@@ -263,6 +264,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/organizations/{organizationId}/memberships/archived:
     parameters:
       - $ref: "#/components/parameters/OrganizationId"
@@ -1855,6 +1857,130 @@ paths:
         '200': { description: 志工完成或略過本人指派事項, content: { application/json: { schema: { $ref: '#/components/schemas/AssignedCareMutation' } } } }
         '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /v1/platform/administrators:
+    get:
+      tags: [Platform Administrators]
+      operationId: listPlatformAdministrators
+      responses:
+        '200':
+          description: 平台管理員清單與治理政策
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminListResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Platform Administrators]
+      operationId: createPlatformAdministrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePlatformAdminRequest' }
+      responses:
+        '201':
+          description: 建立平台管理員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/platform/administrators/replacements:
+    post:
+      tags: [Platform Administrators]
+      operationId: replacePlatformAdministrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlatformAdminReplacementRequest' }
+      responses:
+        '200':
+          description: 完成平台管理員替換
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/platform/administrators/candidates:
+    get:
+      tags: [Platform Administrators]
+      operationId: listPlatformAdministratorCandidates
+      responses:
+        '200':
+          description: 可提升為平台管理員的啟用帳號
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PlatformAdminCandidate' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/platform/administrators/audit:
+    get:
+      tags: [Platform Administrators]
+      operationId: listPlatformAdministratorAudit
+      parameters:
+        - { name: user_id, in: query, schema: { type: string, format: uuid } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+      responses:
+        '200':
+          description: 平台管理員稽核紀錄
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlatformAuditRecord' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/platform/administrators/{userId}/promote:
+    post:
+      tags: [Platform Administrators]
+      operationId: promotePlatformAdministrator
+      parameters: [{ name: userId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: 提升既有帳號
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/platform/administrators/{userId}/enable:
+    post:
+      tags: [Platform Administrators]
+      operationId: enablePlatformAdministrator
+      parameters: [{ name: userId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: 重新啟用平台管理員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/platform/administrators/{userId}/disable:
+    post:
+      tags: [Platform Administrators]
+      operationId: disablePlatformAdministrator
+      parameters: [{ name: userId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: 停用平台管理員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/platform/administrators/{userId}/demote:
+    post:
+      tags: [Platform Administrators]
+      operationId: demotePlatformAdministrator
+      parameters: [{ name: userId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: 降權平台管理員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   securitySchemes:
     bearerAuth:
@@ -2564,6 +2690,8 @@ components:
         archived_from_status: { type: [string, "null"] }
         archived_at: { type: [string, "null"], format: date-time }
         archived_by_user_id: { type: [string, "null"], format: uuid }
+        volunteer_authorization_status:
+          { type: [string, "null"], enum: [active, expired, revoked] }
     MembershipCreateRequest:
       type: object
       required: [user_id, role]
@@ -3926,3 +4054,72 @@ components:
         acted_at: { type: string, format: date-time }
         recorded_at: { type: [string, 'null'], format: date-time }
         actual_completed_at: { type: [string, 'null'], format: date-time }
+    PlatformAdminPolicySummary:
+      type: object
+      required: [min_active_admins, max_active_admins, active_count, available_slots]
+      properties:
+        min_active_admins: { type: integer, minimum: 1 }
+        max_active_admins: { type: integer, minimum: 1 }
+        active_count: { type: integer, minimum: 0 }
+        available_slots: { type: integer, minimum: 0 }
+    PlatformAdmin:
+      type: object
+      required: [user_id, username, display_name, user_status, platform_role, effective_status, can_enable, can_disable, can_demote]
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: [string, 'null'] }
+        display_name: { type: string }
+        user_status: { type: string, enum: [active, disabled] }
+        platform_role: { type: [string, 'null'], enum: [PLATFORM_ADMIN, null] }
+        effective_status: { type: string, enum: [active, disabled] }
+        can_enable: { type: boolean }
+        can_disable: { type: boolean }
+        can_demote: { type: boolean }
+    PlatformAdminListResponse:
+      type: object
+      required: [policy, items]
+      properties:
+        policy: { $ref: '#/components/schemas/PlatformAdminPolicySummary' }
+        items: { type: array, items: { $ref: '#/components/schemas/PlatformAdmin' } }
+    PlatformAdminCandidate:
+      type: object
+      required: [user_id, username, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: [string, 'null'] }
+        display_name: { type: string }
+    CreatePlatformAdminRequest:
+      type: object
+      required: [username, display_name, temporary_password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 200 }
+        display_name: { type: string, minLength: 1, maxLength: 200 }
+        temporary_password: { type: string, format: password, minLength: 1 }
+    PlatformAdminReplacementRequest:
+      type: object
+      required: [outgoing_user_id, replacement_user_id, reason]
+      properties:
+        outgoing_user_id: { type: string, format: uuid }
+        replacement_user_id: { type: string, format: uuid }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    PlatformAdminMutationResponse:
+      type: object
+      required: [item, policy, operation_id]
+      properties:
+        item: { $ref: '#/components/schemas/PlatformAdmin' }
+        policy: { $ref: '#/components/schemas/PlatformAdminPolicySummary' }
+        operation_id: { type: string, format: uuid }
+    PlatformAuditRecord:
+      type: object
+      required: [id, operation_id, action, result, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        operation_id: { type: string, format: uuid }
+        actor_user_id: { type: [string, 'null'], format: uuid }
+        resource_id: { type: [string, 'null'], format: uuid }
+        action: { type: string }
+        before: { type: [object, 'null'] }
+        after: { type: [object, 'null'] }
+        reason: { type: [string, 'null'] }
+        result: { type: string, enum: [success, denied] }
+        created_at: { type: string, format: date-time }

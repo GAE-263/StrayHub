@@ -86,13 +86,19 @@ afterEach(async () => {
 });
 
 describe("archived shelter memberships page", () => {
-  it("shows archived members in separate management and volunteer sections", async () => {
+  it("shows archived members in separate staff and volunteer sections", async () => {
     await renderPage();
 
     expect(container?.textContent).toContain("已封存成員");
     expect(container?.textContent).toContain("已封存工作人員");
     expect(container?.textContent).toContain("已封存志工");
+    expect(container?.textContent).toContain("工作人員");
+    expect(container?.textContent).not.toContain("管理人員");
     expect(container?.textContent).toContain("封存前：已停用");
     expect(container?.textContent).toContain("恢復成員");
+    const sectionTitles = Array.from(
+      container?.querySelectorAll(".membership-section h2") ?? [],
+    ).map((heading) => heading.textContent?.trim());
+    expect(sectionTitles).toEqual(["志工", "工作人員"]);
   });
 });

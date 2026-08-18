@@ -6,7 +6,7 @@
 - 已完成 local seed，並可使用：
   - 帳號：`local-shelter-admin-a`
   - 密碼：`local-only-password`
-- 服務網址：`http://127.0.0.1:3000`
+- 服務網址：`http://127.0.0.1:3001`
 
 ## 自動化驗證
 
@@ -23,8 +23,8 @@ git diff --check
 
 ## 本機真人驗證
 
-1. 開啟 `http://127.0.0.1:3000/login`，使用上述管理員帳號登入。
-2. 開啟 `http://127.0.0.1:3000/shelters`。
+1. 開啟 `http://127.0.0.1:3001/login`，使用上述管理員帳號登入。
+2. 開啟 `http://127.0.0.1:3001/shelters`。
 3. 確認頁面主標題是「權限管理」，Membership 清單以姓名與帳號辨識，不以 UUID 作主要名稱。
 4. 確認 STAFF 顯示醫療資料權限狀態；VOLUNTEER 與 SHELTER_ADMIN 不顯示不適用的醫療權限 checkbox。
 5. 確認 active、expired、revoked 等狀態仍能辨識，角色選擇與停用帳號操作仍存在。

@@ -44,6 +44,7 @@ type Membership = {
   archived_from_status?: string | null;
   archived_at?: string | null;
   archived_by_user_id?: string | null;
+  volunteer_authorization_status?: "active" | "expired" | "revoked" | null;
 };
 
 type Area = {
@@ -66,6 +67,44 @@ const membershipStatusLabels: Record<string, string> = {
   expired: "已過期",
   revoked: "已撤銷",
 };
+
+const volunteerAuthorizationLabels: Record<string, string> = {
+  expired: "授權已到期",
+  revoked: "授權已撤銷",
+};
+
+const membershipStatusOrder: Record<string, number> = {
+  active: 0,
+  disabled: 1,
+  expired: 2,
+  revoked: 3,
+  invited: 4,
+};
+
+function sortMemberships(left: Membership, right: Membership) {
+  const leftStatus =
+    left.volunteer_authorization_status === "revoked"
+      ? "revoked"
+      : left.volunteer_authorization_status === "expired"
+        ? "expired"
+        : left.status;
+  const rightStatus =
+    right.volunteer_authorization_status === "revoked"
+      ? "revoked"
+      : right.volunteer_authorization_status === "expired"
+        ? "expired"
+        : right.status;
+  const statusOrder =
+    (membershipStatusOrder[leftStatus] ?? 99) -
+    (membershipStatusOrder[rightStatus] ?? 99);
+  if (statusOrder !== 0) return statusOrder;
+  if (left.role !== right.role) {
+    return left.role === "SHELTER_ADMIN" ? -1 : 1;
+  }
+  return (left.display_name ?? left.username ?? "").localeCompare(
+    right.display_name ?? right.username ?? "",
+  );
+}
 
 async function responseData<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -119,11 +158,17 @@ export default function SheltersManagementPage() {
     currentRole ?? "",
   );
   const managementMemberships = useMemo(
-    () => memberships.filter((membership) => membership.role !== "VOLUNTEER"),
+    () =>
+      memberships
+        .filter((membership) => membership.role !== "VOLUNTEER")
+        .sort(sortMemberships),
     [memberships],
   );
   const volunteerMemberships = useMemo(
-    () => memberships.filter((membership) => membership.role === "VOLUNTEER"),
+    () =>
+      memberships
+        .filter((membership) => membership.role === "VOLUNTEER")
+        .sort(sortMemberships),
     [memberships],
   );
 
@@ -295,8 +340,18 @@ export default function SheltersManagementPage() {
       managementMemberships.filter(
         (item) => item.role === "SHELTER_ADMIN" && item.status === "active",
       ).length <= 1;
+    const authorizationStatus = membership.volunteer_authorization_status;
+    const isAuthorizationInactive = ["expired", "revoked"].includes(
+      authorizationStatus ?? "",
+    );
+    const canReenable =
+      membership.status === "disabled" && !isAuthorizationInactive;
+    const isMuted = membership.status !== "active" || isAuthorizationInactive;
     return (
-      <li className="membership-item" key={membership.id}>
+      <li
+        className={`membership-item${isMuted ? " membership-item-muted" : ""}`}
+        key={membership.id}
+      >
         <div className="membership-identity">
           <strong>{identity}</strong>
           {membership.username && (
@@ -310,6 +365,9 @@ export default function SheltersManagementPage() {
           <Badge>
             {membershipStatusLabels[membership.status] ?? membership.status}
           </Badge>
+          {authorizationStatus && authorizationStatus !== "active" ? (
+            <Badge>{volunteerAuthorizationLabels[authorizationStatus]}</Badge>
+          ) : null}
         </div>
         <div className="membership-actions">
           <Select
@@ -355,7 +413,7 @@ export default function SheltersManagementPage() {
           <Button
             variant="secondary"
             type="button"
-            disabled={membership.status === "disabled"}
+            disabled={membership.status !== "active"}
             onClick={() =>
               void runAction(() =>
                 updateMembership(membership.id, { status: "disabled" }),
@@ -364,6 +422,19 @@ export default function SheltersManagementPage() {
           >
             停用
           </Button>
+          {canReenable ? (
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() =>
+                void runAction(() =>
+                  updateMembership(membership.id, { status: "active" }),
+                )
+              }
+            >
+              重新啟用
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             type="button"
@@ -441,12 +512,6 @@ export default function SheltersManagementPage() {
                 啟用收容所
               </Button>
             )}
-          {canManageShelterSettings && (
-            <div className="shelter-timezone-note">
-              <strong>時區</strong>
-              <span>台灣各地收容所統一使用 Asia/Taipei（台灣時間）</span>
-            </div>
-          )}
           {canManageOrganizations && (
             <form onSubmit={(event) => void submit(event, createShelter)}>
               <h3>建立收容所</h3>
@@ -505,7 +570,7 @@ export default function SheltersManagementPage() {
             <div>
               <CardTitle id="account-list-title">帳號與權限</CardTitle>
               <p className="card-description">
-                管理目前收容所的管理人員、工作人員與志工。
+                管理目前收容所的工作人員與志工。
               </p>
             </div>
             <div className="membership-header-actions">
@@ -527,25 +592,6 @@ export default function SheltersManagementPage() {
           <CardContent>
             <section
               className="membership-section"
-              aria-labelledby="staff-title"
-            >
-              <div className="membership-section-heading">
-                <div>
-                  <h3 id="staff-title">管理人員</h3>
-                  <p>收容所管理員與工作人員</p>
-                </div>
-                <Badge>{managementMemberships.length} 人</Badge>
-              </div>
-              {managementMemberships.length > 0 ? (
-                <ul className="membership-list">
-                  {managementMemberships.map(renderMembership)}
-                </ul>
-              ) : (
-                <p className="membership-empty">目前沒有管理人員。</p>
-              )}
-            </section>
-            <section
-              className="membership-section"
               aria-labelledby="volunteer-title"
             >
               <div className="membership-section-heading">
@@ -561,6 +607,24 @@ export default function SheltersManagementPage() {
                 </ul>
               ) : (
                 <p className="membership-empty">目前沒有志工。</p>
+              )}
+            </section>
+            <section
+              className="membership-section"
+              aria-labelledby="staff-title"
+            >
+              <div className="membership-section-heading">
+                <div>
+                  <h3 id="staff-title">工作人員</h3>
+                </div>
+                <Badge>{managementMemberships.length} 人</Badge>
+              </div>
+              {managementMemberships.length > 0 ? (
+                <ul className="membership-list">
+                  {managementMemberships.map(renderMembership)}
+                </ul>
+              ) : (
+                <p className="membership-empty">目前沒有工作人員。</p>
               )}
             </section>
           </CardContent>

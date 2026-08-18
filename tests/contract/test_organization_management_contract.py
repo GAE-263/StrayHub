@@ -72,9 +72,19 @@ def test_membership_contract_exposes_finite_volunteer_projection() -> None:
     properties = document["components"]["schemas"]["Membership"]["properties"]
     assert {"valid_from", "expires_at", "access_version"} <= properties.keys()
     assert {"username", "display_name"} <= properties.keys()
-    assert {"archived_from_status", "archived_at", "archived_by_user_id"} <= properties.keys()
+    assert {
+        "archived_from_status",
+        "archived_at",
+        "archived_by_user_id",
+        "volunteer_authorization_status",
+    } <= properties.keys()
     assert "archived" in properties["status"]["enum"]
-    assert {"valid_from", "expires_at", "access_version"} <= MembershipResponse.model_fields.keys()
+    assert {
+        "valid_from",
+        "expires_at",
+        "access_version",
+        "volunteer_authorization_status",
+    } <= MembershipResponse.model_fields.keys()
 
 
 def test_membership_response_includes_user_identity_projection() -> None:
@@ -95,6 +105,27 @@ def test_membership_response_includes_user_identity_projection() -> None:
 
     assert response.username == "local-staff-a"
     assert response.display_name == "本機工作人員 A"
+
+
+def test_membership_response_distinguishes_revoked_volunteer_authorization() -> None:
+    response = _membership_response(
+        SimpleNamespace(
+            id=uuid4(),
+            organization_id=uuid4(),
+            user_id=uuid4(),
+            role="VOLUNTEER",
+            status="disabled",
+            valid_from=None,
+            expires_at=None,
+            access_version=1,
+            medical_care_access=False,
+        ),
+        SimpleNamespace(username="volunteer-a", display_name="志工 A"),
+        "revoked",
+    )
+
+    assert response.status == "disabled"
+    assert response.volunteer_authorization_status == "revoked"
 
 
 def test_organization_router_exposes_membership_archive_lifecycle_operations():

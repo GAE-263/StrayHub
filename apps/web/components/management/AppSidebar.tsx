@@ -69,6 +69,12 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
         roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
         icon: "history",
       },
+      {
+        href: "/platform-admins",
+        label: "平台管理員",
+        roles: ["PLATFORM_ADMIN"],
+        icon: "settings",
+      },
     ],
   },
 ];

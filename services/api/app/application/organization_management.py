@@ -161,6 +161,7 @@ class OrganizationManagementService:
         role: str | None,
         status: str | None,
         medical_care_access: bool | None = None,
+        volunteer_authorization_status: str | None = None,
     ):
         if role is not None:
             if role not in {"SHELTER_ADMIN", "STAFF", "VOLUNTEER"}:
@@ -175,6 +176,17 @@ class OrganizationManagementService:
         if status is not None:
             if status not in {"invited", "active", "disabled"}:
                 raise DomainError("invalid_membership_status", "Membership 狀態無效", 422)
+            if (
+                status == "active"
+                and membership.role == "VOLUNTEER"
+                and volunteer_authorization_status in {"expired", "revoked"}
+            ):
+                label = "已撤銷" if volunteer_authorization_status == "revoked" else "已過期"
+                raise DomainError(
+                    "volunteer_authorization_not_active",
+                    f"志工授權{label}，請先完成新的志工授權流程",
+                    409,
+                )
             membership.status = status
         if medical_care_access is not None:
             if membership.role != "STAFF":

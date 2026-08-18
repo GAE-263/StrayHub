@@ -31,6 +31,7 @@ type Membership = {
   display_name?: string | null;
   archived_from_status?: string | null;
   archived_at?: string | null;
+  volunteer_authorization_status?: "active" | "expired" | "revoked" | null;
 };
 
 const roleLabels: Record<Membership["role"], string> = {
@@ -45,6 +46,43 @@ const statusLabels: Record<string, string> = {
   expired: "已過期",
   revoked: "已撤銷",
 };
+
+const volunteerAuthorizationLabels: Record<string, string> = {
+  expired: "授權已到期",
+  revoked: "授權已撤銷",
+};
+
+const membershipStatusOrder: Record<string, number> = {
+  active: 0,
+  disabled: 1,
+  expired: 2,
+  revoked: 3,
+};
+
+function sortArchivedMemberships(left: Membership, right: Membership) {
+  const leftStatus =
+    left.volunteer_authorization_status === "revoked"
+      ? "revoked"
+      : left.volunteer_authorization_status === "expired"
+        ? "expired"
+        : (left.archived_from_status ?? "disabled");
+  const rightStatus =
+    right.volunteer_authorization_status === "revoked"
+      ? "revoked"
+      : right.volunteer_authorization_status === "expired"
+        ? "expired"
+        : (right.archived_from_status ?? "disabled");
+  const statusOrder =
+    (membershipStatusOrder[leftStatus] ?? 99) -
+    (membershipStatusOrder[rightStatus] ?? 99);
+  if (statusOrder !== 0) return statusOrder;
+  if (left.role !== right.role) {
+    return left.role === "SHELTER_ADMIN" ? -1 : 1;
+  }
+  return (left.display_name ?? left.username ?? "").localeCompare(
+    right.display_name ?? right.username ?? "",
+  );
+}
 
 async function responseData<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -146,19 +184,19 @@ export default function ArchivedShelterMembershipsPage() {
         .some((value) => value!.toLowerCase().includes(needle)),
     );
   }, [memberships, search]);
-  const managementMemberships = filteredMemberships.filter(
-    (membership) => membership.role !== "VOLUNTEER",
-  );
-  const volunteerMemberships = filteredMemberships.filter(
-    (membership) => membership.role === "VOLUNTEER",
-  );
+  const managementMemberships = filteredMemberships
+    .filter((membership) => membership.role !== "VOLUNTEER")
+    .sort(sortArchivedMemberships);
+  const volunteerMemberships = filteredMemberships
+    .filter((membership) => membership.role === "VOLUNTEER")
+    .sort(sortArchivedMemberships);
 
   const renderMembership = (membership: Membership) => {
     const identity =
       membership.display_name || membership.username || "未命名使用者";
     return (
       <li
-        className="membership-item archived-membership-item"
+        className="membership-item membership-item-muted archived-membership-item"
         key={membership.id}
       >
         <div className="membership-identity">
@@ -179,6 +217,16 @@ export default function ArchivedShelterMembershipsPage() {
                 membership.archived_from_status}
             </span>
           )}
+          {membership.volunteer_authorization_status &&
+          membership.volunteer_authorization_status !== "active" ? (
+            <Badge>
+              {
+                volunteerAuthorizationLabels[
+                  membership.volunteer_authorization_status
+                ]
+              }
+            </Badge>
+          ) : null}
         </div>
         <div className="membership-actions">
           <Button
@@ -245,27 +293,6 @@ export default function ArchivedShelterMembershipsPage() {
         <CardContent>
           <section
             className="membership-section"
-            aria-labelledby="archived-staff-title"
-          >
-            <div className="membership-section-heading">
-              <div>
-                <h2 id="archived-staff-title">管理人員</h2>
-                <p>收容所管理員與工作人員</p>
-              </div>
-              <Badge>{managementMemberships.length} 人</Badge>
-            </div>
-            {managementMemberships.length > 0 ? (
-              <ul className="membership-list">
-                {managementMemberships.map(renderMembership)}
-              </ul>
-            ) : (
-              <p className="membership-empty">
-                目前沒有符合條件的封存管理人員。
-              </p>
-            )}
-          </section>
-          <section
-            className="membership-section"
             aria-labelledby="archived-volunteer-title"
           >
             <div className="membership-section-heading">
@@ -281,6 +308,26 @@ export default function ArchivedShelterMembershipsPage() {
               </ul>
             ) : (
               <p className="membership-empty">目前沒有符合條件的封存志工。</p>
+            )}
+          </section>
+          <section
+            className="membership-section"
+            aria-labelledby="archived-staff-title"
+          >
+            <div className="membership-section-heading">
+              <div>
+                <h2 id="archived-staff-title">工作人員</h2>
+              </div>
+              <Badge>{managementMemberships.length} 人</Badge>
+            </div>
+            {managementMemberships.length > 0 ? (
+              <ul className="membership-list">
+                {managementMemberships.map(renderMembership)}
+              </ul>
+            ) : (
+              <p className="membership-empty">
+                目前沒有符合條件的封存工作人員。
+              </p>
             )}
           </section>
         </CardContent>

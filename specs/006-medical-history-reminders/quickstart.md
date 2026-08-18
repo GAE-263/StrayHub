@@ -50,13 +50,13 @@ Care Agenda 的 100／500 Playwright suite 會使用真實 API 與固定本機 s
 ```bash
 export STRAYHUB_TEST_DATABASE_URL=postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub
 export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub
-export API_INTERNAL_URL=http://127.0.0.1:8000
+export API_INTERNAL_URL=http://127.0.0.1:8001
 export STRAYHUB_MEDICAL_E2E_SEED_ALLOWED=1
 ```
 
 - `scripts.seed_medical_care` 在 `agenda-e2e` profile 下 MUST 要求 `STRAYHUB_MEDICAL_E2E_SEED_ALLOWED=1`，並拒絕 host 不是 `127.0.0.1`／`localhost` 的測試資料庫 URL。
 - Playwright seed helper MUST 從 `apps/web/e2e/fixtures/medical-care.ts` 解析 repository root，將其作為 subprocess `cwd`；不得依賴 `npm --prefix apps/web` 啟動後的目前目錄。
-- Next.js 沿用 `API_INTERNAL_URL` 將 `/v1` 轉送至 API。執行 suite 前必須確認 `http://127.0.0.1:8000/healthz` 回傳 `{"status":"ok"}`；API 未啟動、環境缺少或 seed guard 拒絕時，測試應回報前置條件失敗，不得顯示成 Agenda UI assertion failure。
+- Next.js 沿用 `API_INTERNAL_URL` 將 `/v1` 轉送至 API。執行 suite 前必須確認 `http://127.0.0.1:8001/healthz` 回傳 `{"status":"ok"}`；API 未啟動、環境缺少或 seed guard 拒絕時，測試應回報前置條件失敗，不得顯示成 Agenda UI assertion failure。
 - 若由 Playwright 自動啟動 Web，API 仍須依本節另行啟動；若 API 與 Web 已手動啟動，使用既有 `PLAYWRIGHT_SKIP_WEBSERVER=1` 避免重複啟動 Web。
 
 ## 3. Contract-first Gate

@@ -186,24 +186,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/organizations/{organizationId}/memberships/archived": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                organizationId: components["parameters"]["OrganizationId"];
-            };
-            cookie?: never;
-        };
-        get: operations["listArchivedMemberships"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/organizations/{organizationId}/accounts": {
         parameters: {
             query?: never;
@@ -239,6 +221,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateMembership"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/memberships/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listArchivedMemberships"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/organizations/{organizationId}/memberships/{membershipId}/archive": {
@@ -1517,6 +1517,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/platform/administrators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformAdministrators"];
+        put?: never;
+        post: operations["createPlatformAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/replacements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["replacePlatformAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformAdministratorCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformAdministratorAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/{userId}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["promotePlatformAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/{userId}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enablePlatformAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/{userId}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disablePlatformAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/administrators/{userId}/demote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["demotePlatformAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1890,8 +2018,12 @@ export interface components {
             username?: string | null;
             display_name?: string | null;
             archived_from_status?: string | null;
+            /** Format: date-time */
             archived_at?: string | null;
+            /** Format: uuid */
             archived_by_user_id?: string | null;
+            /** @enum {string|null} */
+            volunteer_authorization_status?: "active" | "expired" | "revoked" | null;
         };
         MembershipCreateRequest: {
             /** Format: uuid */
@@ -2807,6 +2939,74 @@ export interface components {
             /** Format: date-time */
             actual_completed_at: string | null;
         };
+        PlatformAdminPolicySummary: {
+            min_active_admins: number;
+            max_active_admins: number;
+            active_count: number;
+            available_slots: number;
+        };
+        PlatformAdmin: {
+            /** Format: uuid */
+            user_id: string;
+            username: string | null;
+            display_name: string;
+            /** @enum {string} */
+            user_status: "active" | "disabled";
+            /** @enum {string|null} */
+            platform_role: "PLATFORM_ADMIN" | null;
+            /** @enum {string} */
+            effective_status: "active" | "disabled";
+            can_enable: boolean;
+            can_disable: boolean;
+            can_demote: boolean;
+        };
+        PlatformAdminListResponse: {
+            policy: components["schemas"]["PlatformAdminPolicySummary"];
+            items: components["schemas"]["PlatformAdmin"][];
+        };
+        PlatformAdminCandidate: {
+            /** Format: uuid */
+            user_id: string;
+            username: string | null;
+            display_name: string;
+        };
+        CreatePlatformAdminRequest: {
+            username: string;
+            display_name: string;
+            /** Format: password */
+            temporary_password: string;
+        };
+        PlatformAdminReplacementRequest: {
+            /** Format: uuid */
+            outgoing_user_id: string;
+            /** Format: uuid */
+            replacement_user_id: string;
+            reason: string;
+        };
+        PlatformAdminMutationResponse: {
+            item: components["schemas"]["PlatformAdmin"];
+            policy: components["schemas"]["PlatformAdminPolicySummary"];
+            /** Format: uuid */
+            operation_id: string;
+        };
+        PlatformAuditRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            operation_id: string;
+            /** Format: uuid */
+            actor_user_id?: string | null;
+            /** Format: uuid */
+            resource_id?: string | null;
+            action: string;
+            before?: Record<string, never> | null;
+            after?: Record<string, never> | null;
+            reason?: string | null;
+            /** @enum {string} */
+            result: "success" | "denied";
+            /** Format: date-time */
+            created_at: string;
+        };
     };
     responses: {
         /** @description Webhook 或 Request 格式錯誤 */
@@ -3249,28 +3449,6 @@ export interface operations {
             };
         };
     };
-    listArchivedMemberships: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                organizationId: components["parameters"]["OrganizationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MembershipListResponse"];
-                };
-            };
-            403: components["responses"]["Forbidden"];
-        };
-    };
     createMembership: {
         parameters: {
             query?: never;
@@ -3351,6 +3529,30 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listArchivedMemberships: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 收容所已封存 Membership */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipListResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
         };
     };
     archiveMembership: {
@@ -3365,6 +3567,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Membership 已封存 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3389,6 +3592,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Membership 已恢復 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5670,6 +5874,221 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPlatformAdministrators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 平台管理員清單與治理政策 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminListResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createPlatformAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlatformAdminRequest"];
+            };
+        };
+        responses: {
+            /** @description 建立平台管理員 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminMutationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    replacePlatformAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformAdminReplacementRequest"];
+            };
+        };
+        responses: {
+            /** @description 完成平台管理員替換 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminMutationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPlatformAdministratorCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可提升為平台管理員的啟用帳號 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminCandidate"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listPlatformAdministratorAudit: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                action?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 平台管理員稽核紀錄 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAuditRecord"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    promotePlatformAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 提升既有帳號 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminMutationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    enablePlatformAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重新啟用平台管理員 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminMutationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    disablePlatformAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 停用平台管理員 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminMutationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    demotePlatformAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 降權平台管理員 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformAdminMutationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
         };
     };

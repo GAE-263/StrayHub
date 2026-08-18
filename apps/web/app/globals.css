@@ -1002,21 +1002,6 @@ td {
 .shelter-management-heading p {
   line-height: 1.6;
 }
-.shelter-timezone-note {
-  align-items: center;
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  display: flex;
-  gap: 10px;
-  margin-top: 22px;
-  padding: 12px 14px;
-}
-.shelter-timezone-note strong {
-  color: var(--ink);
-  white-space: nowrap;
-}
 .membership-card-header {
   align-items: flex-start;
   display: flex;
@@ -1091,6 +1076,105 @@ td {
   justify-content: flex-end;
   margin-top: 22px;
 }
+.platform-admin-page {
+  display: grid;
+  gap: 20px;
+}
+.platform-admin-heading {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+.platform-admin-header-actions,
+.platform-admin-actions,
+.platform-admin-inline-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.platform-policy-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.platform-policy-grid .ui-card-content {
+  display: grid;
+  gap: 5px;
+}
+.platform-policy-number {
+  color: var(--primary);
+  font-size: 2rem;
+  line-height: 1;
+}
+.platform-admin-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.platform-admin-item {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px;
+}
+.platform-admin-item.is-disabled {
+  background: #eef0ef;
+  color: #747b78;
+  opacity: 0.82;
+}
+.platform-admin-username {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  margin-top: 5px;
+}
+.platform-admin-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.platform-admin-inline-form .ui-field {
+  flex: 1 1 300px;
+  margin: 0;
+}
+.platform-audit-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.platform-audit-list li {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 0;
+}
+@media (max-width: 720px) {
+  .platform-admin-heading,
+  .platform-admin-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .platform-admin-header-actions,
+  .platform-admin-meta {
+    justify-content: flex-start;
+  }
+  .platform-policy-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .membership-list {
   display: grid;
   gap: 12px;
@@ -1106,6 +1190,19 @@ td {
   gap: 14px;
   grid-template-columns: minmax(190px, 1fr) auto minmax(310px, 1.25fr);
   padding: 16px;
+}
+.membership-item-muted {
+  background: #eef2f0;
+  border-color: #d5ddda;
+  color: #687570;
+}
+.membership-item-muted .membership-identity strong,
+.membership-item-muted .membership-permission {
+  color: #687570;
+}
+.membership-item-muted .ui-badge {
+  background: #e1e7e4;
+  color: #687570;
 }
 .membership-identity {
   display: grid;
@@ -1170,11 +1267,6 @@ td {
   .shelter-management-heading {
     flex-direction: column;
     gap: 14px;
-  }
-  .shelter-timezone-note {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
   }
   .membership-item {
     grid-template-columns: 1fr;

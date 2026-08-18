@@ -6,7 +6,7 @@
 
 ## Summary
 
-本功能將現有 Membership 停用流程擴充為可稽核的「封存／恢復」生命週期：預設權限管理頁面排除已封存成員，另提供 `/shelters/archived` 查詢與恢復；同時將管理員與工作人員、志工分成兩個管理區塊，並以首屏操作入口與 Modal 改善建立帳號流程。後端保留 User、Membership、照護回報與 Audit 歷史，不執行破壞性的 User 刪除。
+本功能將現有 Membership 停用流程擴充為可稽核的「停用／重新啟用／封存／恢復」生命週期：預設權限管理頁面排除已封存成員，另提供 `/shelters/archived` 查詢與恢復；同時將志工置於上方、工作人員置於下方，並依角色與狀態排序，以偏灰色卡片降低停用、過期與撤銷項目的視覺強度。後端保留 User、Membership、照護回報與 Audit 歷史，不執行破壞性的 User 刪除。
 
 ## Technical Context
 
@@ -24,7 +24,7 @@
 
 **Performance Goals**: 管理員開啟正常或封存成員清單時，在現有資料量下維持一次清單請求與可接受的後台互動速度；不新增逐筆查詢造成的明顯延遲。
 
-**Constraints**: 所有成員查詢與異動必須受目前收容所範圍與既有管理員授權限制；重要異動必須寫入 Audit；Asia/Taipei 固定設定不可被此功能改變。
+**Constraints**: 所有成員查詢與異動必須受目前收容所範圍與既有管理員授權限制；重要異動必須寫入 Audit；志工授權的 `revoked` 狀態不得藉由重新啟用 Membership 繞過。
 
 **Scale/Scope**: 目前每個收容所的成員數量為小至中型管理清單；本功能涵蓋 `/shelters`、`/shelters/archived` 及其 Membership API，不改寫其他管理頁的整體版型。
 
@@ -63,6 +63,7 @@ services/api/app/api/organization_management.py
 services/api/app/application/organization_management.py
 services/api/app/persistence/models/identity.py
 services/api/app/persistence/repositories/organization_repository.py
+services/api/app/persistence/repositories/volunteer_access_repository.py
 services/api/migrations/versions/<new-membership-archive-migration>.py
 tests/contract/test_organization_management_contract.py
 tests/<organization-management-tests>.py

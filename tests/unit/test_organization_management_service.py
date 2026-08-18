@@ -161,3 +161,48 @@ async def test_restoring_expired_volunteer_remains_expired() -> None:
     )
 
     assert membership.status == "expired"
+
+
+@pytest.mark.asyncio
+async def test_disabled_staff_can_be_reenabled() -> None:
+    repository = _Repository()
+    membership = OrganizationMembership(
+        id=uuid4(),
+        organization_id=repository.organization.id,
+        user_id=repository.user_record.id,
+        role="STAFF",
+        status="disabled",
+    )
+
+    await OrganizationManagementService(repository, Argon2PasswordHasher()).update_membership(
+        membership,
+        role=None,
+        status="active",
+    )
+
+    assert membership.status == "active"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("authorization_status", ["expired", "revoked"])
+async def test_volunteer_cannot_be_reenabled_after_terminal_authorization(
+    authorization_status: str,
+) -> None:
+    repository = _Repository()
+    membership = OrganizationMembership(
+        id=uuid4(),
+        organization_id=repository.organization.id,
+        user_id=repository.user_record.id,
+        role="VOLUNTEER",
+        status="disabled",
+    )
+
+    with pytest.raises(DomainError, match="志工授權"):
+        await OrganizationManagementService(repository, Argon2PasswordHasher()).update_membership(
+            membership,
+            role=None,
+            status="active",
+            volunteer_authorization_status=authorization_status,
+        )
+
+    assert membership.status == "disabled"

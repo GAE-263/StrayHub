@@ -149,14 +149,35 @@ async function mockOrganizationManagement(page: Page, role: string) {
           items: url.pathname.endsWith("/memberships")
             ? [
                 {
-                  id: "membership-a",
+                  id: "membership-admin",
                   organization_id: "org-a",
-                  user_id: "user-a-id",
+                  user_id: "admin-id",
+                  username: "local-admin-a",
+                  display_name: "本機管理員 A",
+                  role: "SHELTER_ADMIN",
+                  status: "active",
+                  medical_care_access: false,
+                },
+                {
+                  id: "membership-staff",
+                  organization_id: "org-a",
+                  user_id: "staff-id",
                   username: "local-staff-a",
                   display_name: "本機工作人員 A",
                   role: "STAFF",
-                  status: "active",
+                  status: "disabled",
                   medical_care_access: false,
+                },
+                {
+                  id: "membership-volunteer",
+                  organization_id: "org-a",
+                  user_id: "volunteer-id",
+                  username: "local-volunteer-a",
+                  display_name: "本機志工 A",
+                  role: "VOLUNTEER",
+                  status: "disabled",
+                  medical_care_access: false,
+                  volunteer_authorization_status: "revoked",
                 },
               ]
             : [],
@@ -205,14 +226,15 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   await expect(page.getByText("帳號與權限")).toBeVisible();
   await expect(page.getByText("本機工作人員 A")).toBeVisible();
   await expect(page.getByText("帳號：local-staff-a")).toBeVisible();
-  await expect(
-    page.getByText("台灣各地收容所統一使用 Asia/Taipei（台灣時間）"),
-  ).toBeVisible();
+  await expect(page.getByText("時區")).toHaveCount(0);
   await expect(page.getByLabel("收容所時區")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "儲存時區" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "建立收容所" })).toHaveCount(
     0,
   );
+  await expect(page.getByRole("heading", { name: "志工" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "工作人員" })).toBeVisible();
+  await expect(page.getByText("授權已撤銷")).toBeVisible();
   await page.getByRole("button", { name: "建立帳號" }).click();
   await expect(
     page.getByRole("heading", { name: "建立機構帳號" }),
@@ -248,6 +270,6 @@ test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({ page }
   await page.getByRole("button", { name: "恢復成員" }).click();
   await expect(page.getByRole("status")).toContainText("成員已恢復");
   await expect(
-    page.getByText("目前沒有符合條件的封存管理人員。"),
+    page.getByText("目前沒有符合條件的封存工作人員。"),
   ).toBeVisible();
 });

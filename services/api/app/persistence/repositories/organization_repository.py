@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
+    VolunteerAccessGrant,
 )
 
 T = TypeVar("T")
@@ -98,6 +99,24 @@ class OrganizationRepository:
             statement = statement.where(OrganizationMembership.id != exclude_membership_id)
         result = await self.session.execute(statement)
         return int(result.scalar_one())
+
+    async def volunteer_authorization_statuses(
+        self, organization_id: UUID, membership_ids: builtins.list[UUID]
+    ) -> dict[UUID, str]:
+        if not membership_ids:
+            return {}
+        result = await self.session.execute(
+            select(VolunteerAccessGrant.membership_id, VolunteerAccessGrant.status)
+            .where(
+                VolunteerAccessGrant.organization_id == organization_id,
+                VolunteerAccessGrant.membership_id.in_(membership_ids),
+            )
+            .order_by(VolunteerAccessGrant.approved_at.desc(), VolunteerAccessGrant.id.desc())
+        )
+        statuses: dict[UUID, str] = {}
+        for membership_id, grant_status in result.all():
+            statuses.setdefault(membership_id, grant_status)
+        return statuses
 
     async def membership_by_id(
         self, membership_id: UUID, organization_id: UUID

@@ -31,6 +31,7 @@ from services.api.app.persistence.models.medical_care import (
 )
 from services.api.app.persistence.models.observation import ObservationCategory, ObservationOption
 from services.api.app.persistence.models.observation_usage import ObservationOptionUsage
+from services.api.app.persistence.models.platform_governance import PlatformAdminPolicy
 from services.api.app.persistence.models.qr_code import AnimalQrCode
 from services.api.app.persistence.models.reportable_scope import DailyReportableScope
 from services.api.app.persistence.models.shelter_area import ShelterArea
@@ -65,6 +66,7 @@ __all__ = [
     "ObservationCategory",
     "ObservationOption",
     "ObservationOptionUsage",
+    "PlatformAdminPolicy",
     "Organization",
     "OrganizationMembership",
     "OrganizationVolunteerAccessPolicy",

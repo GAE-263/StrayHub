@@ -81,6 +81,7 @@ class MembershipResponse(BaseModel):
     archived_from_status: str | None = None
     archived_at: datetime | None = None
     archived_by_user_id: UUID | None = None
+    volunteer_authorization_status: Literal["active", "expired", "revoked"] | None = None
 
 
 class MembershipCreateRequest(BaseModel):
@@ -228,7 +229,11 @@ def _response(organization: Organization) -> OrganizationResponse:
     return data
 
 
-def _membership_response(membership: OrganizationMembership, user=None) -> MembershipResponse:
+def _membership_response(
+    membership: OrganizationMembership,
+    user=None,
+    volunteer_authorization_status: str | None = None,
+) -> MembershipResponse:
     return MembershipResponse.model_validate(
         {
             "id": membership.id,
@@ -245,6 +250,9 @@ def _membership_response(membership: OrganizationMembership, user=None) -> Membe
             "archived_from_status": getattr(membership, "archived_from_status", None),
             "archived_at": getattr(membership, "archived_at", None),
             "archived_by_user_id": getattr(membership, "archived_by_user_id", None),
+            "volunteer_authorization_status": (
+                volunteer_authorization_status if membership.role == "VOLUNTEER" else None
+            ),
         }
     )
 
@@ -491,8 +499,21 @@ async def list_memberships(
         organizationId,
         resource_type="organization_membership",
     )
-    memberships = await OrganizationRepository(session).memberships_with_users(organizationId)
-    return {"items": [_membership_response(membership, user) for membership, user in memberships]}
+    repository = OrganizationRepository(session)
+    memberships = await repository.memberships_with_users(organizationId)
+    authorization_statuses = await repository.volunteer_authorization_statuses(
+        organizationId, [membership.id for membership, _ in memberships]
+    )
+    return {
+        "items": [
+            _membership_response(
+                membership,
+                user,
+                authorization_statuses.get(membership.id),
+            )
+            for membership, user in memberships
+        ]
+    }
 
 
 @router.get(
@@ -510,14 +531,27 @@ async def list_archived_memberships(
         organizationId,
         resource_type="organization_membership",
     )
-    memberships = await OrganizationRepository(session).memberships_with_users(
+    repository = OrganizationRepository(session)
+    memberships = await repository.memberships_with_users(
         organizationId,
         include_archived=True,
     )
     archived = [
         (membership, user) for membership, user in memberships if membership.status == "archived"
     ]
-    return {"items": [_membership_response(membership, user) for membership, user in archived]}
+    authorization_statuses = await repository.volunteer_authorization_statuses(
+        organizationId, [membership.id for membership, _ in archived]
+    )
+    return {
+        "items": [
+            _membership_response(
+                membership,
+                user,
+                authorization_statuses.get(membership.id),
+            )
+            for membership, user in archived
+        ]
+    }
 
 
 @router.post(
@@ -625,6 +659,9 @@ async def update_membership(
     membership = await repository.membership_by_id(membershipId, organizationId)
     if membership is None:
         raise DomainError("membership_not_found", "Membership 不存在或無法存取", 404)
+    volunteer_authorization_status = (
+        await repository.volunteer_authorization_statuses(organizationId, [membership.id])
+    ).get(membership.id)
     membership = await OrganizationManagementService(
         repository, Argon2PasswordHasher()
     ).update_membership(
@@ -632,6 +669,7 @@ async def update_membership(
         role=payload.role,
         status=payload.status,
         medical_care_access=payload.medical_care_access,
+        volunteer_authorization_status=volunteer_authorization_status,
     )
     await AuditService(session).record(
         organization_id=organizationId,
@@ -643,7 +681,11 @@ async def update_membership(
         after=payload.model_dump(exclude_none=True),
     )
     await session.commit()
-    return _membership_response(membership, await repository.user(membership.user_id))
+    return _membership_response(
+        membership,
+        await repository.user(membership.user_id),
+        volunteer_authorization_status,
+    )
 
 
 @router.post(

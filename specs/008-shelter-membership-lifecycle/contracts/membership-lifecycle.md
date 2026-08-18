@@ -13,8 +13,8 @@ All operations require the existing Membership management boundary:
 `GET /v1/organizations/{organizationId}/memberships`
 
 - Default response excludes `status = archived`.
-- Response retains `id`, `organization_id`, `user_id`, `role`, `status`, `valid_from`, `expires_at`, `medical_care_access`, `username`, and `display_name`.
-- Results are grouped by the client into management staff (`SHELTER_ADMIN`, `STAFF`) and volunteers (`VOLUNTEER`).
+- Response retains `id`, `organization_id`, `user_id`, `role`, `status`, `valid_from`, `expires_at`, `medical_care_access`, `username`, `display_name`, and derived `volunteer_authorization_status`.
+- Results are grouped by the client into volunteers (`VOLUNTEER`) first and staff (`SHELTER_ADMIN`, `STAFF`) second; staff are ordered by administrator before staff, then each section is ordered by active, disabled, expired, revoked.
 
 ## API: Archived Membership List
 
@@ -61,13 +61,22 @@ The endpoint MUST apply the same organization scope, identity projection, error 
 - Records `membership.restored`.
 - Returns the restored membership projection.
 
+## API: Re-enable Membership
+
+`PATCH /v1/organizations/{organizationId}/memberships/{membershipId}` with `{ "status": "active" }`
+
+- Re-enables a disabled SHELTER_ADMIN or STAFF Membership and records the existing membership update Audit event.
+- For a VOLUNTEER Membership, rejects re-enabling when the latest volunteer authorization is `expired` or `revoked`; a new valid volunteer authorization must be established through the existing volunteer access flow.
+- Returns `volunteer_authorization_status` so the client can distinguish account status from authorization status.
+
 ## UI Routes
 
-- `/shelters`: active, invited, disabled, expired, and revoked memberships according to existing display rules; archived memberships excluded.
-- `/shelters/archived`: archived memberships only, grouped with the same role labels and offering search and restore.
+- `/shelters`: active, invited, disabled, expired, and revoked memberships according to existing display rules; archived memberships excluded. The volunteer section is first, followed by the staff section.
+- `/shelters/archived`: archived memberships only, grouped with the same section order and offering search and restore.
 
 ## UI Interaction Contract
 
 - The primary page header exposes `建立帳號` and `查看已封存成員`.
 - The account form opens in a modal with `帳號`, `顯示名稱`, `暫時密碼`, and `角色`.
 - Modal close, Escape, validation failure, loading, success, and authorization failure must be observable and accessible.
+- Disabled, expired, and revoked cards use a muted gray visual treatment; revoked volunteer authorization is labeled `授權已撤銷` and is distinct from Membership archive or disable status.

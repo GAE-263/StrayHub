@@ -30,3 +30,15 @@
 - **Decision**: 將建立帳號表單移入既有 `Dialog`，在權限管理頁首提供主要操作按鈕；Modal 需支援取消、Escape、返回焦點、錯誤保留非敏感欄位與成功後清除密碼。
 - **Rationale**: 專案已具備原生 dialog 的焦點與 modal 行為，重用可降低依賴與維護成本，並符合管理員不需滾動到頁尾的需求。
 - **Alternatives considered**: 新增外部 modal 套件沒有必要；保留頁尾表單則無法解決主要操作的可見性問題。
+
+## Decision 6: 停用可重新啟用，但志工授權狀態獨立判定
+
+- **Decision**: 一般已停用 Membership 可透過既有 Membership PATCH 操作重新設為 `active`；若志工最近一筆授權為 `expired` 或 `revoked`，重新啟用請求必須拒絕，清單另以「授權已撤銷」或「授權已到期」呈現授權狀態。授權撤銷不等同 Membership 封存或 User 刪除。
+- **Rationale**: 管理員需要修正誤停用帳號，但志工授權具有獨立的有限期間與撤銷稽核；直接把志工 Membership 變成 `active` 會繞過既有授權邊界。
+- **Alternatives considered**: 將 `revoked` 寫回 Membership status 會混淆帳號生命週期與志工授權生命週期；完全禁止重新啟用則無法處理一般工作人員的誤停用。
+
+## Decision 7: 以固定順序與灰階樣式降低非啟用項目干擾
+
+- **Decision**: `/shelters` 與 `/shelters/archived` 都將志工區塊放在工作人員區塊前；工作人員內 SHELTER_ADMIN 先於 STAFF；每區狀態依啟用中、已停用、已過期、授權已撤銷排序。停用、過期與撤銷卡片使用偏灰色樣式，啟用中保持最高辨識度。
+- **Rationale**: 讓管理員先看到變動較頻繁的志工，並能用位置與色彩快速辨識目前可用帳號；狀態文字仍保留以支援精確查詢。
+- **Alternatives considered**: 只依建立時間排序會讓歷史帳號與現役帳號混雜；只用顏色而不顯示文字會降低可及性與狀態可追溯性。

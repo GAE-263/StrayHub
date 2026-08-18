@@ -10,9 +10,9 @@ export UV_CACHE_DIR
 export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub}"
 export STRAYHUB_TEST_DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL:-postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub}"
 export API_HOST="${API_HOST:-127.0.0.1}"
-export API_PORT="${API_PORT:-8000}"
+export API_PORT="${API_PORT:-8001}"
 export WEB_HOST="${WEB_HOST:-127.0.0.1}"
-export WEB_PORT="${WEB_PORT:-3000}"
+export WEB_PORT="${WEB_PORT:-3001}"
 
 case "$MODE" in
   check|serve) ;;
@@ -27,6 +27,15 @@ require_command() {
     echo "缺少必要命令：$1" >&2
     exit 1
   }
+}
+
+require_port_available() {
+  local label="$1"
+  local port="$2"
+  if command -v lsof >/dev/null && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "${label} port ${port} 已被使用，請先停止舊服務後再執行 demo.sh。" >&2
+    exit 1
+  fi
 }
 
 require_command uv
@@ -70,12 +79,16 @@ echo "Shelter Admin: local-shelter-admin-a / local-only-password (ORG-A)"
 echo "Volunteer A:  local-volunteer-a / local-only-password"
 echo "Staff B:      local-staff-b / local-only-password"
 echo "Platform:     local-platform-admin / local-only-password"
+echo "Platform disabled: local-platform-admin-disabled / local-only-password"
 echo "API:          http://${API_HOST}:${API_PORT}/healthz"
 echo "Web:          http://${WEB_HOST}:${WEB_PORT}"
 
 if [[ "$MODE" == "check" ]]; then
   exit 0
 fi
+
+require_port_available "API" "$API_PORT"
+require_port_available "Web" "$WEB_PORT"
 
 pids=()
 cleanup() {

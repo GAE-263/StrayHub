@@ -71,14 +71,46 @@ function mockFetch(role: string) {
       return jsonResponse({
         items: [
           {
-            id: "membership-a",
+            id: "membership-admin",
             organization_id: "org-a",
-            user_id: "user-a-id",
+            user_id: "user-admin-id",
+            username: "local-admin-a",
+            display_name: "本機管理員 A",
+            role: "SHELTER_ADMIN",
+            status: "active",
+            medical_care_access: false,
+          },
+          {
+            id: "membership-staff",
+            organization_id: "org-a",
+            user_id: "user-staff-id",
             username: "local-staff-a",
             display_name: "本機工作人員 A",
             role: "STAFF",
+            status: "disabled",
+            medical_care_access: false,
+          },
+          {
+            id: "membership-volunteer",
+            organization_id: "org-a",
+            user_id: "user-volunteer-id",
+            username: "local-volunteer-a",
+            display_name: "本機志工 A",
+            role: "VOLUNTEER",
             status: "active",
             medical_care_access: false,
+            volunteer_authorization_status: "active",
+          },
+          {
+            id: "membership-revoked",
+            organization_id: "org-a",
+            user_id: "user-revoked-id",
+            username: "local-volunteer-revoked",
+            display_name: "本機撤銷志工",
+            role: "VOLUNTEER",
+            status: "disabled",
+            medical_care_access: false,
+            volunteer_authorization_status: "revoked",
           },
         ],
       });
@@ -119,21 +151,32 @@ describe("shelter management page authorization", () => {
     expect(container?.textContent).toContain("建立收容所");
   });
 
-  it("shows current shelter settings but not organization creation to SHELTER_ADMIN", async () => {
+  it("shows current shelter permissions but not organization creation to SHELTER_ADMIN", async () => {
     await renderPage("SHELTER_ADMIN");
-    expect(container?.textContent).toContain(
-      "台灣各地收容所統一使用 Asia/Taipei",
-    );
     expect(container?.textContent).toContain("帳號與權限");
     expect(container?.textContent).not.toContain("建立收容所");
     expect(container?.textContent).toContain("本機工作人員 A");
     expect(container?.textContent).toContain("帳號：local-staff-a");
-    expect(container?.textContent).toContain("管理人員");
+    expect(container?.textContent).toContain("工作人員");
     expect(container?.textContent).toContain("志工");
+    expect(container?.textContent).toContain("授權已撤銷");
+    expect(container?.textContent).not.toContain("時區");
     expect(container?.textContent).toContain("查看已封存成員");
     expect(container?.textContent).toContain("建立帳號");
     expect(container?.textContent).not.toContain("照護日期與時區");
     expect(container?.textContent).not.toContain("儲存時區");
+    const sectionTitles = Array.from(
+      container?.querySelectorAll(".membership-section h3") ?? [],
+    ).map((heading) => heading.textContent?.trim());
+    expect(sectionTitles).toEqual(["志工", "工作人員"]);
+    expect(container?.querySelectorAll(".membership-item-muted").length).toBe(
+      2,
+    );
+    expect(
+      Array.from(container?.querySelectorAll("button") ?? []).filter(
+        (button) => button.textContent?.trim() === "重新啟用",
+      ),
+    ).toHaveLength(1);
   });
 
   it("does not expose shelter settings to STAFF", async () => {

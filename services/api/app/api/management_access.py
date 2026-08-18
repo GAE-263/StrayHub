@@ -28,3 +28,8 @@ def require_admin_context(context: RequestContext) -> UUID:
 
 def require_staff_or_admin(context: RequestContext) -> UUID:
     return require_management_context(context, roles=MANAGEMENT_ROLES)
+
+
+def require_platform_scope(context: RequestContext) -> None:
+    if not context.platform_scope or context.role != "PLATFORM_ADMIN":
+        raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
