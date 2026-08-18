@@ -1180,6 +1180,11 @@ td {
   flex: 1 1 300px;
   margin: 0;
 }
+.platform-admin-inline-form .ui-input,
+.platform-admin-promote-submit {
+  height: 44px;
+  min-height: 44px;
+}
 .platform-audit-list {
   display: grid;
   gap: 10px;
@@ -1194,6 +1199,21 @@ td {
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px 0;
+}
+@media (min-width: 460px) {
+  .platform-admin-inline-form {
+    align-items: flex-end;
+  }
+}
+@media (max-width: 459px) {
+  .platform-admin-inline-form {
+    align-items: stretch;
+  }
+  .platform-admin-inline-form .ui-field,
+  .platform-admin-promote-submit {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }
 @media (max-width: 720px) {
   .platform-admin-heading,

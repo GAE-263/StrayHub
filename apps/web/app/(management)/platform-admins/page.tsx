@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { authFetch } from "../../../lib/auth";
+import { useRouter } from "next/navigation";
+import { authFetch, clearAuth, type CurrentUser } from "../../../lib/auth";
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -44,6 +45,12 @@ type Candidate = {
 
 type ListResponse = { policy: Policy; items: Admin[] };
 
+type MutationResponse = {
+  item: Admin;
+  policy: Policy;
+  operation_id: string;
+};
+
 type AuditRecord = {
   id: string;
   operation_id: string;
@@ -68,10 +75,12 @@ async function readResponse<T>(response: Response): Promise<T> {
 }
 
 export default function PlatformAdminsPage() {
+  const router = useRouter();
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -91,9 +100,10 @@ export default function PlatformAdminsPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const [adminData, candidateData] = await Promise.all([
+    const [adminData, candidateData, profileData] = await Promise.all([
       request<ListResponse>("/v1/platform/administrators"),
       request<Candidate[]>("/v1/platform/administrators/candidates"),
+      request<CurrentUser>("/v1/auth/me"),
     ]);
     const auditData = await request<AuditRecord[]>(
       "/v1/platform/administrators/audit?limit=20",
@@ -101,6 +111,7 @@ export default function PlatformAdminsPage() {
     setPolicy(adminData.policy);
     setAdmins(adminData.items);
     setCandidates(candidateData);
+    setCurrentUser(profileData);
     setAuditRecords(auditData);
     setOutgoingUserId(
       (current) =>
@@ -141,10 +152,20 @@ export default function PlatformAdminsPage() {
   };
 
   const mutate = async (path: string, body?: unknown) => {
-    await request(path, {
+    const result = await request<MutationResponse>(path, {
       method: "POST",
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+
+    const invalidatesCurrentSession =
+      result.item.user_id === currentUser?.user.id &&
+      (result.item.user_status !== "active" ||
+        result.item.platform_role !== "PLATFORM_ADMIN");
+    if (invalidatesCurrentSession) {
+      clearAuth();
+      router.replace("/login");
+      return;
+    }
     await load();
   };
 
@@ -228,7 +249,7 @@ export default function PlatformAdminsPage() {
           ) : null}
           {admin.can_demote ? (
             <Button
-              variant="ghost"
+              variant="secondary"
               type="button"
               onClick={() =>
                 void run(() =>
@@ -380,6 +401,7 @@ export default function PlatformAdminsPage() {
               </Select>
             </Field>
             <Button
+              className="platform-admin-promote-submit"
               type="submit"
               disabled={!promoteUserId || policy?.available_slots === 0}
             >
