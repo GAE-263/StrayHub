@@ -23,6 +23,14 @@ class OrganizationRepository:
     async def get(self, organization_id: UUID) -> Organization | None:
         return await self.session.get(Organization, organization_id)
 
+    async def lock_organization(self, organization_id: UUID) -> Organization | None:
+        """Lock the tenant row while a membership mutation is validated and saved."""
+
+        result = await self.session.execute(
+            select(Organization).where(Organization.id == organization_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def list(self) -> list[Organization]:
         result = await self.session.execute(select(Organization).order_by(Organization.name))
         return list(result.scalars())

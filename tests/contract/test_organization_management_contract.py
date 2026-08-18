@@ -87,6 +87,28 @@ def test_membership_contract_exposes_finite_volunteer_projection() -> None:
     } <= MembershipResponse.model_fields.keys()
 
 
+def test_membership_mutations_require_expected_access_version() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    schemas = document["components"]["schemas"]
+    update_schema = schemas["MembershipUpdateRequest"]
+    version_schema = schemas["MembershipMutationVersionRequest"]
+    assert "expected_access_version" in update_schema["required"]
+    assert "expected_access_version" in update_schema["properties"]
+    assert version_schema["required"] == ["expected_access_version"]
+    for path in (
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/archive",
+        "/v1/organizations/{organizationId}/memberships/{membershipId}/restore",
+    ):
+        assert (
+            document["paths"][path]["post"]["requestBody"]["content"]["application/json"]["schema"][
+                "$ref"
+            ]
+            == "#/components/schemas/MembershipMutationVersionRequest"
+        )
+
+
 def test_membership_response_includes_user_identity_projection() -> None:
     response = _membership_response(
         SimpleNamespace(

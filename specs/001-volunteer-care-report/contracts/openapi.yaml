@@ -285,6 +285,11 @@ paths:
     post:
       tags: [Memberships]
       operationId: archiveMembership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MembershipMutationVersionRequest" }
       responses:
         "200":
           description: Membership 已封存
@@ -300,6 +305,11 @@ paths:
     post:
       tags: [Memberships]
       operationId: restoreMembership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MembershipMutationVersionRequest" }
       responses:
         "200":
           description: Membership 已恢復
@@ -2700,10 +2710,17 @@ components:
         role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
     MembershipUpdateRequest:
       type: object
+      required: [expected_access_version]
       properties:
         role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
         status: { type: string, enum: [invited, active, disabled] }
         medical_care_access: { type: boolean }
+        expected_access_version: { type: integer, minimum: 1 }
+    MembershipMutationVersionRequest:
+      type: object
+      required: [expected_access_version]
+      properties:
+        expected_access_version: { type: integer, minimum: 1 }
     MembershipListResponse:
       type: object
       required: [items]

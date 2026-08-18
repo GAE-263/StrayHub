@@ -562,8 +562,14 @@ td {
 .ui-toast {
   background: var(--ink);
   border-radius: var(--radius-sm);
+  bottom: 20px;
+  box-shadow: var(--shadow);
   color: #fff;
+  left: 20px;
+  max-width: min(420px, calc(100vw - 40px));
+  position: fixed;
   padding: 12px 15px;
+  z-index: 1000;
 }
 .ui-tooltip {
   display: inline-flex;
@@ -618,6 +624,34 @@ td {
 .ui-overlay-close:hover {
   background: var(--surface-soft);
   color: var(--ink);
+}
+.permission-confirmation-content {
+  display: grid;
+  gap: 12px;
+  line-height: 1.6;
+}
+.permission-confirmation-content p {
+  margin: 0;
+}
+.permission-confirmation-diff {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+.permission-confirmation-diff > div {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.permission-confirmation-diff dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.permission-confirmation-diff dd {
+  margin: 4px 0 0;
 }
 @keyframes spin {
   to {
@@ -1261,6 +1295,16 @@ td {
   }
   .membership-header-actions {
     justify-content: flex-start;
+  }
+
+  .permission-confirmation-diff {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-toast {
+    bottom: 12px;
+    left: 12px;
+    max-width: calc(100vw - 24px);
   }
 }
 @media (max-width: 600px) {

@@ -52,6 +52,34 @@ async def test_tenant_operation_audit_cannot_be_written_without_organization_sco
         )
 
 
+@pytest.mark.asyncio
+async def test_denial_audit_preserves_scope_reason_result_and_before_projection():
+    class Session:
+        def add(self, record):
+            self.record = record
+
+        async def flush(self):
+            return None
+
+    organization_id = uuid4()
+    membership_id = uuid4()
+    record = await AuditService(Session()).record_denial(
+        organization_id=organization_id,
+        actor_user_id=uuid4(),
+        resource_type="organization_membership",
+        resource_id=membership_id,
+        reason="membership_state_changed",
+        before={"role": "STAFF", "status": "active", "access_version": 3},
+    )
+
+    assert record.organization_id == organization_id
+    assert record.resource_id == membership_id
+    assert record.result == "denied"
+    assert record.reason == "membership_state_changed"
+    assert record.before_data == {"role": "STAFF", "status": "active", "access_version": 3}
+    assert record.after_data is None
+
+
 def test_platform_support_requires_one_target_and_trimmed_reason_before_query() -> None:
     target = uuid4()
     context = RequestContext(

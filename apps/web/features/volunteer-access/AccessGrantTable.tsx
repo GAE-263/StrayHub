@@ -4,6 +4,8 @@ import React from "react";
 import { useState } from "react";
 
 import { formatTaiwanDateTime } from "./volunteerAccess";
+import { MembershipPermissionDialog } from "../../components/management/MembershipPermissionDialog";
+import { Toast } from "../../components/ui/toast";
 
 export type AccessGrant = {
   id: string;
@@ -14,6 +16,15 @@ export type AccessGrant = {
   version: number;
   source_type: string;
   revocation_reason?: string | null;
+};
+
+type PendingGrantChange = {
+  grant: AccessGrant;
+  action: "update_period" | "revoke";
+  payload: object;
+  before: string;
+  after: string;
+  authorizationImpact?: string;
 };
 
 function localDateTime(value: string) {
@@ -34,6 +45,10 @@ export function AccessGrantTable({
     Record<string, { from: string; to: string; reason: string }>
   >({});
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const [pending, setPending] = useState<PendingGrantChange | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const visible = grants.filter(
     (grant) => status === "all" || grant.status === status,
   );
@@ -70,8 +85,6 @@ export function AccessGrantTable({
     const expiresAt = new Date(values.to);
     const immediate =
       action === "update_period" && expiresAt.getTime() <= Date.now();
-    if (immediate && !window.confirm("新期限已在現在之前，確認立即失效？"))
-      return;
     const payload =
       action === "revoke"
         ? {
@@ -87,15 +100,44 @@ export function AccessGrantTable({
             confirm_immediate_expiry: immediate,
             reason: values.reason.trim() || null,
           };
+    setPending({
+      grant,
+      action,
+      payload,
+      before:
+        action === "revoke"
+          ? `有效授權／版本 ${grant.version}`
+          : `${formatTaiwanDateTime(grant.valid_from)} ～ ${formatTaiwanDateTime(grant.expires_at)}`,
+      after:
+        action === "revoke"
+          ? "已撤銷"
+          : `${values.from || "現在"} ～ ${values.to || "新期限"}`,
+      authorizationImpact: immediate
+        ? "新期限已到期，這次操作會立即失效。"
+        : undefined,
+    });
+  }
+
+  async function confirmMutation() {
+    if (!pending) return;
+    setConfirming(true);
+    setError("");
     try {
-      await onMutate(grant.id, payload);
-      setMessage(action === "revoke" ? "授權已撤銷" : "授權期限已更新");
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "授權已由其他管理員更新，輸入已保留，請重新載入後確認",
+      await onMutate(pending.grant.id, pending.payload);
+      setPending(null);
+      setToast(
+        pending.action === "revoke"
+          ? `已撤銷「${pending.grant.display_name}」的志工授權`
+          : `已更新「${pending.grant.display_name}」的志工授權期限`,
       );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "授權已由其他管理員更新，請重新載入後確認",
+      );
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -198,9 +240,26 @@ export function AccessGrantTable({
           </tbody>
         </table>
       </div>
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {error ? <p role="alert">{error}</p> : null}
+      {message ? (
+        <p role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
+      {toast ? <Toast>{toast}</Toast> : null}
+      <MembershipPermissionDialog
+        open={Boolean(pending)}
+        identity={pending?.grant.display_name ?? "志工"}
+        operation={
+          pending?.action === "revoke" ? "撤銷志工授權" : "調整志工授權期限"
+        }
+        before={pending?.before ?? ""}
+        after={pending?.after ?? ""}
+        authorizationImpact={pending?.authorizationImpact}
+        onClose={() => setPending(null)}
+        onConfirm={() => void confirmMutation()}
+        confirming={confirming}
+      />
     </section>
   );
 }

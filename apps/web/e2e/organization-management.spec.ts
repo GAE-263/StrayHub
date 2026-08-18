@@ -113,6 +113,7 @@ async function mockOrganizationManagement(page: Page, role: string) {
                   display_name: "已封存工作人員",
                   role: "STAFF",
                   status: "archived",
+                  access_version: 1,
                   archived_from_status: "disabled",
                 },
               ]
@@ -134,6 +135,7 @@ async function mockOrganizationManagement(page: Page, role: string) {
           display_name: "已封存工作人員",
           role: "STAFF",
           status: "disabled",
+          access_version: 2,
         }),
       });
       return;
@@ -156,6 +158,7 @@ async function mockOrganizationManagement(page: Page, role: string) {
                   display_name: "本機管理員 A",
                   role: "SHELTER_ADMIN",
                   status: "active",
+                  access_version: 1,
                   medical_care_access: false,
                 },
                 {
@@ -166,6 +169,7 @@ async function mockOrganizationManagement(page: Page, role: string) {
                   display_name: "本機工作人員 A",
                   role: "STAFF",
                   status: "disabled",
+                  access_version: 1,
                   medical_care_access: false,
                 },
                 {
@@ -176,6 +180,7 @@ async function mockOrganizationManagement(page: Page, role: string) {
                   display_name: "本機志工 A",
                   role: "VOLUNTEER",
                   status: "disabled",
+                  access_version: 1,
                   medical_care_access: false,
                   volunteer_authorization_status: "revoked",
                 },
@@ -268,7 +273,8 @@ test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({ page }
   await expect(page.getByText("已封存工作人員")).toBeVisible();
   await expect(page.getByText("封存前：已停用")).toBeVisible();
   await page.getByRole("button", { name: "恢復成員" }).click();
-  await expect(page.getByRole("status")).toContainText("成員已恢復");
+  await page.getByRole("button", { name: "確認調整" }).click();
+  await expect(page.getByRole("status")).toContainText("已恢復成員");
   await expect(
     page.getByText("目前沒有符合條件的封存工作人員。"),
   ).toBeVisible();

@@ -78,6 +78,7 @@ function mockFetch(role: string) {
             display_name: "本機管理員 A",
             role: "SHELTER_ADMIN",
             status: "active",
+            access_version: 1,
             medical_care_access: false,
           },
           {
@@ -88,6 +89,7 @@ function mockFetch(role: string) {
             display_name: "本機工作人員 A",
             role: "STAFF",
             status: "disabled",
+            access_version: 1,
             medical_care_access: false,
           },
           {
@@ -98,6 +100,7 @@ function mockFetch(role: string) {
             display_name: "本機志工 A",
             role: "VOLUNTEER",
             status: "active",
+            access_version: 1,
             medical_care_access: false,
             volunteer_authorization_status: "active",
           },
@@ -109,6 +112,7 @@ function mockFetch(role: string) {
             display_name: "本機撤銷志工",
             role: "VOLUNTEER",
             status: "disabled",
+            access_version: 1,
             medical_care_access: false,
             volunteer_authorization_status: "revoked",
           },
@@ -201,6 +205,29 @@ describe("shelter management page authorization", () => {
     await act(async () => cancelButton?.click());
     expect(
       container?.querySelector<HTMLDialogElement>('[role="dialog"]')?.open,
+    ).toBe(false);
+  });
+
+  it("opens a confirmation dialog before a membership role mutation", async () => {
+    await renderPage("SHELTER_ADMIN");
+    const roleSelect = container?.querySelector<HTMLSelectElement>(
+      '[aria-label="本機工作人員 A 角色"]',
+    );
+    expect(roleSelect).not.toBeNull();
+    await act(async () => {
+      if (!roleSelect) return;
+      roleSelect.value = "SHELTER_ADMIN";
+      roleSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container?.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(container?.textContent).toContain("調整角色");
+    const cancelButton = Array.from(
+      container?.querySelectorAll('[role="alertdialog"] button') ?? [],
+    ).find((button) => button.textContent?.trim() === "取消") as
+      HTMLButtonElement | undefined;
+    await act(async () => cancelButton?.click());
+    expect(
+      container?.querySelector<HTMLDialogElement>('[role="alertdialog"]')?.open,
     ).toBe(false);
   });
 });

@@ -206,3 +206,108 @@ async def test_volunteer_cannot_be_reenabled_after_terminal_authorization(
         )
 
     assert membership.status == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_third_active_shelter_admin_is_rejected_before_membership_insert() -> None:
+    repository = _Repository()
+    repository.memberships.extend(
+        [
+            OrganizationMembership(
+                id=uuid4(),
+                organization_id=repository.organization.id,
+                user_id=uuid4(),
+                role="SHELTER_ADMIN",
+                status="active",
+            ),
+            OrganizationMembership(
+                id=uuid4(),
+                organization_id=repository.organization.id,
+                user_id=uuid4(),
+                role="SHELTER_ADMIN",
+                status="active",
+            ),
+        ]
+    )
+
+    with pytest.raises(DomainError, match="最多只能有兩名"):
+        await OrganizationManagementService(repository, Argon2PasswordHasher()).create_membership(
+            organization_id=repository.organization.id,
+            user_id=repository.user_record.id,
+            role="SHELTER_ADMIN",
+        )
+
+    assert len(repository.memberships) == 2
+
+
+@pytest.mark.asyncio
+async def test_membership_projection_rejects_last_admin_without_partial_mutation() -> None:
+    repository = _Repository()
+    membership = OrganizationMembership(
+        id=uuid4(),
+        organization_id=repository.organization.id,
+        user_id=repository.user_record.id,
+        role="SHELTER_ADMIN",
+        status="active",
+        access_version=4,
+    )
+    repository.memberships.append(membership)
+
+    with pytest.raises(DomainError, match="至少需要一名"):
+        await OrganizationManagementService(repository, Argon2PasswordHasher()).update_membership(
+            membership,
+            role="STAFF",
+            status="disabled",
+            expected_access_version=4,
+        )
+
+    assert (membership.role, membership.status, membership.access_version) == (
+        "SHELTER_ADMIN",
+        "active",
+        4,
+    )
+
+
+@pytest.mark.asyncio
+async def test_stale_membership_version_is_rejected_without_mutation() -> None:
+    repository = _Repository()
+    membership = OrganizationMembership(
+        id=uuid4(),
+        organization_id=repository.organization.id,
+        user_id=repository.user_record.id,
+        role="STAFF",
+        status="disabled",
+        access_version=3,
+    )
+
+    with pytest.raises(DomainError, match="其他操作更新"):
+        await OrganizationManagementService(repository, Argon2PasswordHasher()).update_membership(
+            membership,
+            role=None,
+            status="active",
+            expected_access_version=2,
+        )
+
+    assert (membership.status, membership.access_version) == ("disabled", 3)
+
+
+@pytest.mark.asyncio
+async def test_successful_membership_mutation_increments_access_version() -> None:
+    repository = _Repository()
+    membership = OrganizationMembership(
+        id=uuid4(),
+        organization_id=repository.organization.id,
+        user_id=repository.user_record.id,
+        role="STAFF",
+        status="disabled",
+        access_version=1,
+    )
+
+    await OrganizationManagementService(repository, Argon2PasswordHasher()).update_membership(
+        membership,
+        role=None,
+        status="active",
+        expected_access_version=1,
+    )
+
+    assert (membership.status, membership.access_version) == ("active", 2)

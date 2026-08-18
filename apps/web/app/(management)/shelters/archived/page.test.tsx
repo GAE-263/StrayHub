@@ -9,6 +9,24 @@ import ArchivedShelterMembershipsPage from "./page";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+if (!HTMLDialogElement.prototype.showModal) {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+    configurable: true,
+    value() {
+      this.open = true;
+    },
+  });
+}
+
+if (!HTMLDialogElement.prototype.close) {
+  Object.defineProperty(HTMLDialogElement.prototype, "close", {
+    configurable: true,
+    value() {
+      this.open = false;
+    },
+  });
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -51,6 +69,7 @@ async function renderPage() {
             username: "archived-staff",
             role: "STAFF",
             status: "archived",
+            access_version: 1,
             archived_from_status: "disabled",
           },
           {
@@ -60,6 +79,18 @@ async function renderPage() {
             username: "archived-volunteer",
             role: "VOLUNTEER",
             status: "archived",
+            access_version: 1,
+          },
+        ],
+      });
+    }
+    if (path.endsWith("/memberships")) {
+      return jsonResponse({
+        items: [
+          {
+            id: "membership-admin",
+            role: "SHELTER_ADMIN",
+            status: "active",
           },
         ],
       });
@@ -96,6 +127,19 @@ describe("archived shelter memberships page", () => {
     expect(container?.textContent).not.toContain("管理人員");
     expect(container?.textContent).toContain("封存前：已停用");
     expect(container?.textContent).toContain("恢復成員");
+    const restoreButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "恢復成員");
+    await act(async () => restoreButton?.click());
+    expect(container?.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(container?.textContent).toContain("確認權限調整");
+    const cancelButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "取消");
+    await act(async () => cancelButton?.click());
+    expect(
+      container?.querySelector<HTMLDialogElement>('[role="alertdialog"]')?.open,
+    ).toBe(false);
     const sectionTitles = Array.from(
       container?.querySelectorAll(".membership-section h2") ?? [],
     ).map((heading) => heading.textContent?.trim());

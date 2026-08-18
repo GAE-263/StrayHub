@@ -14,6 +14,8 @@ import {
 import { Field } from "../../../../components/ui/field";
 import { Input } from "../../../../components/ui/input";
 import { Select } from "../../../../components/ui/select";
+import { Toast } from "../../../../components/ui/toast";
+import { MembershipPermissionDialog } from "../../../../components/management/MembershipPermissionDialog";
 import { authFetch, type CurrentUser } from "../../../../lib/auth";
 
 type Shelter = {
@@ -27,11 +29,17 @@ type Membership = {
   user_id: string;
   role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
   status: "archived";
+  access_version: number;
   username?: string | null;
   display_name?: string | null;
   archived_from_status?: string | null;
   archived_at?: string | null;
   volunteer_authorization_status?: "active" | "expired" | "revoked" | null;
+};
+
+type ActiveMembership = {
+  role: Membership["role"];
+  status: string;
 };
 
 const roleLabels: Record<Membership["role"], string> = {
@@ -106,6 +114,10 @@ export default function ArchivedShelterMembershipsPage() {
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
+  const [activeAdminCount, setActiveAdminCount] = useState(0);
+  const [pendingRestore, setPendingRestore] = useState<Membership | null>(null);
+  const [confirmingRestore, setConfirmingRestore] = useState(false);
 
   const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -137,10 +149,21 @@ export default function ArchivedShelterMembershipsPage() {
 
   const loadArchivedMemberships = useCallback(async () => {
     if (!selectedShelterId) return;
-    const data = await request<{ items: Membership[] }>(
-      `/v1/organizations/${selectedShelterId}/memberships/archived`,
-    );
+    const [data, activeData] = await Promise.all([
+      request<{ items: Membership[] }>(
+        `/v1/organizations/${selectedShelterId}/memberships/archived`,
+      ),
+      request<{ items: ActiveMembership[] }>(
+        `/v1/organizations/${selectedShelterId}/memberships`,
+      ),
+    ]);
     setMemberships(data.items);
+    setActiveAdminCount(
+      activeData.items.filter(
+        (membership) =>
+          membership.role === "SHELTER_ADMIN" && membership.status === "active",
+      ).length,
+    );
   }, [request, selectedShelterId]);
 
   useEffect(() => {
@@ -160,18 +183,36 @@ export default function ArchivedShelterMembershipsPage() {
     );
   }, [canManage, loadArchivedMemberships, selectedShelterId]);
 
-  const restoreMembership = async (membershipId: string) => {
+  const restoreMembership = async (membership: Membership) => {
     setErrorMessage("");
     setMessage("");
     try {
       await request<Membership>(
-        `/v1/organizations/${selectedShelterId}/memberships/${membershipId}/restore`,
-        { method: "POST" },
+        `/v1/organizations/${selectedShelterId}/memberships/${membership.id}/restore`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            expected_access_version: membership.access_version,
+          }),
+        },
       );
-      setMessage("成員已恢復，請回到權限管理查看目前狀態。");
       await loadArchivedMemberships();
+      setToastMessage(
+        `已恢復成員「${membership.display_name || membership.username || "未命名使用者"}」`,
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "操作失敗");
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!pendingRestore) return;
+    setConfirmingRestore(true);
+    try {
+      await restoreMembership(pendingRestore);
+      setPendingRestore(null);
+    } finally {
+      setConfirmingRestore(false);
     }
   };
 
@@ -229,10 +270,7 @@ export default function ArchivedShelterMembershipsPage() {
           ) : null}
         </div>
         <div className="membership-actions">
-          <Button
-            type="button"
-            onClick={() => void restoreMembership(membership.id)}
-          >
+          <Button type="button" onClick={() => setPendingRestore(membership)}>
             恢復成員
           </Button>
         </div>
@@ -256,6 +294,7 @@ export default function ArchivedShelterMembershipsPage() {
         <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
       )}
       {message && <Alert role="status">{message}</Alert>}
+      {toastMessage && <Toast>{toastMessage}</Toast>}
       <Card aria-labelledby="archived-list-title">
         <CardHeader className="membership-card-header">
           <div>
@@ -332,6 +371,42 @@ export default function ArchivedShelterMembershipsPage() {
           </section>
         </CardContent>
       </Card>
+      <MembershipPermissionDialog
+        open={Boolean(pendingRestore)}
+        shelterName={
+          shelters.find((shelter) => shelter.id === selectedShelterId)?.name
+        }
+        identity={
+          pendingRestore?.display_name ||
+          pendingRestore?.username ||
+          "未命名使用者"
+        }
+        operation="恢復成員"
+        before="已封存"
+        after={
+          pendingRestore?.role === "SHELTER_ADMIN" &&
+          pendingRestore.archived_from_status === "active"
+            ? "啟用中的收容所管理員"
+            : "恢復封存前狀態"
+        }
+        adminCountBefore={activeAdminCount}
+        adminCountAfter={
+          activeAdminCount +
+          (pendingRestore?.role === "SHELTER_ADMIN" &&
+          pendingRestore.archived_from_status === "active"
+            ? 1
+            : 0)
+        }
+        authorizationImpact={
+          pendingRestore?.volunteer_authorization_status === "expired" ||
+          pendingRestore?.volunteer_authorization_status === "revoked"
+            ? "志工授權已過期或撤銷，恢復 Membership 不會繞過授權流程。"
+            : undefined
+        }
+        onClose={() => setPendingRestore(null)}
+        onConfirm={() => void confirmRestore()}
+        confirming={confirmingRestore}
+      />
     </main>
   );
 }

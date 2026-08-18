@@ -77,6 +77,8 @@ class AuditService:
         resource_id: UUID | None = None,
         source_channel: str = "api",
         reason: str | None = None,
+        before: Any = None,
+        after: Any = None,
     ) -> AuditRecord:
         return await self.record(
             organization_id=organization_id,
@@ -85,7 +87,10 @@ class AuditService:
             resource_type=resource_type,
             resource_id=resource_id,
             source_channel=source_channel,
+            before=before,
+            after=after,
             reason=reason,
+            result="denied",
         )
 
     async def record_correction(
