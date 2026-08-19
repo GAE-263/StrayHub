@@ -427,7 +427,7 @@
   - Route verification：`http://localhost:3001/settings/reportable-scope`；以管理權限登入，點擊 active scope 的停用，確認 Dialog 顯示目標／期間／志工影響；取消不 PATCH；確認後顯示處理中並停用，成功後 Toast 可見。
   - Commit：`fix(web): confirm reportable scope deactivation`。
 
-## [ ] FT-014 以設計系統 Dialog 取代 AI review `window.prompt`
+## [x] FT-014 以設計系統 Dialog 取代 AI review `window.prompt`
 
 - **優先級：** P1
 - **問題位置：** `apps/web/app/(management)/ai-review/page.tsx:77-95, 183-204`
@@ -435,7 +435,18 @@
 - **預期修改後：** Dialog + Field + Textarea；拒絕具風險語意；busy 與 Toast 完整。
 - **驗證：** AI review tests、P1 browser／a11y、前後 screenshot。
 - **預定 commit：** `fix(web): replace ai review prompt with governed dialog`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：確認／拒絕使用 `window.prompt`，兩種動作視覺與語意層級相同，沒有 busy／Toast feedback。
+  - RED：AI review interaction test 點擊拒絕後找不到 `拒絕 AI Observation` Dialog，且會依賴 browser prompt。
+  - GREEN：改用 design-system Dialog、Field、Textarea；拒絕使用 destructive confirmation；確認／拒絕均要求 reason；request 期間鎖定 controls；成功後顯示 Toast，拒絕明確保留原始 AI output。
+  - Changed files：
+    - `apps/web/app/(management)/ai-review/page.tsx`
+    - `apps/web/app/(management)/ai-review/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：AI review page test 1 passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/ai-review`；在待覆核項目點擊確認／拒絕，Dialog 顯示對應語意與 reason textarea；拒絕為 destructive；取消不送出；確認後顯示 Toast 並刷新 queue。
+  - Commit：`fix(web): replace ai review prompt with governed dialog`。
 
 ## [ ] FT-015 移除建立收容所管理員的雙層 Modal
 
