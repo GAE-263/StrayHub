@@ -57,10 +57,13 @@ function response(body: unknown, status = 200): Response {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-async function renderPage(listResponse?: unknown) {
+async function renderPage(listResponse?: unknown, delayMs = 0) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
+      if (delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
       const path = String(input);
       if (path.endsWith("/auth/me")) {
         return response({
@@ -147,6 +150,28 @@ describe("platform administrator management page", () => {
     expect(container?.textContent).toContain("已停用的平台管理員");
     expect(container?.textContent).toContain("剩餘名額");
     expect(container?.textContent).toContain("本機工作人員 A");
+  });
+
+  it("shows loading state before an empty governance response", async () => {
+    await renderPage(
+      {
+        policy: {
+          min_active_admins: 1,
+          max_active_admins: 2,
+          active_count: 0,
+          available_slots: 2,
+        },
+        items: [],
+      },
+      40,
+    );
+    expect(container?.textContent).toContain("正在載入平台管理員");
+    expect(container?.textContent).not.toContain("目前沒有啟用中的平台管理員");
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    expect(container?.textContent).toContain("目前沒有啟用中的平台管理員");
   });
 
   it("opens the create account modal", async () => {

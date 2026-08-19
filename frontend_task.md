@@ -469,7 +469,7 @@
   - Route verification：`http://localhost:3001/shelters`；以 SHELTER_ADMIN 登入，點擊建立帳號、選擇收容所管理員、提交；確認建立表單關閉且只有權限確認 Dialog 開啟；取消後恢復原表單，確認後建立帳號。
   - Commit：`fix(web): avoid stacked shelter account dialogs`。
 
-## [ ] FT-016 區分 shelters／platform-admins 初始 loading 與 empty
+## [x] FT-016 區分 shelters／platform-admins 初始 loading 與 empty
 
 - **優先級：** P1
 - **問題位置：** shelters、archived shelters、platform admins 清單。
@@ -477,7 +477,22 @@
 - **預期修改後：** loaded 前顯示 LoadingState；成功且真空才顯示 EmptyState。
 - **驗證：** delayed-response tests、page tests、前後錄影／screenshot。
 - **預定 commit：** `fix(web): separate governance loading and empty states`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：governance API 尚未完成時，platform admins、shelters 與 archived memberships 以空陣列先渲染「目前沒有資料」，無法區分 loading 與真正 empty。
+  - RED：新增三個 route 的 delayed-response tests；原始實作在 delay 期間即顯示 empty。另修正 shelters `loadShelters` 對 selected id 的 callback dependency，避免 loading effect 重複重入。
+  - GREEN：platform admins 加入 policy／active／audit／disabled loading views 與 EmptyState；shelters 與 archived shelters 分離 shelter list loading、membership details loading，API 完成且 items 為空才顯示 EmptyState。
+  - Changed files：
+    - `apps/web/app/(management)/platform-admins/page.tsx`
+    - `apps/web/app/(management)/platform-admins/page.test.tsx`
+    - `apps/web/app/(management)/shelters/page.tsx`
+    - `apps/web/app/(management)/shelters/page.test.tsx`
+    - `apps/web/app/(management)/shelters/archived/page.tsx`
+    - `apps/web/app/(management)/shelters/archived/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：三個 page suites 16 tests passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/platform-admins`、`/shelters`、`/shelters/archived`；在網路延遲下觀察對應 LoadingState，待 API 回傳空陣列後才顯示 EmptyState；有資料時顯示清單，不再短暫顯示錯誤 empty。
+  - Commit：`fix(web): separate governance loading and empty states`。
 
 ## [ ] FT-017 為 mutation 表單加入 submitting 防重複送出
 

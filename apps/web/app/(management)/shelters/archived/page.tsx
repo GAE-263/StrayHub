@@ -16,6 +16,10 @@ import { Input } from "../../../../components/ui/input";
 import { Select } from "../../../../components/ui/select";
 import { Toast } from "../../../../components/ui/toast";
 import { MembershipPermissionDialog } from "../../../../components/management/MembershipPermissionDialog";
+import {
+  EmptyState,
+  LoadingState,
+} from "../../../../components/management/StateViews";
 import { authFetch, type CurrentUser } from "../../../../lib/auth";
 
 type Shelter = {
@@ -109,8 +113,10 @@ async function responseData<T>(response: Response): Promise<T> {
 export default function ArchivedShelterMembershipsPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [sheltersLoading, setSheltersLoading] = useState(true);
   const [selectedShelterId, setSelectedShelterId] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [membershipsLoading, setMembershipsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -138,32 +144,46 @@ export default function ArchivedShelterMembershipsPage() {
   );
 
   const loadShelters = useCallback(async () => {
-    const data = await request<{ items: Shelter[] }>("/v1/organizations");
-    setShelters(data.items);
-    setSelectedShelterId((current) =>
-      data.items.some((shelter) => shelter.id === current)
-        ? current
-        : (data.items[0]?.id ?? ""),
-    );
+    setSheltersLoading(true);
+    try {
+      const data = await request<{ items: Shelter[] }>("/v1/organizations");
+      setShelters(data.items);
+      setSelectedShelterId((current) =>
+        data.items.some((shelter) => shelter.id === current)
+          ? current
+          : (data.items[0]?.id ?? ""),
+      );
+    } finally {
+      setSheltersLoading(false);
+    }
   }, [request]);
 
   const loadArchivedMemberships = useCallback(async () => {
-    if (!selectedShelterId) return;
-    const [data, activeData] = await Promise.all([
-      request<{ items: Membership[] }>(
-        `/v1/organizations/${selectedShelterId}/memberships/archived`,
-      ),
-      request<{ items: ActiveMembership[] }>(
-        `/v1/organizations/${selectedShelterId}/memberships`,
-      ),
-    ]);
-    setMemberships(data.items);
-    setActiveAdminCount(
-      activeData.items.filter(
-        (membership) =>
-          membership.role === "SHELTER_ADMIN" && membership.status === "active",
-      ).length,
-    );
+    if (!selectedShelterId) {
+      setMembershipsLoading(false);
+      return;
+    }
+    setMembershipsLoading(true);
+    try {
+      const [data, activeData] = await Promise.all([
+        request<{ items: Membership[] }>(
+          `/v1/organizations/${selectedShelterId}/memberships/archived`,
+        ),
+        request<{ items: ActiveMembership[] }>(
+          `/v1/organizations/${selectedShelterId}/memberships`,
+        ),
+      ]);
+      setMemberships(data.items);
+      setActiveAdminCount(
+        activeData.items.filter(
+          (membership) =>
+            membership.role === "SHELTER_ADMIN" &&
+            membership.status === "active",
+        ).length,
+      );
+    } finally {
+      setMembershipsLoading(false);
+    }
   }, [request, selectedShelterId]);
 
   useEffect(() => {
@@ -307,20 +327,26 @@ export default function ArchivedShelterMembershipsPage() {
             </p>
           </div>
           <div className="membership-header-actions">
-            <Field>
-              <label htmlFor="archived-shelter">目前管理收容所</label>
-              <Select
-                id="archived-shelter"
-                value={selectedShelterId}
-                onChange={(event) => setSelectedShelterId(event.target.value)}
-              >
-                {shelters.map((shelter) => (
-                  <option key={shelter.id} value={shelter.id}>
-                    {shelter.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            {sheltersLoading ? (
+              <LoadingState title="正在載入收容所…" />
+            ) : shelters.length === 0 ? (
+              <EmptyState title="目前沒有可管理的收容所" />
+            ) : (
+              <Field>
+                <label htmlFor="archived-shelter">目前管理收容所</label>
+                <Select
+                  id="archived-shelter"
+                  value={selectedShelterId}
+                  onChange={(event) => setSelectedShelterId(event.target.value)}
+                >
+                  {shelters.map((shelter) => (
+                    <option key={shelter.id} value={shelter.id}>
+                      {shelter.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
             <Field>
               <label htmlFor="archived-search">搜尋姓名或帳號</label>
               <Input
@@ -333,45 +359,53 @@ export default function ArchivedShelterMembershipsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <section
-            className="membership-section"
-            aria-labelledby="archived-volunteer-title"
-          >
-            <div className="membership-section-heading">
-              <div>
-                <h2 id="archived-volunteer-title">志工</h2>
-                <p>封存的志工授權仍保留歷史紀錄</p>
-              </div>
-              <Badge>{volunteerMemberships.length} 人</Badge>
-            </div>
-            {volunteerMemberships.length > 0 ? (
-              <ul className="membership-list">
-                {volunteerMemberships.map(renderMembership)}
-              </ul>
-            ) : (
-              <p className="membership-empty">目前沒有符合條件的封存志工。</p>
-            )}
-          </section>
-          <section
-            className="membership-section"
-            aria-labelledby="archived-staff-title"
-          >
-            <div className="membership-section-heading">
-              <div>
-                <h2 id="archived-staff-title">工作人員</h2>
-              </div>
-              <Badge>{managementMemberships.length} 人</Badge>
-            </div>
-            {managementMemberships.length > 0 ? (
-              <ul className="membership-list">
-                {managementMemberships.map(renderMembership)}
-              </ul>
-            ) : (
-              <p className="membership-empty">
-                目前沒有符合條件的封存工作人員。
-              </p>
-            )}
-          </section>
+          {membershipsLoading ? (
+            <LoadingState title="正在載入封存成員…" />
+          ) : (
+            <>
+              <section
+                className="membership-section"
+                aria-labelledby="archived-volunteer-title"
+              >
+                <div className="membership-section-heading">
+                  <div>
+                    <h2 id="archived-volunteer-title">志工</h2>
+                    <p>封存的志工授權仍保留歷史紀錄</p>
+                  </div>
+                  <Badge>{volunteerMemberships.length} 人</Badge>
+                </div>
+                {volunteerMemberships.length > 0 ? (
+                  <ul className="membership-list">
+                    {volunteerMemberships.map(renderMembership)}
+                  </ul>
+                ) : (
+                  <p className="membership-empty">
+                    目前沒有符合條件的封存志工。
+                  </p>
+                )}
+              </section>
+              <section
+                className="membership-section"
+                aria-labelledby="archived-staff-title"
+              >
+                <div className="membership-section-heading">
+                  <div>
+                    <h2 id="archived-staff-title">工作人員</h2>
+                  </div>
+                  <Badge>{managementMemberships.length} 人</Badge>
+                </div>
+                {managementMemberships.length > 0 ? (
+                  <ul className="membership-list">
+                    {managementMemberships.map(renderMembership)}
+                  </ul>
+                ) : (
+                  <p className="membership-empty">
+                    目前沒有符合條件的封存工作人員。
+                  </p>
+                )}
+              </section>
+            </>
+          )}
         </CardContent>
       </Card>
       <MembershipPermissionDialog

@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { authFetch, clearAuth, type CurrentUser } from "../../../lib/auth";
+import {
+  EmptyState,
+  LoadingState,
+} from "../../../components/management/StateViews";
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -89,6 +93,7 @@ export default function PlatformAdminsPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -110,26 +115,31 @@ export default function PlatformAdminsPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const [adminData, candidateData, profileData] = await Promise.all([
-      request<ListResponse>("/v1/platform/administrators"),
-      request<Candidate[]>("/v1/platform/administrators/candidates"),
-      request<CurrentUser>("/v1/auth/me"),
-    ]);
-    const auditData = await request<AuditRecord[]>(
-      "/v1/platform/administrators/audit?limit=20",
-    );
-    setPolicy(adminData.policy);
-    setAdmins(adminData.items);
-    setCandidates(candidateData);
-    setCurrentUser(profileData);
-    setAuditRecords(auditData);
-    setOutgoingUserId(
-      (current) =>
-        current ||
-        adminData.items.find((item) => item.effective_status === "active")
-          ?.user_id ||
-        "",
-    );
+    setLoading(true);
+    try {
+      const [adminData, candidateData, profileData] = await Promise.all([
+        request<ListResponse>("/v1/platform/administrators"),
+        request<Candidate[]>("/v1/platform/administrators/candidates"),
+        request<CurrentUser>("/v1/auth/me"),
+      ]);
+      const auditData = await request<AuditRecord[]>(
+        "/v1/platform/administrators/audit?limit=20",
+      );
+      setPolicy(adminData.policy);
+      setAdmins(adminData.items);
+      setCandidates(candidateData);
+      setCurrentUser(profileData);
+      setAuditRecords(auditData);
+      setOutgoingUserId(
+        (current) =>
+          current ||
+          adminData.items.find((item) => item.effective_status === "active")
+            ?.user_id ||
+          "",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [request]);
 
   useEffect(() => {
@@ -365,7 +375,8 @@ export default function PlatformAdminsPage() {
       </div>
       {error ? <Alert role="alert">操作失敗：{error}</Alert> : null}
       {message ? <Toast>{message}</Toast> : null}
-      {policy ? (
+      {loading ? <LoadingState title="正在載入平台管理員…" /> : null}
+      {!loading && policy ? (
         <div className="platform-policy-grid" aria-label="平台管理員政策摘要">
           <Card>
             <CardContent>
@@ -401,12 +412,14 @@ export default function PlatformAdminsPage() {
           <CardTitle>啟用中的平台管理員</CardTitle>
         </CardHeader>
         <CardContent>
-          {activeAdmins.length ? (
+          {loading ? (
+            <LoadingState title="正在載入啟用中的平台管理員…" />
+          ) : activeAdmins.length ? (
             <ul className="platform-admin-list">
               {activeAdmins.map(renderAdmin)}
             </ul>
           ) : (
-            <p>目前沒有啟用中的平台管理員。</p>
+            <EmptyState title="目前沒有啟用中的平台管理員" />
           )}
         </CardContent>
       </Card>
@@ -415,7 +428,9 @@ export default function PlatformAdminsPage() {
           <CardTitle>平台異動紀錄</CardTitle>
         </CardHeader>
         <CardContent>
-          {auditRecords.length ? (
+          {loading ? (
+            <LoadingState title="正在載入平台異動紀錄…" />
+          ) : auditRecords.length ? (
             <ul className="platform-audit-list">
               {auditRecords.map((record) => (
                 <li key={record.id}>
@@ -426,7 +441,7 @@ export default function PlatformAdminsPage() {
               ))}
             </ul>
           ) : (
-            <p>目前沒有平台管理員異動紀錄。</p>
+            <EmptyState title="目前沒有平台管理員異動紀錄" />
           )}
         </CardContent>
       </Card>
@@ -435,12 +450,14 @@ export default function PlatformAdminsPage() {
           <CardTitle>已停用的平台管理員</CardTitle>
         </CardHeader>
         <CardContent>
-          {disabledAdmins.length ? (
+          {loading ? (
+            <LoadingState title="正在載入已停用的平台管理員…" />
+          ) : disabledAdmins.length ? (
             <ul className="platform-admin-list">
               {disabledAdmins.map(renderAdmin)}
             </ul>
           ) : (
-            <p>目前沒有已停用的平台管理員。</p>
+            <EmptyState title="目前沒有已停用的平台管理員" />
           )}
         </CardContent>
       </Card>

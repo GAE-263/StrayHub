@@ -24,6 +24,10 @@ import { Input } from "../../../components/ui/input";
 import { Select } from "../../../components/ui/select";
 import { Toast } from "../../../components/ui/toast";
 import { MembershipPermissionDialog } from "../../../components/management/MembershipPermissionDialog";
+import {
+  EmptyState,
+  LoadingState,
+} from "../../../components/management/StateViews";
 
 type Shelter = {
   id: string;
@@ -142,9 +146,11 @@ async function responseData<T>(response: Response): Promise<T> {
 export default function SheltersManagementPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [sheltersLoading, setSheltersLoading] = useState(true);
   const [selectedShelterId, setSelectedShelterId] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [newShelterName, setNewShelterName] = useState("");
   const [organizationCode, setOrganizationCode] = useState("");
   const [initialAdminUsername, setInitialAdminUsername] = useState("");
@@ -206,32 +212,46 @@ export default function SheltersManagementPage() {
 
   const loadShelters = useCallback(
     async (preferredId?: string) => {
-      const data = await request<{ items: Shelter[] }>("/v1/organizations");
-      setShelters(data.items);
-      const nextId = preferredId ?? selectedShelterId;
-      if (data.items.some((shelter) => shelter.id === nextId)) {
-        setSelectedShelterId(nextId);
-      } else if (data.items[0]) {
-        setSelectedShelterId(data.items[0].id);
+      setSheltersLoading(true);
+      try {
+        const data = await request<{ items: Shelter[] }>("/v1/organizations");
+        setShelters(data.items);
+        setSelectedShelterId((current) => {
+          const nextId = preferredId ?? current;
+          if (data.items.some((shelter) => shelter.id === nextId)) {
+            return nextId;
+          }
+          return data.items[0]?.id ?? "";
+        });
+      } finally {
+        setSheltersLoading(false);
       }
     },
-    [request, selectedShelterId],
+    [request],
   );
 
   const loadShelterDetails = useCallback(async () => {
-    if (!selectedShelterId) return;
-    const [membershipData, areaData] = await Promise.all([
-      request<{ items: Membership[] }>(
-        `/v1/organizations/${selectedShelterId}/memberships`,
-      ),
-      selectedShelter?.status === "active"
-        ? request<{ items: Area[] }>(
-            `/v1/organizations/${selectedShelterId}/areas`,
-          )
-        : Promise.resolve({ items: [] as Area[] }),
-    ]);
-    setMemberships(membershipData.items);
-    setAreas(areaData.items);
+    if (!selectedShelterId) {
+      setDetailsLoading(false);
+      return;
+    }
+    setDetailsLoading(true);
+    try {
+      const [membershipData, areaData] = await Promise.all([
+        request<{ items: Membership[] }>(
+          `/v1/organizations/${selectedShelterId}/memberships`,
+        ),
+        selectedShelter?.status === "active"
+          ? request<{ items: Area[] }>(
+              `/v1/organizations/${selectedShelterId}/areas`,
+            )
+          : Promise.resolve({ items: [] as Area[] }),
+      ]);
+      setMemberships(membershipData.items);
+      setAreas(areaData.items);
+    } finally {
+      setDetailsLoading(false);
+    }
   }, [request, selectedShelter, selectedShelterId]);
 
   useEffect(() => {
@@ -248,6 +268,7 @@ export default function SheltersManagementPage() {
     if (!canManageShelterSettings) {
       setMemberships([]);
       setAreas([]);
+      setDetailsLoading(false);
       return;
     }
     void loadShelterDetails().catch((error: Error) =>
@@ -589,21 +610,26 @@ export default function SheltersManagementPage() {
           <CardTitle id="shelter-list-title">收容所</CardTitle>
         </CardHeader>
         <CardContent>
-          <Field>
-            <label htmlFor="selected-shelter">目前管理收容所</label>
-            <Select
-              id="selected-shelter"
-              value={selectedShelterId}
-              onChange={(event) => setSelectedShelterId(event.target.value)}
-            >
-              <option value="">請選擇</option>
-              {shelters.map((shelter) => (
-                <option key={shelter.id} value={shelter.id}>
-                  {shelter.name}（{shelter.status}）
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {sheltersLoading ? (
+            <LoadingState title="正在載入收容所…" />
+          ) : shelters.length === 0 ? (
+            <EmptyState title="目前沒有可管理的收容所" />
+          ) : (
+            <Field>
+              <label htmlFor="selected-shelter">目前管理收容所</label>
+              <Select
+                id="selected-shelter"
+                value={selectedShelterId}
+                onChange={(event) => setSelectedShelterId(event.target.value)}
+              >
+                {shelters.map((shelter) => (
+                  <option key={shelter.id} value={shelter.id}>
+                    {shelter.name}（{shelter.status}）
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           {canManageOrganizations &&
             selectedShelter?.status === "pending_setup" && (
               <Button
@@ -691,43 +717,49 @@ export default function SheltersManagementPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <section
-              className="membership-section"
-              aria-labelledby="volunteer-title"
-            >
-              <div className="membership-section-heading">
-                <div>
-                  <h3 id="volunteer-title">志工</h3>
-                  <p>依既有報名與限時授權流程管理</p>
-                </div>
-                <Badge>{volunteerMemberships.length} 人</Badge>
-              </div>
-              {volunteerMemberships.length > 0 ? (
-                <ul className="membership-list">
-                  {volunteerMemberships.map(renderMembership)}
-                </ul>
-              ) : (
-                <p className="membership-empty">目前沒有志工。</p>
-              )}
-            </section>
-            <section
-              className="membership-section"
-              aria-labelledby="staff-title"
-            >
-              <div className="membership-section-heading">
-                <div>
-                  <h3 id="staff-title">工作人員</h3>
-                </div>
-                <Badge>{managementMemberships.length} 人</Badge>
-              </div>
-              {managementMemberships.length > 0 ? (
-                <ul className="membership-list">
-                  {managementMemberships.map(renderMembership)}
-                </ul>
-              ) : (
-                <p className="membership-empty">目前沒有工作人員。</p>
-              )}
-            </section>
+            {detailsLoading ? (
+              <LoadingState title="正在載入帳號與權限…" />
+            ) : (
+              <>
+                <section
+                  className="membership-section"
+                  aria-labelledby="volunteer-title"
+                >
+                  <div className="membership-section-heading">
+                    <div>
+                      <h3 id="volunteer-title">志工</h3>
+                      <p>依既有報名與限時授權流程管理</p>
+                    </div>
+                    <Badge>{volunteerMemberships.length} 人</Badge>
+                  </div>
+                  {volunteerMemberships.length > 0 ? (
+                    <ul className="membership-list">
+                      {volunteerMemberships.map(renderMembership)}
+                    </ul>
+                  ) : (
+                    <p className="membership-empty">目前沒有志工。</p>
+                  )}
+                </section>
+                <section
+                  className="membership-section"
+                  aria-labelledby="staff-title"
+                >
+                  <div className="membership-section-heading">
+                    <div>
+                      <h3 id="staff-title">工作人員</h3>
+                    </div>
+                    <Badge>{managementMemberships.length} 人</Badge>
+                  </div>
+                  {managementMemberships.length > 0 ? (
+                    <ul className="membership-list">
+                      {managementMemberships.map(renderMembership)}
+                    </ul>
+                  ) : (
+                    <p className="membership-empty">目前沒有工作人員。</p>
+                  )}
+                </section>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

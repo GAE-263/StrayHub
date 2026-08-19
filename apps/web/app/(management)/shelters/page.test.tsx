@@ -44,8 +44,11 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as Response;
 }
 
-function mockFetch(role: string) {
+function mockFetch(role: string, delayMs = 0) {
   return vi.fn(async (input: RequestInfo | URL) => {
+    if (delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
     const path = String(input);
     if (path.endsWith("/auth/me")) {
       return jsonResponse({
@@ -129,8 +132,8 @@ function mockFetch(role: string) {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-async function renderPage(role: string) {
-  vi.stubGlobal("fetch", mockFetch(role));
+async function renderPage(role: string, delayMs = 0) {
+  vi.stubGlobal("fetch", mockFetch(role, delayMs));
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -181,6 +184,12 @@ describe("shelter management page authorization", () => {
         (button) => button.textContent?.trim() === "重新啟用",
       ),
     ).toHaveLength(1);
+  });
+
+  it("shows loading before shelter and membership responses resolve", async () => {
+    await renderPage("SHELTER_ADMIN", 40);
+    expect(container?.textContent).toContain("正在載入收容所");
+    expect(container?.textContent).not.toContain("目前沒有志工");
   });
 
   it("does not expose shelter settings to STAFF", async () => {
