@@ -1394,6 +1394,51 @@ dialog.ui-sheet[open] {
 .volunteer-report-card .ui-card-header p {
   margin: 0;
 }
+.volunteer-application-page {
+  align-content: start;
+  display: grid;
+  gap: 24px;
+  margin: 0 auto;
+  max-width: 560px;
+  min-height: 100vh;
+  padding: 40px 20px;
+  width: 100%;
+}
+.volunteer-application-heading,
+.volunteer-application-content,
+.volunteer-application-actions,
+.volunteer-grant-summary {
+  display: grid;
+  gap: 16px;
+}
+.volunteer-application-heading h1,
+.volunteer-application-card .ui-card-header p,
+.volunteer-grant-summary {
+  margin: 0;
+}
+.volunteer-application-card .ui-card-header p {
+  color: var(--muted);
+}
+.volunteer-consent {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+.volunteer-grant-summary {
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+.volunteer-grant-summary dt {
+  font-weight: 700;
+}
+.volunteer-grant-summary dd {
+  margin: 4px 0 0;
+}
+.volunteer-application-actions .ui-button,
+.volunteer-application-link {
+  width: 100%;
+}
 .animal-confirmation-actions .ui-button,
 .volunteer-report-actions .ui-button {
   width: 100%;

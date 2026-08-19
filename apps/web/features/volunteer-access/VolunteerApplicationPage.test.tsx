@@ -7,6 +7,30 @@ import { describe, expect, it } from "vitest";
 import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
 
 describe("VolunteerApplicationPage", () => {
+  it("uses semantic application primitives instead of hard-coded color utilities", () => {
+    const html = renderToStaticMarkup(
+      <VolunteerApplicationPage
+        initialStatus={{
+          organization: {
+            id: "org-a",
+            name: "收容所 A",
+            applications_enabled: true,
+          },
+          application: null,
+          grant: null,
+          effective_status: "none",
+          next_actions: ["apply"],
+        }}
+        idToken="id-token"
+        shelterEntryReference="entry"
+      />,
+    );
+    expect(html).toContain("ui-card");
+    expect(html).toContain("ui-checkbox");
+    expect(html).toContain("ui-button ui-button-default");
+    expect(html).not.toMatch(/(?:emerald|slate|red)-/);
+  });
+
   it.each([
     ["none", "立即報名"],
     ["pending", "等待收容所審核"],

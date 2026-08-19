@@ -598,7 +598,7 @@
   - Verification：focused 3 files／8 tests passed；360／768 四張 screenshots 視覺 PASS；volunteer E2E 3 passed；full Vitest 53 files／132 tests passed；Python 474 tests passed；TypeScript／Prettier／`git diff --check` passed。
   - Commit：`fix(web): structure volunteer cards with shared primitives`。
 
-## [ ] FT-022 將志工報名頁色彩遷移至 semantic tokens
+## [x] FT-022 將志工報名頁色彩遷移至 semantic tokens
 
 - **優先級：** P1
 - **問題位置：** `apps/web/features/volunteer-access/VolunteerApplicationPage.tsx:140-228`
@@ -606,7 +606,13 @@
 - **預期修改後：** 使用 Card／Alert／Button／Checkbox 與共用 tokens。
 - **驗證：** component tests、360 screenshot、axe。
 - **預定 commit：** `refactor(web): align volunteer application design tokens`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：初始申請 markup 無 `ui-card`／`ui-checkbox`／`ui-button`，仍輸出 emerald／slate utilities。
+  - GREEN：頁面遷移至 Card／Alert／Button／Checkbox 與 semantic tokens；grant／reason／error 使用 scoped surfaces；visual review 發現 min-height grid stretch 並以 `align-content:start` 修正。
+  - Changed files：`VolunteerApplicationPage.tsx`／test、`globals.css`、`volunteer-access-approval.spec.ts`、`frontend_task.md`。
+  - Verification：component 7 tests passed；application E2E 1 passed；志工 routes Axe 1 passed；360 screenshot 複驗 PASS；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`refactor(web): align volunteer application design tokens`。
 
 ## [ ] FT-023 為撤回志工報名加入確認與成功回饋
 

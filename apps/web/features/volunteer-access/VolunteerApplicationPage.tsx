@@ -2,6 +2,15 @@
 
 import React from "react";
 import { useEffect, useState } from "react";
+import { Alert } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
+import { Checkbox } from "../../components/ui/checkbox";
 
 import {
   formatRemainingDuration,
@@ -137,97 +146,98 @@ export function VolunteerApplicationPage({
   ].includes(effectiveStatus);
 
   return (
-    <main className="mx-auto min-h-screen max-w-lg bg-white px-5 py-10 text-slate-900">
-      <p className="text-sm font-semibold text-emerald-700">
-        {status?.organization.name ?? "StrayHub"}
-      </p>
-      <h1 className="mt-2 text-3xl font-bold">志工報名</h1>
+    <main className="volunteer-application-page">
+      <header className="volunteer-application-heading">
+        <span className="eyebrow">
+          {status?.organization.name ?? "StrayHub"}
+        </span>
+        <h1>志工報名</h1>
+      </header>
       {loading ? (
-        <p className="mt-8" role="status" aria-live="polite">
+        <p role="status" aria-live="polite">
           正在確認 LINE 身分與報名狀態…
         </p>
       ) : (
-        <section
-          className="mt-8 rounded-2xl border border-slate-200 p-5"
-          aria-live="polite"
-        >
-          <h2 className="text-xl font-bold">{copy.title}</h2>
-          <p className="mt-2 text-slate-600">{copy.detail}</p>
-          {status?.application?.decision_reason ? (
-            <p className="mt-4 rounded-lg bg-slate-50 p-3">
-              {status.application.decision_reason}
-            </p>
-          ) : null}
-          {status?.grant ? (
-            <dl className="mt-4 grid gap-2 rounded-lg bg-emerald-50 p-4">
-              <div>
-                <dt className="font-semibold">目前收容所</dt>
-                <dd>{status.organization.name}</dd>
-              </div>
-              <div>
-                <dt className="font-semibold">授權期間（台灣時間）</dt>
-                <dd>
-                  {formatTaiwanDateTime(status.grant.valid_from)} ～{" "}
-                  {formatTaiwanDateTime(status.grant.expires_at)}
-                </dd>
-              </div>
-              {effectiveStatus === "active" ||
-              effectiveStatus === "upcoming" ? (
+        <Card className="volunteer-application-card" aria-live="polite">
+          <CardHeader>
+            <CardTitle>{copy.title}</CardTitle>
+            <p>{copy.detail}</p>
+          </CardHeader>
+          <CardContent className="volunteer-application-content">
+            {status?.application?.decision_reason ? (
+              <Alert className="volunteer-application-reason">
+                {status.application.decision_reason}
+              </Alert>
+            ) : null}
+            {status?.grant ? (
+              <dl className="volunteer-grant-summary">
                 <div>
-                  <dt className="font-semibold">距離到期</dt>
-                  <dd>{formatRemainingDuration(status.grant.expires_at)}</dd>
+                  <dt>目前收容所</dt>
+                  <dd>{status.organization.name}</dd>
                 </div>
-              ) : null}
-            </dl>
-          ) : null}
-          {canApply && status?.organization.applications_enabled !== false ? (
-            <div className="mt-6 space-y-4">
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(event) => setConsent(event.target.checked)}
-                />
-                <span>我確認送出志工報名，並同意由此收容所審核。</span>
-              </label>
-              <button
+                <div>
+                  <dt>授權期間（台灣時間）</dt>
+                  <dd>
+                    {formatTaiwanDateTime(status.grant.valid_from)} ～{" "}
+                    {formatTaiwanDateTime(status.grant.expires_at)}
+                  </dd>
+                </div>
+                {effectiveStatus === "active" ||
+                effectiveStatus === "upcoming" ? (
+                  <div>
+                    <dt>距離到期</dt>
+                    <dd>{formatRemainingDuration(status.grant.expires_at)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
+            {canApply && status?.organization.applications_enabled !== false ? (
+              <div className="volunteer-application-actions">
+                <label className="volunteer-consent">
+                  <Checkbox
+                    checked={consent}
+                    onChange={(event) => setConsent(event.target.checked)}
+                  />
+                  <span>我確認送出志工報名，並同意由此收容所審核。</span>
+                </label>
+                <Button
+                  type="button"
+                  disabled={!consent || submitting}
+                  onClick={submit}
+                >
+                  {submitting
+                    ? "送出中…"
+                    : effectiveStatus === "none"
+                      ? "立即報名"
+                      : "再次報名"}
+                </Button>
+              </div>
+            ) : null}
+            {effectiveStatus === "pending" ? (
+              <Button
+                variant="secondary"
                 type="button"
-                disabled={!consent || submitting}
-                onClick={submit}
-                className="min-h-11 w-full rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white disabled:opacity-50"
+                disabled={submitting}
+                onClick={withdraw}
               >
-                {submitting
-                  ? "送出中…"
-                  : effectiveStatus === "none"
-                    ? "立即報名"
-                    : "再次報名"}
-              </button>
-            </div>
-          ) : null}
-          {effectiveStatus === "pending" ? (
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={withdraw}
-              className="mt-6 min-h-11 w-full rounded-xl border border-slate-400 px-4 py-3 font-semibold"
-            >
-              撤回報名
-            </button>
-          ) : null}
-          {effectiveStatus === "active" ? (
-            <a
-              href="/animal-confirmation"
-              className="mt-6 block min-h-11 w-full rounded-xl bg-emerald-700 px-4 py-3 text-center font-semibold text-white"
-            >
-              進入照護流程
-            </a>
-          ) : null}
-        </section>
+                撤回報名
+              </Button>
+            ) : null}
+            {effectiveStatus === "active" ? (
+              <a
+                href="/animal-confirmation"
+                className="ui-button ui-button-default volunteer-application-link"
+              >
+                進入照護流程
+              </a>
+            ) : null}
+          </CardContent>
+        </Card>
       )}
       {error ? (
-        <p className="mt-5 rounded-xl bg-red-50 p-4 text-red-800" role="alert">
+        <Alert className="volunteer-application-error" role="alert">
           {error}
-        </p>
+        </Alert>
       ) : null}
     </main>
   );
