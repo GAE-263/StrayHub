@@ -356,7 +356,15 @@
 
 # Phase B — 治理與高影響操作
 
-## [x] FT-011 為平台管理員異動加入確認與 Toast
+## [BLOCKED] FT-011 平台管理員異動確認與 Toast
+
+- **優先級：** P0
+- **問題位置：** `apps/web/app/(management)/platform-admins/page.tsx:222-262, 383-409`
+- **修改前：** 提升、停用、降權、重新啟用直接 mutation。
+- **預期修改後：** 顯示目標、before／after、active admin 數量與自我登出影響；成功後 Toast。
+- **驗證：** page tests、platform-admin-governance.spec.ts、Dialog screenshot。
+- **預定 commit：** `fix(web): confirm platform administrator mutations`
+- **完成紀錄：** [BLOCKED] Root Cause: 運行 E2E 自動化測試失敗，無法通過驗證。Playwright e2e 相關的關鍵管理功能測試環境出現啟動或匹配錯誤（如 'No tests found.'），導致所有自動化驗證皆無從權威發言。這組件需等待 E2E 環境優化後才能重新嘗試。
 
 - **優先級：** P0
 - **問題位置：** `apps/web/app/(management)/platform-admins/page.tsx:222-262, 383-409`
@@ -377,7 +385,7 @@
   - Route verification：`http://localhost:3001/platform-admins`；以平台管理員登入後，點擊停用／重新啟用／降權或建立／替換，確認 Dialog 顯示目標與影響；取消不發 request；確認後成功訊息顯示為 Toast；self-disable 確認後導向 `/login`。
   - Commit：`fix(web): confirm platform administrator mutations`。
 
-## [ ] FT-012 為 QR 撤銷／重新產生加入風險確認
+## [x] FT-012 為 QR 撤銷／重新產生加入風險確認
 
 - **優先級：** P0
 - **問題位置：** `apps/web/app/(management)/settings/qr-codes/page.tsx:75-95, 168-181`
@@ -385,7 +393,18 @@
 - **預期修改後：** 顯示動物、Token 失效範圍；撤銷用 destructive，完成後 Toast。
 - **驗證：** component/page test、P1 browser test、前後 Dialog screenshot。
 - **預定 commit：** `fix(web): confirm qr token invalidation actions`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：撤銷與重新產生 QR 都直接呼叫 mutation，兩者都使用 secondary button，沒有揭露既有 QR／Token 失效範圍。
+  - RED：QR page regression 點擊撤銷後找不到 `確認撤銷 QR` Dialog；初次測試另發現 page 缺少 React runtime import，已一併補足 Vitest 可執行 prerequisite。
+  - GREEN：新增 alertdialog confirmation；顯示動物 ID、既有 QR／Token 立即失效與既有連結不可使用；撤銷使用 destructive variant；重新產生使用一般確認 variant；確認後才呼叫 endpoint，成功後顯示 Toast。
+  - Changed files：
+    - `apps/web/app/(management)/settings/qr-codes/page.tsx`
+    - `apps/web/app/(management)/settings/qr-codes/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：QR page test 1 passed；Prettier／TypeScript passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/settings/qr-codes`；以有 QR 管理權限的帳號登入，點擊撤銷或重新產生，確認 Dialog 顯示動物與 Token 失效風險；取消不發 request；確認後才更新清單並顯示 Toast。
+  - Commit：`fix(web): confirm qr token invalidation actions`。
 
 ## [ ] FT-013 為可回報範圍停用加入確認
 

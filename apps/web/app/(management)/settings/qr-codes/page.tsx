@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { authFetch } from "../../../../lib/auth";
 import { LoadingState } from "../../../../components/management/StateViews";
 import { Alert } from "../../../../components/ui/alert";
@@ -14,6 +14,8 @@ import {
 } from "../../../../components/ui/card";
 import { Field } from "../../../../components/ui/field";
 import { Input } from "../../../../components/ui/input";
+import { Dialog } from "../../../../components/ui/dialog";
+import { Toast } from "../../../../components/ui/toast";
 import {
   Table,
   TableBody,
@@ -32,12 +34,22 @@ type Qr = {
   token: string | null;
 };
 
+type PendingQrAction = {
+  id: string;
+  animalId: string;
+  action: "revoke" | "regenerate";
+};
+
 export default function QrCodesPage() {
   const [items, setItems] = useState<Qr[]>([]);
   const [animalId, setAnimalId] = useState("");
   const [issuedToken, setIssuedToken] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<PendingQrAction | null>(
+    null,
+  );
   const load = () => {
     setLoading(true);
     void authFetch("/v1/management/qr-codes")
@@ -73,11 +85,15 @@ export default function QrCodesPage() {
     load();
   };
   const revoke = async (id: string) => {
+    setError("");
     const response = await authFetch(`/v1/management/qr-codes/${id}/revoke`, {
       method: "POST",
     });
     if (!response.ok) setError(`QR 撤銷失敗（HTTP ${response.status}）`);
-    else load();
+    else {
+      setMessage("QR 已撤銷，既有 Token 已失效。");
+      load();
+    }
   };
   const regenerate = async (id: string) => {
     setError("");
@@ -91,7 +107,16 @@ export default function QrCodesPage() {
     }
     const value = (await response.json()) as Qr;
     setIssuedToken(value.token ?? "");
+    setMessage("QR 已重新產生，既有 Token 已失效。");
     load();
+  };
+
+  const confirmPendingAction = async () => {
+    const action = pendingAction;
+    if (!action) return;
+    setPendingAction(null);
+    if (action.action === "revoke") await revoke(action.id);
+    else await regenerate(action.id);
   };
   const print = () => {
     if (typeof window !== "undefined") window.print();
@@ -106,6 +131,7 @@ export default function QrCodesPage() {
         </div>
       </div>
       {error ? <Alert role="alert">{error}</Alert> : null}
+      {message ? <Toast>{message}</Toast> : null}
       {issuedToken ? (
         <Alert role="status">
           請立即保存此一次性 Token：<code>{issuedToken}</code>
@@ -166,17 +192,29 @@ export default function QrCodesPage() {
                     <TableCell>
                       <div className="p1-actions">
                         <Button
-                          variant="secondary"
+                          variant="destructive"
                           type="button"
                           disabled={item.revoked}
-                          onClick={() => void revoke(item.id)}
+                          onClick={() =>
+                            setPendingAction({
+                              id: item.id,
+                              animalId: item.animal_id,
+                              action: "revoke",
+                            })
+                          }
                         >
                           撤銷
                         </Button>
                         <Button
                           variant="secondary"
                           type="button"
-                          onClick={() => void regenerate(item.id)}
+                          onClick={() =>
+                            setPendingAction({
+                              id: item.id,
+                              animalId: item.animal_id,
+                              action: "regenerate",
+                            })
+                          }
                         >
                           重新產生
                         </Button>
@@ -196,6 +234,37 @@ export default function QrCodesPage() {
           )}
         </CardContent>
       </Card>
+      <Dialog
+        open={pendingAction !== null}
+        role="alertdialog"
+        title={
+          pendingAction?.action === "revoke" ? "確認撤銷 QR" : "確認重新產生 QR"
+        }
+        onClose={() => setPendingAction(null)}
+      >
+        <p className="dialog-description">
+          動物：{pendingAction?.animalId ?? "未知動物"}。這會讓目前綁定的 QR
+          與既有 Token 立即失效，已發出的連結無法再使用。
+        </p>
+        <div className="dialog-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setPendingAction(null)}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant={
+              pendingAction?.action === "revoke" ? "destructive" : "default"
+            }
+            onClick={() => void confirmPendingAction()}
+          >
+            {pendingAction?.action === "revoke" ? "確認撤銷" : "確認重新產生"}
+          </Button>
+        </div>
+      </Dialog>
     </section>
   );
 }
