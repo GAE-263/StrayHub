@@ -49,6 +49,30 @@ test.describe("管理工作台 Shell", () => {
     await expect(trigger).toBeFocused();
   });
 
+  test("tablet uses compact navigation without sidebar whitespace", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/");
+
+    const trigger = page.getByRole("button", { name: "開啟管理工作台導覽" });
+    await expect(trigger).toBeVisible();
+    await expect(page.locator(".app-sidebar")).toBeHidden();
+    await expect(page.locator(".header-logout")).toBeHidden();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+
+    await trigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "管理工作台導覽" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+  });
+
   test("context switch failure is visible and logout returns to login", async ({
     page,
   }) => {

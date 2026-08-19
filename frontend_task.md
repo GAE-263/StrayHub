@@ -248,7 +248,7 @@
   - Visual verification：管理頁外觀／操作不變，並提供 DevTools single-main／no-nested-main 驗收指令；依指示完成。
   - Commit：本任務獨立 commit `fix(web): keep a single main landmark per route`。
 
-## [ ] FT-007 修正 768px tablet 導覽的大面積空白
+## [x] FT-007 修正 768px tablet 導覽的大面積空白
 
 - **優先級：** P1
 - **問題位置：** `apps/web/app/globals.css:929-956, 1488-1530`
@@ -256,7 +256,19 @@
 - **預期修改後：** tablet 使用 compact navigation 或 Mobile Sheet，主內容靠近 header。
 - **驗證：** 768x1024 前後 screenshot、keyboard navigation、responsive test。
 - **預定 commit：** `fix(web): compact management navigation on tablets`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：2026-08-19 完成；同 viewport 頁面驗收後依指示建立獨立 commit。
+  - 修改前：768×1024 命中 `max-width: 900px` 的 horizontal sidebar 規則；導覽折成兩列並保留約 114px 淡綠區域，頁面標題約從 y=226 才開始，hamburger 不存在。
+  - RED：Playwright 在 768×1024 要求 header hamburger 可見、sidebar 與 header logout 隱藏、無水平 overflow、Drawer 可開啟且 Escape 後恢復 trigger focus；原實作因找不到 hamburger 失敗並保存 before screenshot。
+  - GREEN：最終勝出的 `max-width: 900px` app-shell 規則改為 block body、隱藏 sidebar、顯示 MobileNavigation 並隱藏重複 header logout；移除 tablet horizontal nav-group 規則，601–900px 沿用既有單欄全高 Drawer。
+  - Before／After：同 route／mock data／768px；兩列淡綠導覽完全消失，標題上移約 114px，hamburger 位於「森」左側，header 維持單列，無可見 horizontal overflow。
+  - Changed files：
+    - `apps/web/app/globals.css`
+    - `apps/web/e2e/management-shell.spec.ts`
+    - `frontend_task.md`
+  - Verification：tablet Playwright 1 test PASS；management shell 4 tests PASS；P1 routes × 4 viewports Axe PASS；full Vitest 51 files／114 tests PASS；TypeScript／Prettier PASS；Python 474 tests PASS；`/` HTTP 200；`git diff --check` PASS。
+  - Visual verification：768×1024 Header、主內容起點、Mobile Sheet 與 before／after screenshot 已完成驗收。
+  - Commit：本任務獨立 commit `fix(web): compact management navigation on tablets`。
 
 ## [ ] FT-008 合併重複的 600／900px app-shell media rules
 

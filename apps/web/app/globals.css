@@ -1638,26 +1638,18 @@ dialog.ui-sheet[open] {
 }
 @media (max-width: 900px) {
   .app-body {
-    grid-template-columns: 1fr;
+    display: block;
   }
   .app-sidebar {
-    border-bottom: 1px solid var(--line);
-    border-right: 0;
-    padding: 14px 18px;
-  }
-  .sidebar-intro {
     display: none;
   }
-  .nav-group {
-    display: inline-flex;
-    margin: 0 20px 0 0;
-    vertical-align: top;
+  .mobile-navigation {
+    display: block;
+    flex: 0 0 auto;
+    padding: 0;
   }
-  .nav-heading {
+  .app-header .header-logout {
     display: none;
-  }
-  .nav-link {
-    padding: 8px;
   }
   .metric-grid {
     grid-template-columns: repeat(2, 1fr);
