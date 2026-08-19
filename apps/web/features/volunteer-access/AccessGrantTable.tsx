@@ -5,6 +5,12 @@ import { useState } from "react";
 
 import { formatTaiwanDateTime } from "./volunteerAccess";
 import { MembershipPermissionDialog } from "../../components/management/MembershipPermissionDialog";
+import { Alert } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import { Field } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
+import { Select } from "../../components/ui/select";
+import { Table } from "../../components/ui/table";
 import { Toast } from "../../components/ui/toast";
 
 export type AccessGrant = {
@@ -144,9 +150,10 @@ export function AccessGrantTable({
   return (
     <section className="ui-card ui-card-padded" aria-labelledby="grant-title">
       <h2 id="grant-title">志工授權與歷史週期</h2>
-      <label>
-        狀態篩選
-        <select
+      <Field className="grant-status-filter">
+        <label htmlFor="grant-status-filter">狀態篩選</label>
+        <Select
+          id="grant-status-filter"
           value={status}
           onChange={(event) => setStatus(event.target.value)}
         >
@@ -154,99 +161,101 @@ export function AccessGrantTable({
           <option value="active">有效／即將開始</option>
           <option value="expired">已到期</option>
           <option value="revoked">已撤銷</option>
-        </select>
-      </label>
-      <div className="ui-table-wrap mt-4">
-        <table className="ui-table">
-          <thead>
-            <tr>
-              <th className="ui-table-head">志工</th>
-              <th className="ui-table-head">狀態與來源</th>
-              <th className="ui-table-head">期間（台灣時間）</th>
-              <th className="ui-table-head">管理</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((grant) => {
-              const values = draft(grant);
-              return (
-                <tr key={grant.id}>
-                  <td className="ui-table-cell">{grant.display_name}</td>
-                  <td className="ui-table-cell">
-                    {grant.status}／{grant.source_type}
-                    {grant.revocation_reason ? (
-                      <p>{grant.revocation_reason}</p>
-                    ) : null}
-                  </td>
-                  <td className="ui-table-cell">
-                    {formatTaiwanDateTime(grant.valid_from)} ～{" "}
-                    {formatTaiwanDateTime(grant.expires_at)}
-                  </td>
-                  <td className="ui-table-cell">
-                    {grant.status === "active" ? (
-                      <div className="grid gap-2">
-                        <label>
-                          開始
-                          <input
-                            aria-label={`${grant.display_name} 開始時間`}
-                            type="datetime-local"
-                            value={values.from}
-                            onChange={(event) =>
-                              updateDraft(grant, { from: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          到期
-                          <input
-                            aria-label={`${grant.display_name} 到期時間`}
-                            type="datetime-local"
-                            value={values.to}
-                            onChange={(event) =>
-                              updateDraft(grant, { to: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          原因
-                          <input
-                            aria-label={`${grant.display_name} 操作原因`}
-                            value={values.reason}
-                            onChange={(event) =>
-                              updateDraft(grant, { reason: event.target.value })
-                            }
-                          />
-                        </label>
-                        <button
+        </Select>
+      </Field>
+      <Table className="grant-table">
+        <thead>
+          <tr>
+            <th className="ui-table-head">志工</th>
+            <th className="ui-table-head">狀態與來源</th>
+            <th className="ui-table-head">期間（台灣時間）</th>
+            <th className="ui-table-head">管理</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((grant) => {
+            const values = draft(grant);
+            return (
+              <tr key={grant.id}>
+                <td className="ui-table-cell">{grant.display_name}</td>
+                <td className="ui-table-cell">
+                  {grant.status}／{grant.source_type}
+                  {grant.revocation_reason ? (
+                    <p>{grant.revocation_reason}</p>
+                  ) : null}
+                </td>
+                <td className="ui-table-cell">
+                  {formatTaiwanDateTime(grant.valid_from)} ～{" "}
+                  {formatTaiwanDateTime(grant.expires_at)}
+                </td>
+                <td className="ui-table-cell">
+                  {grant.status === "active" ? (
+                    <div className="grant-management-fields">
+                      <label>
+                        開始
+                        <Input
+                          aria-label={`${grant.display_name} 開始時間`}
+                          type="datetime-local"
+                          value={values.from}
+                          onChange={(event) =>
+                            updateDraft(grant, { from: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        到期
+                        <Input
+                          aria-label={`${grant.display_name} 到期時間`}
+                          type="datetime-local"
+                          value={values.to}
+                          onChange={(event) =>
+                            updateDraft(grant, { to: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        原因
+                        <Input
+                          aria-label={`${grant.display_name} 操作原因`}
+                          value={values.reason}
+                          onChange={(event) =>
+                            updateDraft(grant, { reason: event.target.value })
+                          }
+                        />
+                      </label>
+                      <div className="grant-management-actions">
+                        <Button
+                          variant="secondary"
                           type="button"
                           onClick={() => mutate(grant, "update_period")}
                         >
                           更新期限
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="destructive"
                           type="button"
                           onClick={() => mutate(grant, "revoke")}
                         >
                           撤銷授權
-                        </button>
+                        </Button>
                       </div>
-                    ) : (
-                      <span>歷史週期（不可修改）</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {error ? <p role="alert">{error}</p> : null}
+                    </div>
+                  ) : (
+                    <span>歷史週期（不可修改）</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </Table>
+      {error ? <Alert role="alert">{error}</Alert> : null}
       {message ? (
         <p role="status" aria-live="polite">
           {message}
         </p>
       ) : null}
-      {toast ? <Toast>{toast}</Toast> : null}
+      {toast ? <Toast onClose={() => setToast("")}>{toast}</Toast> : null}
       <MembershipPermissionDialog
         open={Boolean(pending)}
         identity={pending?.grant.display_name ?? "志工"}

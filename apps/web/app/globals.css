@@ -1439,6 +1439,19 @@ dialog.ui-sheet[open] {
 .volunteer-application-link {
   width: 100%;
 }
+.grant-status-filter {
+  max-width: 280px;
+}
+.grant-management-fields {
+  display: grid;
+  gap: 10px;
+  min-width: 260px;
+}
+.grant-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .animal-confirmation-actions .ui-button,
 .volunteer-report-actions .ui-button {
   width: 100%;

@@ -630,7 +630,7 @@
   - Verification：component 8 tests passed；approval E2E cancel／confirm／single-request 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`fix(web): confirm volunteer application withdrawal`。
 
-## [ ] FT-024 遷移志工授權表格至 UI primitives
+## [x] FT-024 遷移志工授權表格至 UI primitives
 
 - **優先級：** P1
 - **問題位置：** `apps/web/features/volunteer-access/AccessGrantTable.tsx`
@@ -638,7 +638,13 @@
 - **預期修改後：** Field／Select／Input／Button／Table；更新與撤銷有明確層級。
 - **驗證：** component test、volunteer access E2E、responsive screenshot。
 - **預定 commit：** `refactor(web): migrate volunteer grants to ui primitives`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：grant markup 缺少 Field／Select／Input／Button primitives，撤銷與更新皆為無層級 raw button。
+  - GREEN：status filter 使用 Field／Select；期限與原因使用 Input；Table root 使用 shared primitive；更新為 secondary、撤銷為 destructive；error 改為 Alert、Toast 可關閉。
+  - Changed files：`AccessGrantTable.tsx`／test、`globals.css`、`frontend_task.md`。
+  - Verification：component 1 passed；grant revoke E2E 1 passed；access responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`refactor(web): migrate volunteer grants to ui primitives`。
 
 ## [ ] FT-025 遷移志工批次審核工作台至 UI primitives
 
