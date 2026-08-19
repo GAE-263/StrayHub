@@ -806,6 +806,7 @@
   - Visual：360／1440共10個acceptance assertions通過；final screenshots為 `/tmp/strayhub-ft032/ai-review-360.png`、`/tmp/strayhub-ft032/animals-1440.png`，無截斷、overflow或異常換行；左下Next dev indicator保留給FT-034。
   - Gates：Vitest 54 files／138 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、browser Axe P0 15／P1 1、Python 474均通過。
   - Review：初次review的2 Medium＋1 Low均已修正；replacement source review PASS，無severity findings。
+  - Commit：`7c4fc61 refactor(web): standardize management interface copy`。
 
 ## [x] FT-033 將 Shelter Cage／Area 列表改為標準清單
 
@@ -823,6 +824,7 @@
   - Visual：organization E2E於360／1440截圖並驗證無horizontal overflow；人工pixel review確認單欄／橫列、Badges與表單對齊正常，Next dev indicator保留給FT-034。
   - Gates：Vitest 54 files／139 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、organization E2E 3、P1 Axe 1、Python 474均通過。
   - Review：初次Medium loading finding已修正；replacement source review PASS，無severity findings。
+  - Commit：`79f2866 refactor(web): align shelter area list presentation`。
 
 ## [x] FT-034 排除 Next.js dev indicator 的 visual baseline 噪音
 
@@ -839,6 +841,7 @@
   - Visual：`npm run test:visual`為6 passed／6 skipped／10 failed；10 failures均已通過indicator guard，僅在360px舊baseline與目前產品UI真實差異處失敗，留待FT-035完整回報與FT-036逐張review。
   - Gates：Vitest 55 files／140 tests、TypeScript、Prettier、Next production build與Python 474均通過；無snapshot檔變更。
   - Review：獨立source review PASS，無severity findings，確認未提前進入FT-035／FT-036 scope。
+  - Commit：`0da3c7a test(web): remove dev indicator from visual evidence`。
 
 ## [x] FT-035 將 visual viewport 拆成獨立 test cases
 
@@ -856,6 +859,7 @@
   - Caveat：第一次parallel run因先前`next build`破壞reuse中的dev `.next`而得到HTTP 500；確認health後重啟，serial fresh-server run才是authoritative evidence。
   - Gates：Vitest 55 files／140 tests、TypeScript、Prettier與Python 474均通過；零snapshot檔變更。
   - Review：獨立source review PASS，無severity findings，確認未提前加入FT-036 routes/baselines。
+  - Commit：`9f899b0 test(web): isolate visual checks by viewport`。
 
 ## [x] FT-036 補齊治理與志工頁 visual baselines
 
@@ -874,6 +878,7 @@
   - Baselines：snapshot inventory為80 PNGs（40既有P0 accepted UI刷新＋12治理＋20志工＋8 batch），route／viewport／state命名唯一，無stale batch names。
   - GREEN：`test:visual:update -- --workers=1` 82 passed；緊接normal no-update `test:visual -- --workers=1` 82 passed。
   - Gates：Vitest 55 files／140 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、browser Axe P0 15／P1 1與Python 474均通過。
+  - Commit：`a0d8fd0 test(web): cover governance and volunteer visual states`。
 
 ---
 
@@ -894,13 +899,15 @@ npm --prefix apps/web run test:visual
 
 最終驗收還需確認：
 
-- [ ] 360／768／1024／1440 無不合理 layout regression。
-- [ ] 高影響操作都有明確確認、busy、成功／失敗回饋。
-- [ ] 不存在未定義的產品 layout classes。
-- [ ] 不存在不存在的 primitive variant class。
-- [ ] 每頁只有一個 main landmark，Dialog／Sheet IDs 唯一。
-- [ ] Visual baseline 差異都經 reviewer 說明與核准。
-- [ ] 每個 FT 任務都有獨立 commit、驗證證據及本文件完成註記。
+- [x] 360／768／1024／1440 無不合理 layout regression。
+- [x] 高影響操作都有明確確認、busy、成功／失敗回饋。
+- [x] 不存在未定義的產品 layout classes。
+- [x] 不存在不存在的 primitive variant class。
+- [x] 每頁只有一個 main landmark，Dialog／Sheet IDs 唯一。
+- [x] Visual baseline 差異都經 reviewer 說明與核准。
+- [x] 每個 FT 任務都有獨立 commit、驗證證據及本文件完成註記。
+
+Phase E於2026-08-20完成。Fresh final gate：Vitest 55 files／140 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、browser Axe P0 15／P1 1、visual 82與Python 474均通過；完成摘要見`docs/frontend_phase_e_summary.md`。
 
 ## 文件建立紀錄
 
