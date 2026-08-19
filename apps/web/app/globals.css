@@ -1500,6 +1500,21 @@ dialog.ui-sheet[open] {
   gap: 8px;
   margin-top: 16px;
 }
+.policy-form {
+  display: grid;
+  gap: 18px;
+  max-width: 680px;
+}
+.policy-checkbox {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+.policy-note {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
 @media (min-width: 720px) {
   .notification-filters {
     grid-template-columns: repeat(4, minmax(0, 1fr)) auto;

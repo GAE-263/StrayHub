@@ -679,7 +679,7 @@
   - Verification：component 1 passed；notification keyboard flow 1 passed；notifications responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`fix(web): align notification retry controls and feedback`。
 
-## [ ] FT-027 補齊志工授權政策的 loading／busy／error
+## [x] FT-027 補齊志工授權政策的 loading／busy／error
 
 - **優先級：** P1
 - **問題位置：** `VolunteerAccessPolicyForm.tsx` 與 settings route。
@@ -687,7 +687,13 @@
 - **預期修改後：** primitives、LoadingState／ErrorState、重試、busy、Toast。
 - **驗證：** component／route tests、P1 browser／axe。
 - **預定 commit：** `fix(web): harden volunteer access policy states`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：form輸出 raw controls／emerald CTA／empty status，save exception未攔截；route fetch failure無終止 loading路徑。
+  - GREEN：Checkbox／Field／Input／Button；save busy disables controls，failure Alert且可重試，success lifecycle Toast；route使用 LoadingState／ErrorState、HTTP fail-closed與retry Button。
+  - Changed files：`VolunteerAccessPolicyForm.tsx`／test、settings page、`globals.css`、`frontend_task.md`。
+  - Verification：component markup與failure→success recovery 2 passed；settings responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`fix(web): harden volunteer access policy states`。
 
 ## [ ] FT-028 強化 Active Shelter Context 的視覺權重
 

@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { authFetch } from "../../../../lib/auth";
+import { Button } from "../../../../components/ui/button";
+import {
+  ErrorState,
+  LoadingState,
+} from "../../../../components/management/StateViews";
 import {
   VolunteerAccessPolicyForm,
   type VolunteerAccessPolicy,
@@ -10,17 +15,35 @@ import {
 
 export default function VolunteerAccessSettingsPage() {
   const [policy, setPolicy] = useState<VolunteerAccessPolicy | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const organizationId = window.sessionStorage.getItem(
+        "active_organization_id",
+      );
+      if (!organizationId) throw new Error("請先選擇目前收容所");
+      const response = await authFetch(
+        `/v1/organizations/${organizationId}/volunteer-access-policy`,
+      );
+      if (!response.ok) throw new Error("無法載入志工授權設定");
+      setPolicy((await response.json()) as VolunteerAccessPolicy);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "無法載入志工授權設定",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    const organizationId = window.sessionStorage.getItem(
-      "active_organization_id",
-    );
-    if (!organizationId) return;
-    void authFetch(
-      `/v1/organizations/${organizationId}/volunteer-access-policy`,
-    )
-      .then((response) => response.json())
-      .then(setPolicy);
+    void load();
+    // Initial load runs once for the active shelter snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function save(value: VolunteerAccessPolicy) {
@@ -49,10 +72,32 @@ export default function VolunteerAccessSettingsPage() {
           <p>控制新申請入口，以及後續核准使用的預設有限期限。</p>
         </div>
       </div>
-      {policy ? (
+      {loading ? (
+        <LoadingState
+          title="正在載入志工授權設定…"
+          description="正在取得目前收容所的申請與期限政策。"
+        />
+      ) : error ? (
+        <ErrorState
+          title="無法載入志工授權設定"
+          description={error}
+          action={
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => void load()}
+            >
+              重試
+            </Button>
+          }
+        />
+      ) : policy ? (
         <VolunteerAccessPolicyForm policy={policy} onSave={save} />
       ) : (
-        <p>正在載入設定…</p>
+        <ErrorState
+          title="找不到志工授權設定"
+          description="請重新載入後再試。"
+        />
       )}
     </div>
   );
