@@ -807,7 +807,7 @@
   - Gates：Vitest 54 files／138 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、browser Axe P0 15／P1 1、Python 474均通過。
   - Review：初次review的2 Medium＋1 Low均已修正；replacement source review PASS，無severity findings。
 
-## [ ] FT-033 將 Shelter Cage／Area 列表改為標準清單
+## [x] FT-033 將 Shelter Cage／Area 列表改為標準清單
 
 - **優先級：** P2
 - **問題位置：** `apps/web/app/(management)/shelters/page.tsx:835-879`
@@ -815,7 +815,14 @@
 - **預期修改後：** surface-soft rows、Badge、本地化 labels、明確 EmptyState。
 - **驗證：** shelter page test、organization E2E、360／1440 screenshot。
 - **預定 commit：** `refactor(web): align shelter area list presentation`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - RED：empty/non-empty unit contracts先以2 failures證明舊raw `<ul>`、英文values與缺少EmptyState；reviewer loading contract再以1 failure重現details pending時的false EmptyState。
+  - GREEN：`/shelters` 的「籠舍／區域」使用semantic `<ul>/<li>`、surface-soft `.list-card` rows、繁中類型／狀態Badges與明確EmptyState；select只改display labels，API values仍為 `area`／`cage`。
+  - Loading：`detailsLoading`優先顯示「正在載入籠舍與區域…」，切換收容所時不公告假empty也不顯示舊rows；獨立details-delay test驗證loading／empty／pending-row邊界。
+  - URL：`http://127.0.0.1:3001/shelters`；以SHELTER_ADMIN檢查non-empty rows、empty state、建立表單與權限邊界。
+  - Visual：organization E2E於360／1440截圖並驗證無horizontal overflow；人工pixel review確認單欄／橫列、Badges與表單對齊正常，Next dev indicator保留給FT-034。
+  - Gates：Vitest 54 files／139 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、organization E2E 3、P1 Axe 1、Python 474均通過。
+  - Review：初次Medium loading finding已修正；replacement source review PASS，無severity findings。
 
 ## [ ] FT-034 排除 Next.js dev indicator 的 visual baseline 噪音
 

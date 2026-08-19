@@ -29,6 +29,7 @@ import {
   EmptyState,
   LoadingState,
 } from "../../../components/management/StateViews";
+import { statusLabel } from "../../../components/management/ui-status";
 
 type Shelter = {
   id: string;
@@ -98,6 +99,11 @@ const membershipStatusLabels: Record<string, string> = {
 const volunteerAuthorizationLabels: Record<string, string> = {
   expired: "授權已到期",
   revoked: "授權已撤銷",
+};
+
+const areaTypeLabels: Record<Area["area_type"], string> = {
+  area: "區域",
+  cage: "籠舍",
 };
 
 const membershipStatusOrder: Record<string, number> = {
@@ -916,16 +922,29 @@ export default function SheltersManagementPage() {
       {canManageShelterSettings && (
         <Card aria-labelledby="area-list-title">
           <CardHeader>
-            <CardTitle id="area-list-title">Cage / Area</CardTitle>
+            <CardTitle id="area-list-title">籠舍／區域</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul>
-              {areas.map((area) => (
-                <li key={area.id}>
-                  {area.name}（{area.area_type}／<Badge>{area.status}</Badge>）
-                </li>
-              ))}
-            </ul>
+            {detailsLoading ? (
+              <LoadingState title="正在載入籠舍與區域…" />
+            ) : areas.length === 0 ? (
+              <EmptyState
+                title="目前沒有籠舍或區域"
+                description="建立第一個籠舍或區域，供動物檔案與照護流程使用。"
+              />
+            ) : (
+              <ul className="area-list" aria-label="籠舍與區域清單">
+                {areas.map((area) => (
+                  <li className="list-card area-item" key={area.id}>
+                    <strong>{area.name}</strong>
+                    <div className="area-meta">
+                      <Badge>{areaTypeLabels[area.area_type]}</Badge>
+                      <Badge>{statusLabel(area.status)}</Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
             <form onSubmit={(event) => void submit(event, createArea)}>
               <Field>
                 <label htmlFor="area-name">區域名稱</label>
@@ -947,8 +966,8 @@ export default function SheltersManagementPage() {
                   }
                   disabled={submittingAction}
                 >
-                  <option value="area">Area</option>
-                  <option value="cage">Cage</option>
+                  <option value="area">區域</option>
+                  <option value="cage">籠舍</option>
                 </Select>
               </Field>
               <Button

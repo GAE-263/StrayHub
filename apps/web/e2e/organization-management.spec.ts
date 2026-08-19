@@ -185,7 +185,20 @@ async function mockOrganizationManagement(page: Page, role: string) {
                   volunteer_authorization_status: "revoked",
                 },
               ]
-            : [],
+            : [
+                {
+                  id: "area-a",
+                  name: "隔離區",
+                  area_type: "area",
+                  status: "active",
+                },
+                {
+                  id: "cage-a",
+                  name: "A-01",
+                  area_type: "cage",
+                  status: "inactive",
+                },
+              ],
         }),
       });
       return;
@@ -223,7 +236,7 @@ test("PLATFORM_ADMIN 可看到建立收容所表單", async ({ page }) => {
   expect(audit.items[0].action).toBe("organization.created");
 });
 
-test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
+test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }, testInfo) => {
   await page.addInitScript(() =>
     sessionStorage.setItem("access_token", "test-access"),
   );
@@ -242,6 +255,32 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "志工" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "工作人員" })).toBeVisible();
   await expect(page.getByText("授權已撤銷")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "籠舍／區域" })).toBeVisible();
+  const areaList = page.getByRole("list", { name: "籠舍與區域清單" });
+  await expect(areaList.getByRole("listitem")).toHaveCount(2);
+  await expect(areaList.getByRole("listitem").nth(0)).toContainText(
+    "隔離區區域啟用中",
+  );
+  await expect(areaList.getByRole("listitem").nth(1)).toContainText(
+    "A-01籠舍已停用",
+  );
+  await expect(areaList.getByText("area", { exact: true })).toHaveCount(0);
+  await expect(areaList.getByText("cage", { exact: true })).toHaveCount(0);
+  for (const viewport of [
+    { width: 360, height: 800 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`ft033-area-list-${viewport.width}.png`),
+      fullPage: true,
+    });
+  }
   await page.getByRole("button", { name: "建立帳號" }).click();
   await expect(
     page.getByRole("heading", { name: "建立機構帳號" }),

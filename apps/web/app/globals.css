@@ -509,6 +509,32 @@ summary:focus-visible {
   min-width: 0;
   padding: 16px;
 }
+.area-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+}
+.area-item {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.area-item > strong {
+  overflow-wrap: anywhere;
+}
+.area-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 720px) {
+  .area-item {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+}
 .reminder-card-grid {
   display: grid;
   gap: 16px;
