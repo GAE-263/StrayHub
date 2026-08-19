@@ -356,15 +356,7 @@
 
 # Phase B — 治理與高影響操作
 
-## [BLOCKED] FT-011 平台管理員異動確認與 Toast
-
-- **優先級：** P0
-- **問題位置：** `apps/web/app/(management)/platform-admins/page.tsx:222-262, 383-409`
-- **修改前：** 提升、停用、降權、重新啟用直接 mutation。
-- **預期修改後：** 顯示目標、before／after、active admin 數量與自我登出影響；成功後 Toast。
-- **驗證：** page tests、platform-admin-governance.spec.ts、Dialog screenshot。
-- **預定 commit：** `fix(web): confirm platform administrator mutations`
-- **完成紀錄：** [BLOCKED] Root Cause: 運行 E2E 自動化測試失敗，無法通過驗證。Playwright e2e 相關的關鍵管理功能測試環境出現啟動或匹配錯誤（如 'No tests found.'），導致所有自動化驗證皆無從權威發言。這組件需等待 E2E 環境優化後才能重新嘗試。
+## [x] FT-011 平台管理員異動確認與 Toast
 
 - **優先級：** P0
 - **問題位置：** `apps/web/app/(management)/platform-admins/page.tsx:222-262, 383-409`
@@ -382,6 +374,7 @@
     - `apps/web/app/(management)/platform-admins/page.test.tsx`
     - `frontend_task.md`
   - Verification：platform-admin page tests 6 passed；`platform-admin-governance.spec.ts` 1 passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Revalidation：2026-08-19 以 `apps/web` 為工作目錄重新執行 platform-admin page tests 8 passed，並以 `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test e2e/platform-admin-governance.spec.ts` 驗證 Chromium 1 passed；先前的 `[BLOCKED]` 來自錯誤檔名／工作目錄造成的 `No tests found`，不是產品或 E2E 環境 blocker。
   - Route verification：`http://localhost:3001/platform-admins`；以平台管理員登入後，點擊停用／重新啟用／降權或建立／替換，確認 Dialog 顯示目標與影響；取消不發 request；確認後成功訊息顯示為 Toast；self-disable 確認後導向 `/login`。
   - Commit：`fix(web): confirm platform administrator mutations`。
 
