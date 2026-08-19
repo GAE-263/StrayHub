@@ -824,7 +824,7 @@
   - Gates：Vitest 54 files／139 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、organization E2E 3、P1 Axe 1、Python 474均通過。
   - Review：初次Medium loading finding已修正；replacement source review PASS，無severity findings。
 
-## [ ] FT-034 排除 Next.js dev indicator 的 visual baseline 噪音
+## [x] FT-034 排除 Next.js dev indicator 的 visual baseline 噪音
 
 - **優先級：** P1
 - **問題位置：** Playwright visual test runtime／Next config。
@@ -832,7 +832,13 @@
 - **預期修改後：** visual test 不包含 dev indicator，頁面內容差異才會觸發失敗。
 - **驗證：** `npm --prefix apps/web run test:visual`；不可直接更新 baseline 掩蓋 indicator。
 - **預定 commit：** `test(web): remove dev indicator from visual evidence`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - RED：config contract先得到 `devIndicators = undefined`；fresh dev runtime的visual guard再得到visible `nextjs-portal`，證明舊indicator會進入pixels。
+  - GREEN：Next 15.5.23依官方設定加入`devIndicators: false`；config unit與實際`/login` runtime test均通過，fresh screenshot人工確認左下角N indicator不存在。
+  - Guard：所有`toHaveScreenshot`前均assert `nextjs-portal` hidden；保留portal host但驗證其不渲染，不使用mask、CSS注入或baseline更新掩蓋噪音。
+  - Visual：`npm run test:visual`為6 passed／6 skipped／10 failed；10 failures均已通過indicator guard，僅在360px舊baseline與目前產品UI真實差異處失敗，留待FT-035完整回報與FT-036逐張review。
+  - Gates：Vitest 55 files／140 tests、TypeScript、Prettier、Next production build與Python 474均通過；無snapshot檔變更。
+  - Review：獨立source review PASS，無severity findings，確認未提前進入FT-035／FT-036 scope。
 
 ## [ ] FT-035 將 visual viewport 拆成獨立 test cases
 
