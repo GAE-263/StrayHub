@@ -110,7 +110,7 @@ export default function AnimalsPage() {
           <p>搜尋名稱、收容編號與 Cage／Area，進入完整照護歷程。</p>
         </div>
       </div>
-      <section className="panel ui-card">
+      <section className="ui-card ui-card-padded">
         <div className="toolbar" aria-label="動物清單篩選">
           <Field>
             <label htmlFor="animal-query">搜尋</label>

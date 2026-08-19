@@ -196,7 +196,10 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
   }, [filterType, includeArchived, search]);
 
   return (
-    <section className="panel ui-card" aria-labelledby="medical-history-title">
+    <section
+      className="ui-card ui-card-padded"
+      aria-labelledby="medical-history-title"
+    >
       <div className="section-heading">
         <div>
           <h2 id="medical-history-title">醫療歷史</h2>

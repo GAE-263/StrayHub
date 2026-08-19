@@ -75,7 +75,7 @@ export default function VolunteerNotificationsPage() {
         </div>
       </div>
       <form
-        className="panel ui-card mb-4 flex flex-wrap items-end gap-4"
+        className="ui-card ui-card-padded mb-4 flex flex-wrap items-end gap-4"
         onSubmit={(event) => {
           event.preventDefault();
           void load(organizationId).catch((reason) => setError(reason.message));

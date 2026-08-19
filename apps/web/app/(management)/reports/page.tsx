@@ -90,7 +90,7 @@ export default function ReportsPage() {
           <p>保留志工原始回報，集中處理狀態、AI 提示與可追溯修正。</p>
         </div>
       </div>
-      <section className="panel ui-card">
+      <section className="ui-card ui-card-padded">
         <div className="toolbar">
           <Field>
             <label htmlFor="report-from">開始日期</label>

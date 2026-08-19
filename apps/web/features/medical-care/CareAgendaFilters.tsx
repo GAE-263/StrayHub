@@ -37,7 +37,7 @@ export function CareAgendaFilters({
   };
   return (
     <section
-      className="panel ui-card toolbar care-agenda-filters"
+      className="ui-card ui-card-padded toolbar care-agenda-filters"
       aria-label="照護行事曆篩選"
     >
       <Field>

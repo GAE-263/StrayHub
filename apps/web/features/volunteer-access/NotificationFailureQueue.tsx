@@ -54,26 +54,29 @@ export function NotificationFailureQueue({
   }
 
   return (
-    <section className="panel ui-card" aria-labelledby="notification-title">
+    <section
+      className="ui-card ui-card-padded"
+      aria-labelledby="notification-title"
+    >
       <h2 id="notification-title">通知失敗佇列</h2>
       <p>
         只顯示最少收件人資訊；retry_wait 會自動重試，只有 failed 可人工選取。
       </p>
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="ui-table-wrap">
+        <table className="ui-table">
           <thead>
             <tr>
-              <th>選取</th>
-              <th>收件人</th>
-              <th>事件／狀態</th>
-              <th>最近失敗</th>
-              <th>操作</th>
+              <th className="ui-table-head">選取</th>
+              <th className="ui-table-head">收件人</th>
+              <th className="ui-table-head">事件／狀態</th>
+              <th className="ui-table-head">最近失敗</th>
+              <th className="ui-table-head">操作</th>
             </tr>
           </thead>
           <tbody>
             {notifications.map((notification) => (
               <tr key={notification.id}>
-                <td>
+                <td className="ui-table-cell">
                   <input
                     type="checkbox"
                     aria-label={`選取 ${notification.recipient_display_name} 通知`}
@@ -88,21 +91,23 @@ export function NotificationFailureQueue({
                     }
                   />
                 </td>
-                <td>{notification.recipient_display_name}</td>
-                <td>
+                <td className="ui-table-cell">
+                  {notification.recipient_display_name}
+                </td>
+                <td className="ui-table-cell">
                   {notification.event_type}／{notification.status}
                   {notification.status === "retry_wait"
                     ? "（等待自動重試）"
                     : ""}
                 </td>
-                <td>
+                <td className="ui-table-cell">
                   {notification.last_failed_at
                     ? formatTaiwanDateTime(notification.last_failed_at)
                     : "—"}
                   <br />
                   嘗試 {notification.attempt_count} 次
                 </td>
-                <td>
+                <td className="ui-table-cell">
                   <button
                     type="button"
                     disabled={notification.status !== "failed"}

@@ -315,7 +315,7 @@
   - Visual verification：`/login` 的 username/password/submit computed height 均為 44px；`/shelters` 可見非-checkbox membership controls 均為 44px；checkbox 本體保留小尺寸，外層 permission hit target 保留 44px。
   - Commit：本任務獨立 commit `refactor(web): standardize control heights`。
 
-## [ ] FT-010 收斂重複 selectors 與 legacy／primitive cascade
+## [x] FT-010 收斂重複 selectors 與 legacy／primitive cascade
 
 - **優先級：** P2
 - **問題位置：** `.sr-only`、`.notice`、`.notice.success`、`.panel.ui-card`、`.button-quiet`、全域 table selectors。
@@ -323,7 +323,34 @@
 - **預期修改後：** 每個 semantic class 有單一來源；已遷移元件不再同掛 legacy 與 primitive class。
 - **驗證：** class usage search、完整 component tests、visual routes。
 - **預定 commit：** `refactor(web): reduce legacy css cascade overlap`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：selector／class migration、visual route 與完整 regression 完成。
+  - 修改前：`.sr-only`、`.notice`、`.notice.success` 各有重複 CSS 定義；3 個 volunteer tables 使用 raw global `table/th/td`；12 個 production surfaces 同掛 legacy `panel` 與 primitive `ui-card`；AppHeader 同掛 `button-quiet` 與 `ui-button-ghost`。
+  - RED：legacy／primitive cascade contract 實測 `.sr-only` 定義數量為 2，預期為 1。
+  - GREEN：合併 semantic state selectors；新增 `.ui-card-padded` 取代 `panel ui-card`；AppHeader 移除 `button-quiet`；3 個 tables 遷移至 `.ui-table-wrap`／`.ui-table`／`.ui-table-head`／`.ui-table-cell`；移除 global raw table selectors。
+  - Changed files：
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `apps/web/components/management/AppHeader.tsx`
+    - `apps/web/app/management-home.tsx`
+    - `apps/web/app/(management)/animals/[animalId]/page.tsx`
+    - `apps/web/app/(management)/animals/page.tsx`
+    - `apps/web/app/(management)/reports/[reportId]/page.tsx`
+    - `apps/web/app/(management)/reports/page.tsx`
+    - `apps/web/app/(management)/volunteers/applications/page.tsx`
+    - `apps/web/app/(management)/volunteers/notifications/page.tsx`
+    - `apps/web/features/medical-care/AnimalTodaySummary.tsx`
+    - `apps/web/features/medical-care/CareAgendaFilters.tsx`
+    - `apps/web/features/medical-care/MedicalHistoryPanel.tsx`
+    - `apps/web/features/medical-care/ReminderSection.tsx`
+    - `apps/web/features/volunteer-access/AccessGrantTable.tsx`
+    - `apps/web/features/volunteer-access/ApplicationBatchWorkbench.tsx`
+    - `apps/web/features/volunteer-access/NotificationFailureQueue.tsx`
+    - `apps/web/features/volunteer-access/VolunteerAccessPolicyForm.tsx`
+    - `frontend_task.md`
+  - Verification：CSS contract 11 tests PASS；相關 medical／volunteer component tests 33 tests PASS；full Vitest 51 files／117 tests PASS；TypeScript／Prettier PASS；management shell 6 tests PASS；P1 routes × 4 viewports Axe PASS；Python 474 tests PASS；management／volunteer routes HTTP 200；`git diff --check` PASS。
+  - Visual verification：management home、reports、animals、medical care、volunteer tables 的 card padding、table overflow 與 notice spacing 維持預期；raw table migration 未造成 viewport overflow。
+  - Commit：本任務獨立 commit `refactor(web): reduce legacy css cascade overlap`。
 
 ---
 

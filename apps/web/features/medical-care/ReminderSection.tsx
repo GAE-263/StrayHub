@@ -29,7 +29,10 @@ export function ReminderSection({
   onLoadMore?: () => void;
 }) {
   return (
-    <section className="panel ui-card" aria-labelledby={`agenda-${id}`}>
+    <section
+      className="ui-card ui-card-padded"
+      aria-labelledby={`agenda-${id}`}
+    >
       <div className="section-heading">
         <h2 id={`agenda-${id}`}>{title}</h2>
         <Badge>

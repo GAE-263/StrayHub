@@ -117,7 +117,10 @@ export default function ManagementHome() {
               ))}
             </div>
             <div className="content-grid">
-              <Card className="panel" aria-labelledby="recent-reports-title">
+              <Card
+                className="ui-card-padded"
+                aria-labelledby="recent-reports-title"
+              >
                 <div className="panel-heading">
                   <h2 id="recent-reports-title">最近回報</h2>
                   <Link className="text-link" href="/reports">
@@ -167,7 +170,10 @@ export default function ManagementHome() {
                   </Table>
                 )}
               </Card>
-              <Card className="panel" aria-labelledby="quick-entry-title">
+              <Card
+                className="ui-card-padded"
+                aria-labelledby="quick-entry-title"
+              >
                 <h2 id="quick-entry-title">快速入口</h2>
                 <Link className="link-card" href="/animals">
                   <strong>動物檔案</strong>

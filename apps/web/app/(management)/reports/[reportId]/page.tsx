@@ -137,7 +137,7 @@ export default function ReportDetailPage({ params }: Props) {
         </p>
       ) : null}
       <div className="content-grid">
-        <Card className="panel">
+        <Card className="ui-card-padded">
           <h2>原始回報</h2>
           <pre className="json-view">
             {JSON.stringify(report.answers, null, 2)}
@@ -151,7 +151,7 @@ export default function ReportDetailPage({ params }: Props) {
               : "此回報沒有照片。"}
           </p>
         </Card>
-        <Card className="panel">
+        <Card className="ui-card-padded">
           <h2>AI 狀態</h2>
           <p role="status" aria-live="polite" aria-atomic="true">
             {reportAIStatusSummary(report.ai_observations)

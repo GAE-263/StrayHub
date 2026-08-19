@@ -188,7 +188,7 @@ export function ApplicationBatchWorkbench({
   const failedCount = results.filter((item) => item.result === "failed").length;
 
   return (
-    <section className="panel ui-card" aria-labelledby="batch-title">
+    <section className="ui-card ui-card-padded" aria-labelledby="batch-title">
       <h2 id="batch-title">志工報名審核</h2>
       <div className="mt-4 flex flex-wrap gap-4">
         <label>
@@ -246,20 +246,20 @@ export function ApplicationBatchWorkbench({
           />
         </label>
       </fieldset>
-      <div className="mt-5 overflow-x-auto">
-        <table className="w-full">
+      <div className="ui-table-wrap mt-5">
+        <table className="ui-table">
           <thead>
             <tr>
-              <th>選取</th>
-              <th>志工</th>
-              <th>狀態</th>
-              <th>個別期限</th>
+              <th className="ui-table-head">選取</th>
+              <th className="ui-table-head">志工</th>
+              <th className="ui-table-head">狀態</th>
+              <th className="ui-table-head">個別期限</th>
             </tr>
           </thead>
           <tbody>
             {applications.map((application) => (
               <tr key={application.id}>
-                <td>
+                <td className="ui-table-cell">
                   <input
                     aria-label={`選取 ${application.display_name}`}
                     type="checkbox"
@@ -274,9 +274,9 @@ export function ApplicationBatchWorkbench({
                     }}
                   />
                 </td>
-                <td>{application.display_name}</td>
-                <td>{application.status}</td>
-                <td>
+                <td className="ui-table-cell">{application.display_name}</td>
+                <td className="ui-table-cell">{application.status}</td>
+                <td className="ui-table-cell">
                   <input
                     aria-label={`${application.display_name} 個別到期時間`}
                     type="datetime-local"

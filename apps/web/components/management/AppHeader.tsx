@@ -61,7 +61,7 @@ export function AppHeader({
         )}
         <span className="user-label">{displayName}</span>
         <Button
-          className="button-quiet header-logout"
+          className="header-logout"
           variant="ghost"
           type="button"
           aria-label="登出管理工作台"

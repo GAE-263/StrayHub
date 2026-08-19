@@ -182,3 +182,17 @@ describe("control height contracts", () => {
     );
   });
 });
+
+describe("legacy and primitive cascade contracts", () => {
+  it("keeps semantic state and table selectors single-sourced", () => {
+    expect(css.match(/^\.sr-only\s*\{/gm)).toHaveLength(1);
+    expect(css.match(/^\.notice\s*\{/gm)).toHaveLength(1);
+    expect(css.match(/^\.notice\.success\s*\{/gm)).toHaveLength(1);
+    expect(css).not.toMatch(/^table\s*\{/m);
+    expect(css).not.toMatch(/^th,\s*$/m);
+    expect(css).not.toMatch(/^td\s*\{/m);
+    expect(css).toContain(".ui-table-wrap");
+    expect(css).toContain(".ui-table-head");
+    expect(css).toContain(".ui-table-cell");
+  });
+});

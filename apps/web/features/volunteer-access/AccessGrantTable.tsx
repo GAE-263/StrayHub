@@ -142,7 +142,7 @@ export function AccessGrantTable({
   }
 
   return (
-    <section className="panel ui-card" aria-labelledby="grant-title">
+    <section className="ui-card ui-card-padded" aria-labelledby="grant-title">
       <h2 id="grant-title">志工授權與歷史週期</h2>
       <label>
         狀態篩選
@@ -156,14 +156,14 @@ export function AccessGrantTable({
           <option value="revoked">已撤銷</option>
         </select>
       </label>
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full">
+      <div className="ui-table-wrap mt-4">
+        <table className="ui-table">
           <thead>
             <tr>
-              <th>志工</th>
-              <th>狀態與來源</th>
-              <th>期間（台灣時間）</th>
-              <th>管理</th>
+              <th className="ui-table-head">志工</th>
+              <th className="ui-table-head">狀態與來源</th>
+              <th className="ui-table-head">期間（台灣時間）</th>
+              <th className="ui-table-head">管理</th>
             </tr>
           </thead>
           <tbody>
@@ -171,18 +171,18 @@ export function AccessGrantTable({
               const values = draft(grant);
               return (
                 <tr key={grant.id}>
-                  <td>{grant.display_name}</td>
-                  <td>
+                  <td className="ui-table-cell">{grant.display_name}</td>
+                  <td className="ui-table-cell">
                     {grant.status}／{grant.source_type}
                     {grant.revocation_reason ? (
                       <p>{grant.revocation_reason}</p>
                     ) : null}
                   </td>
-                  <td>
+                  <td className="ui-table-cell">
                     {formatTaiwanDateTime(grant.valid_from)} ～{" "}
                     {formatTaiwanDateTime(grant.expires_at)}
                   </td>
-                  <td>
+                  <td className="ui-table-cell">
                     {grant.status === "active" ? (
                       <div className="grid gap-2">
                         <label>

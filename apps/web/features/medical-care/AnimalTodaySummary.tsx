@@ -19,7 +19,7 @@ export function AnimalTodaySummary({
 }) {
   if (error)
     return (
-      <section className="panel ui-card" role="alert">
+      <section className="ui-card ui-card-padded" role="alert">
         <h2>今日摘要載入失敗</h2>
         <p>{error}</p>
       </section>
@@ -33,7 +33,7 @@ export function AnimalTodaySummary({
           ? "今天有事件但沒有待辦"
           : "今天沒有任何事件";
   return (
-    <section className="panel ui-card" aria-live="polite">
+    <section className="ui-card ui-card-padded" aria-live="polite">
       <h2>今天發生什麼</h2>
       <p>
         {localToday ? `${localToday}：` : ""}

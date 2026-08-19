@@ -35,7 +35,7 @@ export function VolunteerAccessPolicyForm({
   }
 
   return (
-    <form onSubmit={submit} className="panel ui-card space-y-5">
+    <form onSubmit={submit} className="ui-card ui-card-padded space-y-5">
       <label className="flex gap-3">
         <input
           type="checkbox"

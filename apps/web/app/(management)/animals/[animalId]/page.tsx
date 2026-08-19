@@ -151,7 +151,7 @@ export default function AnimalProfilePage({ params }: Props) {
           localToday={todaySummary.today}
           state={todaySummary.state}
         />
-        <Card className="panel" aria-labelledby="animal-summary-title">
+        <Card className="ui-card-padded" aria-labelledby="animal-summary-title">
           <h2 id="animal-summary-title">基本資料</h2>
           <dl className="detail-list">
             <div>
@@ -177,7 +177,7 @@ export default function AnimalProfilePage({ params }: Props) {
             </div>
           </dl>
         </Card>
-        <Card className="panel" aria-labelledby="animal-actions-title">
+        <Card className="ui-card-padded" aria-labelledby="animal-actions-title">
           <h2 id="animal-actions-title">工作入口</h2>
           <Link className="link-card" href={`/animals/${animal.id}/timeline`}>
             <strong>Timeline</strong>
