@@ -54,7 +54,7 @@ describe("global dialog contracts", () => {
     expect(sheetGroup).toContain("margin: 0");
 
     const sheetLink = ruleBody(".ui-sheet .nav-link");
-    expect(sheetLink).toContain("min-height: 44px");
+    expect(sheetLink).toContain("min-height: var(--control-height)");
     expect(sheetLink).toContain("width: 100%");
   });
 
@@ -113,7 +113,7 @@ describe("mobile header contracts", () => {
     expect(brandGroup).toContain("align-items: center");
 
     const trigger = ruleBody(".mobile-menu-trigger");
-    expect(trigger).toContain("height: 44px");
+    expect(trigger).toContain("height: var(--control-height)");
     expect(trigger).toContain("width: 44px");
     expect(trigger).toContain("justify-content: center");
 
@@ -157,5 +157,28 @@ describe("responsive app shell contracts", () => {
     const body = ruleBody(".app-body");
     expect(body).toContain("flex: 1 1 auto");
     expect(body).toContain("min-height: 0");
+  });
+});
+
+describe("control height contracts", () => {
+  it("uses one 44px token for interactive controls and hit targets", () => {
+    expect(ruleBody(":root")).toContain("--control-height: 44px");
+    expect(css).not.toMatch(/min-height:\s*(42|46)px/);
+
+    expect(ruleBody(".login-card form > button")).toContain(
+      "min-height: var(--control-height)",
+    );
+    expect(
+      ruleBody(".field input,\n.field select,\n.field textarea"),
+    ).toContain("min-height: var(--control-height)");
+    expect(ruleBody(".checkbox-field")).toContain(
+      "min-height: var(--control-height)",
+    );
+    expect(ruleBody(".ui-sheet .nav-link")).toContain(
+      "min-height: var(--control-height)",
+    );
+    expect(css).toMatch(
+      /\.membership-permission\s*\{[^}]*min-height: var\(--control-height\)/,
+    );
   });
 });

@@ -293,7 +293,7 @@
   - Visual verification：360 Header 自然兩列且內容緊接實際高度；768 compact navigation 無淡綠空白；1024 desktop sidebar／logout／四欄 metrics 保持，三者皆無 horizontal clipping 或不合理垂直空白。
   - Commit：本任務獨立 commit `refactor(web): consolidate app shell breakpoints`。
 
-## [ ] FT-009 統一 42／44／46px 控制高度
+## [x] FT-009 統一 42／44／46px 控制高度
 
 - **優先級：** P2
 - **問題位置：** `apps/web/app/globals.css:78-85, 398-408, 479-486, 860-865, 1011-1020, 1356-1358`
@@ -301,7 +301,19 @@
 - **預期修改後：** 互動區使用單一 `--control-height: 44px`；checkbox 可視本體除外，但 label hit target 至少 44px。
 - **驗證：** computed-style assertions、login／membership screenshots。
 - **預定 commit：** `refactor(web): standardize control heights`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：實作、computed browser verification 與完整 regression 完成。
+  - 修改前：login submit 使用 46px；legacy field input/select、checkbox label 與 mobile membership permission 使用 42px；其他共用 controls 多為 44px；僅使用 min-height 時 login submit 實際 computed height 仍為 46px。
+  - RED：CSS contract 缺少 `--control-height` 且偵測到 42／46px；browser computed test 實測 login controls 為 `[44, 44, 46]`。
+  - GREEN：新增 `--control-height: 44px`；一般 single-line controls 同時使用 `height`／`min-height` token；textarea 使用 `height: auto` 並保留 100px min-height；checkbox 本體維持 20px，外層 checkbox label hit target 使用 44px；Sheet link 保留可換行的 min-height token。
+  - Changed files：
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `apps/web/e2e/management-shell.spec.ts`
+    - `frontend_task.md`
+  - Verification：CSS contract 10 tests PASS；management shell 6 tests PASS；login／membership computed Playwright PASS；P1 routes × 4 viewports Axe PASS；full Vitest 51 files／116 tests PASS；TypeScript／Prettier PASS；Python 474 tests PASS；`/login`、`/shelters`、`/` HTTP 200；`git diff --check` PASS。
+  - Visual verification：`/login` 的 username/password/submit computed height 均為 44px；`/shelters` 可見非-checkbox membership controls 均為 44px；checkbox 本體保留小尺寸，外層 permission hit target 保留 44px。
+  - Commit：本任務獨立 commit `refactor(web): standardize control heights`。
 
 ## [ ] FT-010 收斂重複 selectors 與 legacy／primitive cascade
 

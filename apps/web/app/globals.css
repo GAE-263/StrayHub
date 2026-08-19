@@ -23,6 +23,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --control-height: 44px;
 }
 
 * {
@@ -72,16 +73,18 @@ body {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  min-height: 44px;
+  height: var(--control-height);
+  min-height: var(--control-height);
   padding: 9px 11px;
 }
 .login-card form > button {
   align-items: center;
   display: inline-flex;
   gap: 8px;
+  height: var(--control-height);
   justify-content: center;
   margin-top: 8px;
-  min-height: 46px;
+  min-height: var(--control-height);
 }
 a {
   color: inherit;
@@ -253,9 +256,9 @@ summary:focus-visible {
   border-radius: var(--radius-sm);
   color: var(--ink);
   display: inline-flex;
-  height: 44px;
+  height: var(--control-height);
   justify-content: center;
-  min-height: 44px;
+  min-height: var(--control-height);
   padding: 0;
   width: 44px;
 }
@@ -285,7 +288,8 @@ summary:focus-visible {
   border-radius: 9px;
   color: white;
   font-weight: 700;
-  min-height: 44px;
+  height: var(--control-height);
+  min-height: var(--control-height);
   padding: 10px 15px;
 }
 .button:hover {
@@ -433,8 +437,9 @@ td {
   display: inline-flex;
   font-weight: 700;
   gap: 8px;
+  height: var(--control-height);
   justify-content: center;
-  min-height: 44px;
+  min-height: var(--control-height);
   padding: 10px 15px;
   transition: border-color 120ms ease;
 }
@@ -571,11 +576,13 @@ td {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--foreground);
-  min-height: 44px;
+  height: var(--control-height);
+  min-height: var(--control-height);
   padding: 9px 11px;
   width: 100%;
 }
 .ui-textarea {
+  height: auto;
   min-height: 100px;
   resize: vertical;
 }
@@ -729,7 +736,7 @@ dialog.ui-sheet[open] {
   gap: 12px;
   line-height: 1.4;
   margin: 0;
-  min-height: 44px;
+  min-height: var(--control-height);
   padding: 10px 12px;
   width: 100%;
 }
@@ -767,7 +774,7 @@ dialog.ui-sheet[open] {
   color: var(--muted);
   display: inline-flex;
   font-size: 24px;
-  height: 44px;
+  height: var(--control-height);
   justify-content: center;
   line-height: 1;
   margin: -8px -8px 0 0;
@@ -1013,7 +1020,7 @@ dialog.ui-sheet[open] {
   align-items: center;
   display: flex;
   gap: 8px;
-  min-height: 42px;
+  min-height: var(--control-height);
 }
 .form-error {
   color: var(--danger);
@@ -1111,11 +1118,13 @@ dialog.ui-sheet[open] {
   border: 1px solid var(--line);
   border-radius: 9px;
   color: var(--ink);
-  min-height: 42px;
+  height: var(--control-height);
+  min-height: var(--control-height);
   padding: 9px 11px;
   width: 100%;
 }
 .field textarea {
+  height: auto;
   min-height: 100px;
   resize: vertical;
 }
@@ -1278,8 +1287,8 @@ dialog.ui-sheet[open] {
 }
 .platform-admin-inline-form .ui-input,
 .platform-admin-promote-submit {
-  height: 44px;
-  min-height: 44px;
+  height: var(--control-height);
+  min-height: var(--control-height);
 }
 .platform-audit-list {
   display: grid;
@@ -1389,6 +1398,7 @@ dialog.ui-sheet[open] {
   display: inline-flex;
   font-size: 13px;
   gap: 7px;
+  min-height: var(--control-height);
   white-space: nowrap;
 }
 .membership-permission input {
@@ -1657,6 +1667,6 @@ dialog.ui-sheet[open] {
     width: 100%;
   }
   .membership-permission {
-    min-height: 42px;
+    min-height: var(--control-height);
   }
 }

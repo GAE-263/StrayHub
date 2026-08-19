@@ -131,6 +131,39 @@ test.describe("管理工作台 Shell", () => {
     }
   });
 
+  test("login and membership controls use the shared control height", async ({
+    page,
+  }) => {
+    await page.goto("/login");
+    await expect(
+      page.getByRole("heading", { name: "浪浪森友會管理入口" }),
+    ).toBeVisible();
+
+    const loginHeights = await page
+      .locator(".login-card input, .login-card button")
+      .evaluateAll((elements) =>
+        elements.map((element) =>
+          Math.round(element.getBoundingClientRect().height),
+        ),
+      );
+    expect(loginHeights).toEqual([44, 44, 44]);
+
+    await page.goto("/shelters");
+    await expect(page.locator(".shelter-management-page")).toBeVisible();
+    const membershipHeights = await page
+      .locator(".app-main input, .app-main select, .app-main button")
+      .evaluateAll((elements) =>
+        elements
+          .filter(
+            (element) => (element as HTMLInputElement).type !== "checkbox",
+          )
+          .map((element) => Math.round(element.getBoundingClientRect().height))
+          .filter((height) => height > 0),
+      );
+    expect(membershipHeights.length).toBeGreaterThan(0);
+    expect(new Set(membershipHeights)).toEqual(new Set([44]));
+  });
+
   test("context switch failure is visible and logout returns to login", async ({
     page,
   }) => {
