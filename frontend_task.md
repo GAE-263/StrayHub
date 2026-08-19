@@ -857,7 +857,7 @@
   - Gates：Vitest 55 files／140 tests、TypeScript、Prettier與Python 474均通過；零snapshot檔變更。
   - Review：獨立source review PASS，無severity findings，確認未提前加入FT-036 routes/baselines。
 
-## [ ] FT-036 補齊治理與志工頁 visual baselines
+## [x] FT-036 補齊治理與志工頁 visual baselines
 
 - **優先級：** P1
 - **問題位置：** `p0-visual.spec.ts` 尚未涵蓋 shelters、archived shelters、platform admins；志工 visual tests 目前被 skip。
@@ -865,7 +865,15 @@
 - **預期修改後：** 主要狀態與確認 Dialog 在 360／768／1024／1440 均有 reviewer-approved baseline。
 - **驗證：** visual suite 全部執行；每個 baseline 有 route／viewport／state 識別。
 - **預定 commit：** `test(web): cover governance and volunteer visual states`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - RED：visual list由62擴至77 tests後，12治理＋20志工主頁＋4 batch state cases均因missing snapshots失敗，證明coverage缺口；無UI/assertion failure。
+  - Coverage：`/shelters`、`/shelters/archived`、`/platform-admins`與5個志工routes均涵蓋360／768／1024／1440；batch confirmation與partial result亦各有4 viewport。
+  - Fixture：新增visual-only governance fixture，沿用既有organization/platform governance response shapes，提供PLATFORM_ADMIN、active shelter context、非空memberships/areas/archived/admin data，不修改production或通用fixture。
+  - State evidence：confirmation截取真正的`alertdialog`；partial result scroll至「逐筆結果」後截取viewport，避免100-row full-page背景稀釋訊號。
+  - Review：12治理、20志工主頁與修正後8 batch candidates先以contact sheets完成pixel review；無錯誤頁、Next indicator或明顯overflow後才執行explicit update。獨立source review亦PASS，無severity findings。
+  - Baselines：snapshot inventory為80 PNGs（40既有P0 accepted UI刷新＋12治理＋20志工＋8 batch），route／viewport／state命名唯一，無stale batch names。
+  - GREEN：`test:visual:update -- --workers=1` 82 passed；緊接normal no-update `test:visual -- --workers=1` 82 passed。
+  - Gates：Vitest 55 files／140 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、browser Axe P0 15／P1 1與Python 474均通過。
 
 ---
 
