@@ -14,6 +14,7 @@ import { Card } from "../../../../components/ui/card";
 import { Button } from "../../../../components/ui/button";
 import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFormDialog";
 import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
+import { Toast } from "../../../../components/ui/toast";
 
 type Props = { params: Promise<{ animalId: string }> };
 type Animal = {
@@ -39,6 +40,7 @@ export default function AnimalProfilePage({ params }: Props) {
       "no_activity" | "events_no_todos" | "pending" | "overdue" | undefined,
   });
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     void authFetch(`/v1/management/animals/${animalId}`)
@@ -210,7 +212,13 @@ export default function AnimalProfilePage({ params }: Props) {
         open={reminderOpen}
         animalId={animal.id}
         onClose={() => setReminderOpen(false)}
+        onSaved={setToast}
       />
+      {toast ? (
+        <Toast messageKey={toast} onClose={() => setToast("")}>
+          {toast}
+        </Toast>
+      ) : null}
     </section>
   );
 }

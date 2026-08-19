@@ -7,6 +7,22 @@ test("今日照護行事曆顯示四區、欄位與篩選", async ({ page }) => 
     sessionStorage.setItem("active_organization_id", "org-a");
   });
   await mockManagementApi(page);
+  let actionRequests = 0;
+  await page.route(
+    "**/v1/management/care-reminder-occurrences/o1/actions",
+    async (route) => {
+      actionRequests += 1;
+      if (actionRequests === 1) {
+        await route.fulfill({ status: 503, body: "offline" });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "completed" }),
+      });
+    },
+  );
   await page.route("**/v1/management/care-agenda**", async (route) => {
     const cursor = new URL(route.request().url()).searchParams.get(
       "today_pending_cursor",
@@ -83,4 +99,20 @@ test("今日照護行事曆顯示四區、欄位與篩選", async ({ page }) => 
   await page.getByRole("button", { name: "載入更多（尚有 1 筆）" }).click();
   await expect(page.getByLabel("今天待處理").getByText("阿福")).toBeVisible();
   await expect(page.getByLabel("今天待處理")).toContainText("2");
+  await page
+    .getByLabel("今天待處理")
+    .getByRole("article")
+    .filter({ hasText: "小白" })
+    .getByRole("button", { name: "處理" })
+    .click();
+  await page.getByRole("button", { name: "確認處理" }).click();
+  const actionDialog = page.getByRole("dialog");
+  await expect(actionDialog).toBeVisible();
+  await expect(actionDialog.getByRole("alert")).toContainText("提醒處理失敗");
+  await actionDialog.getByRole("button", { name: "確認處理" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "提醒已完成" }),
+  ).toBeVisible();
+  expect(actionRequests).toBe(2);
 });

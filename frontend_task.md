@@ -770,7 +770,7 @@
   - Independent review：早期review的Medium／Low findings均以RED修正；final replacement reviewer PASS，無 blocking finding。
   - Commit：`fix(web): confirm medical history archival`。
 
-## [ ] FT-031 讓提醒建立／處理成功訊息在 Dialog 關閉後可見
+## [x] FT-031 讓提醒建立／處理成功訊息在 Dialog 關閉後可見
 
 - **優先級：** P1
 - **問題位置：** `ReminderFormDialog.tsx`、`ReminderActionDialog.tsx` 與父層。
@@ -778,7 +778,14 @@
 - **預期修改後：** 父層顯示 Toast；錯誤保留於 Dialog。
 - **驗證：** reminder tests、care calendar E2E。
 - **預定 commit：** `fix(web): preserve reminder success feedback after dialogs`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：create/action mutation成功且Dialog關閉後均找不到success status；第二個RED確認create 422只有status paragraph、缺Dialog內Alert。
+  - GREEN：Dialog以localized message callback通知父層；AnimalProfilePage與CareAgenda擁有lifecycle Toast；create 422／action 503保留Dialog與error，retry成功後才關閉並顯示建立／完成／略過／取消／改期對應訊息。
+  - Changed files：Reminder Form／Action Dialog、CareAgenda、animal profile page、兩個reminder E2E、`frontend_task.md`。
+  - Verification：reminder focused 3 files／5 tests passed；create/action browser 3 passed；responsive 8 passed；P0 Axe passed；full Vitest 53 files／137 tests、Python 474 tests、TypeScript、Prettier、diff gate passed。
+  - Independent review：final source-only reviewer PASS，無 blocking finding。
+  - Commit：`fix(web): preserve reminder success feedback after dialogs`。
 
 ---
 
