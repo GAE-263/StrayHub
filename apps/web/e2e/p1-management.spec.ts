@@ -2,12 +2,12 @@ import { test, expect } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
 
 const p1Routes = [
-  ["/ai-review", "AI Review Queue"],
+  ["/ai-review", "AI 人工覆核"],
   ["/shelters", "權限管理"],
   ["/settings/observation-options", "觀察詞彙"],
   ["/settings/qr-codes", "QR 綁定"],
   ["/settings/reportable-scope", "可回報範圍"],
-  ["/settings/audit", "Audit Query"],
+  ["/settings/audit", "稽核紀錄查詢"],
 ] as const;
 
 test.describe("P1 management routes", () => {
@@ -63,19 +63,19 @@ test.describe("P1 management routes", () => {
     await expect(page.getByText("Cage / Area")).toHaveCount(0);
   });
 
-  test("AI Queue permission denied 顯示繁中下一步且不渲染資料", async ({
+  test("AI 人工覆核 permission denied 顯示繁中下一步且不渲染資料", async ({
     page,
   }) => {
     await page.route("**/v1/management/ai-review?*", async (route) => {
       await route.fulfill({
         status: 403,
         contentType: "application/json",
-        body: JSON.stringify({ message: "目前角色無權限查看 AI Queue" }),
+        body: JSON.stringify({ message: "目前角色無權限查看 AI 人工覆核" }),
       });
     });
     await page.goto("/ai-review");
     await expect(
-      page.getByRole("alert").filter({ hasText: "無法載入 AI Queue" }),
+      page.getByRole("alert").filter({ hasText: "無法載入 AI 人工覆核" }),
     ).toBeVisible();
     await expect(page.getByText("需要人工覆核")).toHaveCount(0);
   });

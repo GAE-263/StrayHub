@@ -131,7 +131,7 @@ test("管理核心清楚區分 no-results、permission denied 與 network error"
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockManagementApi(page, { reportsStatus: "network" });
   await page.goto("/reports");
-  await expect(page.getByText("無法載入 Report Inbox")).toBeVisible();
+  await expect(page.getByText("無法載入回報收件匣")).toBeVisible();
 });
 
 test("管理首頁以 permission denied 與 network error 提供下一步", async ({

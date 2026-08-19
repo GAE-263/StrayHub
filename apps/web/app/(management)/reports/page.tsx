@@ -61,7 +61,7 @@ export default function ReportsPage() {
           return;
         }
         if (!response.ok)
-          throw new Error(`Report Inbox 載入失敗（HTTP ${response.status}）`);
+          throw new Error(`回報收件匣載入失敗（HTTP ${response.status}）`);
         const nextData = (await response.json()) as ResponseData;
         if (!controller.signal.aborted && requestId === latestRequest.current)
           setData(nextData);
@@ -71,7 +71,7 @@ export default function ReportsPage() {
           setError(
             requestError instanceof Error
               ? requestError.message
-              : "Report Inbox 載入失敗",
+              : "回報收件匣載入失敗",
           );
       })
       .finally(() => {
@@ -129,7 +129,7 @@ export default function ReportsPage() {
           <PermissionDeniedState description="請切換到已授權收容所，或聯絡收容所管理者。" />
         ) : null}
         {error ? (
-          <ErrorState title="無法載入 Report Inbox" description={error} />
+          <ErrorState title="無法載入回報收件匣" description={error} />
         ) : null}
         {!loading && !error && data?.items.length === 0 ? (
           <EmptyState
@@ -168,7 +168,7 @@ export default function ReportsPage() {
                   <td>{statusLabel(report.ai_job_status)}</td>
                   <td>
                     <Link className="text-link" href={`/reports/${report.id}`}>
-                      查看 Detail →
+                      查看詳情 →
                     </Link>
                   </td>
                 </tr>

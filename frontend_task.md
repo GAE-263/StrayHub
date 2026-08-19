@@ -791,7 +791,7 @@
 
 # Phase E — 內容、次要頁面與視覺門檻
 
-## [ ] FT-032 統一管理工作台的中英文產品文案
+## [x] FT-032 統一管理工作台的中英文產品文案
 
 - **優先級：** P2
 - **問題位置：** navigation 與頁面中的 `AI Review Queue`、`Audit Query`、`Report Inbox`、`Detail`、`Timeline`、`Membership`、`Active Shelter Context`。
@@ -799,7 +799,13 @@
 - **預期修改後：** eyebrow 可保留英文；導航、主標題、按鈕與欄位以繁中為主，技術詞彙置於括號或說明。
 - **驗證：** copy assertions、導航 screenshots、既有 locator 更新。
 - **預定 commit：** `refactor(web): standardize management interface copy`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - RED：新增management copy contract與AI頁rendered heading assertion後，舊 `AI Review Queue`／`AI Queue`／`Timeline →` 與「審核／覆核」不一致均使測試失敗。
+  - GREEN：產品名稱統一為「AI 人工覆核」；導航、首頁、稽核、回報詳情、近期歷程、成員資格與目前收容所均採繁中主詞，必要技術詞保留括號說明；copy contract改為whitespace-tolerant RegExp。
+  - URLs：`http://127.0.0.1:3001/`、`/animals`、`/ai-review`、`/settings/audit`、`/reports`、`/reports/report-a`；檢查導航、標題、欄位、action與error/loading state。
+  - Visual：360／1440共10個acceptance assertions通過；final screenshots為 `/tmp/strayhub-ft032/ai-review-360.png`、`/tmp/strayhub-ft032/animals-1440.png`，無截斷、overflow或異常換行；左下Next dev indicator保留給FT-034。
+  - Gates：Vitest 54 files／138 tests、TypeScript、Prettier、P0 E2E 94、P1 E2E 2、browser Axe P0 15／P1 1、Python 474均通過。
+  - Review：初次review的2 Medium＋1 Low均已修正；replacement source review PASS，無severity findings。
 
 ## [ ] FT-033 將 Shelter Cage／Area 列表改為標準清單
 

@@ -407,7 +407,7 @@ export default function SheltersManagementPage() {
       setAccountPassword("");
       throw error;
     }
-    setMessage("帳號與 Membership 已建立。");
+    setMessage("帳號與成員資格已建立。");
     setAccountUsername("");
     setAccountDisplayName("");
     setAccountPassword("");

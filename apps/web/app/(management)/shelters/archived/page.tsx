@@ -313,7 +313,7 @@ export default function ArchivedShelterMembershipsPage() {
         <div>
           <span className="eyebrow">SHELTER ADMINISTRATION</span>
           <h1 id="archived-title">已封存成員</h1>
-          <p>查詢目前收容所已封存的帳號與 Membership，必要時恢復權限。</p>
+          <p>查詢目前收容所已封存的帳號與成員資格，必要時恢復權限。</p>
         </div>
         <Link className="ui-button ui-button-secondary" href="/shelters">
           返回權限管理
@@ -450,7 +450,7 @@ export default function ArchivedShelterMembershipsPage() {
         authorizationImpact={
           pendingRestore?.volunteer_authorization_status === "expired" ||
           pendingRestore?.volunteer_authorization_status === "revoked"
-            ? "志工授權已過期或撤銷，恢復 Membership 不會繞過授權流程。"
+            ? "志工授權已過期或撤銷，恢復成員資格不會繞過授權流程。"
             : undefined
         }
         onClose={() => setPendingRestore(null)}

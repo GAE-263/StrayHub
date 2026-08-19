@@ -48,14 +48,14 @@ export default function AuditPage() {
     void authFetch(`/v1/management/audit?${params}`)
       .then(async (response) => {
         if (!response.ok)
-          throw new Error(`Audit Query 失敗（HTTP ${response.status}）`);
+          throw new Error(`稽核紀錄查詢失敗（HTTP ${response.status}）`);
         setItems(((await response.json()) as { items: Audit[] }).items);
       })
       .catch((requestError: unknown) =>
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Audit Query 失敗",
+            : "稽核紀錄查詢失敗",
         ),
       )
       .finally(() => setLoading(false));
@@ -65,10 +65,9 @@ export default function AuditPage() {
       <div className="page-heading">
         <div>
           <span className="eyebrow">READ-ONLY AUDIT</span>
-          <h1 id="audit-title">Audit Query</h1>
+          <h1 id="audit-title">稽核紀錄查詢</h1>
           <p>
-            依目前 Scope
-            追蹤操作者、資源、Action、原因與時間；此頁沒有修改或刪除操作。
+            依目前收容所範圍追蹤操作者、資源、動作、原因與時間；此頁沒有修改或刪除操作。
           </p>
         </div>
       </div>
@@ -79,7 +78,7 @@ export default function AuditPage() {
         <CardContent>
           <div className="p1-form-grid">
             <Field>
-              <label htmlFor="audit-action">Action</label>
+              <label htmlFor="audit-action">動作（Action）</label>
               <Input
                 id="audit-action"
                 value={action}
@@ -88,7 +87,7 @@ export default function AuditPage() {
               />
             </Field>
             <Field>
-              <label htmlFor="audit-resource">Resource type</label>
+              <label htmlFor="audit-resource">資源類型（Resource type）</label>
               <Input
                 id="audit-resource"
                 value={resourceType}
@@ -98,17 +97,17 @@ export default function AuditPage() {
             </Field>
           </div>
           {loading ? (
-            <LoadingState title="正在查詢 Audit…" />
+            <LoadingState title="正在查詢稽核紀錄…" />
           ) : error ? (
             <Alert role="alert">{error}</Alert>
           ) : items.length === 0 ? (
-            <EmptyState title="目前沒有符合條件的 Audit" />
+            <EmptyState title="目前沒有符合條件的稽核紀錄" />
           ) : (
             <Table>
               <TableHeader>
                 <tr>
                   <TableHead>時間</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>動作</TableHead>
                   <TableHead>資源</TableHead>
                   <TableHead>操作者</TableHead>
                   <TableHead>原因</TableHead>

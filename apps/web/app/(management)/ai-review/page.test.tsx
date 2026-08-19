@@ -80,6 +80,8 @@ afterEach(async () => {
 describe("AI review queue", () => {
   it("uses a governed dialog instead of window.prompt for rejection", async () => {
     await renderPage();
+    expect(container?.querySelector("h1")?.textContent).toBe("AI 人工覆核");
+    expect(container?.textContent).not.toContain("AI Queue");
     const rejectButton = Array.from(
       container?.querySelectorAll("button") ?? [],
     ).find((button) => button.textContent?.trim() === "拒絕");

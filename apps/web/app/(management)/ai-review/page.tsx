@@ -75,14 +75,14 @@ export default function AiReviewPage() {
     void authFetch(`/v1/management/ai-review?${params}`)
       .then(async (response) => {
         if (!response.ok)
-          throw new Error(`AI Queue 載入失敗（HTTP ${response.status}）`);
+          throw new Error(`AI 人工覆核載入失敗（HTTP ${response.status}）`);
         setItems(((await response.json()) as { items: Observation[] }).items);
       })
       .catch((requestError: unknown) =>
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "AI Queue 載入失敗",
+            : "AI 人工覆核載入失敗",
         ),
       )
       .finally(() => setLoading(false));
@@ -138,7 +138,7 @@ export default function AiReviewPage() {
       <div className="page-heading">
         <div>
           <span className="eyebrow">AI REVIEW QUEUE</span>
-          <h1 id="ai-review-title">AI Review Queue</h1>
+          <h1 id="ai-review-title">AI 人工覆核</h1>
           <p>AI 只提供可追溯提示；人工決定另存，不改寫原始回報。</p>
         </div>
       </div>
@@ -166,10 +166,10 @@ export default function AiReviewPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <LoadingState title="正在載入 AI Queue…" />
+            <LoadingState title="正在載入 AI 人工覆核…" />
           ) : error ? (
             <Alert role="alert">
-              <strong>無法載入 AI Queue</strong>
+              <strong>無法載入 AI 人工覆核</strong>
               <p>{error}</p>
             </Alert>
           ) : items.length === 0 ? (

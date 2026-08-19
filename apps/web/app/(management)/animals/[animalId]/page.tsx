@@ -182,7 +182,7 @@ export default function AnimalProfilePage({ params }: Props) {
         <Card className="ui-card-padded" aria-labelledby="animal-actions-title">
           <h2 id="animal-actions-title">工作入口</h2>
           <Link className="link-card" href={`/animals/${animal.id}/timeline`}>
-            <strong>Timeline</strong>
+            <strong>近期歷程</strong>
             <p className="muted">查看近 14 日、多筆回報與 AI 狀態。</p>
           </Link>
           <Link

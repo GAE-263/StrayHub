@@ -10,7 +10,8 @@ def test_report_workflow_covers_inbox_detail_and_traceable_mutations() -> None:
     detail = Path("apps/web/app/(management)/reports/[reportId]/page.tsx").read_text()
     api = Path("services/api/app/api/report_inbox.py").read_text()
 
-    assert "Report Inbox" in inbox
+    assert "回報收件匣" in inbox
+    assert "Report Inbox" not in inbox
     assert "answers" in detail
     assert "media_ids" in detail
     assert "ai_observations" in detail

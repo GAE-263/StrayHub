@@ -200,7 +200,7 @@ export default function AnimalsPage() {
                       className="text-link"
                       href={`/animals/${animal.id}/timeline`}
                     >
-                      Timeline →
+                      近期歷程 →
                     </Link>
                   </td>
                 </tr>

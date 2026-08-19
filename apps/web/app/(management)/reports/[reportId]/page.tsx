@@ -54,7 +54,7 @@ export default function ReportDetailPage({ params }: Props) {
     void authFetch(`/v1/management/reports/${reportId}`)
       .then(async (response) => {
         if (!response.ok)
-          throw new Error(`回報 Detail 載入失敗（HTTP ${response.status}）`);
+          throw new Error(`回報詳情載入失敗（HTTP ${response.status}）`);
         const data = (await response.json()) as { report: Report };
         setReport(data.report);
         setCorrection(JSON.stringify(data.report.answers, null, 2));
@@ -63,7 +63,7 @@ export default function ReportDetailPage({ params }: Props) {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "回報 Detail 載入失敗",
+            : "回報詳情載入失敗",
         ),
       );
   };
@@ -84,7 +84,7 @@ export default function ReportDetailPage({ params }: Props) {
         },
       );
       if (!response.ok) throw new Error(`操作失敗（HTTP ${response.status}）`);
-      setMessage("操作已完成，原始內容與 Audit 仍保留。 ");
+      setMessage("操作已完成，原始內容與稽核紀錄仍保留。 ");
       load();
     } catch (requestError: unknown) {
       setError(
@@ -98,13 +98,13 @@ export default function ReportDetailPage({ params }: Props) {
   if (error && !report)
     return (
       <div>
-        <ErrorState title="無法載入回報 Detail" description={error} />
+        <ErrorState title="無法載入回報詳情" description={error} />
       </div>
     );
   if (!report)
     return (
       <div>
-        <LoadingState title="正在載入回報 Detail…" />
+        <LoadingState title="正在載入回報詳情…" />
       </div>
     );
 
@@ -147,7 +147,7 @@ export default function ReportDetailPage({ params }: Props) {
           <h3>照片</h3>
           <p className="muted">
             {report.media_ids.length
-              ? `${report.media_ids.length} 個 Media Asset，需依權限取得 Signed URL。`
+              ? `${report.media_ids.length} 個媒體檔案，需依權限取得簽署網址（Signed URL）。`
               : "此回報沒有照片。"}
           </p>
         </Card>
@@ -156,7 +156,7 @@ export default function ReportDetailPage({ params }: Props) {
           <p role="status" aria-live="polite" aria-atomic="true">
             {reportAIStatusSummary(report.ai_observations)
               .map((item) => `AI：${item.label}`)
-              .join("；") || "AI：尚無 AI Observation"}
+              .join("；") || "AI：尚無 AI 觀察結果"}
           </p>
           {report.ai_observations.length ? (
             report.ai_observations.map((observation) => (
@@ -185,17 +185,17 @@ export default function ReportDetailPage({ params }: Props) {
               </Card>
             ))
           ) : (
-            <p className="muted">尚無 AI Observation。</p>
+            <p className="muted">尚無 AI 觀察結果。</p>
           )}
         </Card>
       </div>
       <Card className="panel mutation-panel">
-        <h2>Correction／Archive</h2>
+        <h2>修正／封存</h2>
         <p className="muted">
-          修正會建立 Correction 與 Audit；封存只改變狀態，不會 Hard Delete。
+          修正會建立修正紀錄與稽核紀錄；封存只改變狀態，不會永久刪除。
         </p>
         <Field>
-          <label htmlFor="correction-answers">修正後 answers（JSON）</label>
+          <label htmlFor="correction-answers">修正後內容（JSON）</label>
           <Textarea
             id="correction-answers"
             value={correction}
@@ -226,7 +226,7 @@ export default function ReportDetailPage({ params }: Props) {
               }
             }}
           >
-            保存 Correction
+            保存修正
           </Button>
           <Button
             variant="secondary"
@@ -234,14 +234,14 @@ export default function ReportDetailPage({ params }: Props) {
             disabled={busy || !reason.trim()}
             onClick={() => setArchiveOpen(true)}
           >
-            Archive
+            封存
           </Button>
           <Button
             variant="secondary"
             type="button"
             onClick={() => router.push(`/animals/${report.animal_id}/timeline`)}
           >
-            回到 Timeline
+            回到近期歷程
           </Button>
         </div>
       </Card>
@@ -250,7 +250,7 @@ export default function ReportDetailPage({ params }: Props) {
         title="確認封存回報"
         onClose={() => setArchiveOpen(false)}
       >
-        <p>封存只會改變回報狀態，不會刪除原始回報、照片或 Audit 紀錄。</p>
+        <p>封存只會改變回報狀態，不會刪除原始回報、照片或稽核紀錄。</p>
         <div className="toolbar">
           <Button
             variant="secondary"

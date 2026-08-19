@@ -100,7 +100,7 @@ test("Report Inbox 可用日期與狀態篩選，並通往 detail 與 animal pro
   await page.getByLabel("結束日期").fill("2026-08-14");
   await page.getByLabel("狀態").selectOption("saved");
   await expect(page.getByText("小森")).toBeVisible();
-  await expect(page.getByRole("link", { name: "查看 Detail →" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "查看詳情 →" })).toBeVisible();
   await page.getByRole("link", { name: "小森" }).click();
   await expect(page).toHaveURL(/\/animals\/animal-a$/);
   await expect(page.getByRole("heading", { name: "小森" })).toBeVisible();
@@ -169,7 +169,9 @@ test("detail 與 Timeline 保留 Breadcrumb、同日多筆與 AI／人工狀態"
   await page.goto("/reports/report-a");
   await expect(page.getByRole("heading", { name: "小森" })).toBeVisible();
   await expect(page.getByRole("status")).toContainText("需要人工覆核");
-  await expect(page.getByRole("link", { name: "回報收件匣" })).toBeVisible();
+  await expect(
+    page.getByLabel("Breadcrumb").getByRole("link", { name: "回報收件匣" }),
+  ).toBeVisible();
 
   await page.goto("/animals/animal-a/timeline");
   await expect(

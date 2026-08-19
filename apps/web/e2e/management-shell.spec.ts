@@ -193,9 +193,7 @@ test.describe("管理工作台 Shell", () => {
     });
     await page.goto("/");
     await page.getByLabel("切換目前收容所").selectOption("org-b");
-    await expect(
-      page.getByText("無法切換 Active Shelter Context"),
-    ).toBeVisible();
+    await expect(page.getByText("無法切換目前收容所")).toBeVisible();
     await page.getByRole("button", { name: "登出管理工作台" }).click();
     await expect(page).toHaveURL(/\/login$/);
   });
