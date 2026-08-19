@@ -728,6 +728,27 @@
   - Verification：page 1 passed；save failure保留輸入＋retry 1 passed；initial offline→reconnect 1 passed；care-report responsive 360／768／1024／1440共4 passed；P0 Axe四 viewport passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`fix(web): align volunteer report state feedback`。
 
+## [x] Phase C 完成摘要
+
+- **完成範圍：** FT-019～FT-029，共 11 個 atomic frontend remediation tasks。
+- **獨立 commits：**
+  1. `3a8fec7` — `fix(web): align volunteer animal confirmation layout`
+  2. `2391385` — `fix(web): use unique animal confirmation labels`
+  3. `9d6c7bb` — `fix(web): structure volunteer cards with shared primitives`
+  4. `ca769d1` — `refactor(web): align volunteer application design tokens`
+  5. `6aa10e1` — `fix(web): confirm volunteer application withdrawal`
+  6. `41306e5` — `refactor(web): migrate volunteer grants to ui primitives`
+  7. `f5ad8d9` — `refactor(web): align volunteer batch workbench styles`
+  8. `afbf6a0` — `fix(web): align notification retry controls and feedback`
+  9. `5c408a0` — `fix(web): harden volunteer access policy states`
+  10. `70b6b6f` — `refactor(web): align active shelter context presentation`
+  11. `d44df28` — `fix(web): align volunteer report state feedback`
+- **主要成果：** 志工 shell與 responsive card結構、全域唯一 labeling、semantic token/primitives遷移、destructive confirmation與 lifecycle Toast、授權／批次／通知 controls層級、fail-closed loading/error/empty與 offline reconnect。
+- **Accessibility／responsive：** 360／768／1024／1440無核心水平 overflow；keyboard Dialog focus restore與 retry流程通過；P0＋志工 routes Axe無 critical／serious violations。
+- **Independent review：** FT-020與FT-021 reviewers均 PASS，無 blocker；FT-021四張 360／768 screenshots無 clipping／overflow。
+- **Final regression（2026-08-19）：** Vitest 53 files／136 tests passed；Python pytest 474 passed；TypeScript／Prettier／`git diff --check` passed；combined browser suite 74 passed後2個 Axe tests因7-worker 30s timeout，隔離以60s原命令重跑2／2 passed。
+- **Known non-blocker：** Starlette TestClient／httpx既有 deprecation warning；`ActiveShelterContext`目前未掛入 route，因此FT-028 browser screenshot明確不適用。
+
 ---
 
 # Phase D — 醫療照護操作
