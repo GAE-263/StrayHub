@@ -270,7 +270,7 @@
   - Visual verification：768×1024 Header、主內容起點、Mobile Sheet 與 before／after screenshot 已完成驗收。
   - Commit：本任務獨立 commit `fix(web): compact management navigation on tablets`。
 
-## [ ] FT-008 合併重複的 600／900px app-shell media rules
+## [x] FT-008 合併重複的 600／900px app-shell media rules
 
 - **優先級：** P1
 - **問題位置：** `apps/web/app/globals.css:929, 940, 1330, 1488, 1518`
@@ -278,7 +278,20 @@
 - **預期修改後：** 每個 breakpoint 只有單一 app-shell 區塊，body 高度不依賴錯誤的固定 header 高度。
 - **驗證：** 360／768／1024 responsive、visual diff、無 horizontal／不合理 vertical overflow。
 - **預定 commit：** `refactor(web): consolidate app shell breakpoints`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：2026-08-19 完成；source/computed tests、360／768／1024 screenshot 與頁面驗收完成，依指示建立獨立 commit。
+  - 修改前：`max-width: 900px` 分散為 2 blocks、`max-width: 600px` 分散為 3 blocks；`.app-header` 與 `.app-main` 同 breakpoint 依 source order 決定 winning padding；`.app-body` 固定使用 `calc(100vh - 72px)`，但 360px Header 實際高於 72px。
+  - RED：CSS contract 取得 2 個 900px blocks（預期 1）；360×800 browser computed `.app-body` min-height 為 728px，證明仍以 `800 - 72` 計算而非依真實 Header 高度。
+  - GREEN：900px 與 600px declarations 各合併為唯一 media block；保留原本最終 winning values；`.app-frame` 改為 `100vh` fallback + `100dvh` flex column，Header 不縮小，`.app-body` 以 `flex: 1 1 auto`／`min-height: 0` 填滿剩餘空間。
+  - Feature preservation：observation vocabulary 與 shelter membership responsive declarations 原樣搬入各自最終 breakpoint，未改 selector、value 或 component markup。
+  - Changed files：
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `apps/web/e2e/management-shell.spec.ts`
+    - `frontend_task.md`
+  - Verification：CSS contract 1 file／9 tests PASS；360／768／1024 computed responsive Playwright 1 test PASS；management shell 5 tests PASS；P1 routes × 4 viewports Axe PASS；full Vitest 51 files／115 tests PASS；TypeScript／Prettier PASS；Python 474 tests PASS；`/`、`/settings/observation-options`、`/shelters` HTTP 200；`git diff --check` PASS。
+  - Visual verification：360 Header 自然兩列且內容緊接實際高度；768 compact navigation 無淡綠空白；1024 desktop sidebar／logout／四欄 metrics 保持，三者皆無 horizontal clipping 或不合理垂直空白。
+  - Commit：本任務獨立 commit `refactor(web): consolidate app shell breakpoints`。
 
 ## [ ] FT-009 統一 42／44／46px 控制高度
 

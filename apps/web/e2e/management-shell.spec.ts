@@ -73,6 +73,64 @@ test.describe("管理工作台 Shell", () => {
     await expect(trigger).toBeFocused();
   });
 
+  test("responsive shell follows the actual header height", async ({
+    page,
+  }) => {
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 768, height: 1024 },
+      { width: 1024, height: 768 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await expect(
+        page.getByRole("heading", { name: "管理工作台總覽" }),
+      ).toBeVisible();
+
+      const geometry = await page.evaluate(() => {
+        const frame = document.querySelector<HTMLElement>(".app-frame");
+        const header = document.querySelector<HTMLElement>(".app-header");
+        const body = document.querySelector<HTMLElement>(".app-body");
+        if (!frame || !header || !body) throw new Error("app shell missing");
+        const headerBox = header.getBoundingClientRect();
+        const bodyBox = body.getBoundingClientRect();
+        return {
+          bodyMinHeight: getComputedStyle(body).minHeight,
+          bodyTop: bodyBox.top,
+          frameHeight: frame.getBoundingClientRect().height,
+          headerBottom: headerBox.bottom,
+          headerHeight: headerBox.height,
+          horizontalOverflow:
+            document.documentElement.scrollWidth > window.innerWidth,
+        };
+      });
+
+      expect(geometry.bodyMinHeight).toBe("0px");
+      expect(Math.abs(geometry.bodyTop - geometry.headerBottom)).toBeLessThan(
+        1,
+      );
+      expect(geometry.frameHeight).toBeGreaterThanOrEqual(viewport.height);
+      expect(geometry.horizontalOverflow).toBe(false);
+
+      const trigger = page.getByRole("button", {
+        name: "開啟管理工作台導覽",
+      });
+      if (viewport.width <= 900) {
+        await expect(trigger).toBeVisible();
+        await expect(page.locator(".app-sidebar")).toBeHidden();
+        await expect(page.locator(".header-logout")).toBeHidden();
+      } else {
+        await expect(trigger).toBeHidden();
+        await expect(page.locator(".app-sidebar")).toBeVisible();
+        await expect(page.locator(".header-logout")).toBeVisible();
+      }
+
+      if (viewport.width === 360) {
+        expect(geometry.headerHeight).toBeGreaterThan(72);
+      }
+    }
+  });
+
   test("context switch failure is visible and logout returns to login", async ({
     page,
   }) => {

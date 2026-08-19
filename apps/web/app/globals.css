@@ -106,13 +106,17 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 .app-frame {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 .app-header {
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   display: flex;
+  flex: 0 0 auto;
   justify-content: space-between;
   min-height: 72px;
   padding: 0 32px;
@@ -181,8 +185,9 @@ summary:focus-visible {
 }
 .app-body {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: 240px minmax(0, 1fr);
-  min-height: calc(100vh - 72px);
+  min-height: 0;
 }
 .app-sidebar {
   background: #edf4ef;
@@ -1073,66 +1078,6 @@ dialog.ui-sheet[open] {
   }
 }
 
-@media (max-width: 900px) {
-  .observation-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .observation-filter-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .observation-search-field {
-    grid-column: 1 / -1;
-  }
-}
-@media (max-width: 600px) {
-  .app-header {
-    padding: 0 16px;
-  }
-  .app-body {
-    display: block;
-  }
-  .app-sidebar {
-    display: none;
-  }
-  .mobile-navigation {
-    display: block;
-    flex: 0 0 auto;
-    padding: 0;
-  }
-  .app-header .header-logout {
-    display: none;
-  }
-  .app-main {
-    padding: 24px 14px 48px;
-  }
-  .observation-page-heading {
-    align-items: flex-start;
-    display: grid;
-    gap: 16px;
-  }
-  .observation-page-heading .button {
-    justify-self: start;
-  }
-  .observation-summary-grid,
-  .observation-filter-grid,
-  .form-grid-compact {
-    grid-template-columns: 1fr;
-  }
-  .observation-category-toggle {
-    align-items: flex-start;
-    display: grid;
-    gap: 12px;
-  }
-  .observation-category-counts {
-    justify-content: flex-start;
-  }
-  .observation-option-actions .button {
-    flex: 1 1 auto;
-  }
-  .observation-dialog {
-    padding: 18px;
-  }
-}
 .loading-dot {
   animation: loading-dot-pulse 1.2s infinite;
   background: var(--accent);
@@ -1478,36 +1423,6 @@ dialog.ui-sheet[open] {
     max-width: calc(100vw - 24px);
   }
 }
-@media (max-width: 600px) {
-  .shelter-management-heading {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .membership-item {
-    grid-template-columns: 1fr;
-  }
-  .membership-header-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .membership-header-actions .field,
-  .membership-header-actions .ui-button {
-    width: 100%;
-  }
-  .membership-actions {
-    grid-column: auto;
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .membership-actions select,
-  .membership-actions button,
-  .membership-permission {
-    width: 100%;
-  }
-  .membership-permission {
-    min-height: 42px;
-  }
-}
 .toolbar {
   align-items: center;
   display: flex;
@@ -1657,6 +1572,15 @@ dialog.ui-sheet[open] {
   .content-grid {
     grid-template-columns: 1fr;
   }
+  .observation-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .observation-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .observation-search-field {
+    grid-column: 1 / -1;
+  }
 }
 @media (max-width: 600px) {
   .app-header {
@@ -1679,5 +1603,60 @@ dialog.ui-sheet[open] {
   .metric-grid,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+  .observation-page-heading {
+    align-items: flex-start;
+    display: grid;
+    gap: 16px;
+  }
+  .observation-page-heading .button {
+    justify-self: start;
+  }
+  .observation-summary-grid,
+  .observation-filter-grid,
+  .form-grid-compact {
+    grid-template-columns: 1fr;
+  }
+  .observation-category-toggle {
+    align-items: flex-start;
+    display: grid;
+    gap: 12px;
+  }
+  .observation-category-counts {
+    justify-content: flex-start;
+  }
+  .observation-option-actions .button {
+    flex: 1 1 auto;
+  }
+  .observation-dialog {
+    padding: 18px;
+  }
+  .shelter-management-heading {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .membership-item {
+    grid-template-columns: 1fr;
+  }
+  .membership-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .membership-header-actions .field,
+  .membership-header-actions .ui-button {
+    width: 100%;
+  }
+  .membership-actions {
+    align-items: stretch;
+    flex-direction: column;
+    grid-column: auto;
+  }
+  .membership-actions select,
+  .membership-actions button,
+  .membership-permission {
+    width: 100%;
+  }
+  .membership-permission {
+    min-height: 42px;
   }
 }

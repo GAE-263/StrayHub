@@ -142,3 +142,20 @@ describe("state view visual contracts", () => {
     );
   });
 });
+
+describe("responsive app shell contracts", () => {
+  it("uses one block per shell breakpoint and fills dynamic viewport height", () => {
+    expect(css.match(/@media \(max-width: 900px\)/g)).toHaveLength(1);
+    expect(css.match(/@media \(max-width: 600px\)/g)).toHaveLength(1);
+    expect(css).not.toContain("calc(100vh - 72px)");
+
+    const frame = ruleBody(".app-frame");
+    expect(frame).toContain("display: flex");
+    expect(frame).toContain("flex-direction: column");
+    expect(frame).toContain("min-height: 100dvh");
+
+    const body = ruleBody(".app-body");
+    expect(body).toContain("flex: 1 1 auto");
+    expect(body).toContain("min-height: 0");
+  });
+});
