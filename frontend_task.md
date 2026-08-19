@@ -712,7 +712,7 @@
   - Verification：component callback＋semantic markup 2 passed；TypeScript passed；full Vitest／Python／Prettier／diff gate passed。
   - Commit：`refactor(web): align active shelter context presentation`。
 
-## [ ] FT-029 統一志工 care-report 的 loading／offline／empty 狀態
+## [x] FT-029 統一志工 care-report 的 loading／offline／empty 狀態
 
 - **優先級：** P2
 - **問題位置：** `apps/web/app/(volunteer)/care-report/page.tsx:48-60`
@@ -720,7 +720,13 @@
 - **預期修改後：** LoadingState／ErrorState／EmptyState 或 Alert，並保留輸入。
 - **驗證：** page test、offline browser flow、360 screenshot。
 - **預定 commit：** `fix(web): align volunteer report state feedback`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：page test真正 render後確認 loading僅為普通 status paragraph、無 shared state-card；並揭露 page缺少 classic JSX React import。
+  - GREEN：LoadingState／ErrorState／EmptyState；404／204為真 empty，其他 HTTP/network failure fail-closed為 offline；重新連線不清空既有 draft，offline與empty互斥。
+  - Changed files：care-report `page.tsx`／test、`state-feedback.spec.ts`、`frontend_task.md`。
+  - Verification：page 1 passed；save failure保留輸入＋retry 1 passed；initial offline→reconnect 1 passed；care-report responsive 360／768／1024／1440共4 passed；P0 Axe四 viewport passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`fix(web): align volunteer report state feedback`。
 
 ---
 
