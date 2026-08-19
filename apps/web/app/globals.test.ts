@@ -28,3 +28,13 @@ describe("global animation contracts", () => {
     expect(css).not.toMatch(/@keyframes\s+pulse\b/);
   });
 });
+
+describe("global dialog contracts", () => {
+  it("centers permission confirmation dialogs in the viewport", () => {
+    const permissionDialog = ruleBody(".permission-confirmation-dialog");
+
+    expect(permissionDialog).toContain("inset: 0");
+    expect(permissionDialog).toContain("margin: auto");
+    expect(permissionDialog).toContain("position: fixed");
+  });
+});

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { AlertDialog } from "../ui/alert-dialog";
+import { Button } from "../ui/button";
 
 export function MembershipPermissionDialog({
   open,
@@ -18,6 +19,7 @@ export function MembershipPermissionDialog({
   onClose,
   onConfirm,
   confirming = false,
+  destructive = false,
 }: {
   open: boolean;
   title?: string;
@@ -33,12 +35,14 @@ export function MembershipPermissionDialog({
   onClose: () => void;
   onConfirm: () => void;
   confirming?: boolean;
+  destructive?: boolean;
 }) {
   return (
     <AlertDialog
       open={open}
       title={title}
       closeLabel="關閉權限確認"
+      className="permission-confirmation-dialog"
       onClose={onClose}
     >
       <div className="permission-confirmation-content">
@@ -74,17 +78,22 @@ export function MembershipPermissionDialog({
         ) : null}
         {authorizationImpact ? <p>{authorizationImpact}</p> : null}
         <div className="dialog-actions">
-          <button type="button" onClick={onClose} disabled={confirming}>
-            取消
-          </button>
-          <button
+          <Button
             type="button"
-            className="ui-button ui-button-primary"
+            variant="secondary"
+            onClick={onClose}
+            disabled={confirming}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant={destructive ? "destructive" : "default"}
             onClick={onConfirm}
             disabled={confirming}
           >
             {confirming ? "處理中…" : confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </AlertDialog>

@@ -96,7 +96,7 @@
   - Commit：`fix(web): separate skeleton and loading animations`
   - SHA：本完成紀錄與實作位於同一 commit；提交後以 `git log -1` 顯示值為準。
 
-## [ ] FT-002 修正權限確認 Dialog 的按鈕 variants
+## [x] FT-002 修正權限確認 Dialog 的按鈕 variants
 
 - **優先級：** P0
 - **問題位置：** `apps/web/components/management/MembershipPermissionDialog.tsx:76-87`
@@ -108,7 +108,25 @@
   - `frontend_task.md`
 - **驗證：** component test、typecheck、Dialog 修改前後 screenshot／computed class。
 - **預定 commit：** `fix(web): align permission dialog button variants`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：實作、自動化驗證與 `/shelters` 頁面驗收完成。
+  - 修改前：取消按鈕沒有 Design System class；確認按鈕使用不存在的 `ui-button-primary`。
+  - RED 1：預期取消為 secondary、一般確認為 default → 1 failed。
+  - RED 2：預期高風險確認為 destructive → 1 failed、1 passed。
+  - 修改後：取消統一使用 secondary；一般確認使用 default；停用、封存、管理員降級、撤銷授權與批次拒絕使用 destructive；權限確認 Modal 固定顯示於 viewport 正中央，內容過高時在 Modal 內捲動。
+  - Changed files：
+    - `apps/web/components/management/MembershipPermissionDialog.tsx`
+    - `apps/web/components/management/MembershipPermissionDialog.test.tsx`
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `apps/web/app/(management)/shelters/page.tsx`
+    - `apps/web/features/volunteer-access/ApplicationBatchWorkbench.tsx`
+    - `apps/web/features/volunteer-access/AccessGrantTable.tsx`
+    - `frontend_task.md`
+  - Verification：targeted Dialog／CSS 2 files／4 tests PASS；完整 Vitest 51 files／102 tests PASS；typecheck PASS；Prettier PASS；完整 pytest 474 tests PASS。
+  - Visual verification：使用者於 `/shelters` 驗收一般／destructive 按鈕與置中 Modal，並要求提交。
+  - Commit：`fix(web): align permission dialog button variants`
+  - SHA：本完成紀錄與實作位於同一 commit；提交後以 `git log -1` 顯示值為準。
 
 ## [ ] FT-003 補齊缺失的 layout primitives
 

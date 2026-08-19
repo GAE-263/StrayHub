@@ -592,6 +592,13 @@ td {
 .ui-sheet::backdrop {
   background: rgba(25, 51, 47, 0.46);
 }
+.permission-confirmation-dialog {
+  inset: 0;
+  margin: auto;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  position: fixed;
+}
 .ui-sheet {
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
   margin: 0 0 0 auto;

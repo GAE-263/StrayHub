@@ -256,6 +256,7 @@ export function AccessGrantTable({
         before={pending?.before ?? ""}
         after={pending?.after ?? ""}
         authorizationImpact={pending?.authorizationImpact}
+        destructive={pending?.action === "revoke"}
         onClose={() => setPending(null)}
         onConfirm={() => void confirmMutation()}
         confirming={confirming}

@@ -809,6 +809,13 @@ export default function SheltersManagementPage() {
         after={pendingMembershipChange?.after ?? ""}
         adminCountBefore={pendingMembershipChange?.adminCountBefore}
         adminCountAfter={pendingMembershipChange?.adminCountAfter}
+        destructive={Boolean(
+          pendingMembershipChange &&
+          (pendingMembershipChange.operation.includes("停用") ||
+            pendingMembershipChange.operation.includes("封存") ||
+            pendingMembershipChange.adminCountAfter <
+              pendingMembershipChange.adminCountBefore),
+        )}
         onClose={() => setPendingMembershipChange(null)}
         onConfirm={() => void confirmMembershipChange()}
         confirming={confirmingChange}

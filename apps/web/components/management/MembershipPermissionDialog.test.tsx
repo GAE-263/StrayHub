@@ -21,9 +21,30 @@ describe("MembershipPermissionDialog", () => {
     );
 
     expect(html).toContain('role="alertdialog"');
+    expect(html).toContain('class="ui-dialog permission-confirmation-dialog"');
     expect(html).toContain("收容所 A");
     expect(html).toContain("本機工作人員 A");
     expect(html).toContain("1 → 2 人");
     expect(html).toContain("確認調整");
+    expect(html).toContain('class="ui-button ui-button-secondary"');
+    expect(html).toContain('class="ui-button ui-button-default"');
+    expect(html).not.toContain("ui-button-primary");
+  });
+
+  it("uses the destructive variant for high-risk confirmation", () => {
+    const html = renderToStaticMarkup(
+      <MembershipPermissionDialog
+        open
+        identity="本機志工 A"
+        operation="撤銷志工授權"
+        before="授權中"
+        after="已撤銷"
+        destructive
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('class="ui-button ui-button-destructive"');
   });
 });
