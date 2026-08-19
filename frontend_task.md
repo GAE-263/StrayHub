@@ -406,7 +406,7 @@
   - Route verification：`http://localhost:3001/settings/qr-codes`；以有 QR 管理權限的帳號登入，點擊撤銷或重新產生，確認 Dialog 顯示動物與 Token 失效風險；取消不發 request；確認後才更新清單並顯示 Toast。
   - Commit：`fix(web): confirm qr token invalidation actions`。
 
-## [ ] FT-013 為可回報範圍停用加入確認
+## [x] FT-013 為可回報範圍停用加入確認
 
 - **優先級：** P1
 - **問題位置：** `apps/web/app/(management)/settings/reportable-scope/page.tsx:95-110, 218-225`
@@ -414,7 +414,18 @@
 - **預期修改後：** 確認目標、有效期間與志工影響；成功 Toast；提交期間鎖定。
 - **驗證：** page test、P1 a11y／browser。
 - **預定 commit：** `fix(web): confirm reportable scope deactivation`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：點擊可回報範圍「停用」後直接 PATCH，沒有說明有效期間或志工影響。
+  - RED：page regression 點擊停用後找不到 `確認停用可回報範圍` Dialog。
+  - GREEN：新增 destructive confirmation Dialog，顯示目標、有效期間、指定志工／受影響志工範圍與歷史資料保留行為；確認後才 PATCH；request 期間鎖定 Dialog controls；成功回饋改用 Toast。
+  - Changed files：
+    - `apps/web/app/(management)/settings/reportable-scope/page.tsx`
+    - `apps/web/app/(management)/settings/reportable-scope/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：reportable-scope page test 1 passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/settings/reportable-scope`；以管理權限登入，點擊 active scope 的停用，確認 Dialog 顯示目標／期間／志工影響；取消不 PATCH；確認後顯示處理中並停用，成功後 Toast 可見。
+  - Commit：`fix(web): confirm reportable scope deactivation`。
 
 ## [ ] FT-014 以設計系統 Dialog 取代 AI review `window.prompt`
 
