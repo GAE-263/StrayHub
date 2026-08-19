@@ -582,7 +582,7 @@
   - Verification：component 3 tests passed；selected-card browser flow 驗證兩個 title ID 各 1 個且 Axe 無 critical／serious violation；volunteer E2E 3 passed；full Vitest 53 files／131 tests passed；Python 474 tests passed；TypeScript／Prettier／`git diff --check` passed。
   - Commit：`fix(web): use unique animal confirmation labels`。
 
-## [ ] FT-021 修正志工核心 Card 的內容 padding 與結構
+## [x] FT-021 修正志工核心 Card 的內容 padding 與結構
 
 - **優先級：** P1
 - **問題位置：** `AnimalConfirmationCard.tsx`、`LiffFallback.tsx`。
@@ -590,7 +590,13 @@
 - **預期修改後：** 使用 CardHeader／CardTitle／CardContent；圖片與 actions 有 responsive layout。
 - **驗證：** component tests、360／768 screenshot。
 - **預定 commit：** `fix(web): structure volunteer cards with shared primitives`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：Animal confirmation 與 LIFF fallback markup 均缺少 `ui-card-header`／`ui-card-title`／`ui-card-content`。
+  - GREEN：兩個 Card 遷移至 CardHeader／CardTitle／CardContent；confirmation media/details 在 360px 單欄、720px 起雙欄；actions 在手機 full-width、tablet 起自適應；LIFF form 保留既有資料與 callbacks。
+  - Changed files：`AnimalConfirmationCard.tsx`／test、`LiffFallback.tsx`、`tests/local_bot_mvp.test.tsx`、`globals.css`、`e2e/volunteer-core.spec.ts`、`frontend_task.md`。
+  - Verification：focused 3 files／8 tests passed；360／768 四張 screenshots 視覺 PASS；volunteer E2E 3 passed；full Vitest 53 files／132 tests passed；Python 474 tests passed；TypeScript／Prettier／`git diff --check` passed。
+  - Commit：`fix(web): structure volunteer cards with shared primitives`。
 
 ## [ ] FT-022 將志工報名頁色彩遷移至 semantic tokens
 

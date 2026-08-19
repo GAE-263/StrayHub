@@ -1362,6 +1362,42 @@ dialog.ui-sheet[open] {
 .volunteer-candidate-item .ui-button {
   width: 100%;
 }
+.animal-confirmation-content,
+.volunteer-report-content {
+  display: grid;
+  gap: 20px;
+}
+.animal-confirmation-layout,
+.animal-confirmation-details,
+.animal-confirmation-actions,
+.volunteer-report-actions {
+  display: grid;
+  gap: 12px;
+}
+.animal-confirmation-media {
+  align-items: center;
+  aspect-ratio: 16 / 10;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+.animal-confirmation-media img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+.animal-confirmation-media p,
+.animal-confirmation-details p,
+.volunteer-report-card .ui-card-header p {
+  margin: 0;
+}
+.animal-confirmation-actions .ui-button,
+.volunteer-report-actions .ui-button {
+  width: 100%;
+}
 @media (min-width: 720px) {
   .volunteer-page {
     padding: 40px 32px 64px;
@@ -1374,6 +1410,19 @@ dialog.ui-sheet[open] {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .volunteer-candidate-item .ui-button {
+    width: auto;
+  }
+  .animal-confirmation-layout {
+    align-items: start;
+    grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  }
+  .animal-confirmation-actions,
+  .volunteer-report-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .animal-confirmation-actions .ui-button,
+  .volunteer-report-actions .ui-button {
     width: auto;
   }
 }

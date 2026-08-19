@@ -4,6 +4,24 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AnimalConfirmationCard } from "./AnimalConfirmationCard";
 
 describe("AnimalConfirmationCard", () => {
+  it("uses shared card structure with responsive media and actions hooks", () => {
+    const html = renderToStaticMarkup(
+      <AnimalConfirmationCard
+        animal={{ id: "animal-a", name: "小黑", canReport: true }}
+        onConfirm={() => undefined}
+        onReselect={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('class="ui-card-header"');
+    expect(html).toContain('class="ui-card-title"');
+    expect(html).toContain(
+      'class="ui-card-content animal-confirmation-content"',
+    );
+    expect(html).toContain('class="animal-confirmation-layout"');
+    expect(html).toContain('class="animal-confirmation-actions"');
+  });
+
   it("uses a card-specific title id when the page title is present", () => {
     const html = renderToStaticMarkup(
       <>
@@ -26,49 +44,35 @@ describe("AnimalConfirmationCard", () => {
   });
 
   it("renders every disambiguating identity field and explicit actions", () => {
-    const element = AnimalConfirmationCard({
-      animal: {
-        id: "animal-a",
-        name: "小黑",
-        shelterNumber: "VAAAG114080610",
-        photoUrl: "/animals/a.jpg",
-        cage: "Cage 1",
-        area: "北區",
-        canReport: true,
-      },
-      onConfirm: () => undefined,
-      onReselect: () => undefined,
-    });
-    const children = React.Children.toArray(element.props.children);
-    const text = children
-      .map((child) =>
-        React.isValidElement<{ children?: React.ReactNode }>(child)
-          ? child.props.children
-          : child,
-      )
-      .join(" ");
-    expect(text).toContain("VAAAG114080610");
-    expect(text).toContain("Cage 1");
-    expect(text).toContain("北區");
-    expect(
-      children.some(
-        (child) => React.isValidElement(child) && child.type === "img",
-      ),
-    ).toBe(true);
+    const html = renderToStaticMarkup(
+      <AnimalConfirmationCard
+        animal={{
+          id: "animal-a",
+          name: "小黑",
+          shelterNumber: "VAAAG114080610",
+          photoUrl: "/animals/a.jpg",
+          cage: "Cage 1",
+          area: "北區",
+          canReport: true,
+        }}
+        onConfirm={() => undefined}
+        onReselect={() => undefined}
+      />,
+    );
+    expect(html).toContain("VAAAG114080610");
+    expect(html).toContain("Cage 1");
+    expect(html).toContain("北區");
+    expect(html).toContain('<img src="/animals/a.jpg" alt="小黑 的照片"');
   });
 
   it("disables confirmation when the candidate is not reportable", () => {
-    const element = AnimalConfirmationCard({
-      animal: { id: "animal-a", name: "小黑", canReport: false },
-      onConfirm: () => undefined,
-      onReselect: () => undefined,
-    });
-    const buttons = React.Children.toArray(element.props.children).filter(
-      (child) => React.isValidElement(child) && child.type === "button",
+    const html = renderToStaticMarkup(
+      <AnimalConfirmationCard
+        animal={{ id: "animal-a", name: "小黑", canReport: false }}
+        onConfirm={() => undefined}
+        onReselect={() => undefined}
+      />,
     );
-    expect(
-      React.isValidElement<{ disabled?: boolean }>(buttons[0]) &&
-        buttons[0].props.disabled,
-    ).toBe(true);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>確認是這隻<\/button>/);
   });
 });

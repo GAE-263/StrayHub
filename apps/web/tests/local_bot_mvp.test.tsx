@@ -14,6 +14,10 @@ describe("local bot MVP fallback", () => {
       />
     );
     const text = renderToStaticMarkup(element);
+    expect(text).toContain('class="ui-card-header"');
+    expect(text).toContain('class="ui-card-title"');
+    expect(text).toContain('class="ui-card-content volunteer-report-content"');
+    expect(text).toContain('class="volunteer-report-actions"');
     expect(text).toContain("儲存並繼續");
     expect(text).toContain("重新附加照片");
     expect(text).toContain("回到 LINE Bot");

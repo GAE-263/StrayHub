@@ -64,14 +64,42 @@ test("動物確認頁在手機與平板使用一致的志工 shell", async ({
       path: testInfo.outputPath(`ft019-after-${viewport.width}.png`),
       fullPage: true,
     });
+    await page.getByRole("button", { name: "查看確認卡" }).click();
+    await expect(page.locator(".animal-confirmation-card")).toBeVisible();
+    const confirmationColumns = await page
+      .locator(".animal-confirmation-layout")
+      .evaluate(
+        (element) =>
+          getComputedStyle(element).gridTemplateColumns.split(" ").length,
+      );
+    expect(confirmationColumns).toBe(viewport.columns);
+    await page.screenshot({
+      path: testInfo.outputPath(`ft021-animal-card-${viewport.width}.png`),
+      fullPage: true,
+    });
   }
 });
 
-test("志工照護回報保留草稿內容", async ({ page }) => {
+test("志工照護回報保留草稿內容", async ({ page }, testInfo) => {
   await mockVolunteerApi(page);
-  await page.goto("/care-report");
-  await expect(
-    page.getByRole("heading", { name: "照護回報備援介面" }),
-  ).toBeVisible();
-  await expect(page.getByText("目前步驟：care")).toBeVisible();
+  for (const viewport of [
+    { width: 360, height: 800 },
+    { width: 768, height: 1024 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/care-report");
+    await expect(
+      page.getByRole("heading", { name: "照護回報備援介面" }),
+    ).toBeVisible();
+    await expect(page.getByText("目前步驟：care")).toBeVisible();
+    await page.locator("nextjs-portal").evaluateAll((portals) => {
+      portals.forEach((portal) => {
+        (portal as HTMLElement).style.display = "none";
+      });
+    });
+    await page.screenshot({
+      path: testInfo.outputPath(`ft021-report-card-${viewport.width}.png`),
+      fullPage: true,
+    });
+  }
 });
