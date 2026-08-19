@@ -554,6 +554,10 @@ export async function mockLoginApi(
     ? input
     : (input.organizations ?? [organization]);
   await page.route("**/v1/auth/me", async (route) => {
+    if (route.request().method() !== "GET") {
+      await json(route, { message: "Method Not Allowed" }, 405);
+      return;
+    }
     await json(route, {
       user: {
         id: "user-a",
@@ -571,9 +575,17 @@ export async function mockLoginApi(
     });
   });
   await page.route("**/v1/organizations", async (route) => {
+    if (route.request().method() !== "GET") {
+      await json(route, { message: "Method Not Allowed" }, 405);
+      return;
+    }
     await json(route, { items: organizations });
   });
   await page.route("**/v1/management/dashboard", async (route) => {
+    if (route.request().method() !== "GET") {
+      await json(route, { message: "Method Not Allowed" }, 405);
+      return;
+    }
     await json(route, {
       organization_id: organizations[0]?.id,
       role: organizations[0]?.role ?? "STAFF",

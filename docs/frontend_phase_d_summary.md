@@ -146,6 +146,7 @@ Phase D final P0 gate揭露既有 `mockLoginApi` 不完整：login與context mut
 - 一般收容所使用者使用 `platform_role: null`；組織角色保留在membership。
 - Membership依傳入organizations生成，保留各自role/status。
 - Dashboard role跟隨第一個active organization role，避免遮蔽SHELTER_ADMIN UI。
+- 三個新增的read-only handlers限制為GET；非預期method回405，避免fixture遮蔽frontend HTTP method regression。
 
 ### 驗證與 review
 
