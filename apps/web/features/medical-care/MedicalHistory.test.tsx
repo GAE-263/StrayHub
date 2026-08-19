@@ -27,6 +27,16 @@ describe("MedicalHistoryPanel", () => {
     expect(markup).toContain("顯示已封存");
     expect(markup).toContain("正在載入醫療歷史");
   });
+
+  it("describes the medical archive impact in an alert dialog", () => {
+    const markup = renderToStaticMarkup(
+      <MedicalHistoryPanel animalId="animal-1" />,
+    );
+    expect(markup).toContain("確認封存醫療紀錄");
+    expect(markup).toContain("有效紀錄");
+    expect(markup).toContain("封存後保留於醫療歷史");
+    expect(markup).toContain("確認封存");
+  });
 });
 
 describe("medical history supporting entries", () => {

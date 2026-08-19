@@ -753,7 +753,7 @@
 
 # Phase D — 醫療照護操作
 
-## [ ] FT-030 為醫療紀錄封存加入二次確認
+## [x] FT-030 為醫療紀錄封存加入二次確認
 
 - **優先級：** P0
 - **問題位置：** `MedicalHistoryPanel.tsx:168-189, 380-386`
@@ -761,7 +761,14 @@
 - **預期修改後：** AlertDialog 顯示紀錄、before／after、原因；成功 Toast。
 - **驗證：** MedicalHistory tests、dialog cancel／confirm、medical E2E。
 - **預定 commit：** `fix(web): confirm medical history archival`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：component缺少封存 review copy；browser首擊直接 POST、無 AlertDialog。第二個 RED重現503 error落在modal背後；reviewer Low再以RED重現失敗後取消會洩漏stale page Alert。
+  - GREEN：封存採pending snapshot與AlertDialog，顯示目標、有效→已封存、原因及歷史保留；cancel不送request並保留edit reason；confirm使用busy＋同步ref lock；失敗留在Dialog可retry，取消清除dialog-specific error；成功Toast。
+  - Changed files：`MedicalHistoryPanel.tsx`／test、`dialog.tsx`、`medical-history.spec.ts`、`frontend_task.md`。
+  - Verification：MedicalHistory／Dialog 7 passed；medical-history Playwright 3 passed；timeline responsive四viewport passed；P0 Axe passed；full Vitest 53 files／137 tests、Python 474 tests、TypeScript、Prettier、diff gate passed。
+  - Independent review：早期review的Medium／Low findings均以RED修正；final replacement reviewer PASS，無 blocking finding。
+  - Commit：`fix(web): confirm medical history archival`。
 
 ## [ ] FT-031 讓提醒建立／處理成功訊息在 Dialog 關閉後可見
 

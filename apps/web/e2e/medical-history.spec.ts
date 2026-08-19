@@ -29,6 +29,7 @@ test("管理員可新增同日醫療歷史、搜尋、更正與封存", async ({
     sessionStorage.setItem("active_organization_id", "org-a");
   });
   let records = [baseRecord];
+  let archiveRequests = 0;
   await mockManagementApi(page, {
     timelines: () => ({ days: [] }),
   });
@@ -89,6 +90,11 @@ test("管理員可新增同日醫療歷史、搜尋、更正與封存", async ({
         return;
       }
       if (route.request().method() === "POST") {
+        archiveRequests += 1;
+        if (archiveRequests === 1) {
+          await route.fulfill({ status: 503, body: "offline" });
+          return;
+        }
         const archived = {
           ...current,
           status: "archived",
@@ -148,7 +154,33 @@ test("管理員可新增同日醫療歷史、搜尋、更正與封存", async ({
   await visitRecord.getByRole("button", { name: "修改／封存" }).click();
   await page.getByLabel("修改或封存原因").fill("重複紀錄");
   await page.getByRole("button", { name: "封存紀錄" }).click();
-  await expect(page.getByText("已封存醫療紀錄")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "確認封存醫療紀錄" }),
+  ).toBeVisible();
+  expect(archiveRequests).toBe(0);
+  await page.getByRole("button", { name: "取消封存" }).click();
+  expect(archiveRequests).toBe(0);
+  await page.getByRole("button", { name: "封存紀錄" }).click();
+  const archiveDialog = page.getByRole("alertdialog");
+  await archiveDialog.getByRole("button", { name: "確認封存" }).click();
+  await expect(archiveDialog).toBeVisible();
+  await expect(archiveDialog.getByRole("alert")).toContainText(
+    "醫療紀錄封存失敗",
+  );
+  await expect(archiveDialog).toContainText("重複紀錄");
+  expect(archiveRequests).toBe(1);
+  await archiveDialog.getByRole("button", { name: "取消封存" }).click();
+  await expect(archiveDialog).not.toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "醫療紀錄封存失敗" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("修改或封存原因")).toHaveValue("重複紀錄");
+  await page.getByRole("button", { name: "封存紀錄" }).click();
+  await archiveDialog.getByRole("button", { name: "確認封存" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已封存醫療紀錄" }),
+  ).toBeVisible();
+  expect(archiveRequests).toBe(2);
 });
 
 test("附件或網路失敗時保留尚未送出的醫療文字", async ({ page }) => {

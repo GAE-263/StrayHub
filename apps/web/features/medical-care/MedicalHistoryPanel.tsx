@@ -5,14 +5,18 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { AlertDialog } from "../../components/ui/alert-dialog";
+import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
+import { Toast } from "../../components/ui/toast";
 import {
   archiveMedicalRecord,
   createMedicalRecord,
@@ -59,6 +63,12 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [toast, setToast] = useState("");
+  const [pendingArchive, setPendingArchive] = useState<{
+    item: MedicalRecord;
+    reason: string;
+  } | null>(null);
+  const archiveLock = useRef(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -165,17 +175,32 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
     }
   }
 
-  async function archive(item: MedicalRecord) {
+  function requestArchive(item: MedicalRecord) {
     if (busy || !reason.trim()) return;
+    setError("");
+    setPendingArchive({ item, reason: reason.trim() });
+  }
+
+  function cancelArchive() {
+    if (busy) return;
+    setPendingArchive(null);
+    setError("");
+  }
+
+  async function confirmArchive() {
+    if (!pendingArchive || archiveLock.current) return;
+    const { item, reason: archiveReason } = pendingArchive;
+    archiveLock.current = true;
     setBusy(true);
     setError("");
     try {
       await archiveMedicalRecord(item.id, {
         expected_version: item.version,
-        reason: reason.trim(),
+        reason: archiveReason,
       });
       setEditingId(null);
-      setMessage("已封存醫療紀錄");
+      setPendingArchive(null);
+      setToast("已封存醫療紀錄");
       await load();
     } catch (archiveError) {
       setError(
@@ -184,6 +209,7 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
           : "醫療紀錄封存失敗",
       );
     } finally {
+      archiveLock.current = false;
       setBusy(false);
     }
   }
@@ -328,7 +354,7 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
       <p className="muted" role="status" aria-live="polite">
         {loading ? "正在載入醫療歷史…" : message}
       </p>
-      {error ? (
+      {error && !pendingArchive ? (
         <div className="notice error" role="alert">
           {error}
           <Button type="button" variant="secondary" onClick={() => void load()}>
@@ -384,7 +410,7 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
                     type="button"
                     variant="destructive"
                     disabled={busy}
-                    onClick={() => void archive(item)}
+                    onClick={() => requestArchive(item)}
                   >
                     封存紀錄
                   </Button>
@@ -428,6 +454,60 @@ export function MedicalHistoryPanel({ animalId }: { animalId: string }) {
           </article>
         ))}
       </div>
+      <AlertDialog
+        open={Boolean(pendingArchive)}
+        title="確認封存醫療紀錄"
+        closeLabel="關閉封存確認"
+        closeDisabled={busy}
+        className="permission-confirmation-dialog"
+        onClose={cancelArchive}
+      >
+        <div className="permission-confirmation-content">
+          <p>
+            <strong>紀錄：</strong>
+            {pendingArchive?.item.title ?? ""}
+          </p>
+          <dl className="permission-confirmation-diff">
+            <div>
+              <dt>目前</dt>
+              <dd>有效紀錄</dd>
+            </div>
+            <div>
+              <dt>變更後</dt>
+              <dd>已封存</dd>
+            </div>
+          </dl>
+          <p>
+            <strong>原因：</strong>
+            {pendingArchive?.reason ?? ""}
+          </p>
+          <p>封存後保留於醫療歷史與稽核紀錄，不會永久刪除。</p>
+          {error ? <Alert role="alert">{error}</Alert> : null}
+          <div className="dialog-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={cancelArchive}
+            >
+              取消封存
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void confirmArchive()}
+            >
+              {busy ? "封存中…" : "確認封存"}
+            </Button>
+          </div>
+        </div>
+      </AlertDialog>
+      {toast ? (
+        <Toast messageKey={toast} onClose={() => setToast("")}>
+          {toast}
+        </Toast>
+      ) : null}
     </section>
   );
 }

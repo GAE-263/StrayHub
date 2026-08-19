@@ -10,6 +10,7 @@ export function Dialog({
   children,
   onClose,
   closeLabel = "關閉",
+  closeDisabled = false,
   role = "dialog",
   className,
 }: {
@@ -18,6 +19,7 @@ export function Dialog({
   children: ReactNode;
   onClose: () => void;
   closeLabel?: string;
+  closeDisabled?: boolean;
   role?: "dialog" | "alertdialog";
   className?: string;
 }) {
@@ -58,6 +60,7 @@ export function Dialog({
           className="ui-overlay-close"
           type="button"
           aria-label={closeLabel}
+          disabled={closeDisabled}
           onClick={onClose}
         >
           ×
