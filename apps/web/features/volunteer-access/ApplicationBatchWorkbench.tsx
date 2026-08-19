@@ -3,6 +3,13 @@
 import React, { useMemo, useRef, useState } from "react";
 
 import { MembershipPermissionDialog } from "../../components/management/MembershipPermissionDialog";
+import { Alert } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
+import { Select } from "../../components/ui/select";
+import { Table } from "../../components/ui/table";
 import { Toast } from "../../components/ui/toast";
 
 type Application = {
@@ -190,10 +197,9 @@ export function ApplicationBatchWorkbench({
   return (
     <section className="ui-card ui-card-padded" aria-labelledby="batch-title">
       <h2 id="batch-title">志工報名審核</h2>
-      <div className="mt-4 flex flex-wrap gap-4">
+      <div className="batch-controls">
         <label>
-          <input
-            type="checkbox"
+          <Checkbox
             checked={allFiltered}
             onChange={(event) => {
               setAllFiltered(event.target.checked);
@@ -204,7 +210,7 @@ export function ApplicationBatchWorkbench({
         </label>
         <label>
           決策
-          <select
+          <Select
             value={decision}
             onChange={(event) => {
               setDecision(event.target.value as typeof decision);
@@ -213,12 +219,12 @@ export function ApplicationBatchWorkbench({
           >
             <option value="approve">核准</option>
             <option value="reject">拒絕</option>
-          </select>
+          </Select>
         </label>
         {decision === "reject" ? (
           <label>
             拒絕原因
-            <input
+            <Input
               aria-label="拒絕原因"
               value={reason}
               maxLength={500}
@@ -227,11 +233,11 @@ export function ApplicationBatchWorkbench({
           </label>
         ) : null}
       </div>
-      <fieldset className="mt-4 flex flex-wrap gap-4">
+      <fieldset className="batch-period-fields">
         <legend>共同授權期限（留白則使用批次建立時的收容所政策快照）</legend>
         <label>
           開始時間
-          <input
+          <Input
             type="datetime-local"
             value={defaultValidFrom}
             onChange={(event) => setDefaultValidFrom(event.target.value)}
@@ -239,69 +245,62 @@ export function ApplicationBatchWorkbench({
         </label>
         <label>
           到期時間
-          <input
+          <Input
             type="datetime-local"
             value={defaultExpiresAt}
             onChange={(event) => setDefaultExpiresAt(event.target.value)}
           />
         </label>
       </fieldset>
-      <div className="ui-table-wrap mt-5">
-        <table className="ui-table">
-          <thead>
-            <tr>
-              <th className="ui-table-head">選取</th>
-              <th className="ui-table-head">志工</th>
-              <th className="ui-table-head">狀態</th>
-              <th className="ui-table-head">個別期限</th>
+      <Table className="batch-table">
+        <thead>
+          <tr>
+            <th className="ui-table-head">選取</th>
+            <th className="ui-table-head">志工</th>
+            <th className="ui-table-head">狀態</th>
+            <th className="ui-table-head">個別期限</th>
+          </tr>
+        </thead>
+        <tbody>
+          {applications.map((application) => (
+            <tr key={application.id}>
+              <td className="ui-table-cell">
+                <Checkbox
+                  aria-label={`選取 ${application.display_name}`}
+                  checked={selectedSet.has(application.id)}
+                  onChange={(event) => {
+                    setConfirming(false);
+                    setSelected((current) =>
+                      event.target.checked
+                        ? [...current, application.id]
+                        : current.filter((id) => id !== application.id),
+                    );
+                  }}
+                />
+              </td>
+              <td className="ui-table-cell">{application.display_name}</td>
+              <td className="ui-table-cell">{application.status}</td>
+              <td className="ui-table-cell">
+                <Input
+                  aria-label={`${application.display_name} 個別到期時間`}
+                  type="datetime-local"
+                  disabled={!selectedSet.has(application.id)}
+                  value={overrides[application.id] ?? ""}
+                  onChange={(event) =>
+                    setOverrides((current) => ({
+                      ...current,
+                      [application.id]: event.target.value,
+                    }))
+                  }
+                />
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {applications.map((application) => (
-              <tr key={application.id}>
-                <td className="ui-table-cell">
-                  <input
-                    aria-label={`選取 ${application.display_name}`}
-                    type="checkbox"
-                    checked={selectedSet.has(application.id)}
-                    onChange={(event) => {
-                      setConfirming(false);
-                      setSelected((current) =>
-                        event.target.checked
-                          ? [...current, application.id]
-                          : current.filter((id) => id !== application.id),
-                      );
-                    }}
-                  />
-                </td>
-                <td className="ui-table-cell">{application.display_name}</td>
-                <td className="ui-table-cell">{application.status}</td>
-                <td className="ui-table-cell">
-                  <input
-                    aria-label={`${application.display_name} 個別到期時間`}
-                    type="datetime-local"
-                    disabled={!selectedSet.has(application.id)}
-                    value={overrides[application.id] ?? ""}
-                    onChange={(event) =>
-                      setOverrides((current) => ({
-                        ...current,
-                        [application.id]: event.target.value,
-                      }))
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <button
-        type="button"
-        onClick={submit}
-        className="mt-5 min-h-11 rounded-lg bg-emerald-700 px-5 text-white"
-      >
+          ))}
+        </tbody>
+      </Table>
+      <Button type="button" onClick={submit}>
         確認並建立批次
-      </button>
+      </Button>
       <MembershipPermissionDialog
         open={confirming}
         title="確認志工批次決策"
@@ -322,8 +321,8 @@ export function ApplicationBatchWorkbench({
         onConfirm={() => void createBatch(buildPayload())}
         confirming={false}
       />
-      {error ? <p role="alert">{error}</p> : null}
-      {toast ? <Toast>{toast}</Toast> : null}
+      {error ? <Alert role="alert">{error}</Alert> : null}
+      {toast ? <Toast onClose={() => setToast("")}>{toast}</Toast> : null}
       <h3 className="mt-6">逐筆結果</h3>
       {batch ? (
         <div>
@@ -332,25 +331,28 @@ export function ApplicationBatchWorkbench({
             {batch.succeeded_count}、衝突 {batch.conflict_count}、失敗{" "}
             {batch.failed_count}
           </p>
-          <button type="button" onClick={refresh}>
+          <Button variant="secondary" type="button" onClick={refresh}>
             更新進度
-          </button>
+          </Button>
         </div>
       ) : null}
       {results.length ? (
         <ul>
           {results.map((item) => (
             <li key={item.id}>
-              {item.application_id}：{item.result}
+              {item.application_id}：
+              <Badge className={`batch-result batch-result-${item.result}`}>
+                {item.result}
+              </Badge>
               {item.error_code ? `（${item.error_code}）` : ""}
             </li>
           ))}
         </ul>
       ) : null}
       {failedCount ? (
-        <button type="button" onClick={retryFailed}>
+        <Button variant="secondary" type="button" onClick={retryFailed}>
           只重試失敗項目（{Math.min(failedCount, 500)}）
-        </button>
+        </Button>
       ) : null}
       <p role="status" aria-live="polite">
         {message || "批次送出後顯示成功、衝突與失敗項目，可只重試失敗項目。"}

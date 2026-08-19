@@ -646,7 +646,7 @@
   - Verification：component 1 passed；grant revoke E2E 1 passed；access responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`refactor(web): migrate volunteer grants to ui primitives`。
 
-## [ ] FT-025 遷移志工批次審核工作台至 UI primitives
+## [x] FT-025 遷移志工批次審核工作台至 UI primitives
 
 - **優先級：** P1
 - **問題位置：** `ApplicationBatchWorkbench.tsx`
@@ -654,7 +654,13 @@
 - **預期修改後：** primitives、responsive form grid、Badge／Alert 區分 success／conflict／error。
 - **驗證：** component test、batch E2E、360／1440 screenshot。
 - **預定 commit：** `refactor(web): align volunteer batch workbench styles`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：workbench 仍輸出 raw checkbox／select／input 與硬編碼 emerald CTA。
+  - GREEN：選取改用 Checkbox；決策 Select；日期／原因 Input；Table root與 Button primitives；error Alert、Toast lifecycle；逐筆結果使用 success／conflict／failed semantic Badge。
+  - Changed files：`ApplicationBatchWorkbench.tsx`／test、`globals.css`、`frontend_task.md`。
+  - Verification：component 1 passed；1,200 all-filtered snapshot E2E 1 passed；applications responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`refactor(web): align volunteer batch workbench styles`。
 
 ## [ ] FT-026 遷移通知失敗佇列並分離 success／error
 

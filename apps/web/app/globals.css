@@ -1452,6 +1452,42 @@ dialog.ui-sheet[open] {
   flex-wrap: wrap;
   gap: 8px;
 }
+.batch-controls,
+.batch-period-fields {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.batch-controls label,
+.batch-period-fields label {
+  display: grid;
+  gap: 6px;
+}
+.batch-table {
+  margin-top: 20px;
+}
+.batch-result {
+  margin-inline: 4px;
+}
+.batch-result-succeeded,
+.batch-result-success {
+  background: var(--accent-soft);
+  color: var(--success);
+}
+.batch-result-conflict {
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+  color: var(--warning);
+}
+.batch-result-failed {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
+@media (min-width: 720px) {
+  .batch-controls,
+  .batch-period-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 .animal-confirmation-actions .ui-button,
 .volunteer-report-actions .ui-button {
   width: 100%;
