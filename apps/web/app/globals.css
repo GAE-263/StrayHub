@@ -1515,6 +1515,22 @@ dialog.ui-sheet[open] {
   font-size: 14px;
   margin: 0;
 }
+.active-shelter-context {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.active-shelter-identity {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-weight: 700;
+  gap: 8px;
+}
 @media (min-width: 720px) {
   .notification-filters {
     grid-template-columns: repeat(4, minmax(0, 1fr)) auto;

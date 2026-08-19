@@ -695,7 +695,7 @@
   - Verification：component markup與failure→success recovery 2 passed；settings responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`fix(web): harden volunteer access policy states`。
 
-## [ ] FT-028 強化 Active Shelter Context 的視覺權重
+## [x] FT-028 強化 Active Shelter Context 的視覺權重
 
 - **優先級：** P2
 - **問題位置：** `ActiveShelterContext.tsx:17-24`
@@ -703,7 +703,14 @@
 - **預期修改後：** surface-soft context card、Badge／Alert、secondary Button。
 - **驗證：** component test、context mismatch screenshot／axe。
 - **預定 commit：** `refactor(web): align active shelter context presentation`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：context輸出純文字、raw alert paragraph與 raw button，無 semantic surface／Badge。
+  - GREEN：surface-soft bordered context card、作用中 Badge、mismatch Alert、secondary切換 Button；保留 explicit onSwitch callback。
+  - Reachability：repo search確認此 component目前未掛入任何 route，因此 context mismatch browser screenshot／route Axe 不適用，不虛構證據。
+  - Changed files：`ActiveShelterContext.tsx`／test、`globals.css`、`frontend_task.md`。
+  - Verification：component callback＋semantic markup 2 passed；TypeScript passed；full Vitest／Python／Prettier／diff gate passed。
+  - Commit：`refactor(web): align active shelter context presentation`。
 
 ## [ ] FT-029 統一志工 care-report 的 loading／offline／empty 狀態
 
