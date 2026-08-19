@@ -1,11 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { LogOut } from "lucide-react";
 import { iconMap } from "./icon-map";
 import { NavigationLinks } from "./AppSidebar";
+import { Button } from "../ui/button";
 import { Sheet } from "../ui/sheet";
 
-export function MobileNavigation({ role }: { role: string }) {
+export function MobileNavigation({
+  role,
+  onLogout,
+}: {
+  role: string;
+  onLogout: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const Menu = iconMap.menu;
@@ -24,10 +32,21 @@ export function MobileNavigation({ role }: { role: string }) {
         onClick={() => setOpen(true)}
       >
         <Menu size={20} aria-hidden="true" />
-        <span>導覽</span>
       </button>
       <Sheet open={open} title="管理工作台導覽" onClose={close}>
         <NavigationLinks role={role} onNavigate={close} />
+        <div className="mobile-navigation-footer">
+          <Button
+            className="mobile-navigation-logout"
+            variant="ghost"
+            type="button"
+            aria-label="登出管理工作台"
+            onClick={onLogout}
+          >
+            <LogOut size={18} aria-hidden="true" />
+            登出
+          </Button>
+        </div>
       </Sheet>
     </div>
   );

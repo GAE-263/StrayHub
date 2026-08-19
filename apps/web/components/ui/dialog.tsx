@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import type { ReactNode, SyntheticEvent } from "react";
 import { cn } from "../../lib/utils";
 
@@ -23,6 +23,7 @@ export function Dialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -48,11 +49,11 @@ export function Dialog({
       className={cn("ui-dialog", className)}
       role={role}
       aria-modal="true"
-      aria-labelledby="ui-dialog-title"
+      aria-labelledby={titleId}
       onCancel={handleCancel}
     >
       <div className="ui-overlay-heading">
-        <h2 id="ui-dialog-title">{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           className="ui-overlay-close"
           type="button"

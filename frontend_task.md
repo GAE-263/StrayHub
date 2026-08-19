@@ -161,7 +161,7 @@
   - Commit：`fix(web): define shared medical care layout utilities`
   - SHA：本完成紀錄與實作位於同一 commit；提交後以 `git log -1` 顯示值為準。
 
-## [ ] FT-004 讓 Dialog／Sheet 標題 ID 唯一並明確設定 surface
+## [x] FT-004 讓 Dialog／Sheet 標題 ID 唯一並明確設定 surface
 
 - **優先級：** P1
 - **問題位置：**
@@ -172,7 +172,31 @@
 - **預期修改後：** 使用 `useId()`；明確套用 `var(--surface)` 與 `var(--foreground)`。
 - **驗證：** 同頁多 Dialog ID regression test、dialog tests、axe。
 - **預定 commit：** `fix(web): make overlay labels unique and tokenized`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：2026-08-19 完成；Dialog／Mobile Sheet 頁面驗收後依指示建立獨立 commit。
+  - 修改前：所有 Dialog 固定使用 `ui-dialog-title`，所有 Sheet 固定使用 `ui-sheet-title`；同頁多 overlay 產生重複 ID，surface 顏色依賴瀏覽器預設。
+  - RED：`npm test -- components/ui/dialog.test.tsx app/globals.test.ts` → 2 failed；三個 overlay 只有兩個 unique labels，且 overlay CSS 缺少 surface token。
+  - RED（Mobile Sheet 可讀性）：390px 截圖顯示 tablet `.nav-group { display: inline-flex; }` 同時壓縮 Sheet 導覽，文字逐字換行；Sheet vertical-list contract → 1 failed。
+  - RED（Mobile trigger）：414px 截圖確認 trigger 在 header 下方獨占一列且顯示冗餘「導覽」文字；icon-only 與 header ordering contract → 3 failed。
+  - RED（Drawer placement）：578×800 Playwright bounding box 顯示 Sheet `x=158` 且未保證完整 viewport 高度；left-edge／full-height contracts → 2 failed。
+  - RED（Mobile logout）：Header 登出在 hamburger breakpoint 仍可見，Drawer 內沒有登出操作；component／CSS／Playwright contracts → 4 failed。
+  - RED（closed dialog regression）：直接對 `dialog.ui-sheet` 套用 flex 會覆蓋瀏覽器 closed-dialog 隱藏規則並攔截 hamburger；`[open]` display contract → 1 failed。
+  - 修改後：Dialog／Sheet 各自以 React `useId()` 連結 `aria-labelledby` 與標題；overlay 明確使用 `var(--surface)`／`var(--foreground)`；Mobile Sheet 導覽改為單欄分組清單，項目至少 44px 高、圖示與文字同行，並可獨立垂直捲動；小螢幕 trigger 改為 44×44 hamburger-only icon，置於 header 左上角且位於「森」品牌圖示左側；Sheet 改為左側固定 drawer，`x/y=0`、高度 `100dvh`、寬度最多 420px，遮罩不會從 drawer 下方露出；hamburger breakpoint 隱藏 Header 登出，並在 Drawer 底部顯示含 icon 的全寬登出按鈕，沿用既有 logout callback；flex layout 僅於 Sheet `[open]` 時啟用。
+  - Changed files：
+    - `apps/web/components/ui/dialog.tsx`
+    - `apps/web/components/ui/sheet.tsx`
+    - `apps/web/components/ui/dialog.test.tsx`
+    - `apps/web/components/management/AppHeader.tsx`
+    - `apps/web/components/management/ManagementLayout.tsx`
+    - `apps/web/components/management/MobileNavigation.tsx`
+    - `apps/web/components/management/management-shell.test.tsx`
+    - `apps/web/e2e/management-shell.spec.ts`
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `frontend_task.md`
+  - Verification：overlay／Mobile Sheet／header targeted PASS（mobile header 2 files／11 tests；drawer CSS 7 tests）；mobile navigation Playwright bounding-box 1 test PASS；full Vitest 51 files／111 tests PASS；TypeScript／Prettier PASS；P1 axe 4 viewports 1 test PASS；Python 474 tests PASS。
+  - Visual verification：窄螢幕 hamburger、左側全高單欄 Drawer、Drawer 內登出與 overlay surface 已依 390／414／578px 截圖回饋完成調整。
+  - Commit：本任務獨立 commit `fix(web): make overlay labels unique and tokenized`。
 
 ## [ ] FT-005 讓 StateViews 依狀態顯示正確圖示
 

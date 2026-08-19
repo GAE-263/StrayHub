@@ -28,13 +28,22 @@ test.describe("管理工作台 Shell", () => {
   test("mobile exposes navigation through an accessible menu", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 360, height: 800 });
+    await page.setViewportSize({ width: 578, height: 800 });
     await page.goto("/");
     const trigger = page.getByRole("button", { name: "開啟管理工作台導覽" });
     await expect(trigger).toBeVisible();
     await trigger.click();
+    const sheet = page.getByRole("dialog", { name: "管理工作台導覽" });
+    await expect(sheet).toBeVisible();
+    const box = await sheet.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.x).toBe(0);
+    expect(box?.y).toBe(0);
+    expect(box?.width).toBe(420);
+    expect(box?.height).toBe(800);
+    await expect(page.locator(".header-logout")).toBeHidden();
     await expect(
-      page.getByRole("dialog", { name: "管理工作台導覽" }),
+      sheet.getByRole("button", { name: "登出管理工作台" }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(trigger).toBeFocused();

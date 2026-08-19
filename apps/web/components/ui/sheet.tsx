@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import type { ReactNode, SyntheticEvent } from "react";
 
 export function Sheet({
@@ -16,6 +16,7 @@ export function Sheet({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -41,11 +42,11 @@ export function Sheet({
       className="ui-sheet"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="ui-sheet-title"
+      aria-labelledby={titleId}
       onCancel={handleCancel}
     >
       <div className="ui-overlay-heading">
-        <h2 id="ui-sheet-title">{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           className="ui-overlay-close"
           type="button"

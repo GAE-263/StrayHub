@@ -129,6 +129,11 @@ summary:focus-visible {
 .brand {
   gap: 12px;
 }
+.header-brand-group {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
 .brand-mark {
   align-items: center;
   background: var(--accent);
@@ -243,9 +248,11 @@ summary:focus-visible {
   border-radius: var(--radius-sm);
   color: var(--ink);
   display: inline-flex;
-  gap: 8px;
+  height: 44px;
+  justify-content: center;
   min-height: 44px;
-  padding: 8px 12px;
+  padding: 0;
+  width: 44px;
 }
 .page-heading {
   align-items: flex-end;
@@ -640,9 +647,11 @@ td {
 }
 .ui-dialog,
 .ui-sheet {
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
+  color: var(--foreground);
   max-width: min(720px, calc(100vw - 32px));
   padding: 24px;
   width: 100%;
@@ -658,11 +667,64 @@ td {
   overflow-y: auto;
   position: fixed;
 }
-.ui-sheet {
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  margin: 0 0 0 auto;
-  min-height: 100vh;
+dialog.ui-sheet {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  flex-direction: column;
+  height: 100dvh;
+  inset: 0 auto 0 0;
+  margin: 0;
+  max-height: none;
   max-width: min(420px, 100vw);
+  overflow-y: auto;
+  position: fixed;
+}
+dialog.ui-sheet[open] {
+  display: flex;
+}
+.ui-sheet nav {
+  display: grid;
+  gap: 24px;
+  margin-top: 24px;
+}
+.ui-sheet .nav-group {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.ui-sheet .nav-heading {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 10px 4px;
+}
+.ui-sheet .nav-link {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  line-height: 1.4;
+  margin: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  width: 100%;
+}
+.ui-sheet .nav-link svg {
+  flex: 0 0 auto;
+}
+.ui-sheet .nav-link:hover,
+.ui-sheet .nav-link.active {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.mobile-navigation-footer {
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+  padding-top: 16px;
+}
+.mobile-navigation-logout {
+  justify-content: flex-start;
+  width: 100%;
 }
 .ui-overlay-heading {
   align-items: flex-start;
@@ -1015,7 +1077,11 @@ td {
   }
   .mobile-navigation {
     display: block;
-    padding: 12px 14px 0;
+    flex: 0 0 auto;
+    padding: 0;
+  }
+  .app-header .header-logout {
+    display: none;
   }
   .app-main {
     padding: 24px 14px 48px;

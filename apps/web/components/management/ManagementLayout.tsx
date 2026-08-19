@@ -210,8 +210,10 @@ export function ManagementLayout({ children }: Props) {
           void switchOrganization(nextOrganizationId)
         }
         onLogout={() => void logout()}
+        mobileNavigation={
+          <MobileNavigation role={role} onLogout={() => void logout()} />
+        }
       />
-      <MobileNavigation role={role} />
       <div className="app-body">
         <AppSidebar role={role} />
         <main className="app-main">

@@ -37,6 +37,41 @@ describe("global dialog contracts", () => {
     expect(permissionDialog).toContain("margin: auto");
     expect(permissionDialog).toContain("position: fixed");
   });
+
+  it("uses explicit surface tokens for dialogs and sheets", () => {
+    const overlaySurface = ruleBody(".ui-dialog,\n.ui-sheet");
+
+    expect(overlaySurface).toContain("background: var(--surface)");
+    expect(overlaySurface).toContain("color: var(--foreground)");
+  });
+
+  it("keeps mobile sheet navigation readable as a vertical list", () => {
+    const sheetNav = ruleBody(".ui-sheet nav");
+    expect(sheetNav).toContain("display: grid");
+
+    const sheetGroup = ruleBody(".ui-sheet .nav-group");
+    expect(sheetGroup).toContain("display: grid");
+    expect(sheetGroup).toContain("margin: 0");
+
+    const sheetLink = ruleBody(".ui-sheet .nav-link");
+    expect(sheetLink).toContain("min-height: 44px");
+    expect(sheetLink).toContain("width: 100%");
+  });
+
+  it("anchors the navigation sheet to the full-height left edge", () => {
+    const sheet = ruleBody("dialog.ui-sheet");
+
+    expect(sheet).toContain(
+      "border-radius: 0 var(--radius-lg) var(--radius-lg) 0",
+    );
+    expect(sheet).toContain("height: 100dvh");
+    expect(sheet).toContain("inset: 0 auto 0 0");
+    expect(sheet).toContain("margin: 0");
+    expect(sheet).toContain("max-height: none");
+    expect(sheet).toContain("position: fixed");
+    expect(sheet).not.toContain("display: flex");
+    expect(ruleBody("dialog.ui-sheet[open]")).toContain("display: flex");
+  });
 });
 
 describe("global layout primitive contracts", () => {
@@ -68,5 +103,24 @@ describe("global layout primitive contracts", () => {
     expect(reminderGrid).toContain(
       "grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr))",
     );
+  });
+});
+
+describe("mobile header contracts", () => {
+  it("aligns an icon-only navigation trigger before the brand", () => {
+    const brandGroup = ruleBody(".header-brand-group");
+    expect(brandGroup).toContain("display: flex");
+    expect(brandGroup).toContain("align-items: center");
+
+    const trigger = ruleBody(".mobile-menu-trigger");
+    expect(trigger).toContain("height: 44px");
+    expect(trigger).toContain("width: 44px");
+    expect(trigger).toContain("justify-content: center");
+
+    expect(ruleBody(".app-header .header-logout")).toContain("display: none");
+
+    const drawerLogout = ruleBody(".mobile-navigation-logout");
+    expect(drawerLogout).toContain("justify-content: flex-start");
+    expect(drawerLogout).toContain("width: 100%");
   });
 });
