@@ -124,3 +124,21 @@ describe("mobile header contracts", () => {
     expect(drawerLogout).toContain("width: 100%");
   });
 });
+
+describe("state view visual contracts", () => {
+  it("colors fixed semantic icons from the state tone", () => {
+    const icon = ruleBody(".state-icon");
+    expect(icon).toContain("flex: 0 0 auto");
+    expect(icon).toContain("margin-top: 2px");
+
+    expect(ruleBody(".state-neutral .state-icon")).toContain(
+      "color: var(--muted)",
+    );
+    expect(ruleBody(".state-danger .state-icon")).toContain(
+      "color: var(--danger)",
+    );
+    expect(ruleBody(".state-warning .state-icon")).toContain(
+      "color: var(--warning)",
+    );
+  });
+});

@@ -198,7 +198,7 @@
   - Visual verification：窄螢幕 hamburger、左側全高單欄 Drawer、Drawer 內登出與 overlay surface 已依 390／414／578px 截圖回饋完成調整。
   - Commit：本任務獨立 commit `fix(web): make overlay labels unique and tokenized`。
 
-## [ ] FT-005 讓 StateViews 依狀態顯示正確圖示
+## [x] FT-005 讓 StateViews 依狀態顯示正確圖示
 
 - **優先級：** P1
 - **問題位置：** `apps/web/components/management/StateViews.tsx:18-30`
@@ -206,7 +206,22 @@
 - **預期修改後：** 只有 loading／saving 動畫；其他狀態使用固定 semantic icon／tone。
 - **驗證：** `StateViews.test.tsx`、a11y semantics、視覺差異。
 - **預定 commit：** `fix(web): distinguish state view visual semantics`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：2026-08-19 完成；頁面驗收後依指示建立獨立 commit。
+  - 修改前：`StateView` 無條件輸出 `.loading-dot`，導致 empty、error、permission denied 也顯示與 loading／saving 相同的脈動動畫。
+  - RED（indicator semantics）：要求只有 loading／saving 保留 `.loading-dot`，empty 使用 Inbox、error 使用 AlertTriangle、permission denied 使用 ShieldAlert；`StateViews.test.tsx` → 1 failed。
+  - GREEN（indicator semantics）：依 `kind` render transient animation 或固定 lucide icon；保留既有 role、aria-live、title、description 與 action 行為；3 tests PASS。
+  - RED（visual tone）：要求固定 icon 使用 neutral／danger／warning design tokens 並禁止 flex shrink；`globals.test.ts` → 1 failed。
+  - GREEN（visual tone）：新增 `.state-icon`、`.state-neutral`、`.state-danger`、`.state-warning` 規則，danger／warning 同步使用 token-based border tone；globals 8 tests PASS。
+  - Changed files：
+    - `apps/web/components/management/StateViews.tsx`
+    - `apps/web/components/management/StateViews.test.tsx`
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `frontend_task.md`
+  - Verification：targeted 2 files／11 tests PASS；full Vitest 51 files／113 tests PASS；TypeScript／Prettier PASS；P1 axe 4 viewports 1 test PASS；Python 474 tests PASS；`/animals`／`/reports` HTTP 200；`git diff --check` PASS。
+  - Visual verification：`/animals` loading／empty／error state 驗收步驟與預期 icon／tone 差異已確認，依指示完成。
+  - Commit：本任務獨立 commit `fix(web): distinguish state view visual semantics`。
 
 ## [ ] FT-006 移除管理頁巢狀 `<main>` landmarks
 

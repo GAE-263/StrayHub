@@ -1,4 +1,5 @@
 import React from "react";
+import { AlertTriangle, Inbox, ShieldAlert } from "lucide-react";
 import { getStatusSemantics, type UIStatusKind } from "./ui-status";
 
 type StateProps = {
@@ -16,13 +17,32 @@ function StateView({
   role,
 }: StateProps & { role?: "status" | "alert" }) {
   const semantics = kind ? getStatusSemantics(kind) : null;
+  const animated = kind === "loading" || kind === "saving";
+  const StaticIcon =
+    kind === "empty"
+      ? Inbox
+      : kind === "error"
+        ? AlertTriangle
+        : kind === "permission-denied"
+          ? ShieldAlert
+          : null;
+
   return (
     <div
       className={`state-card ${kind ? `state-${semantics?.tone}` : ""}`}
       role={role}
       aria-live={semantics?.ariaLive ?? "polite"}
     >
-      <span className="loading-dot" aria-hidden="true" />
+      {animated ? (
+        <span className="loading-dot" aria-hidden="true" />
+      ) : StaticIcon && kind ? (
+        <StaticIcon
+          className="state-icon"
+          data-state-icon={kind}
+          size={20}
+          aria-hidden="true"
+        />
+      ) : null}
       <div>
         <strong>{title}</strong>
         {description ? <p>{description}</p> : null}

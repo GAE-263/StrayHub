@@ -382,6 +382,25 @@ td {
   color: var(--muted);
   margin: 6px 0 0;
 }
+.state-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.state-neutral .state-icon {
+  color: var(--muted);
+}
+.state-danger {
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--line));
+}
+.state-danger .state-icon {
+  color: var(--danger);
+}
+.state-warning {
+  border-color: color-mix(in srgb, var(--warning) 32%, var(--line));
+}
+.state-warning .state-icon {
+  color: var(--warning);
+}
 .error-state {
   border-color: #e7c7c7;
   color: var(--danger);

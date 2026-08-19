@@ -41,4 +41,27 @@ describe("StateViews", () => {
     expect(html).toContain("請稍後再試");
     expect(html).toContain("重試");
   });
+
+  it("animates only transient states and uses semantic static icons otherwise", () => {
+    const loading = renderToStaticMarkup(<LoadingState title="載入中" />);
+    const saving = renderToStaticMarkup(<SavingState title="儲存中" />);
+    const empty = renderToStaticMarkup(<EmptyState title="沒有資料" />);
+    const error = renderToStaticMarkup(<ErrorState title="載入失敗" />);
+    const permission = renderToStaticMarkup(<PermissionDeniedState />);
+
+    expect(loading).toContain("loading-dot");
+    expect(saving).toContain("loading-dot");
+
+    expect(empty).not.toContain("loading-dot");
+    expect(empty).toContain('data-state-icon="empty"');
+    expect(empty).toContain("lucide-inbox");
+
+    expect(error).not.toContain("loading-dot");
+    expect(error).toContain('data-state-icon="error"');
+    expect(error).toContain("lucide-triangle-alert");
+
+    expect(permission).not.toContain("loading-dot");
+    expect(permission).toContain('data-state-icon="permission-denied"');
+    expect(permission).toContain("lucide-shield-alert");
+  });
 });
