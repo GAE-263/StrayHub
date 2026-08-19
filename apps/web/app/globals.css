@@ -1488,6 +1488,23 @@ dialog.ui-sheet[open] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+.notification-filters {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.notification-queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+@media (min-width: 720px) {
+  .notification-filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  }
+}
 .animal-confirmation-actions .ui-button,
 .volunteer-report-actions .ui-button {
   width: 100%;

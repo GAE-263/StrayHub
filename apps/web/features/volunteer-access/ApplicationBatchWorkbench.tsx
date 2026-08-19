@@ -316,6 +316,7 @@ export function ApplicationBatchWorkbench({
             : `將處理已選取的 ${selected.length} 筆。`
         }
         confirmLabel="送出完整快照"
+        closeLabel="關閉批次確認"
         destructive={decision === "reject"}
         onClose={() => setConfirming(false)}
         onConfirm={() => void createBatch(buildPayload())}

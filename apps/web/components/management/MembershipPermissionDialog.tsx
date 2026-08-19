@@ -16,6 +16,7 @@ export function MembershipPermissionDialog({
   adminCountAfter,
   authorizationImpact,
   confirmLabel = "確認調整",
+  closeLabel = "關閉權限確認",
   onClose,
   onConfirm,
   confirming = false,
@@ -32,6 +33,7 @@ export function MembershipPermissionDialog({
   adminCountAfter?: number | null;
   authorizationImpact?: string;
   confirmLabel?: string;
+  closeLabel?: string;
   onClose: () => void;
   onConfirm: () => void;
   confirming?: boolean;
@@ -41,7 +43,7 @@ export function MembershipPermissionDialog({
     <AlertDialog
       open={open}
       title={title}
-      closeLabel="關閉權限確認"
+      closeLabel={closeLabel}
       className="permission-confirmation-dialog"
       onClose={onClose}
     >

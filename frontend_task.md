@@ -662,7 +662,7 @@
   - Verification：component 1 passed；1,200 all-filtered snapshot E2E 1 passed；applications responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`refactor(web): align volunteer batch workbench styles`。
 
-## [ ] FT-026 遷移通知失敗佇列並分離 success／error
+## [x] FT-026 遷移通知失敗佇列並分離 success／error
 
 - **優先級：** P1
 - **問題位置：** `NotificationFailureQueue.tsx` 與 notifications page filters。
@@ -670,7 +670,14 @@
 - **預期修改後：** primitives；錯誤用 Alert，成功用 Toast／status；按鈕層級清楚。
 - **驗證：** component test、notification E2E／axe。
 - **預定 commit：** `fix(web): align notification retry controls and feedback`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：queue輸出 raw checkbox／buttons，初始固定渲染空 status；filter form為 raw inputs/select/button。
+  - GREEN：queue使用 Checkbox／Table／Button，bulk retry busy防重複；success Toast與failure Alert分流且失敗保留 selection／operation ID；filters使用 Field／Input／Select／Button；page load error使用 Alert。
+  - Regression correction：shared permission dialog新增 optional contextual closeLabel，batch keyboard focus恢復「關閉批次確認」。
+  - Changed files：`NotificationFailureQueue.tsx`／test、notifications page、`MembershipPermissionDialog.tsx`、`ApplicationBatchWorkbench.tsx`、`globals.css`、`frontend_task.md`。
+  - Verification：component 1 passed；notification keyboard flow 1 passed；notifications responsive 1 passed；志工 routes Axe 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`fix(web): align notification retry controls and feedback`。
 
 ## [ ] FT-027 補齊志工授權政策的 loading／busy／error
 
