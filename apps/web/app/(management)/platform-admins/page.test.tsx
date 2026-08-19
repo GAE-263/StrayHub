@@ -189,6 +189,34 @@ describe("platform administrator management page", () => {
     ).not.toBeNull();
   });
 
+  it("requires confirmation before a platform administrator mutation", async () => {
+    await renderPage({
+      policy: {
+        min_active_admins: 1,
+        max_active_admins: 2,
+        active_count: 2,
+        available_slots: 0,
+      },
+      items: [
+        { ...activeAdmin, can_disable: true },
+        {
+          ...activeAdmin,
+          user_id: "admin-b",
+          display_name: "本機平台管理員 B",
+          can_disable: true,
+        },
+      ],
+    });
+
+    const disableButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "停用");
+    await act(async () => disableButton?.click());
+
+    expect(container?.textContent).toContain("確認停用平台管理員");
+    expect(container?.textContent).toContain("本機平台管理員");
+  });
+
   it("redirects instead of showing 401 when the current admin disables itself", async () => {
     await renderPage({
       policy: {
@@ -213,6 +241,11 @@ describe("platform administrator management page", () => {
       container?.querySelectorAll("button") ?? [],
     ).find((button) => button.textContent?.trim() === "停用");
     await act(async () => disableButton?.click());
+
+    const confirmButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "確認停用");
+    await act(async () => confirmButton?.click());
 
     expect(routerReplace).toHaveBeenCalledWith("/login");
     expect(container?.textContent).not.toContain("操作失敗：401: Session 無效");

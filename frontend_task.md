@@ -356,7 +356,7 @@
 
 # Phase B — 治理與高影響操作
 
-## [ ] FT-011 為平台管理員異動加入確認與 Toast
+## [x] FT-011 為平台管理員異動加入確認與 Toast
 
 - **優先級：** P0
 - **問題位置：** `apps/web/app/(management)/platform-admins/page.tsx:222-262, 383-409`
@@ -364,7 +364,18 @@
 - **預期修改後：** 顯示目標、before／after、active admin 數量與自我登出影響；成功後 Toast。
 - **驗證：** page tests、`platform-admin-governance.spec.ts`、Dialog screenshot。
 - **預定 commit：** `fix(web): confirm platform administrator mutations`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：平台管理員建立、提升、替換、重新啟用、停用與降權都可直接觸發 mutation；成功訊息使用永久 Alert，沒有顯示異動目標、權限影響或 self-session logout 風險。
+  - RED：新增「停用前必須顯示確認 Dialog」測試；現況直接執行 mutation，找不到 `確認停用平台管理員`。
+  - GREEN：加入共用 pending mutation confirmation Dialog；顯示目標、權限／active admin 影響與 self-disable logout 警示；所有 mutation 經確認後才呼叫 API；成功回饋改用 Toast。
+  - Changed files：
+    - `apps/web/app/(management)/platform-admins/page.tsx`
+    - `apps/web/app/(management)/platform-admins/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：platform-admin page tests 6 passed；`platform-admin-governance.spec.ts` 1 passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/platform-admins`；以平台管理員登入後，點擊停用／重新啟用／降權或建立／替換，確認 Dialog 顯示目標與影響；取消不發 request；確認後成功訊息顯示為 Toast；self-disable 確認後導向 `/login`。
+  - Commit：`fix(web): confirm platform administrator mutations`。
 
 ## [ ] FT-012 為 QR 撤銷／重新產生加入風險確認
 

@@ -17,6 +17,7 @@ import { Dialog } from "../../../components/ui/dialog";
 import { Field } from "../../../components/ui/field";
 import { Input } from "../../../components/ui/input";
 import { Select } from "../../../components/ui/select";
+import { Toast } from "../../../components/ui/toast";
 
 type Policy = {
   min_active_admins: number;
@@ -60,6 +61,13 @@ type AuditRecord = {
   created_at: string;
 };
 
+type PendingMutation = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  action: () => Promise<void>;
+};
+
 async function readResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = "操作失敗";
@@ -92,6 +100,8 @@ export default function PlatformAdminsPage() {
   const [outgoingUserId, setOutgoingUserId] = useState("");
   const [replacementUserId, setReplacementUserId] = useState("");
   const [reason, setReason] = useState("");
+  const [pendingMutation, setPendingMutation] =
+    useState<PendingMutation | null>(null);
 
   const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -151,6 +161,17 @@ export default function PlatformAdminsPage() {
     }
   };
 
+  const queueMutation = (mutation: PendingMutation) => {
+    setPendingMutation(mutation);
+  };
+
+  const confirmPendingMutation = async () => {
+    const mutation = pendingMutation;
+    if (!mutation) return;
+    setPendingMutation(null);
+    await run(mutation.action);
+  };
+
   const mutate = async (path: string, body?: unknown) => {
     const result = await request<MutationResponse>(path, {
       method: "POST",
@@ -171,36 +192,64 @@ export default function PlatformAdminsPage() {
 
   const createAdmin = async (event: FormEvent) => {
     event.preventDefault();
-    await mutate("/v1/platform/administrators", {
-      username,
-      display_name: displayName,
-      temporary_password: temporaryPassword,
+    queueMutation({
+      title: "確認建立平台管理員帳號",
+      description: `將建立並立即啟用「${displayName || username}」的平台管理員帳號，啟用中的管理員數量將變為 ${(policy?.active_count ?? 0) + 1}。`,
+      confirmLabel: "確認建立",
+      action: async () => {
+        await mutate("/v1/platform/administrators", {
+          username,
+          display_name: displayName,
+          temporary_password: temporaryPassword,
+        });
+        setUsername("");
+        setDisplayName("");
+        setTemporaryPassword("");
+        setCreateOpen(false);
+        setMessage("平台管理員帳號已建立。");
+      },
     });
-    setUsername("");
-    setDisplayName("");
-    setTemporaryPassword("");
-    setCreateOpen(false);
-    setMessage("平台管理員帳號已建立。");
   };
 
   const promote = async (event: FormEvent) => {
     event.preventDefault();
-    await mutate(`/v1/platform/administrators/${promoteUserId}/promote`);
-    setPromoteUserId("");
-    setMessage("帳號已提升為平台管理員。");
+    const candidate = candidates.find((item) => item.user_id === promoteUserId);
+    queueMutation({
+      title: "確認提升平台管理員權限",
+      description: `將「${candidate?.display_name ?? promoteUserId}」加入平台管理員，啟用中的管理員數量將變為 ${(policy?.active_count ?? 0) + 1}。`,
+      confirmLabel: "確認提升",
+      action: async () => {
+        await mutate(`/v1/platform/administrators/${promoteUserId}/promote`);
+        setPromoteUserId("");
+        setMessage("帳號已提升為平台管理員。");
+      },
+    });
   };
 
   const replace = async (event: FormEvent) => {
     event.preventDefault();
-    await mutate("/v1/platform/administrators/replacements", {
-      outgoing_user_id: outgoingUserId,
-      replacement_user_id: replacementUserId,
-      reason,
+    const outgoing = activeAdmins.find(
+      (item) => item.user_id === outgoingUserId,
+    );
+    const replacement = candidates.find(
+      (item) => item.user_id === replacementUserId,
+    );
+    queueMutation({
+      title: "確認替換平台管理員",
+      description: `將「${outgoing?.display_name ?? outgoingUserId}」的管理權限交接給「${replacement?.display_name ?? replacementUserId}」，啟用中的管理員數量維持 ${policy?.active_count ?? 0}。原因：${reason}`,
+      confirmLabel: "確認替換",
+      action: async () => {
+        await mutate("/v1/platform/administrators/replacements", {
+          outgoing_user_id: outgoingUserId,
+          replacement_user_id: replacementUserId,
+          reason,
+        });
+        setReplacementOpen(false);
+        setReplacementUserId("");
+        setReason("");
+        setMessage("平台管理員替換已完成。");
+      },
     });
-    setReplacementOpen(false);
-    setReplacementUserId("");
-    setReason("");
-    setMessage("平台管理員替換已完成。");
   };
 
   const renderAdmin = (admin: Admin) => (
@@ -224,9 +273,15 @@ export default function PlatformAdminsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void run(() =>
-                  mutate(`/v1/platform/administrators/${admin.user_id}/enable`),
-                )
+                queueMutation({
+                  title: "確認重新啟用平台管理員",
+                  description: `將「${admin.display_name}」重新啟用，該帳號會恢復平台管理員權限。`,
+                  confirmLabel: "確認重新啟用",
+                  action: () =>
+                    mutate(
+                      `/v1/platform/administrators/${admin.user_id}/enable`,
+                    ).then(() => setMessage("平台管理員已重新啟用。")),
+                })
               }
             >
               重新啟用
@@ -237,11 +292,19 @@ export default function PlatformAdminsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void run(() =>
-                  mutate(
-                    `/v1/platform/administrators/${admin.user_id}/disable`,
-                  ),
-                )
+                queueMutation({
+                  title: "確認停用平台管理員",
+                  description: `將停用「${admin.display_name}」。${
+                    admin.user_id === currentUser?.user.id
+                      ? "這會立即使你目前的管理員 session 登出。"
+                      : "該帳號將無法繼續執行平台管理操作。"
+                  }`,
+                  confirmLabel: "確認停用",
+                  action: () =>
+                    mutate(
+                      `/v1/platform/administrators/${admin.user_id}/disable`,
+                    ).then(() => setMessage("平台管理員已停用。")),
+                })
               }
             >
               停用
@@ -252,9 +315,15 @@ export default function PlatformAdminsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void run(() =>
-                  mutate(`/v1/platform/administrators/${admin.user_id}/demote`),
-                )
+                queueMutation({
+                  title: "確認降低平台管理員權限",
+                  description: `將「${admin.display_name}」降為一般帳號，平台管理員權限會立即移除。`,
+                  confirmLabel: "確認降權",
+                  action: () =>
+                    mutate(
+                      `/v1/platform/administrators/${admin.user_id}/demote`,
+                    ).then(() => setMessage("平台管理員權限已移除。")),
+                })
               }
             >
               降權
@@ -295,7 +364,7 @@ export default function PlatformAdminsPage() {
         </div>
       </div>
       {error ? <Alert role="alert">操作失敗：{error}</Alert> : null}
-      {message ? <Alert role="status">{message}</Alert> : null}
+      {message ? <Toast>{message}</Toast> : null}
       {policy ? (
         <div className="platform-policy-grid" aria-label="平台管理員政策摘要">
           <Card>
@@ -521,6 +590,29 @@ export default function PlatformAdminsPage() {
             <Button type="submit">確認替換</Button>
           </div>
         </form>
+      </Dialog>
+      <Dialog
+        open={pendingMutation !== null}
+        title={pendingMutation?.title ?? "確認平台管理員異動"}
+        role="alertdialog"
+        onClose={() => setPendingMutation(null)}
+        className="account-dialog"
+      >
+        <p className="dialog-description">
+          {pendingMutation?.description ?? "請確認這項平台管理員異動。"}
+        </p>
+        <div className="dialog-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setPendingMutation(null)}
+          >
+            取消
+          </Button>
+          <Button type="button" onClick={() => void confirmPendingMutation()}>
+            {pendingMutation?.confirmLabel ?? "確認"}
+          </Button>
+        </div>
       </Dialog>
     </section>
   );
