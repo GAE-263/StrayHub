@@ -632,16 +632,46 @@ summary:focus-visible {
   padding: 12px 15px;
 }
 .ui-toast {
+  align-items: center;
   background: var(--ink);
   border-radius: var(--radius-sm);
   bottom: 20px;
   box-shadow: var(--shadow);
   color: #fff;
+  display: flex;
+  gap: 12px;
   left: 20px;
   max-width: min(420px, calc(100vw - 40px));
   position: fixed;
   padding: 12px 15px;
   z-index: 1000;
+}
+.ui-toast-message {
+  flex: 1;
+  min-width: 0;
+}
+.ui-toast-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 32px;
+  font: inherit;
+  font-size: 20px;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+.ui-toast-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.ui-toast-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 .ui-tooltip {
   display: inline-flex;
@@ -1407,7 +1437,7 @@ dialog.ui-sheet[open] {
   }
 
   .ui-toast {
-    bottom: 12px;
+    bottom: 64px;
     left: 12px;
     max-width: calc(100vw - 24px);
   }

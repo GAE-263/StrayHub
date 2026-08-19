@@ -76,6 +76,11 @@ type PendingMembershipChange = {
   adminCountAfter: number;
 };
 
+type ToastMessage = {
+  id: number;
+  text: string;
+};
+
 const roleLabels: Record<Membership["role"], string> = {
   SHELTER_ADMIN: "收容所管理員",
   STAFF: "工作人員",
@@ -171,7 +176,7 @@ export default function SheltersManagementPage() {
   const [areaType, setAreaType] = useState<Area["area_type"]>("area");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [toastMessage, setToastMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState<ToastMessage | null>(null);
   const selectedShelter = useMemo(
     () => shelters.find((shelter) => shelter.id === selectedShelterId),
     [shelters, selectedShelterId],
@@ -305,6 +310,10 @@ export default function SheltersManagementPage() {
     }
   };
 
+  const showToast = (text: string) => {
+    setToastMessage((current) => ({ id: (current?.id ?? 0) + 1, text }));
+  };
+
   const activeAdminCount = useMemo(
     () =>
       memberships.filter(
@@ -404,7 +413,7 @@ export default function SheltersManagementPage() {
     setAccountPassword("");
     setAccountDialogOpen(false);
     await loadShelterDetails();
-    setToastMessage(
+    showToast(
       createdRole === "SHELTER_ADMIN"
         ? `已建立收容所管理員帳號「${createdIdentity}」`
         : `已建立${roleLabels[createdRole]}帳號「${createdIdentity}」`,
@@ -452,7 +461,7 @@ export default function SheltersManagementPage() {
         await updateMembership(pending.membership, pending.changes);
       }
       setPendingMembershipChange(null);
-      setToastMessage(
+      showToast(
         `已完成${pending.operation}：「${pending.membership.display_name || pending.membership.username || "未命名使用者"}」`,
       );
     } catch (error) {
@@ -612,7 +621,14 @@ export default function SheltersManagementPage() {
         <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
       )}
       {message && <Alert role="status">{message}</Alert>}
-      {toastMessage && <Toast>{toastMessage}</Toast>}
+      {toastMessage && (
+        <Toast
+          messageKey={toastMessage.id}
+          onClose={() => setToastMessage(null)}
+        >
+          {toastMessage.text}
+        </Toast>
+      )}
 
       <Card aria-labelledby="shelter-list-title">
         <CardHeader>

@@ -46,6 +46,11 @@ type ActiveMembership = {
   status: string;
 };
 
+type ToastMessage = {
+  id: number;
+  text: string;
+};
+
 const roleLabels: Record<Membership["role"], string> = {
   SHELTER_ADMIN: "收容所管理員",
   STAFF: "工作人員",
@@ -120,7 +125,7 @@ export default function ArchivedShelterMembershipsPage() {
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [toastMessage, setToastMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState<ToastMessage | null>(null);
   const [activeAdminCount, setActiveAdminCount] = useState(0);
   const [pendingRestore, setPendingRestore] = useState<Membership | null>(null);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
@@ -217,9 +222,10 @@ export default function ArchivedShelterMembershipsPage() {
         },
       );
       await loadArchivedMemberships();
-      setToastMessage(
-        `已恢復成員「${membership.display_name || membership.username || "未命名使用者"}」`,
-      );
+      setToastMessage((current) => ({
+        id: (current?.id ?? 0) + 1,
+        text: `已恢復成員「${membership.display_name || membership.username || "未命名使用者"}」`,
+      }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "操作失敗");
     }
@@ -317,7 +323,14 @@ export default function ArchivedShelterMembershipsPage() {
         <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
       )}
       {message && <Alert role="status">{message}</Alert>}
-      {toastMessage && <Toast>{toastMessage}</Toast>}
+      {toastMessage && (
+        <Toast
+          messageKey={toastMessage.id}
+          onClose={() => setToastMessage(null)}
+        >
+          {toastMessage.text}
+        </Toast>
+      )}
       <Card aria-labelledby="archived-list-title">
         <CardHeader className="membership-card-header">
           <div>

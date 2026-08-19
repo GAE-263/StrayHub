@@ -510,7 +510,7 @@
   - Route verification：`http://localhost:3001/platform-admins` 與 `/shelters`；確認 mutation request pending 時按鈕顯示「處理中…」、相關欄位 disabled，連續雙擊不產生第二次 request，完成後 controls 恢復。
   - Commit：`fix(web): prevent duplicate governance submissions`。
 
-## [ ] FT-018 讓 Toast 支援 timeout、關閉與連續訊息
+## [x] FT-018 讓 Toast 支援 timeout、關閉與連續訊息
 
 - **優先級：** P1
 - **問題位置：** `apps/web/components/ui/toast.tsx` 與 shelters／archived 使用端。
@@ -518,7 +518,23 @@
 - **預期修改後：** timeout、手動關閉、連續訊息 key 與 focus-safe 行為。
 - **驗證：** fake-timer tests、Toast a11y、窄螢幕 screenshot。
 - **預定 commit：** `fix(web): add lifecycle controls to toast feedback`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：Toast 永久留在左下角，沒有手動關閉方式；相同文字再次成功時，React string state equality 可能不 rerender／重新公告。
+  - RED：新增 timeout、manual close／focus preservation、連續相同訊息 `messageKey` fake-timer tests；現況 3 項都因 Toast 永久存在而失敗。
+  - GREEN：Toast 預設 5 秒自動關閉，提供可鍵盤操作的「關閉通知」按鈕與 `onClose`，不在 mount 時移動 focus；`messageKey` 變更會重設 visible state 與 timer。Shelters／archived 以遞增 `{id, text}` notice state 重新公告相同訊息。
+  - Changed files：
+    - `apps/web/components/ui/toast.tsx`
+    - `apps/web/components/ui/toast.test.tsx`
+    - `apps/web/app/globals.css`
+    - `apps/web/app/(management)/shelters/page.tsx`
+    - `apps/web/app/(management)/shelters/archived/page.tsx`
+    - `apps/web/e2e/organization-management.spec.ts`
+    - `frontend_task.md`
+  - Verification：Toast／shelters／archived／CSS targeted suites 25 tests passed；organization management browser suite 3 passed（含 360px Toast lifecycle）；P1 四 viewport Axe 1 passed；full Vitest 53 files／129 tests passed；Python 474 tests passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Visual verification：360×800 Toast 完整位於 viewport 內；初次截圖發現 Next dev indicator 遮住左側文字，將 mobile bottom offset 調整為 64px 後複驗，文字與關閉按鈕完整、無遮蔽／overflow。Screenshot：`apps/web/test-results/organization-management-SHELTER-ADMIN-可在已封存路由查詢並恢復成員-chromium/ft018-toast-360.png`。
+  - Route verification：`http://localhost:3001/shelters`、`/shelters/archived`；完成帳號／權限／恢復 mutation 後觀察 Toast，點「關閉通知」可立即移除；未操作時約 5 秒自動消失；重複相同操作會重新顯示並重新公告。
+  - Commit：`fix(web): add lifecycle controls to toast feedback`。
 
 ---
 
