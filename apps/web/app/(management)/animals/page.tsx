@@ -102,7 +102,7 @@ export default function AnimalsPage() {
   }, [areaId, page, query, status]);
 
   return (
-    <main aria-labelledby="animals-title">
+    <section aria-labelledby="animals-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">ANIMAL DIRECTORY</span>
@@ -232,6 +232,6 @@ export default function AnimalsPage() {
           </div>
         ) : null}
       </section>
-    </main>
+    </section>
   );
 }

@@ -41,7 +41,7 @@ export default function VolunteerAccessSettingsPage() {
   }
 
   return (
-    <main>
+    <div>
       <div className="page-heading">
         <div>
           <span className="eyebrow">VOLUNTEER ACCESS</span>
@@ -54,6 +54,6 @@ export default function VolunteerAccessSettingsPage() {
       ) : (
         <p>正在載入設定…</p>
       )}
-    </main>
+    </div>
   );
 }

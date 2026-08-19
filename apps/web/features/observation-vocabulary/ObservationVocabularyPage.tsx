@@ -228,7 +228,7 @@ export default function ObservationVocabularyPage() {
   };
 
   return (
-    <main aria-labelledby="observation-options-title">
+    <section aria-labelledby="observation-options-title">
       <div className="page-heading observation-page-heading">
         <div>
           <span className="eyebrow">OBSERVATION VOCABULARY</span>
@@ -402,6 +402,6 @@ export default function ObservationVocabularyPage() {
           }}
         />
       ) : null}
-    </main>
+    </section>
   );
 }

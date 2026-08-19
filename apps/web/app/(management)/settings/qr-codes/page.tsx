@@ -97,7 +97,7 @@ export default function QrCodesPage() {
     if (typeof window !== "undefined") window.print();
   };
   return (
-    <main aria-labelledby="qr-title">
+    <section aria-labelledby="qr-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">QR BINDINGS</span>
@@ -196,6 +196,6 @@ export default function QrCodesPage() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }

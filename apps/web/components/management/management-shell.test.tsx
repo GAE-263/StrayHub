@@ -1,18 +1,28 @@
-import { describe, expect, it, vi } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import React from "react";
-import { AppSidebar } from "./AppSidebar";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 import { AppHeader } from "./AppHeader";
+import { AppSidebar } from "./AppSidebar";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { MobileNavigation } from "./MobileNavigation";
 import { ErrorState, EmptyState, LoadingState } from "./StateViews";
 import { StatusBanner } from "./StatusBanner";
-import { Breadcrumbs } from "./Breadcrumbs";
-import { renderToStaticMarkup } from "react-dom/server";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/animals",
 }));
+
+function collectManagementPages(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return collectManagementPages(path);
+    return entry.name === "page.tsx" ? [path] : [];
+  });
+}
 
 describe("management shell primitives", () => {
   it("exposes shared navigation and state components", () => {
@@ -80,5 +90,25 @@ describe("management shell primitives", () => {
       html.indexOf('class="brand-mark"'),
     );
     expect(html).toContain("header-logout");
+  });
+
+  it("delegates the single main landmark to ManagementLayout", () => {
+    const pages = [
+      ...collectManagementPages(join(process.cwd(), "app/(management)")),
+      join(
+        process.cwd(),
+        "features/observation-vocabulary/ObservationVocabularyPage.tsx",
+      ),
+    ];
+    const layout = readFileSync(
+      join(process.cwd(), "components/management/ManagementLayout.tsx"),
+      "utf8",
+    );
+
+    expect(pages.length).toBeGreaterThan(0);
+    for (const page of pages) {
+      expect(readFileSync(page, "utf8"), page).not.toMatch(/<main(?:\s|>)/);
+    }
+    expect(layout.match(/<main(?:\s|>)/g)).toHaveLength(1);
   });
 });

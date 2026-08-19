@@ -110,7 +110,7 @@ export default function ReportableScopePage() {
   };
 
   return (
-    <main aria-labelledby="scope-title">
+    <section aria-labelledby="scope-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">REPORTABLE SCOPE</span>
@@ -231,6 +231,6 @@ export default function ReportableScopePage() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }

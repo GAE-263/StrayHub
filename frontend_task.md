@@ -223,7 +223,7 @@
   - Visual verification：`/animals` loading／empty／error state 驗收步驟與預期 icon／tone 差異已確認，依指示完成。
   - Commit：本任務獨立 commit `fix(web): distinguish state view visual semantics`。
 
-## [ ] FT-006 移除管理頁巢狀 `<main>` landmarks
+## [x] FT-006 移除管理頁巢狀 `<main>` landmarks
 
 - **優先級：** P1
 - **問題位置：** `apps/web/components/management/ManagementLayout.tsx:215-222` 與各 management route 根節點。
@@ -231,7 +231,22 @@
 - **預期修改後：** 每頁只有一個 main landmark，子頁使用 section／div。
 - **驗證：** management shell test、axe、DOM landmark assertion。
 - **預定 commit：** `fix(web): keep a single main landmark per route`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 狀態：2026-08-19 完成；landmark 驗收後依指示建立獨立 commit。
+  - 修改前：`ManagementLayout` 已輸出 `<main class="app-main">`，17 個 management route pages 與 observation vocabulary feature 又輸出 `<main>`，瀏覽器實際 DOM 出現兩個 main landmarks。
+  - RED（source contract）：遞迴掃描所有 management `page.tsx`，要求不宣告 `<main>`，並要求 `ManagementLayout` 恰好保留一個；`ai-review/page.tsx` 首先失敗。
+  - RED（browser DOM）：P1 management routes 在 360／768／1024／1440px 要求 `main` count 精確為 1；`/ai-review` 實際為 2，Playwright 失敗。
+  - Secondary RED：route pages 修正後 `/settings/observation-options` 仍為 2，定位到 `ObservationVocabularyPage.tsx` feature root；納入 source contract 後如預期失敗。
+  - GREEN：有 page heading label 的 route roots 改用 `<section aria-labelledby>`；純 loading／error 或未命名 roots 改用 `<div>`；observation vocabulary feature root 改用 labeled section；Layout 的唯一 main 不變。
+  - Changed files：
+    - `apps/web/app/(management)/**/page.tsx`（17 個含 root main 的 routes）
+    - `apps/web/features/observation-vocabulary/ObservationVocabularyPage.tsx`
+    - `apps/web/components/management/management-shell.test.tsx`
+    - `apps/web/e2e/p1-a11y.spec.ts`
+    - `frontend_task.md`
+  - Verification：targeted 2 files／7 tests PASS；P1 routes × 4 viewports single-main + Axe PASS；full Vitest 51 files／114 tests PASS；TypeScript／Prettier PASS；Python 474 tests PASS；5 個代表 routes HTTP 200；`git diff --check` PASS。
+  - Visual verification：管理頁外觀／操作不變，並提供 DevTools single-main／no-nested-main 驗收指令；依指示完成。
+  - Commit：本任務獨立 commit `fix(web): keep a single main landmark per route`。
 
 ## [ ] FT-007 修正 768px tablet 導覽的大面積空白
 

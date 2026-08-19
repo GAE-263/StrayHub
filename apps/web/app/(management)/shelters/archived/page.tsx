@@ -279,7 +279,10 @@ export default function ArchivedShelterMembershipsPage() {
   };
 
   return (
-    <main className="shelter-management-page" aria-labelledby="archived-title">
+    <section
+      className="shelter-management-page"
+      aria-labelledby="archived-title"
+    >
       <div className="page-heading shelter-management-heading">
         <div>
           <span className="eyebrow">SHELTER ADMINISTRATION</span>
@@ -407,6 +410,6 @@ export default function ArchivedShelterMembershipsPage() {
         onConfirm={() => void confirmRestore()}
         confirming={confirmingRestore}
       />
-    </main>
+    </section>
   );
 }

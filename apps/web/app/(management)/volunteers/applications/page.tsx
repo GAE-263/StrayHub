@@ -99,7 +99,7 @@ export default function VolunteerApplicationsPage() {
   }
 
   return (
-    <main>
+    <div>
       <div className="page-heading">
         <div>
           <span className="eyebrow">VOLUNTEER APPLICATIONS</span>
@@ -153,6 +153,6 @@ export default function VolunteerApplicationsPage() {
         onLoadItems={loadItems}
         onLoadBatch={loadBatch}
       />
-    </main>
+    </div>
   );
 }

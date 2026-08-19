@@ -109,19 +109,19 @@ export default function AnimalProfilePage({ params }: Props) {
 
   if (error)
     return (
-      <main>
+      <div>
         <ErrorState title="無法載入動物檔案" description={error} />
-      </main>
+      </div>
     );
   if (!animal)
     return (
-      <main>
+      <div>
         <LoadingState title="正在載入動物檔案…" />
-      </main>
+      </div>
     );
 
   return (
-    <main aria-labelledby="animal-profile-title">
+    <section aria-labelledby="animal-profile-title">
       <Breadcrumbs
         items={[
           { label: "動物檔案", href: "/animals" },
@@ -211,6 +211,6 @@ export default function AnimalProfilePage({ params }: Props) {
         animalId={animal.id}
         onClose={() => setReminderOpen(false)}
       />
-    </main>
+    </section>
   );
 }

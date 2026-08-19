@@ -266,7 +266,7 @@ export default function PlatformAdminsPage() {
   );
 
   return (
-    <main
+    <section
       className="platform-admin-page"
       aria-labelledby="platform-admin-title"
     >
@@ -522,6 +522,6 @@ export default function PlatformAdminsPage() {
           </div>
         </form>
       </Dialog>
-    </main>
+    </section>
   );
 }

@@ -66,7 +66,7 @@ export default function VolunteerNotificationsPage() {
   }
 
   return (
-    <main>
+    <div>
       <div className="page-heading">
         <div>
           <span className="eyebrow">VOLUNTEER NOTIFICATIONS</span>
@@ -124,6 +124,6 @@ export default function VolunteerNotificationsPage() {
         onRetry={retry}
         onLoadMore={() => load(organizationId, nextCursor, true)}
       />
-    </main>
+    </div>
   );
 }

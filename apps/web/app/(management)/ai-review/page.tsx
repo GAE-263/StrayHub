@@ -94,7 +94,7 @@ export default function AiReviewPage() {
     else load();
   };
   return (
-    <main aria-labelledby="ai-review-title">
+    <section aria-labelledby="ai-review-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">AI REVIEW QUEUE</span>
@@ -210,6 +210,6 @@ export default function AiReviewPage() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }

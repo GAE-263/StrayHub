@@ -82,7 +82,7 @@ export default function ReportsPage() {
   }, [fromDate, status, toDate]);
 
   return (
-    <main aria-labelledby="reports-title">
+    <section aria-labelledby="reports-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">REPORT INBOX</span>
@@ -177,6 +177,6 @@ export default function ReportsPage() {
           </Table>
         ) : null}
       </section>
-    </main>
+    </section>
   );
 }

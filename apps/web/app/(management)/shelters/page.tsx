@@ -566,7 +566,7 @@ export default function SheltersManagementPage() {
   };
 
   return (
-    <main
+    <section
       className="shelter-management-page"
       aria-labelledby="shelter-management-title"
     >
@@ -885,6 +885,6 @@ export default function SheltersManagementPage() {
           </CardContent>
         </Card>
       )}
-    </main>
+    </section>
   );
 }

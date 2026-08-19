@@ -61,7 +61,7 @@ export default function AuditPage() {
       .finally(() => setLoading(false));
   }, [action, resourceType]);
   return (
-    <main aria-labelledby="audit-title">
+    <section aria-labelledby="audit-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">READ-ONLY AUDIT</span>
@@ -135,6 +135,6 @@ export default function AuditPage() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }

@@ -97,19 +97,19 @@ export default function ReportDetailPage({ params }: Props) {
 
   if (error && !report)
     return (
-      <main>
+      <div>
         <ErrorState title="無法載入回報 Detail" description={error} />
-      </main>
+      </div>
     );
   if (!report)
     return (
-      <main>
+      <div>
         <LoadingState title="正在載入回報 Detail…" />
-      </main>
+      </div>
     );
 
   return (
-    <main aria-labelledby="report-detail-title">
+    <section aria-labelledby="report-detail-title">
       <Breadcrumbs
         items={[
           { label: "回報收件匣", href: "/reports" },
@@ -271,6 +271,6 @@ export default function ReportDetailPage({ params }: Props) {
           </Button>
         </div>
       </AlertDialog>
-    </main>
+    </section>
   );
 }

@@ -102,7 +102,7 @@ export default function CareCalendarPage() {
     }
   }
   return (
-    <main aria-labelledby="care-calendar-title">
+    <section aria-labelledby="care-calendar-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">CARE CALENDAR</span>
@@ -132,6 +132,6 @@ export default function CareCalendarPage() {
         loadingBucket={loadingBucket}
         paginationError={paginationError}
       />
-    </main>
+    </section>
   );
 }
