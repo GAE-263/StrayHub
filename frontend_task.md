@@ -840,7 +840,7 @@
   - Gates：Vitest 55 files／140 tests、TypeScript、Prettier、Next production build與Python 474均通過；無snapshot檔變更。
   - Review：獨立source review PASS，無severity findings，確認未提前進入FT-035／FT-036 scope。
 
-## [ ] FT-035 將 visual viewport 拆成獨立 test cases
+## [x] FT-035 將 visual viewport 拆成獨立 test cases
 
 - **優先級：** P1
 - **問題位置：** `apps/web/e2e/p0-visual.spec.ts:25-40`
@@ -848,7 +848,14 @@
 - **預期修改後：** route × viewport 各自獨立回報，完整 evidence 不被首個失敗短路。
 - **驗證：** `playwright test --list` 與 visual run 數量／命名。
 - **預定 commit：** `test(web): isolate visual checks by viewport`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - RED：`playwright test e2e/p0-visual.spec.ts --list`僅17 tests；每個route只列1 test且title無viewport，360px failure會短路同route其餘3個viewport。
+  - GREEN：改為route × viewport nested declarations；list為62 tests（1 runtime＋40 P0 matrix＋20志工matrix＋1 batch），每個title包含完整route與`width×height`。
+  - Compatibility：snapshot filenames維持既有`${slug}-${width}.png`，每個獨立case保留相同token init、API mock、navigation、main visibility、indicator guard與full-page screenshot。
+  - Evidence：fresh Playwright-managed server、`--workers=1`完整執行67 tests；40個P0 snapshot cases全數各自回報真實baseline差異，runtime與5個志工功能tests通過，20個志工visual＋1 batch依既有approval gate skipped。
+  - Caveat：第一次parallel run因先前`next build`破壞reuse中的dev `.next`而得到HTTP 500；確認health後重啟，serial fresh-server run才是authoritative evidence。
+  - Gates：Vitest 55 files／140 tests、TypeScript、Prettier與Python 474均通過；零snapshot檔變更。
+  - Review：獨立source review PASS，無severity findings，確認未提前加入FT-036 routes/baselines。
 
 ## [ ] FT-036 補齊治理與志工頁 visual baselines
 

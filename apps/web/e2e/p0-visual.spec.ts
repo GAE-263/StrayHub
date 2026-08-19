@@ -34,12 +34,14 @@ test("visual runtime excludes the Next.js dev indicator", async ({ page }) => {
 
 for (const route of routes) {
   const slug = route === "/" ? "home" : route.slice(1).replaceAll("/", "-");
-  test(`${route} 建立 P0 visual evidence`, async ({ page }) => {
-    await page.addInitScript(() =>
-      sessionStorage.setItem("access_token", "test-access"),
-    );
-    await mockManagementApi(page);
-    for (const viewport of viewports) {
+  for (const viewport of viewports) {
+    test(`${route} @ ${viewport.width}x${viewport.height} 建立 P0 visual evidence`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem("access_token", "test-access"),
+      );
+      await mockManagementApi(page);
       await page.setViewportSize(viewport);
       await page.goto(route);
       await expect(page.locator("main").first()).toBeVisible();
@@ -47,8 +49,8 @@ for (const route of routes) {
       await expect(page).toHaveScreenshot(`${slug}-${viewport.width}.png`, {
         fullPage: true,
       });
-    }
-  });
+    });
+  }
 }
 
 const volunteerRoutes = [
@@ -61,13 +63,15 @@ const volunteerRoutes = [
 
 for (const route of volunteerRoutes) {
   const slug = route.split("?")[0].slice(1).replaceAll("/", "-");
-  test(`${route} 建立志工授權 visual evidence`, async ({ page }) => {
-    test.skip(
-      process.env.VOLUNTEER_ACCESS_VISUAL_REVIEW !== "approved",
-      "等待 reviewer 確認志工授權 UI 後建立 baseline",
-    );
-    await mockVolunteerAccessApi(page);
-    for (const viewport of viewports) {
+  for (const viewport of viewports) {
+    test(`${route} @ ${viewport.width}x${viewport.height} 建立志工授權 visual evidence`, async ({
+      page,
+    }) => {
+      test.skip(
+        process.env.VOLUNTEER_ACCESS_VISUAL_REVIEW !== "approved",
+        "等待 reviewer 確認志工授權 UI 後建立 baseline",
+      );
+      await mockVolunteerAccessApi(page);
       await page.setViewportSize(viewport);
       await page.goto(route);
       await expect(page.locator("main").first()).toBeVisible();
@@ -75,8 +79,8 @@ for (const route of volunteerRoutes) {
       await expect(page).toHaveScreenshot(`${slug}-${viewport.width}.png`, {
         fullPage: true,
       });
-    }
-  });
+    });
+  }
 }
 
 test("志工批次確認、進度與 partial result 建立 visual evidence", async ({
