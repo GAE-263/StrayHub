@@ -230,4 +230,49 @@ describe("shelter management page authorization", () => {
       container?.querySelector<HTMLDialogElement>('[role="alertdialog"]')?.open,
     ).toBe(false);
   });
+
+  it("switches from account form to admin confirmation without stacking dialogs", async () => {
+    await renderPage("SHELTER_ADMIN");
+    const createButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "建立帳號");
+    await act(async () => createButton?.click());
+
+    const roleSelect =
+      container?.querySelector<HTMLSelectElement>("#account-role");
+    await act(async () => {
+      if (!roleSelect) return;
+      roleSelect.value = "SHELTER_ADMIN";
+      roleSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const accountForm = container?.querySelector<HTMLFormElement>(
+      '[role="dialog"] form',
+    );
+    await act(async () =>
+      accountForm?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+
+    expect(container?.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(
+      container?.querySelector<HTMLDialogElement>('[role="dialog"]')?.open,
+    ).toBe(false);
+
+    const openAlertDialog = Array.from(
+      container?.querySelectorAll<HTMLDialogElement>('[role="alertdialog"]') ??
+        [],
+    ).find((dialog) => dialog.open);
+    const cancelButton = Array.from(
+      openAlertDialog?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "取消") as
+      HTMLButtonElement | undefined;
+    await act(async () => cancelButton?.click());
+    expect(
+      container?.querySelector<HTMLDialogElement>('[role="alertdialog"]')?.open,
+    ).toBe(false);
+    expect(
+      container?.querySelector<HTMLDialogElement>('[role="dialog"]')?.open,
+    ).toBe(true);
+  });
 });

@@ -438,6 +438,7 @@ export default function SheltersManagementPage() {
   const submitAccountForm = (event: FormEvent) => {
     event.preventDefault();
     if (accountRole === "SHELTER_ADMIN") {
+      setAccountDialogOpen(false);
       setAccountConfirmationOpen(true);
       return;
     }
@@ -831,7 +832,10 @@ export default function SheltersManagementPage() {
           after="啟用中的 SHELTER_ADMIN"
           adminCountBefore={activeAdminCount}
           adminCountAfter={activeAdminCount + 1}
-          onClose={() => setAccountConfirmationOpen(false)}
+          onClose={() => {
+            setAccountConfirmationOpen(false);
+            setAccountDialogOpen(true);
+          }}
           onConfirm={() => {
             setAccountConfirmationOpen(false);
             void runAction(createAccount);

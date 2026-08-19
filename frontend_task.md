@@ -448,7 +448,7 @@
   - Route verification：`http://localhost:3001/ai-review`；在待覆核項目點擊確認／拒絕，Dialog 顯示對應語意與 reason textarea；拒絕為 destructive；取消不送出；確認後顯示 Toast 並刷新 queue。
   - Commit：`fix(web): replace ai review prompt with governed dialog`。
 
-## [ ] FT-015 移除建立收容所管理員的雙層 Modal
+## [x] FT-015 移除建立收容所管理員的雙層 Modal
 
 - **優先級：** P1
 - **問題位置：** `apps/web/app/(management)/shelters/page.tsx:438-445, 734-833`
@@ -456,7 +456,18 @@
 - **預期修改後：** 單一兩階段 Dialog，或安全切換 Dialog 並保留輸入／焦點。
 - **驗證：** page test、Escape／focus restore、organization E2E。
 - **預定 commit：** `fix(web): avoid stacked shelter account dialogs`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：建立 SHELTER_ADMIN 時，建立帳號 Dialog 未關閉即另外開啟權限確認 Dialog，形成雙層 modal。
+  - RED：新增 regression 證明提交管理員帳號時建立 Dialog 與確認 Dialog 同時 `open=true`。
+  - GREEN：提交時先關閉建立表單再開權限確認；取消確認會恢復原表單並保留輸入 state；確認後直接執行 createAccount，避免巢狀 modal 與焦點混亂。
+  - Changed files：
+    - `apps/web/app/(management)/shelters/page.tsx`
+    - `apps/web/app/(management)/shelters/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：shelters page tests 6 passed；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/shelters`；以 SHELTER_ADMIN 登入，點擊建立帳號、選擇收容所管理員、提交；確認建立表單關閉且只有權限確認 Dialog 開啟；取消後恢復原表單，確認後建立帳號。
+  - Commit：`fix(web): avoid stacked shelter account dialogs`。
 
 ## [ ] FT-016 區分 shelters／platform-admins 初始 loading 與 empty
 
