@@ -11,6 +11,8 @@ import {
   CardTitle,
 } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { Dialog } from "../../components/ui/dialog";
+import { Toast } from "../../components/ui/toast";
 
 import {
   formatRemainingDuration,
@@ -61,6 +63,8 @@ export function VolunteerApplicationPage({
   const [submitting, setSubmitting] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     if (initialStatus !== null) return;
@@ -127,7 +131,10 @@ export function VolunteerApplicationPage({
           }),
         },
       );
-      setStatus(await readStatus(response));
+      const nextStatus = await readStatus(response);
+      setStatus(nextStatus);
+      setWithdrawOpen(false);
+      setToast("志工報名已撤回");
     } catch (reason) {
       setError(safeVolunteerError((reason as { code?: string })?.code));
     } finally {
@@ -218,7 +225,7 @@ export function VolunteerApplicationPage({
                 variant="secondary"
                 type="button"
                 disabled={submitting}
-                onClick={withdraw}
+                onClick={() => setWithdrawOpen(true)}
               >
                 撤回報名
               </Button>
@@ -239,6 +246,40 @@ export function VolunteerApplicationPage({
           {error}
         </Alert>
       ) : null}
+      <Dialog
+        open={withdrawOpen}
+        title="確認撤回志工報名"
+        role="alertdialog"
+        closeLabel="關閉撤回確認"
+        onClose={() => {
+          if (!submitting) setWithdrawOpen(false);
+        }}
+      >
+        <p>撤回後本次申請將停止審核；需要協助時仍可重新報名。</p>
+        <div className="ui-dialog-actions">
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={submitting}
+            onClick={() => setWithdrawOpen(false)}
+          >
+            保留報名
+          </Button>
+          <Button
+            variant="destructive"
+            type="button"
+            disabled={submitting}
+            onClick={() => void withdraw()}
+          >
+            {submitting ? "撤回中…" : "確認撤回"}
+          </Button>
+        </div>
+      </Dialog>
+      {toast && (
+        <Toast messageKey={toast} onClose={() => setToast("")}>
+          {toast}
+        </Toast>
+      )}
     </main>
   );
 }

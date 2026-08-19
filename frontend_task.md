@@ -614,7 +614,7 @@
   - Verification：component 7 tests passed；application E2E 1 passed；志工 routes Axe 1 passed；360 screenshot 複驗 PASS；full Vitest／Python／TypeScript／Prettier／diff gate passed。
   - Commit：`refactor(web): align volunteer application design tokens`。
 
-## [ ] FT-023 為撤回志工報名加入確認與成功回饋
+## [x] FT-023 為撤回志工報名加入確認與成功回饋
 
 - **優先級：** P1
 - **問題位置：** `VolunteerApplicationPage.tsx:207-215`
@@ -622,7 +622,13 @@
 - **預期修改後：** confirmation Dialog、正確 button variant、成功 Toast。
 - **驗證：** component test、volunteer approval E2E。
 - **預定 commit：** `fix(web): confirm volunteer application withdrawal`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：pending 狀態首擊「撤回報名」立即送出 withdraw POST，未提供確認。
+  - GREEN：首擊開啟 alertdialog；「保留報名」不送 request；destructive「確認撤回」busy 防重複送出，成功後關閉 Dialog、更新 withdrawn 狀態並顯示 Toast。
+  - Changed files：`VolunteerApplicationPage.tsx`／test、`volunteer-access-approval.spec.ts`、`frontend_task.md`。
+  - Verification：component 8 tests passed；approval E2E cancel／confirm／single-request 1 passed；full Vitest／Python／TypeScript／Prettier／diff gate passed。
+  - Commit：`fix(web): confirm volunteer application withdrawal`。
 
 ## [ ] FT-024 遷移志工授權表格至 UI primitives
 
