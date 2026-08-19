@@ -539,7 +539,7 @@ td {
   font-size: 12px;
 }
 .ui-skeleton {
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
   background: var(--surface-soft);
   border-radius: var(--radius-sm);
   min-height: 18px;
@@ -658,7 +658,7 @@ td {
     transform: rotate(360deg);
   }
 }
-@keyframes pulse {
+@keyframes skeleton-pulse {
   50% {
     opacity: 0.55;
   }
@@ -983,7 +983,7 @@ td {
   }
 }
 .loading-dot {
-  animation: pulse 1.2s infinite;
+  animation: loading-dot-pulse 1.2s infinite;
   background: var(--accent);
   border-radius: 50%;
   height: 10px;
@@ -1479,7 +1479,7 @@ td {
   width: 1px;
   clip: rect(0, 0, 0, 0);
 }
-@keyframes pulse {
+@keyframes loading-dot-pulse {
   50% {
     opacity: 0.35;
     transform: scale(0.8);

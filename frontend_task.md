@@ -67,7 +67,7 @@
 
 # Phase A — 設計系統與共用基礎
 
-## [ ] FT-001 拆分 Skeleton 與 loading dot 的 `pulse` 動畫
+## [x] FT-001 拆分 Skeleton 與 loading dot 的 `pulse` 動畫
 
 - **優先級：** P0
 - **問題位置：** `apps/web/app/globals.css:541-546, 661-665, 985-991, 1482-1487`
@@ -79,7 +79,22 @@
   - `frontend_task.md`
 - **驗證：** targeted test、`npm --prefix apps/web run typecheck`、reduced-motion browser assertion、修改前後動畫證據。
 - **預定 commit：** `fix(web): separate skeleton and loading animations`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19
+  - 修改前：`.ui-skeleton` 與 `.loading-dot` 共用兩個同名 `pulse` keyframes；後宣告的縮放規則覆蓋 Skeleton 的透明度動畫。
+  - RED：`npm test -- app/globals.test.ts` → 1 failed，確認 `.ui-skeleton` 仍使用 `animation: pulse`。
+  - 修改後：Skeleton 改用 `skeleton-pulse` 且只改變 opacity；loading dot 改用 `loading-dot-pulse` 並保留縮放效果；不再存在裸 `@keyframes pulse`。
+  - Changed files：
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `frontend_task.md`
+  - Verification：
+    - `npm test -- app/globals.test.ts` → PASS（1 test）
+    - `npm test` → PASS（51 files、100 tests）
+    - `npm run typecheck` → PASS
+    - `npx playwright test e2e/p0-responsive.spec.ts --grep 'reduced-motion'` → PASS（1 test）
+  - Commit：`fix(web): separate skeleton and loading animations`
+  - SHA：本完成紀錄與實作位於同一 commit；提交後以 `git log -1` 顯示值為準。
 
 ## [ ] FT-002 修正權限確認 Dialog 的按鈕 variants
 
