@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { authFetch, clearAuth, type CurrentUser } from "../../../lib/auth";
@@ -94,6 +100,8 @@ export default function PlatformAdminsPage() {
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -177,9 +185,18 @@ export default function PlatformAdminsPage() {
 
   const confirmPendingMutation = async () => {
     const mutation = pendingMutation;
-    if (!mutation) return;
-    setPendingMutation(null);
-    await run(mutation.action);
+    if (!mutation || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      setPendingMutation(null);
+      await mutation.action();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "操作失敗");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   const mutate = async (path: string, body?: unknown) => {
@@ -476,6 +493,7 @@ export default function PlatformAdminsPage() {
                 id="promote-user"
                 value={promoteUserId}
                 onChange={(event) => setPromoteUserId(event.target.value)}
+                disabled={submitting}
                 required
               >
                 <option value="">請選擇</option>
@@ -489,9 +507,11 @@ export default function PlatformAdminsPage() {
             <Button
               className="platform-admin-promote-submit"
               type="submit"
-              disabled={!promoteUserId || policy?.available_slots === 0}
+              disabled={
+                submitting || !promoteUserId || policy?.available_slots === 0
+              }
             >
-              提升
+              {submitting ? "處理中…" : "提升"}
             </Button>
           </form>
         </CardContent>
@@ -512,6 +532,7 @@ export default function PlatformAdminsPage() {
               id="platform-username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -521,6 +542,7 @@ export default function PlatformAdminsPage() {
               id="platform-display-name"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -531,6 +553,7 @@ export default function PlatformAdminsPage() {
               type="password"
               value={temporaryPassword}
               onChange={(event) => setTemporaryPassword(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -542,7 +565,9 @@ export default function PlatformAdminsPage() {
             >
               取消
             </Button>
-            <Button type="submit">建立</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "處理中…" : "建立"}
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -562,6 +587,7 @@ export default function PlatformAdminsPage() {
               id="outgoing-admin"
               value={outgoingUserId}
               onChange={(event) => setOutgoingUserId(event.target.value)}
+              disabled={submitting}
               required
             >
               {activeAdmins.map((admin) => (
@@ -577,6 +603,7 @@ export default function PlatformAdminsPage() {
               id="replacement-admin"
               value={replacementUserId}
               onChange={(event) => setReplacementUserId(event.target.value)}
+              disabled={submitting}
               required
             >
               <option value="">請選擇</option>
@@ -593,6 +620,7 @@ export default function PlatformAdminsPage() {
               id="replacement-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -604,7 +632,9 @@ export default function PlatformAdminsPage() {
             >
               取消
             </Button>
-            <Button type="submit">確認替換</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "處理中…" : "確認替換"}
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -626,8 +656,12 @@ export default function PlatformAdminsPage() {
           >
             取消
           </Button>
-          <Button type="button" onClick={() => void confirmPendingMutation()}>
-            {pendingMutation?.confirmLabel ?? "確認"}
+          <Button
+            type="button"
+            onClick={() => void confirmPendingMutation()}
+            disabled={submitting}
+          >
+            {submitting ? "處理中…" : (pendingMutation?.confirmLabel ?? "確認")}
           </Button>
         </div>
       </Dialog>

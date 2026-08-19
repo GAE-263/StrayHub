@@ -44,10 +44,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as Response;
 }
 
-function mockFetch(role: string, delayMs = 0) {
-  return vi.fn(async (input: RequestInfo | URL) => {
+function mockFetch(role: string, delayMs = 0, mutationDelayMs = 0) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (delayMs) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    if (mutationDelayMs && init?.method && init.method !== "GET") {
+      await new Promise((resolve) => setTimeout(resolve, mutationDelayMs));
     }
     const path = String(input);
     if (path.endsWith("/auth/me")) {
@@ -132,8 +135,9 @@ function mockFetch(role: string, delayMs = 0) {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-async function renderPage(role: string, delayMs = 0) {
-  vi.stubGlobal("fetch", mockFetch(role, delayMs));
+async function renderPage(role: string, delayMs = 0, mutationDelayMs = 0) {
+  const fetchMock = mockFetch(role, delayMs, mutationDelayMs);
+  vi.stubGlobal("fetch", fetchMock);
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -142,6 +146,7 @@ async function renderPage(role: string, delayMs = 0) {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  return fetchMock;
 }
 
 afterEach(async () => {
@@ -190,6 +195,38 @@ describe("shelter management page authorization", () => {
     await renderPage("SHELTER_ADMIN", 40);
     expect(container?.textContent).toContain("正在載入收容所");
     expect(container?.textContent).not.toContain("目前沒有志工");
+  });
+
+  it("prevents duplicate shelter mutation form submissions", async () => {
+    const fetchMock = await renderPage("SHELTER_ADMIN", 0, 80);
+    const areaInput = container?.querySelector<HTMLInputElement>("#area-name");
+    await act(async () => {
+      if (!areaInput) return;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(areaInput, "隔離區");
+      areaInput.dispatchEvent(new Event("input", { bubbles: true }));
+      areaInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const form = areaInput?.closest("form");
+
+    await act(async () => {
+      form?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+      form?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const mutationCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/areas") && init?.method === "POST",
+    );
+    expect(mutationCalls).toHaveLength(1);
   });
 
   it("does not expose shelter settings to STAFF", async () => {

@@ -494,7 +494,7 @@
   - Route verification：`http://localhost:3001/platform-admins`、`/shelters`、`/shelters/archived`；在網路延遲下觀察對應 LoadingState，待 API 回傳空陣列後才顯示 EmptyState；有資料時顯示清單，不再短暫顯示錯誤 empty。
   - Commit：`fix(web): separate governance loading and empty states`。
 
-## [ ] FT-017 為 mutation 表單加入 submitting 防重複送出
+## [x] FT-017 為 mutation 表單加入 submitting 防重複送出
 
 - **優先級：** P1
 - **問題位置：** platform admin 建立／提升／替換、shelter 建立／帳號建立等 mutation forms。
@@ -502,7 +502,20 @@
 - **預期修改後：** 每個 mutation 有獨立 pending state、disabled fields 與「處理中…」標籤。
 - **驗證：** double-click regression test、page tests。
 - **預定 commit：** `fix(web): prevent duplicate governance submissions`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：platform admin confirmation 與 shelter mutation forms 僅靠可重複觸發的 event handler；request pending 時按鈕與 fields 仍可操作，同一 render frame 連續 click／submit 會送出兩次 request。
+  - RED：新增 platform disable confirmation 與 shelter area form 的 double-click regression；兩者都實際觀察到 2 次 mutation request。
+  - GREEN：以同步 `useRef` lock 阻擋同 frame 重入，以 state 控制 disabled／`處理中…` UI；platform 建立、提升、替換及確認 mutation，與 shelter 啟用、建立收容所、建立帳號、建立區域共用防重複 gate；request 期間相關 inputs／selects／buttons 均鎖定。
+  - Changed files：
+    - `apps/web/app/(management)/platform-admins/page.tsx`
+    - `apps/web/app/(management)/platform-admins/page.test.tsx`
+    - `apps/web/app/(management)/shelters/page.tsx`
+    - `apps/web/app/(management)/shelters/page.test.tsx`
+    - `frontend_task.md`
+  - Verification：platform-admins 與 shelters page suites 16 tests passed；double-click requests 均為 1；TypeScript passed；Prettier passed；`git diff --check` passed。
+  - Route verification：`http://localhost:3001/platform-admins` 與 `/shelters`；確認 mutation request pending 時按鈕顯示「處理中…」、相關欄位 disabled，連續雙擊不產生第二次 request，完成後 controls 恢復。
+  - Commit：`fix(web): prevent duplicate governance submissions`。
 
 ## [ ] FT-018 讓 Toast 支援 timeout、關閉與連續訊息
 

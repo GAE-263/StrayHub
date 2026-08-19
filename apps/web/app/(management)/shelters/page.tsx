@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Link from "next/link";
@@ -151,6 +152,8 @@ export default function SheltersManagementPage() {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState(false);
+  const submittingActionRef = useRef(false);
   const [newShelterName, setNewShelterName] = useState("");
   const [organizationCode, setOrganizationCode] = useState("");
   const [initialAdminUsername, setInitialAdminUsername] = useState("");
@@ -287,12 +290,18 @@ export default function SheltersManagementPage() {
   };
 
   const runAction = async (action: () => Promise<void>) => {
+    if (submittingActionRef.current) return;
+    submittingActionRef.current = true;
+    setSubmittingAction(true);
     setErrorMessage("");
     setMessage("");
     try {
       await action();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
+      submittingActionRef.current = false;
+      setSubmittingAction(false);
     }
   };
 
@@ -634,9 +643,10 @@ export default function SheltersManagementPage() {
             selectedShelter?.status === "pending_setup" && (
               <Button
                 type="button"
+                disabled={submittingAction}
                 onClick={() => void runAction(activateShelter)}
               >
-                啟用收容所
+                {submittingAction ? "處理中…" : "啟用收容所"}
               </Button>
             )}
           {canManageOrganizations && (
@@ -648,6 +658,7 @@ export default function SheltersManagementPage() {
                   id="shelter-code"
                   value={organizationCode}
                   onChange={(event) => setOrganizationCode(event.target.value)}
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -657,6 +668,7 @@ export default function SheltersManagementPage() {
                   id="shelter-name"
                   value={newShelterName}
                   onChange={(event) => setNewShelterName(event.target.value)}
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -668,6 +680,7 @@ export default function SheltersManagementPage() {
                   onChange={(event) =>
                     setInitialAdminUsername(event.target.value)
                   }
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -682,10 +695,13 @@ export default function SheltersManagementPage() {
                   onChange={(event) =>
                     setInitialAdminPassword(event.target.value)
                   }
+                  disabled={submittingAction}
                   required
                 />
               </Field>
-              <Button type="submit">建立收容所</Button>
+              <Button type="submit" disabled={submittingAction}>
+                {submittingAction ? "處理中…" : "建立收容所"}
+              </Button>
             </form>
           )}
         </CardContent>
@@ -780,6 +796,7 @@ export default function SheltersManagementPage() {
               id="account-username"
               value={accountUsername}
               onChange={(event) => setAccountUsername(event.target.value)}
+              disabled={submittingAction}
               required
             />
           </Field>
@@ -789,6 +806,7 @@ export default function SheltersManagementPage() {
               id="account-display-name"
               value={accountDisplayName}
               onChange={(event) => setAccountDisplayName(event.target.value)}
+              disabled={submittingAction}
               required
             />
           </Field>
@@ -799,6 +817,7 @@ export default function SheltersManagementPage() {
               type="password"
               value={accountPassword}
               onChange={(event) => setAccountPassword(event.target.value)}
+              disabled={submittingAction}
               required
             />
           </Field>
@@ -810,6 +829,7 @@ export default function SheltersManagementPage() {
               onChange={(event) =>
                 setAccountRole(event.target.value as Membership["role"])
               }
+              disabled={submittingAction}
             >
               <option value="SHELTER_ADMIN">收容所管理員</option>
               <option value="STAFF">工作人員</option>
@@ -824,7 +844,9 @@ export default function SheltersManagementPage() {
             >
               取消
             </Button>
-            <Button type="submit">建立帳號</Button>
+            <Button type="submit" disabled={submittingAction}>
+              {submittingAction ? "處理中…" : "建立帳號"}
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -895,6 +917,7 @@ export default function SheltersManagementPage() {
                   id="area-name"
                   value={areaName}
                   onChange={(event) => setAreaName(event.target.value)}
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -906,6 +929,7 @@ export default function SheltersManagementPage() {
                   onChange={(event) =>
                     setAreaType(event.target.value as Area["area_type"])
                   }
+                  disabled={submittingAction}
                 >
                   <option value="area">Area</option>
                   <option value="cage">Cage</option>
@@ -913,9 +937,11 @@ export default function SheltersManagementPage() {
               </Field>
               <Button
                 type="submit"
-                disabled={selectedShelter?.status !== "active"}
+                disabled={
+                  submittingAction || selectedShelter?.status !== "active"
+                }
               >
-                建立區域
+                {submittingAction ? "處理中…" : "建立區域"}
               </Button>
             </form>
           </CardContent>

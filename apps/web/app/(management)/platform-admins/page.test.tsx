@@ -57,71 +57,76 @@ function response(body: unknown, status = 200): Response {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-async function renderPage(listResponse?: unknown, delayMs = 0) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
-      if (delayMs) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-      const path = String(input);
-      if (path.endsWith("/auth/me")) {
-        return response({
-          user: {
-            id: "admin-a",
-            username: "local-platform-admin-disabled",
-            display_name: "本機平台管理員",
-            platform_role: "PLATFORM_ADMIN",
-            status: "active",
-          },
-          memberships: [],
-        });
-      }
-      if (path.endsWith("/candidates")) {
-        return response([
-          {
-            user_id: "candidate-a",
-            username: "local-staff-a",
-            display_name: "本機工作人員 A",
-          },
-        ]);
-      }
-      if (path.endsWith("/platform/administrators")) {
-        return response(
-          listResponse ?? {
-            policy: {
-              min_active_admins: 1,
-              max_active_admins: 2,
-              active_count: 1,
-              available_slots: 1,
-            },
-            items: [activeAdmin],
-          },
-        );
-      }
-      if (path.endsWith("/disable")) {
-        return response({
-          item: {
-            ...activeAdmin,
-            user_status: "disabled",
-            effective_status: "disabled",
-            can_disable: false,
-          },
+async function renderPage(
+  listResponse?: unknown,
+  delayMs = 0,
+  mutationDelayMs = 0,
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    const path = String(input);
+    if (path.endsWith("/auth/me")) {
+      return response({
+        user: {
+          id: "admin-a",
+          username: "local-platform-admin-disabled",
+          display_name: "本機平台管理員",
+          platform_role: "PLATFORM_ADMIN",
+          status: "active",
+        },
+        memberships: [],
+      });
+    }
+    if (path.endsWith("/candidates")) {
+      return response([
+        {
+          user_id: "candidate-a",
+          username: "local-staff-a",
+          display_name: "本機工作人員 A",
+        },
+      ]);
+    }
+    if (path.endsWith("/platform/administrators")) {
+      return response(
+        listResponse ?? {
           policy: {
             min_active_admins: 1,
             max_active_admins: 2,
             active_count: 1,
             available_slots: 1,
           },
-          operation_id: "operation-disable-self",
-        });
+          items: [activeAdmin],
+        },
+      );
+    }
+    if (path.endsWith("/disable")) {
+      if (mutationDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, mutationDelayMs));
       }
-      if (path.includes("/platform/administrators/audit")) {
-        return response([]);
-      }
-      return response({});
-    }),
-  );
+      return response({
+        item: {
+          ...activeAdmin,
+          user_status: "disabled",
+          effective_status: "disabled",
+          can_disable: false,
+        },
+        policy: {
+          min_active_admins: 1,
+          max_active_admins: 2,
+          active_count: 1,
+          available_slots: 1,
+        },
+        operation_id: "operation-disable-self",
+      });
+    }
+    if (path.includes("/platform/administrators/audit")) {
+      return response([]);
+    }
+    return response({});
+  });
+  vi.stubGlobal("fetch", fetchMock);
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -130,6 +135,7 @@ async function renderPage(listResponse?: unknown, delayMs = 0) {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  return fetchMock;
 }
 
 afterEach(async () => {
@@ -240,6 +246,48 @@ describe("platform administrator management page", () => {
 
     expect(container?.textContent).toContain("確認停用平台管理員");
     expect(container?.textContent).toContain("本機平台管理員");
+  });
+
+  it("prevents duplicate platform administrator mutation requests", async () => {
+    const fetchMock = await renderPage(
+      {
+        policy: {
+          min_active_admins: 1,
+          max_active_admins: 2,
+          active_count: 2,
+          available_slots: 0,
+        },
+        items: [
+          { ...activeAdmin, can_disable: true },
+          {
+            ...activeAdmin,
+            user_id: "admin-b",
+            display_name: "本機平台管理員 B",
+            can_disable: true,
+          },
+        ],
+      },
+      0,
+      80,
+    );
+    const disableButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "停用");
+    await act(async () => disableButton?.click());
+    const confirmButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "確認停用");
+
+    await act(async () => {
+      confirmButton?.click();
+      confirmButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const mutationCalls = fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith("/disable"),
+    );
+    expect(mutationCalls).toHaveLength(1);
   });
 
   it("redirects instead of showing 401 when the current admin disables itself", async () => {
