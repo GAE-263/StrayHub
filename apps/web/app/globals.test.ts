@@ -38,3 +38,35 @@ describe("global dialog contracts", () => {
     expect(permissionDialog).toContain("position: fixed");
   });
 });
+
+describe("global layout primitive contracts", () => {
+  it("defines spacing, cluster, heading and list card layouts", () => {
+    expect(ruleBody(".stack-sm")).toContain("gap: 12px");
+    expect(ruleBody(".stack-md")).toContain("gap: 18px");
+    expect(ruleBody(".stack-lg")).toContain("gap: 24px");
+
+    const cluster = ruleBody(".cluster");
+    expect(cluster).toContain("display: flex");
+    expect(cluster).toContain("flex-wrap: wrap");
+
+    const sectionHeading = ruleBody(".section-heading");
+    expect(sectionHeading).toContain("justify-content: space-between");
+
+    const listCard = ruleBody(".list-card");
+    expect(listCard).toContain("background: var(--surface-soft)");
+    expect(listCard).toContain("border: 1px solid var(--border)");
+
+    expect(ruleBody(".toolbar.care-agenda-filters")).toContain(
+      "align-items: flex-end",
+    );
+    expect(ruleBody(".care-agenda-filters .ui-field")).toContain(
+      "margin-bottom: 0",
+    );
+
+    const reminderGrid = ruleBody(".reminder-card-grid");
+    expect(reminderGrid).toContain("display: grid");
+    expect(reminderGrid).toContain(
+      "grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr))",
+    );
+  });
+});

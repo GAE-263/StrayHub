@@ -452,6 +452,65 @@ td {
   font-size: 1.15rem;
   margin: 0;
 }
+.stack-sm {
+  display: grid;
+  gap: 12px;
+}
+.stack-md {
+  display: grid;
+  gap: 18px;
+}
+.stack-lg {
+  display: grid;
+  gap: 24px;
+}
+.cluster {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.toolbar.care-agenda-filters {
+  align-items: flex-end;
+}
+.care-agenda-filters .ui-field {
+  margin-bottom: 0;
+}
+.section-heading {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.section-heading h2,
+.section-heading h3,
+.section-heading p {
+  margin-top: 0;
+}
+.list-card {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+}
+.reminder-card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+}
+.reminder-card-grid .list-card {
+  align-content: start;
+  grid-template-rows: auto auto 1fr;
+}
+.reminder-card-grid .ui-button {
+  align-self: end;
+  width: 100%;
+}
 .ui-badge {
   background: var(--accent-soft);
   border-radius: 999px;

@@ -36,7 +36,10 @@ export function CareAgendaFilters({
     onDateChange(next.toISOString().slice(0, 10));
   };
   return (
-    <section className="panel ui-card toolbar" aria-label="照護行事曆篩選">
+    <section
+      className="panel ui-card toolbar care-agenda-filters"
+      aria-label="照護行事曆篩選"
+    >
       <Field>
         <label htmlFor="care-calendar-date">指定日期</label>
         <Input

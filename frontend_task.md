@@ -128,7 +128,7 @@
   - Commit：`fix(web): align permission dialog button variants`
   - SHA：本完成紀錄與實作位於同一 commit；提交後以 `git log -1` 顯示值為準。
 
-## [ ] FT-003 補齊缺失的 layout primitives
+## [x] FT-003 補齊缺失的 layout primitives
 
 - **優先級：** P0
 - **問題位置：** `stack-sm`、`stack-md`、`stack-lg`、`cluster`、`section-heading`、`list-card` 在醫療照護元件被使用但沒有 CSS 定義。
@@ -142,7 +142,24 @@
 - **預計檔案：** `apps/web/app/globals.css`、layout regression test、`frontend_task.md`。
 - **驗證：** 搜尋無未定義 class、medical-care targeted tests、360／768／1440 screenshot。
 - **預定 commit：** `fix(web): define shared medical care layout utilities`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19
+  - 狀態：實作、自動化驗證與 `/care-calendar` 頁面驗收完成。
+  - 修改前：六個 layout class 被醫療照護元件使用，但沒有任何 CSS 規則，表單、清單、標題與按鈕群組依瀏覽器一般流排列。
+  - RED：`npm test -- app/globals.test.ts` → 1 failed，確認 `.stack-sm` 未定義。
+  - RED（對齊修正）：截圖確認通用 `.toolbar` 在 source order 覆蓋日期按鈕的 bottom alignment；專用 specificity regression test → 1 failed。
+  - 修改後：新增 12／18／24px stack、可換行 cluster、responsive section heading 與 token-based list card；照護行事曆的日期按鈕群組與相鄰 Input／Select 底部對齊；提醒卡片改為 280px minimum 的 auto-fill grid，寬桌面一排約 4 張、一般桌面約 3 張、平板 2 張、手機 1 張。
+  - Changed files：
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `apps/web/features/medical-care/CareAgendaFilters.tsx`
+    - `apps/web/features/medical-care/CareAgenda.test.tsx`
+    - `apps/web/features/medical-care/ReminderSection.tsx`
+    - `frontend_task.md`
+  - Verification：medical-care targeted 6 files／14 tests PASS；日期按鈕對齊、cascade specificity 與 reminder card grid targeted 2 files／6 tests PASS。
+  - Visual verification：使用者確認日期按鈕與 Input 對齊，並確認提醒清單採一排 3～4 張 responsive cards，減少垂直捲動。
+  - Commit：`fix(web): define shared medical care layout utilities`
+  - SHA：本完成紀錄與實作位於同一 commit；提交後以 `git log -1` 顯示值為準。
 
 ## [ ] FT-004 讓 Dialog／Sheet 標題 ID 唯一並明確設定 surface
 
