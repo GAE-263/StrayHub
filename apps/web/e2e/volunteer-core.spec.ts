@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { mockVolunteerApi } from "./fixtures";
 
 test("志工可找到並確認動物", async ({ page }) => {
@@ -12,6 +13,16 @@ test("志工可找到並確認動物", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "請確認回報對象" }),
   ).toBeVisible();
+  await expect(page.locator("[id='animal-confirmation-title']")).toHaveCount(1);
+  await expect(
+    page.locator("[id='animal-confirmation-card-title']"),
+  ).toHaveCount(1);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(
+    results.violations.filter((item) =>
+      ["critical", "serious"].includes(item.impact ?? ""),
+    ),
+  ).toEqual([]);
 });
 
 test("動物確認頁在手機與平板使用一致的志工 shell", async ({

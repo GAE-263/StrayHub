@@ -1,8 +1,30 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { AnimalConfirmationCard } from "./AnimalConfirmationCard";
 
 describe("AnimalConfirmationCard", () => {
+  it("uses a card-specific title id when the page title is present", () => {
+    const html = renderToStaticMarkup(
+      <>
+        <h1 id="animal-confirmation-title">選擇照護動物</h1>
+        <AnimalConfirmationCard
+          animal={{ id: "animal-a", name: "小黑", canReport: true }}
+          onConfirm={() => undefined}
+          onReselect={() => undefined}
+        />
+      </>,
+    );
+
+    const ids = Array.from(
+      html.matchAll(/\sid="([^"]+)"/g),
+      (match) => match[1],
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(html).toContain('aria-labelledby="animal-confirmation-card-title"');
+    expect(html).toContain('id="animal-confirmation-card-title"');
+  });
+
   it("renders every disambiguating identity field and explicit actions", () => {
     const element = AnimalConfirmationCard({
       animal: {

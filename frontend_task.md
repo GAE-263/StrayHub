@@ -566,7 +566,7 @@
   - Route verification：`http://localhost:3001/animal-confirmation`；以有效志工 session 開啟，搜尋收容編號後確認候選列表維持獨立 identity surface，點擊「查看確認卡」仍進入既有 confirmation flow；空資料文案保留在候選 Card 內。
   - Commit：`fix(web): align volunteer animal confirmation layout`。
 
-## [ ] FT-020 修正動物確認頁重複 ID
+## [x] FT-020 修正動物確認頁重複 ID
 
 - **優先級：** P1
 - **問題位置：** animal confirmation page 與 `AnimalConfirmationCard.tsx`。
@@ -574,7 +574,13 @@
 - **預期修改後：** card 使用唯一 title ID，`aria-labelledby` 指向正確。
 - **驗證：** component test、DOM ID uniqueness、axe。
 - **預定 commit：** `fix(web): use unique animal confirmation labels`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - RED：component document fixture 同時渲染 page title 與 card title，2 個 ID 僅有 1 個 unique value。
+  - GREEN：card title 改為 `animal-confirmation-card-title`，`aria-labelledby` 同步指向唯一 ID；page title 保留 `animal-confirmation-title`。
+  - Changed files：`AnimalConfirmationCard.tsx`、`AnimalConfirmationCard.test.tsx`、`e2e/volunteer-core.spec.ts`、`frontend_task.md`。
+  - Verification：component 3 tests passed；selected-card browser flow 驗證兩個 title ID 各 1 個且 Axe 無 critical／serious violation；volunteer E2E 3 passed；full Vitest 53 files／131 tests passed；Python 474 tests passed；TypeScript／Prettier／`git diff --check` passed。
+  - Commit：`fix(web): use unique animal confirmation labels`。
 
 ## [ ] FT-021 修正志工核心 Card 的內容 padding 與結構
 

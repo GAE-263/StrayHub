@@ -27,9 +27,9 @@ export function AnimalConfirmationCard({
   return (
     <Card
       className="animal-confirmation-card"
-      aria-labelledby="animal-confirmation-title"
+      aria-labelledby="animal-confirmation-card-title"
     >
-      <h2 id="animal-confirmation-title">請確認回報對象</h2>
+      <h2 id="animal-confirmation-card-title">請確認回報對象</h2>
       {animal.photoUrl ? (
         <img src={animal.photoUrl} alt={`${animal.name} 的照片`} />
       ) : (
