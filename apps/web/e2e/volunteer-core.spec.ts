@@ -14,6 +14,48 @@ test("志工可找到並確認動物", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("動物確認頁在手機與平板使用一致的志工 shell", async ({
+  page,
+}, testInfo) => {
+  await mockVolunteerApi(page);
+
+  for (const viewport of [
+    { width: 360, height: 800, columns: 1 },
+    { width: 768, height: 1024, columns: 2 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/animal-confirmation");
+    const shell = page.locator("main.volunteer-page");
+    await expect(shell).toBeVisible();
+    await expect(page.locator(".volunteer-search-card.ui-card")).toHaveCount(2);
+    const geometry = await page.evaluate(() => {
+      const pageShell = document.querySelector<HTMLElement>(".volunteer-page");
+      const grid = document.querySelector<HTMLElement>(
+        ".volunteer-search-grid",
+      );
+      return {
+        columns: getComputedStyle(grid!).gridTemplateColumns.split(" ").length,
+        pageWidth: pageShell!.getBoundingClientRect().width,
+        viewportWidth: window.innerWidth,
+        overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+      };
+    });
+    expect(geometry.columns).toBe(viewport.columns);
+    expect(geometry.pageWidth).toBeLessThanOrEqual(960);
+    expect(geometry.pageWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect(geometry.overflow).toBe(false);
+    await page.locator("nextjs-portal").evaluateAll((portals) => {
+      portals.forEach((portal) => {
+        (portal as HTMLElement).style.display = "none";
+      });
+    });
+    await page.screenshot({
+      path: testInfo.outputPath(`ft019-after-${viewport.width}.png`),
+      fullPage: true,
+    });
+  }
+});
+
 test("志工照護回報保留草稿內容", async ({ page }) => {
   await mockVolunteerApi(page);
   await page.goto("/care-report");

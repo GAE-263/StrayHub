@@ -106,6 +106,28 @@ describe("global layout primitive contracts", () => {
   });
 });
 
+describe("volunteer animal confirmation layout", () => {
+  it("defines a mobile-first volunteer shell and responsive search cards", () => {
+    const page = ruleBody(".volunteer-page");
+    expect(page).toContain("display: grid");
+    expect(page).toContain("margin: 0 auto");
+    expect(page).toContain("max-width: 960px");
+    expect(page).toContain("padding: 24px 16px 48px");
+
+    const searchGrid = ruleBody(".volunteer-search-grid");
+    expect(searchGrid).toContain("display: grid");
+    expect(searchGrid).not.toContain("grid-template-columns");
+
+    const candidateList = ruleBody(".volunteer-candidate-list");
+    expect(candidateList).toContain("list-style: none");
+    expect(candidateList).toContain("padding: 0");
+
+    expect(css).toMatch(
+      /@media \(min-width: 720px\)[\s\S]*?\.volunteer-search-grid\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/,
+    );
+  });
+});
+
 describe("mobile header contracts", () => {
   it("aligns an icon-only navigation trigger before the brand", () => {
     const brandGroup = ruleBody(".header-brand-group");

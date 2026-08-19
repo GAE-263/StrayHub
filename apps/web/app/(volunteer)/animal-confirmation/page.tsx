@@ -2,6 +2,15 @@
 
 import React, { FormEvent, useCallback, useEffect, useState } from "react";
 import { AnimalConfirmationCard } from "../../../features/animal-selection/AnimalConfirmationCard";
+import { Button } from "../../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../components/ui/card";
+import { Field } from "../../../components/ui/field";
+import { Input } from "../../../components/ui/input";
 
 type AnimalCandidate = {
   id: string;
@@ -129,8 +138,11 @@ export default function AnimalConfirmationPage() {
       className="volunteer-page"
       aria-labelledby="animal-confirmation-title"
     >
-      <h1 id="animal-confirmation-title">選擇照護動物</h1>
-      <p>請先從今日名單、QR Code 或收容編號找到候選動物，再明確確認。</p>
+      <div className="volunteer-page-heading">
+        <span className="eyebrow">VOLUNTEER CARE</span>
+        <h1 id="animal-confirmation-title">選擇照護動物</h1>
+        <p>請先從今日名單、QR Code 或收容編號找到候選動物，再明確確認。</p>
+      </div>
       {errorMessage && (
         <p className="notice error" role="alert">
           {errorMessage}
@@ -142,67 +154,95 @@ export default function AnimalConfirmationPage() {
         </p>
       )}
 
-      <section aria-labelledby="qr-search-title">
-        <h2 id="qr-search-title">QR Code</h2>
-        <form
-          aria-label="qr-search-form"
-          onSubmit={(event) => void resolveQr(event)}
+      <div className="volunteer-search-grid">
+        <Card
+          className="volunteer-search-card"
+          aria-labelledby="qr-search-title"
         >
-          <label htmlFor="qr-token">QR Token</label>
-          <input
-            id="qr-token"
-            value={qrToken}
-            onChange={(event) => setQrToken(event.target.value)}
-            required
-          />
-          <button className="button" type="submit">
-            解析 QR Code
-          </button>
-        </form>
-      </section>
+          <CardHeader>
+            <CardTitle id="qr-search-title">QR Code</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="volunteer-search-form"
+              aria-label="qr-search-form"
+              onSubmit={(event) => void resolveQr(event)}
+            >
+              <Field>
+                <label htmlFor="qr-token">QR Token</label>
+                <Input
+                  id="qr-token"
+                  value={qrToken}
+                  onChange={(event) => setQrToken(event.target.value)}
+                  required
+                />
+              </Field>
+              <Button type="submit">解析 QR Code</Button>
+            </form>
+          </CardContent>
+        </Card>
 
-      <section aria-labelledby="shelter-number-search-title">
-        <h2 id="shelter-number-search-title">收容編號搜尋</h2>
-        <form
-          aria-label="shelter-number-search-form"
-          onSubmit={(event) => void search(event)}
+        <Card
+          className="volunteer-search-card"
+          aria-labelledby="shelter-number-search-title"
         >
-          <label htmlFor="shelter-number-query">完整或部分收容編號</label>
-          <input
-            id="shelter-number-query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            required
-          />
-          <button className="button" type="submit">
-            搜尋
-          </button>
-        </form>
-      </section>
+          <CardHeader>
+            <CardTitle id="shelter-number-search-title">收容編號搜尋</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="volunteer-search-form"
+              aria-label="shelter-number-search-form"
+              onSubmit={(event) => void search(event)}
+            >
+              <Field>
+                <label htmlFor="shelter-number-query">完整或部分收容編號</label>
+                <Input
+                  id="shelter-number-query"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  required
+                />
+              </Field>
+              <Button type="submit">搜尋</Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
 
-      <section aria-labelledby="today-list-title">
-        <h2 id="today-list-title">今日可回報動物</h2>
-        {candidates.length === 0 ? (
-          <p>目前沒有可回報的動物。</p>
-        ) : (
-          <ul>
-            {candidates.map((candidate) => (
-              <li key={candidate.id}>
-                <span>
-                  {candidate.name}／{candidate.shelter_number ?? "未維護"}
-                </span>
-                <button
-                  className="button button-secondary"
-                  type="button"
-                  onClick={() => void selectCandidate(candidate)}
+      <Card
+        className="volunteer-candidates-card"
+        aria-labelledby="today-list-title"
+      >
+        <CardHeader>
+          <CardTitle id="today-list-title">今日可回報動物</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {candidates.length === 0 ? (
+            <p>目前沒有可回報的動物。</p>
+          ) : (
+            <ul className="volunteer-candidate-list">
+              {candidates.map((candidate) => (
+                <li
+                  className="volunteer-candidate-item list-card"
+                  key={candidate.id}
                 >
-                  查看確認卡
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  <span>
+                    {candidate.name}／{candidate.shelter_number ?? "未維護"}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => void selectCandidate(candidate)}
+                  >
+                    查看確認卡
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       {selected && (
         <AnimalConfirmationCard

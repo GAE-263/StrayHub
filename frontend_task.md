@@ -540,7 +540,7 @@
 
 # Phase C — 志工與授權介面
 
-## [ ] FT-019 建立一致的志工頁面 Shell 並遷移動物確認表單
+## [x] FT-019 建立一致的志工頁面 Shell 並遷移動物確認表單
 
 - **優先級：** P1
 - **問題位置：** `apps/web/app/(volunteer)/animal-confirmation/page.tsx:129-205`
@@ -548,7 +548,23 @@
 - **預期修改後：** mobile-first max-width／padding、Card、Field、Input、Button、surface-soft candidate list。
 - **驗證：** page test、360／768 screenshot、volunteer E2E／axe。
 - **預定 commit：** `fix(web): align volunteer animal confirmation layout`
-- **完成紀錄：** 待填。
+- **完成紀錄：**
+  - 完成日期：2026-08-19。
+  - 修改前：`volunteer-page` 沒有任何 CSS；QR／收容編號搜尋使用 raw inputs 與 legacy buttons；候選清單沒有 Card 或 surface，360／768 內容貼齊 viewport 且缺乏區塊層級。
+  - RED：page test 載入真實候選資料後，預期兩個 `.volunteer-search-card.ui-card`，實際為 0；CSS contract 找不到 `.volunteer-page`。
+  - GREEN：建立 mobile-first 960px volunteer shell；QR 與收容編號遷移至 Card／Field／Input／Button；候選清單遷移至 Card 與 `list-card` surface；360px 單欄、720px 起搜尋 Card 雙欄，候選 action 在 tablet／desktop 對齊右側。保留 FT-020 title ID 與 FT-021 confirmation card 內部結構的獨立範圍。
+  - Changed files：
+    - `apps/web/app/(volunteer)/animal-confirmation/page.tsx`
+    - `apps/web/app/(volunteer)/animal-confirmation/page.test.tsx`
+    - `apps/web/app/globals.css`
+    - `apps/web/app/globals.test.ts`
+    - `apps/web/tests/animal_disambiguation.test.tsx`
+    - `apps/web/e2e/volunteer-core.spec.ts`
+    - `frontend_task.md`
+  - Verification：focused page／CSS／disambiguation suites 15 tests passed；volunteer E2E 3 passed；animal-confirmation responsive 4 viewports passed；P0 Axe 四 viewport 1 passed；full Vitest 53 files／130 tests passed；Python 474 tests passed；TypeScript／Prettier／`git diff --check` passed。
+  - Visual verification：`/animal-confirmation` 在 360×800 使用單欄 Cards 與 full-width controls；768×1024 使用雙欄搜尋 Cards與全寬候選 Card；兩者無水平 overflow。驗收截圖輸出於 Playwright `test-results`；2026-08-19 使用者回覆 `continue` 接受畫面。
+  - Route verification：`http://localhost:3001/animal-confirmation`；以有效志工 session 開啟，搜尋收容編號後確認候選列表維持獨立 identity surface，點擊「查看確認卡」仍進入既有 confirmation flow；空資料文案保留在候選 Card 內。
+  - Commit：`fix(web): align volunteer animal confirmation layout`。
 
 ## [ ] FT-020 修正動物確認頁重複 ID
 
