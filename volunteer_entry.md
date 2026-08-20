@@ -7,7 +7,7 @@
 | 優先級 | 待完成任務 | 目前狀態 | 完成條件 |
 |---|---|---|---|
 | P0 | 驗證 NEW → 送出報名 → PENDING 的完整入口流程 | 部分完成 | 從 `/volunteer-entry` 進入報名、送出申請、畫面轉為 PENDING，且不把 ID token 放入 URL |
-| P0 | 驗證管理員核准後建立 Membership／Grant | 既有實作、待回歸驗證 | 核准後建立 exact organization 的 active `VOLUNTEER` membership 與有效 grant；重複核准不產生 duplicate |
+| P0 | 驗證管理員核准後建立 Membership／Grant | 完成 | 真實PostgreSQL已驗證並行／重複／stale／cross-org核准只投影exact organization的一組有限期VOLUNTEER Membership與Grant；雙Reviewer通過 |
 | P0 | 驗證核准後第二次 LIFF 進入 | 部分完成 | exchange 回 ACTIVE、internal session 建立、token 先保存、導向 `/animal-confirmation`、`GET /v1/animals` 不再 401 |
 | P0 | 補真實 HTTP exchange integration tests | 完成 | FastAPI HTTP 已覆蓋 NEW、PENDING、ACTIVE、SUSPENDED、401／403／503與response validation／commit failure |
 | P0 | 補完整 authorization failure matrix | 完成 | invalid identity、entry狀態、disabled user/org、future／expired Membership、revoked／expired／missing Grant均fail-closed且非ACTIVE不建立credential |
@@ -34,7 +34,7 @@
 
 ## 建議下一步順序
 
-1. **Task 2／6後端安全commit完成；下一步進入Task 7核准冪等性**
+1. **Task 7核准冪等性完成；下一步進入Task 8 LIFF bootstrap／onboarding**
 2. **完成志工 session boundary 與 401 單次 LIFF 恢復**
 3. **補 Playwright 完整報名與多機構流程**
 4. **更新契約、README、quickstart 及 task ledger**
@@ -44,7 +44,7 @@
 
 ## 目前工作樹狀態
 
-Task 2–6後端安全垂直切片已通過HTTP／真實PostgreSQL transaction tests、migration round-trip、working-tree與staged-only完整pytest及最新雙Reviewer；Task 2已提交，Task 6本文件與專屬測試commit完成後進入Task 7。Frontend、E2E、真機與整體志工報名／LIFF功能仍未完成。
+Task 2–6後端安全垂直切片已提交。Task 7在不修改production的前提下，以真實PostgreSQL驗證application row lock、version conflict、exact organization projection及persisted batch replay，第一輪finding已修正且第二輪雙Reviewer通過。Frontend、E2E、真機與整體志工報名／LIFF功能仍未完成。
 
 ## 執行任務 Ledger
 
@@ -57,7 +57,7 @@ Task 2–6後端安全垂直切片已通過HTTP／真實PostgreSQL transaction t
 | Task 4：Entry expiration／PostgreSQL resolver | MERGED INTO TASK 2 | model、0030 migration、production resolver | 真實PostgreSQL已驗證valid／expired／wrong-purpose／revoked與公開organization context | 同Task 2 |
 | Task 5：Exact-organization exchange states | MERGED INTO TASK 2 | session service、auth repository、entry adapter、combined user+organization scope | 原RLS blocker已以`app.auth_exact_org_id`、policy migration與真實A/B隔離測試修正 | 同Task 2 |
 | Task 6：HTTP atomicity／isolation | 完成 | FastAPI四state／401／403／503、response-before-commit、commit／rollback failure、zero partial state與runtime matrix | fake與真實AsyncSession已驗證flush／commit／rollback failure；獨立連線查User／Organization／Session／Refresh新增為0；combined staged-only `529 passed`且雙Reviewer通過 | `test(api): verify LIFF exchange atomicity` |
-| Task 7：Approval idempotency | 待執行 | application→membership→grant | 既有實作待補並行／重複核准回歸 | — |
+| Task 7：Approval idempotency | 完成 | application→finite Membership→single Grant；並行／重複／stale／cross-org與batch replay | 真實PostgreSQL以`pg_blocking_pids`證明duplicate被application row lock阻擋後409；Membership／Grant各1；stale／cross-org為0；persisted succeeded batch item由新session replay且approval呼叫0次；focused `7 passed`、working `535 passed`、staged-only `532 passed`、Ruff 2檔與雙Reviewer通過；production無修改 | `test(volunteers): enforce idempotent approval membership grants` |
 | Task 8：LIFF bootstrap／onboarding | 待執行 | `/volunteer-entry`、session storage、NEW→PENDING | 候選 Vitest 已存在，尚未人工畫面驗收 | — |
 | Task 9～12：Volunteer route/session lifecycle | 待執行 | route gate、animals handoff、401 recovery、shelter label | 尚未實作完整 boundary／single-flight recovery | — |
 | Task 13：Rich Menu safe publication | 待執行 | env substitution、HTTPS、entry URL | 候選 unit test 已存在，尚未完成 dry-run gate | — |
