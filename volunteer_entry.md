@@ -9,10 +9,10 @@
 | P0 | 驗證 NEW → 送出報名 → PENDING 的完整入口流程 | 部分完成 | 從 `/volunteer-entry` 進入報名、送出申請、畫面轉為 PENDING，且不把 ID token 放入 URL |
 | P0 | 驗證管理員核准後建立 Membership／Grant | 既有實作、待回歸驗證 | 核准後建立 exact organization 的 active `VOLUNTEER` membership 與有效 grant；重複核准不產生 duplicate |
 | P0 | 驗證核准後第二次 LIFF 進入 | 部分完成 | exchange 回 ACTIVE、internal session 建立、token 先保存、導向 `/animal-confirmation`、`GET /v1/animals` 不再 401 |
-| P0 | 補真實 HTTP exchange integration tests | 未完成 | 透過 FastAPI HTTP 測試 NEW、PENDING、ACTIVE、SUSPENDED 及錯誤 response contract，而不只測 service |
-| P0 | 補完整 authorization failure matrix | 未完成 | malformed／revoked／expired／wrong-purpose entry、wrong audience、disabled user/org、expired membership、missing grant 全部不建立 session |
-| P0 | 補 no-partial-state transaction 測試 | 未完成 | exchange 任一驗證或 DB 步驟失敗後，新增 Session、Refresh Token 及 Active Context 數量均為 0 |
-| P0 | 補真實 PostgreSQL entry resolver 測試 | 未完成 | migration 後實際驗證 active、expired、revoked、wrong-purpose 與 cross-organization reference |
+| P0 | 補真實 HTTP exchange integration tests | 完成 | FastAPI HTTP 已覆蓋 NEW、PENDING、ACTIVE、SUSPENDED、401／403／503與response validation／commit failure |
+| P0 | 補完整 authorization failure matrix | 完成 | invalid identity、entry狀態、disabled user/org、future／expired Membership、revoked／expired／missing Grant均fail-closed且非ACTIVE不建立credential |
+| P0 | 補 no-partial-state transaction 測試 | 完成 | 真實AsyncSession已驗證Session／Refresh flush後service或commit失敗均rollback，獨立連線查新增row為0 |
+| P0 | 補真實 PostgreSQL entry resolver 測試 | 完成 | migration後已驗證active／expired／revoked／wrong-purpose、exact-org RLS與Entry／Organization lock contention |
 | P0 | 補多機構隔離 E2E | 未完成 | 同一 LINE user 在 org A 及 B 都有 membership 時，entry A 只建立 A context，entry B 只建立 B context |
 | P0 | 增加志工 route/session boundary | 未完成 | `/animal-confirmation` 載入動物前先確認 server-side session、role 及 active shelter context |
 | P0 | 實作 LIFF session 失效單次恢復 | 未完成 | 受保護 API 回 401 時，每個事件最多重做一次 LIFF exchange；失敗或第二次 401 立即停止 |
@@ -20,8 +20,8 @@
 | P0 | 顯示目前協助的收容所 | 未完成 | `/animal-confirmation` 及 `/care-report` 顯示後端確認的 organization 名稱 |
 | P0 | 補 Rich Menu 實際 dry-run 與發布驗證 | 部分完成 | 缺變數時 fail-fast；resolved URL 必須是 HTTPS 且指向 `/volunteer-entry?entry=…`，不得含 placeholder |
 | P0 | 更新 LIFF／tunnel 開發文件 | 未完成 | README 或 004 quickstart 清楚記錄 Web/API tunnel、LIFF Endpoint、environment 及手機測試步驟 |
-| P0 | 更新 004 契約文件 | 未完成 | `contracts/liff-exchange.openapi.yaml` 與目前 NEW／PENDING／ACTIVE／SUSPENDED response 一致 |
-| P0 | 執行 Alembic migration 實測 | 未完成 | 真實 PostgreSQL 升級到新增 entry expiration migration，確認既有 reference backfill 與 resolver 正常 |
+| P0 | 更新 004 契約文件 | 完成 | additive與canonical contract、runtime Pydantic及generated type的四狀態與401／403／503分類一致 |
+| P0 | 執行 Alembic migration 實測 | 完成 | 真實PostgreSQL已反覆完成0030→0029→0030 round-trip並執行resolver／RLS tests |
 | P0 | 完整 Python 品質門檻 | 未完成 | `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 全部通過 |
 | P0 | 完整 frontend 品質門檻 | 未完成 | frontend unit tests、typecheck、format check、production build 全部通過 |
 | P0 | Playwright LIFF／onboarding E2E | 未完成 | 覆蓋 login redirect、NEW、submit→PENDING、ACTIVE redirect、SUSPENDED、network failure 與跨機構拒絕 |
@@ -29,12 +29,12 @@
 | P0 | 真機 LINE／LIFF 驗收 | 未完成，需要外部設定 | 使用真實 LIFF ID、LINE Login Channel、HTTPS tunnel 及測試 LINE 帳號完成 Case A–D |
 | P1 | 志工報名 visual snapshots | 未完成 | 對 onboarding states 完成 reviewer-approved visual baseline；對應 005 T108 |
 | P1 | 實際使用者計時驗收 | 未完成 | 至少 20 位首次志工及 3 位管理員批次操作留下匿名驗收證據；對應 005 T110 |
-| P0 | 同步 Spec Kit task ledger | 未完成 | 依實際程式碼與測試證據更新 `specs/004-volunteer-entry-route-isolation/tasks.md`；目前 T001–T056 仍全部未勾選 |
+| P0 | 同步 Spec Kit task ledger | 部分完成 | 已依證據完成T013–T015；T016及後續frontend／E2E／真機任務仍保持未完成 |
 | P0 | 最終 diff review 與 commit | 未完成 | 修正完整 gate 發現的問題、獨立 review 最終 diff；使用者完成畫面驗收後再建立 commit |
 
 ## 建議下一步順序
 
-1. **先補後端 HTTP／transaction／PostgreSQL 安全測試**
+1. **Task 2／6後端安全commit完成；下一步進入Task 7核准冪等性**
 2. **完成志工 session boundary 與 401 單次 LIFF 恢復**
 3. **補 Playwright 完整報名與多機構流程**
 4. **更新契約、README、quickstart 及 task ledger**
@@ -44,7 +44,7 @@
 
 ## 目前工作樹狀態
 
-目前工作樹仍有未提交修改；最近一次 `git diff --check` 沒有回報 whitespace 錯誤，但尚未完成完整測試，因此目前不應將志工報名／LIFF 功能標記為完成。
+Task 2–6後端安全垂直切片已通過HTTP／真實PostgreSQL transaction tests、migration round-trip、working-tree與staged-only完整pytest及最新雙Reviewer；Task 2已提交，Task 6本文件與專屬測試commit完成後進入Task 7。Frontend、E2E、真機與整體志工報名／LIFF功能仍未完成。
 
 ## 執行任務 Ledger
 
@@ -52,11 +52,11 @@
 |---|---|---|---|---|
 | Task 1：重整現有未提交變更與任務歸屬 | 完成 | 僅盤點與更新本文件，不修改 production code | staged boundary僅`A volunteer_entry.md`；`git diff --cached --check` exit 0；final independent review passed，無security／logic blocker | `docs: establish volunteer entry completion ledger` |
 | Task 2A：同步既有 Membership generated contract drift | 完成 | 只同步canonical中既有`expected_access_version`與archive／restore request body；不包含LIFF變更 | generated SHA-256逐位元一致；`uv run pytest tests/contract/test_generated_contract_types.py -q`：2 passed；independent review passed | `chore(contracts): sync existing membership types` |
-| Task 2：固定 LIFF exchange contract | 待執行（BLOCKING DRIFT） | canonical／004 spec、route-access、research、OpenAPI、Pydantic、generated types | 必須先解決200 state vs safe 403、entry minLength及ACTIVE credential discriminator | — |
-| Task 3：LINE ID Token security boundary | 待執行 | verifier、Login channel config、safe errors/logging | 尚未取得完整 security suite 證據 | — |
-| Task 4：Entry expiration／PostgreSQL resolver | 待執行 | model、0030 migration、production resolver | 尚未在真實 PostgreSQL 執行 | — |
-| Task 5：Exact-organization exchange states | 待執行（RLS BLOCKER） | session service、auth repository、entry adapter、combined user+organization scope | 候選 fake tests無法發現organization scope被清空；必須用真實PostgreSQL驗證 | — |
-| Task 6：HTTP atomicity／isolation | 待執行 | FastAPI HTTP、rollback、zero partial state | 專屬 security／isolation tests 尚未建立 | — |
+| Task 2：LIFF contract＋server security boundary | 完成（吸收Task 3–5） | canonical／004 contract、LINE verifier、entry expiry resolver、exact-org service、RLS與全域鎖序 | 獨立Task 2 snapshot `513 passed`、28檔Ruff、generated check、migration round-trip及雙Reviewer通過 | `0dc5fe6 feat(api): secure LIFF onboarding exchange` |
+| Task 3：LINE ID Token security boundary | MERGED INTO TASK 2 | verifier、Login channel config、safe errors/logging | contract-only commit被Reviewer拒絕；為避免runtime drift，與Task 2安全切片原子交付 | 同Task 2 |
+| Task 4：Entry expiration／PostgreSQL resolver | MERGED INTO TASK 2 | model、0030 migration、production resolver | 真實PostgreSQL已驗證valid／expired／wrong-purpose／revoked與公開organization context | 同Task 2 |
+| Task 5：Exact-organization exchange states | MERGED INTO TASK 2 | session service、auth repository、entry adapter、combined user+organization scope | 原RLS blocker已以`app.auth_exact_org_id`、policy migration與真實A/B隔離測試修正 | 同Task 2 |
+| Task 6：HTTP atomicity／isolation | 完成 | FastAPI四state／401／403／503、response-before-commit、commit／rollback failure、zero partial state與runtime matrix | fake與真實AsyncSession已驗證flush／commit／rollback failure；獨立連線查User／Organization／Session／Refresh新增為0；combined staged-only `529 passed`且雙Reviewer通過 | `test(api): verify LIFF exchange atomicity` |
 | Task 7：Approval idempotency | 待執行 | application→membership→grant | 既有實作待補並行／重複核准回歸 | — |
 | Task 8：LIFF bootstrap／onboarding | 待執行 | `/volunteer-entry`、session storage、NEW→PENDING | 候選 Vitest 已存在，尚未人工畫面驗收 | — |
 | Task 9～12：Volunteer route/session lifecycle | 待執行 | route gate、animals handoff、401 recovery、shelter label | 尚未實作完整 boundary／single-flight recovery | — |
@@ -90,7 +90,7 @@
    - `docs/frontend_phase_e_summary.md`
    這些不是本次已修改檔案，但會在 Task 14～16 移除舊 token-in-URL fixture／文件契約。
 4. 靜態搜尋未發現本次候選 source 新增 `console.log`／logger／`print` 輸出完整 ID token、access token 或 LINE user ID；搜尋命中的 credential字串均為測試fixture或既有local placeholder，仍需在各任務 staged diff reviewer再次確認。
-5. 現有候選實作跨 Task 2、3、4、5、8、13，不可作為單一feature commit；必須依上表逐任務驗證並以精確路徑stage。
+5. 現有候選實作跨 Task 2～5、8、13；Task 8／13仍須精確分離。Task 2 contract-only staged candidate被獨立Reviewer拒絕，因其會與舊runtime形成可部署的安全drift；Task 3～5因此吸收進Task 2，組成單一可部署後端安全垂直切片。
 6. `.hermes/plans/2026-08-20_202122-volunteer-entry-completion.md` 是本機執行計畫；Task 1 不將 `.hermes/` 納入 staged paths。
 7. Task 1 不宣稱任何 production 行為完成；其唯一交付是可重複使用的任務歸屬與commit邊界。
 
@@ -121,4 +121,31 @@ $ git diff --cached --check
 7. **Task 8／13／16 entry URL exposure**：004要求entry位於URL以保留organization context，但該reference會進browser／LINE／proxy history。首次解析後應評估以`history.replaceState`移除query，並在部署文件要求edge/access log query redaction；entry仍不得被視為authorization credential。
 8. **Refresh token storage trade-off**：目前沿用004既定`sessionStorage`相容方案；同源XSS可讀refresh token。此次不擴張為cookie auth migration，但後續frontend review必須確認CSP／第三方script限制並把cookie migration列為明確的安全改善，而不是宣稱風險不存在。
 9. **Task 4 rollout risk**：候選migration把既有reference回填為`issued_at + 90 days`，超過90天的入口會在升級時立即失效。migration驗收前必須先盤點／輪替舊reference並同步Rich Menu，記錄fail-closed rollout步驟。
-10. **跨任務hunk拆分**：`authentication.py`、`session_service.py`、`.env.example`、`test_authentication_contract.py`及generated OpenAPI跨多個任務；後續不得依整檔stage，必須以任務邊界拆分hunks或先建立明確前置commit。
+10. **跨任務hunk拆分**：`authentication.py`、`session_service.py`、`.env.example`、`test_authentication_contract.py`及generated OpenAPI跨多個任務；Task 2～5依Reviewer要求形成原子後端切片，但`.env.example`只可stage Login channel hunk，Task 8／13的URL與Rich Menu設定仍不得混入。
+
+### Task 2 Contract Resolution
+
+1. 有效LINE token＋有效entry回state-discriminated `200 LiffExchangeResponse`：NEW、PENDING、ACTIVE、SUSPENDED。
+2. 只有ACTIVE schema要求並允許`access_token`、`refresh_token`、`expires_in`、`session_id`、`user_id`；其他state的schema禁止credential欄位。
+3. 無效／過期／wrong-audience LINE token維持401；無效／撤銷／過期／wrong-purpose entry維持safe 403；schema／dependency錯誤分別為422／503。
+4. `shelter_entry_reference`在canonical及004 additive contract統一為32～512字元；organization／role／user仍不接受client輸入。Pydantic runtime binding不得早於Task 5 exact-org service／RLS修正單獨部署。
+5. 004 `spec.md`、`research.md`、`route-access.md`與T013／T015已同步四state語意；exchange只讀取005 Application／Membership／Grant，不管理其lifecycle。
+6. TDD證據：第一次可執行RED揭露minLength=1、缺state response schemas／discriminator與缺generated state types；後續RED分別揭露route-specific error schema缺口、exact authentication scope缺口與舊GET verifier contract。runtime Pydantic、service、resolver與RLS已在同一切片GREEN。
+7. 第一輪contract-only獨立審查未通過：一位Reviewer指出User／Organization停用語意歧義，另一位指出canonical先於runtime落地會形成高風險contract drift，且通用ErrorResponse可洩漏內部原因。修正後採固定safe 401／403 schema、User停用→SUSPENDED、Organization停用→entry safe 403，並合併Task 3～5。
+8. 真實PostgreSQL證據：resolver只接受active、正確purpose、未過期entry並回安全organization公開欄位；exact scope只可見指定user＋organization的Organization、Membership與Application，跨organization UPDATE為0。
+9. 第二輪修正後focused suite為`54 passed`；最新working-tree canonical `uv run pytest -q`為`508 passed in 22.29s`；generated check通過；26個staged Python檔Ruff check／format通過；migration `0030 → 0029 → 0030`成功且current為`0030_volunteer_entry_expiry (head)`。
+10. 第一個staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task2-index.fh9u5h`為`498 passed`，但已被第二輪Reviewer findings與後續修正取代，不得作為最終commit證據。
+11. 第二輪獨立審查仍未通過，揭露並已以RED→GREEN修正：舊`/v1/line/bind`簽名回歸；exact RLS隱藏disabled Membership；ACTIVE只鎖Membership而未鎖實際Grant；resolver／DB例外落入500；文件宣告entry-first但runtime採identity-first。修正後保留獨立legacy bind flow、exact scope可讀inactive raw Membership、固定Membership→Grant雙鎖與三方關聯、safe dependency 503，並以identity-first避免未驗證caller探測entry。
+12. 上述第二輪修正後證據仍須通過新的staged-only snapshot與最新雙Reviewer，通過前Task 2維持REVIEW PENDING且不得commit。
+13. 最新staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task2-final.LPJMpp`以`git checkout-index --all`匯出實際index，canonical pytest結果`505 passed in 33.66s`；未staged的frontend、Rich Menu與Task 6候選未參與此綠燈。
+14. 第三輪Reviewer仍fail-closed，指出Entry／Organization／User未與Membership／Grant共同線性化的TOCTOU。修正後0030 resolver為`VOLATILE`並在同一transaction鎖定Entry→Organization，service再依序設定exact scope、鎖User、Membership、Grant後才建立credential；真實PostgreSQL lock-timeout tests證明entry revoke、organization disable與user disable在授權transaction結束前無法提交。最新focused suite為`58 passed`、canonical full suite為`512 passed in 22.46s`；generated check及26個staged Python檔Ruff check／format通過。前一staged-only證據再次失效，必須重建snapshot與Reviewer。
+15. 第四個staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task2-linearized.wswx9k`以實際index執行canonical pytest，結果`509 passed in 32.52s`；最新Reviewer通過前仍不得commit。
+16. 第四輪Review期間唯讀盤點發現既有管理撤銷與expiration worker採Grant-first；為避免exchange的反向鎖序形成deadlock，先以RED repository test確認後，把全域順序統一為Entry→Organization→User→Grant→Membership，並同步route-access／research。第四個snapshot與其Reviewer結果因此視為stale，必須以最新index重建。
+17. 最新全域鎖序staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task2-lockorder.BFSmuH`為`509 passed in 33.43s`；working-tree canonical為`512 passed in 22.35s`，26個staged Python檔Ruff通過。仍須最新雙Reviewer通過才可commit。
+18. Stale第四輪Reviewer另揭露三個有效阻擋：Binding撤銷TOCTOU、舊status／submit／withdraw helper仍二元素解包四元素resolver、response驗證晚於commit且commit failure落入500。已以RED→GREEN新增Binding `FOR UPDATE`與真實撤銷lock contention、四元素helper回歸、HTTP validation-before-commit與safe rollback 503；Task 6 HTTP probe／真實PostgreSQL flush後rollback目前`10 passed`，最終full gates與最新Reviewer前仍不得commit。
+19. Task 6再補真實PostgreSQL future／expired Membership與revoked／expired Grant runtime matrix，四案皆SUSPENDED且Session／Refresh實表新增為0；最新canonical full suite為`529 passed in 22.86s`，generated check與0030 migration round-trip通過。格式修正後仍須fresh Ruff、staged-only snapshot及最新雙Reviewer。
+20. Final staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task6-final.Qkp7iq`以實際index執行canonical pytest，結果`526 passed in 33.04s`；32個staged Python檔Ruff check／format通過。最新雙Reviewer通過前Task 2與Task 6皆維持REVIEW PENDING。
+21. 較早全域鎖序Reviewer結果雖對response validation與四元組helper已stale，但新揭露expiration JOIN的無限定`FOR UPDATE`會額外鎖User／Organization。RED SQL regression確認後已改為`FOR UPDATE OF volunteer_access_grants SKIP LOCKED`，使worker與管理撤銷及exchange一致採Grant→Membership，不提前反向鎖User／Organization；targeted expiration／lock suite為`6 passed`。前一snapshot與Reviewer再次失效。
+22. Worker lock-scope修正後staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task6-workerlock.yP1YYt`為`527 passed in 33.48s`；working-tree canonical為`530 passed in 23.01s`，33個staged Python檔Ruff check／format通過。最新雙Reviewer通過前仍不得commit。
+23. 較早Task 6 Reviewer新增三項有效finding：rollback自身失敗會遮蔽safe 503、真實DB尚未走route commit failure、004誤把provider無法驗證列為401。RED確認rollback failure原為500後，route已用不可遮蔽的rollback guard固定回503；真實AsyncSession test在Session／Refresh已flush後由commit拋錯，確認route呼叫rollback且獨立連線查User／Organization／Session／Refresh皆0；004已將invalid／expired／audience mismatch保留401並把provider／dependency failure歸503。最新targeted HTTP／isolation suite為`8 passed`，前一snapshot再次失效。
+24. Rollback guard與真實commit-failure修正後，canonical full suite為`532 passed in 21.83s`；final staged-only snapshot `/Users/js/gae_cowork_project/strayhub-task6-rollbackguard.wTctUa`為`529 passed in 34.35s`，33個staged Python檔Ruff、generated check與migration round-trip全綠。最新雙Reviewer通過前仍不得commit。

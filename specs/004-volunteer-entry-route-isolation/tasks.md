@@ -21,7 +21,7 @@
 
 - [ ] T005 在 `apps/web/lib/auth.ts` 與 `apps/web/lib/liff-session.ts` 建立 typed auth/context/recovery state、transient entry reference storage、session source 標記與 logout/terminal cleanup，明確禁止以 client cache 判定 role 或 Membership
 - [ ] T006 [P] 在 `apps/web/lib/route-access.ts` 與 `apps/web/lib/route-access.test.ts` 實作 `EffectiveRole`、management/volunteer area、context-required、redirect、recovery 與 finite-state decision matrix
-- [ ] T007 [P] 在 `services/api/app/infrastructure/line/entry_reference_adapter.py` 實作既有 `VolunteerEntryResolverPort` adapter，呼叫 005 fixed-purpose digest resolver 並在取得單一 organization 後立即套用 organization scope
+- [ ] T007 [P] 在 `services/api/app/infrastructure/line/entry_reference_adapter.py` 實作既有 `VolunteerEntryResolverPort` adapter，呼叫005 fixed-purpose digest resolver並只回安全organization公開context；不得在identity確認前開啟ambient organization scope
 - [ ] T008 在 `services/api/app/persistence/repositories/authentication_repository.py` 增加 exact-organization effective Membership/Grant 查詢與 concurrency lock 支援，重用 005 的 active、valid_from、expires_at、Grant predicate，不建立新的授權規則
 - [ ] T009 [P] 在 `apps/web/components/auth/ProtectedRouteState.tsx` 建立 checking、redirecting、context-required、temporary-error、re-entry 與 safe status/alert 的繁中可及狀態元件
 - [ ] T010 在 `apps/web/components/auth/AuthenticatedRouteBoundary.tsx` 建立不掛載 children 的共用 profile/context loader，區分 local session、formal LIFF session、management allow 與 volunteer allow
@@ -38,9 +38,9 @@
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] 在 `tests/contract/test_authentication_contract.py`、`tests/contract/test_openapi_contract.py` 與 `tests/contract/test_generated_contract_types.py` 驗證 LIFF exchange request 欄位、security、canonical schema 與 generated type 無 drift
-- [ ] T014 [P] [US1] 在 `tests/integration/test_authentication_session.py` 建立 valid binding、active user/org、matching entry 與 active-unexpired Membership/Grant 的 exchange success integration test
-- [ ] T015 [P] [US1] 在 `tests/security/test_liff_exchange_authorization.py` 建立 malformed/revoked/cross-purpose entry、invalid token、missing binding、disabled user/org、pending/rejected/future/expired/revoked/missing Grant 與 cross-tenant denial matrix，並 assert partial Session/Refresh/context 為 0
+- [x] T013 [P] [US1] 在 `tests/contract/test_authentication_contract.py`、`tests/contract/test_openapi_contract.py` 與 `tests/contract/test_generated_contract_types.py` 驗證LIFF exchange request欄位、security、state-discriminated canonical schema與generated type無drift（RED：contract assertions failed；GREEN：contract suite passed；`npm --prefix packages/contracts run check`通過；runtime Pydantic binding與Task 5 exact-org service同一安全切片完成）
+- [x] T014 [P] [US1] 在 `tests/integration/test_authentication_session.py` 建立 valid binding、active user/org、matching entry 與 active-unexpired Membership/Grant 的 exchange success integration test
+- [x] T015 [P] [US1] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/security/test_liff_exchange_state_matrix.py`、`tests/integration/test_liff_runtime_state_matrix.py` 建立invalid token的401／403／503安全HTTP matrix，以及missing binding→NEW、pending→PENDING、future/expired/revoked/missing Grant→SUSPENDED、active exact access→ACTIVE matrix；每個非ACTIVE結果都assert Session/Refresh/context新增為0
 - [ ] T016 [P] [US1] 在 `tests/isolation/test_liff_entry_isolation.py` 驗證 ORG-A entry 不會解析或建立 ORG-B context，且相同 shelter number、animal id、query 與轉傳 URL 不會擴大租戶範圍
 
 ### Implementation for User Story 1
