@@ -8,6 +8,7 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../components/management/StateViews";
+import { authFetch } from "../../../lib/auth";
 
 type Draft = {
   id: string;
@@ -25,7 +26,8 @@ export default function CareReportPage() {
     setLoading(true);
     setOffline(false);
     try {
-      const response = await fetch("/v1/line/care-report/drafts/current");
+      const response = await authFetch("/v1/line/care-report/drafts/current");
+      if (response.status === 401) setDraft(null);
       if (!response.ok && response.status !== 404) {
         throw new Error("目前無法連線");
       }
@@ -53,12 +55,15 @@ export default function CareReportPage() {
 
   const saveDraft = async (answers: Record<string, string>, note: string) => {
     if (!draft) return;
-    const response = await fetch(`/v1/care-report-drafts/${draft.id}`, {
+    const response = await authFetch(`/v1/care-report-drafts/${draft.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers, note }),
     });
-    if (!response.ok) throw new Error("草稿保存失敗，已保留原始輸入，請重試。");
+    if (!response.ok) {
+      if (response.status === 401) setDraft(null);
+      throw new Error("草稿保存失敗，已保留原始輸入，請重試。");
+    }
     setDraft(await response.json());
   };
 

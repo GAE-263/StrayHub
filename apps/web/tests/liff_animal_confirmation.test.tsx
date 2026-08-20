@@ -58,6 +58,7 @@ let container: HTMLDivElement | undefined;
 
 async function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
+  window.sessionStorage.setItem("access_token", "active-session-token");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -110,6 +111,10 @@ describe("LIFF animal confirmation", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [candidate] }));
 
     await renderPage(fetchMock);
+    const requestHeaders = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(requestHeaders.get("Authorization")).toBe(
+      "Bearer active-session-token",
+    );
     const qrInput = container?.querySelector("#qr-token") as HTMLInputElement;
     expect(qrInput.value).toBe("qr-deep-link");
 
@@ -169,5 +174,34 @@ describe("LIFF animal confirmation", () => {
       confirmation_token: "confirmation-1",
     });
     expect(container?.textContent).toContain("已建立回報草稿：draft-1");
+  });
+
+  it("clears previously loaded animals when a later request returns 401", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [candidate] }))
+      .mockResolvedValueOnce(
+        jsonResponse({ message: "登入狀態已失效" }, false, 401),
+      );
+
+    await renderPage(fetchMock);
+    expect(container?.textContent).toContain("小黑／VAAAG114080610");
+
+    const queryInput = container?.querySelector(
+      "#shelter-number-query",
+    ) as HTMLInputElement;
+    await act(async () => {
+      setInputValue(queryInput, "114080610");
+    });
+    await submit(
+      container?.querySelector(
+        'form[aria-label="shelter-number-search-form"]',
+      ) as HTMLFormElement,
+    );
+
+    expect(container?.textContent).not.toContain("小黑／VAAAG114080610");
+    expect(container?.querySelector('[role="alert"]')?.textContent).toContain(
+      "登入狀態已失效",
+    );
   });
 });

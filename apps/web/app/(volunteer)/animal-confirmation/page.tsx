@@ -11,6 +11,7 @@ import {
 } from "../../../components/ui/card";
 import { Field } from "../../../components/ui/field";
 import { Input } from "../../../components/ui/input";
+import { authFetch } from "../../../lib/auth";
 
 type AnimalCandidate = {
   id: string;
@@ -25,6 +26,15 @@ type AnimalCandidate = {
 
 type AnimalConfirmation = AnimalCandidate & { confirmation_token: string };
 
+class ApiResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function responseData<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = "動物查詢失敗";
@@ -34,13 +44,15 @@ async function responseData<T>(response: Response): Promise<T> {
     } catch {
       // Keep a safe generic error when the server response is not JSON.
     }
-    throw new Error(`${response.status}: ${message}`);
+    throw new ApiResponseError(
+      `${response.status}: ${message}`,
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }
 
 export default function AnimalConfirmationPage() {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
   const [candidates, setCandidates] = useState<AnimalCandidate[]>([]);
   const [selected, setSelected] = useState<AnimalConfirmation | null>(null);
   const [query, setQuery] = useState("");
@@ -48,18 +60,23 @@ export default function AnimalConfirmationPage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const request = useCallback(
-    async <T,>(path: string, init?: RequestInit) => {
-      const token = window.sessionStorage.getItem("access_token");
-      const headers = new Headers(init?.headers);
-      headers.set("Content-Type", "application/json");
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      return responseData<T>(
-        await fetch(`${apiBaseUrl}${path}`, { ...init, headers }),
-      );
-    },
-    [apiBaseUrl],
-  );
+  const clearProtectedData = () => {
+    setCandidates([]);
+    setSelected(null);
+  };
+
+  const showRequestError = (error: unknown) => {
+    if (error instanceof ApiResponseError && error.status === 401) {
+      clearProtectedData();
+    }
+    setErrorMessage(error instanceof Error ? error.message : "操作失敗");
+  };
+
+  const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    headers.set("Content-Type", "application/json");
+    return responseData<T>(await authFetch(path, { ...init, headers }));
+  }, []);
 
   const loadToday = useCallback(async () => {
     const data = await request<{ items: AnimalCandidate[] }>("/v1/animals");
@@ -67,7 +84,7 @@ export default function AnimalConfirmationPage() {
   }, [request]);
 
   useEffect(() => {
-    void loadToday().catch((error: Error) => setErrorMessage(error.message));
+    void loadToday().catch(showRequestError);
     const token = new URLSearchParams(window.location.search).get("qr_token");
     if (token) setQrToken(token);
   }, [loadToday]);
@@ -78,7 +95,7 @@ export default function AnimalConfirmationPage() {
     try {
       await action();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "操作失敗");
+      showRequestError(error);
     }
   };
 
