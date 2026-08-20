@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ACCESS_TOKEN_KEY,
@@ -36,5 +36,39 @@ describe("authenticated session source", () => {
     expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
     expect(getSessionSource()).toBeNull();
     expect(getLiffEntryReference()).toBeNull();
+  });
+
+  it("preserves formal LIFF recovery state while clearing credentials", () => {
+    window.sessionStorage.setItem(ACCESS_TOKEN_KEY, "access-token");
+    storeSessionSource("liff");
+    storeLiffEntryReference("opaque-entry-reference-0123456789abcdef");
+
+    clearAuth({ preserveLiffSession: true });
+
+    expect(window.sessionStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+    expect(getSessionSource()).toBe("liff");
+    expect(getLiffEntryReference()).toBe(
+      "opaque-entry-reference-0123456789abcdef",
+    );
+  });
+
+  it("restores formal LIFF recovery state after keyed cleanup fallback", () => {
+    window.sessionStorage.setItem(ACCESS_TOKEN_KEY, "access-token");
+    storeSessionSource("liff");
+    storeLiffEntryReference("opaque-entry-reference-0123456789abcdef");
+    const removeItem = vi
+      .spyOn(window.sessionStorage, "removeItem")
+      .mockImplementation((key: string) => {
+        if (key === ACCESS_TOKEN_KEY) throw new Error("storage failure");
+        Storage.prototype.removeItem.call(window.sessionStorage, key);
+      });
+
+    clearAuth({ preserveLiffSession: true });
+
+    expect(getSessionSource()).toBe("liff");
+    expect(getLiffEntryReference()).toBe(
+      "opaque-entry-reference-0123456789abcdef",
+    );
+    removeItem.mockRestore();
   });
 });

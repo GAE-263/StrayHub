@@ -1,5 +1,9 @@
 import type { EffectiveRole } from "./route-access";
-import { clearLiffSession } from "./liff-session";
+import {
+  clearLiffSession,
+  LIFF_ENTRY_REFERENCE_KEY,
+  LIFF_RECOVERY_EPOCH_KEY,
+} from "./liff-session";
 
 export const ACCESS_TOKEN_KEY = "access_token";
 export const REFRESH_TOKEN_KEY = "refresh_token";
@@ -30,6 +34,15 @@ export type CurrentUser = {
     organization_id: string;
     role: string;
     status: string;
+    valid_from?: string | null;
+    expires_at?: string | null;
+    access_grant?: {
+      membership_id: string;
+      organization_id: string;
+      status: string;
+      valid_from: string;
+      expires_at: string;
+    } | null;
   }>;
 };
 
@@ -46,17 +59,28 @@ export function getAccessToken(): string | null {
   return window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export function clearAuth(): void {
+export function clearAuth(
+  options: { preserveLiffSession?: boolean } = {},
+): void {
   if (typeof window === "undefined") return;
+  const preserveLiffSession = options.preserveLiffSession === true;
+  const preservedValues = preserveLiffSession
+    ? [
+        SESSION_SOURCE_KEY,
+        LIFF_ENTRY_REFERENCE_KEY,
+        LIFF_RECOVERY_EPOCH_KEY,
+      ].map((key) => [key, window.sessionStorage.getItem(key)] as const)
+    : [];
   let keyedRemovalFailed = false;
-  for (const key of [
+  const keys = [
     ACCESS_TOKEN_KEY,
     REFRESH_TOKEN_KEY,
     SESSION_ID_KEY,
     ACTIVE_ORGANIZATION_ID_KEY,
     ACTIVE_ORGANIZATION_CODE_KEY,
-    SESSION_SOURCE_KEY,
-  ]) {
+    ...(preserveLiffSession ? [] : [SESSION_SOURCE_KEY]),
+  ];
+  for (const key of keys) {
     try {
       window.sessionStorage.removeItem(key);
     } catch {
@@ -65,8 +89,11 @@ export function clearAuth(): void {
   }
   if (keyedRemovalFailed) {
     window.sessionStorage.clear();
+    for (const [key, value] of preservedValues) {
+      if (value !== null) window.sessionStorage.setItem(key, value);
+    }
   }
-  clearLiffSession();
+  if (!preserveLiffSession) clearLiffSession();
   window.dispatchEvent(new Event("strayhub:auth-changed"));
 }
 
