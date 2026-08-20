@@ -2037,6 +2037,10 @@ export interface components {
             /** @enum {string} */
             status?: "invited" | "active" | "disabled";
             medical_care_access?: boolean;
+            expected_access_version: number;
+        };
+        MembershipMutationVersionRequest: {
+            expected_access_version: number;
         };
         MembershipListResponse: {
             items: components["schemas"]["Membership"][];
@@ -3565,7 +3569,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipMutationVersionRequest"];
+            };
+        };
         responses: {
             /** @description Membership 已封存 */
             200: {
@@ -3590,7 +3598,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipMutationVersionRequest"];
+            };
+        };
         responses: {
             /** @description Membership 已恢復 */
             200: {

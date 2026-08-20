@@ -51,6 +51,7 @@
 | 任務 | 狀態 | 範圍 | 驗證／證據 | Commit |
 |---|---|---|---|---|
 | Task 1：重整現有未提交變更與任務歸屬 | 完成 | 僅盤點與更新本文件，不修改 production code | staged boundary僅`A volunteer_entry.md`；`git diff --cached --check` exit 0；final independent review passed，無security／logic blocker | `docs: establish volunteer entry completion ledger` |
+| Task 2A：同步既有 Membership generated contract drift | 完成 | 只同步canonical中既有`expected_access_version`與archive／restore request body；不包含LIFF變更 | generated SHA-256逐位元一致；`uv run pytest tests/contract/test_generated_contract_types.py -q`：2 passed；independent review passed | `chore(contracts): sync existing membership types` |
 | Task 2：固定 LIFF exchange contract | 待執行（BLOCKING DRIFT） | canonical／004 spec、route-access、research、OpenAPI、Pydantic、generated types | 必須先解決200 state vs safe 403、entry minLength及ACTIVE credential discriminator | — |
 | Task 3：LINE ID Token security boundary | 待執行 | verifier、Login channel config、safe errors/logging | 尚未取得完整 security suite 證據 | — |
 | Task 4：Entry expiration／PostgreSQL resolver | 待執行 | model、0030 migration、production resolver | 尚未在真實 PostgreSQL 執行 | — |
