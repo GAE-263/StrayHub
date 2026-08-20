@@ -7,7 +7,10 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.app.persistence.database.scope import set_authentication_user_scope
+from services.api.app.persistence.database.scope import (
+    set_authentication_user_organization_scope,
+    set_authentication_user_scope,
+)
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     Organization,
@@ -17,7 +20,10 @@ from services.api.app.persistence.models.identity import (
     User,
     WebhookSession,
 )
-from services.api.app.persistence.models.volunteer_access import VolunteerAccessGrant
+from services.api.app.persistence.models.volunteer_access import (
+    VolunteerAccessGrant,
+    VolunteerApplication,
+)
 
 T = TypeVar("T")
 
@@ -33,8 +39,17 @@ class AuthenticationRepository:
     async def set_authentication_user_scope(self, user_id: UUID) -> None:
         await set_authentication_user_scope(self.session, user_id)
 
+    async def set_authentication_context_scope(self, user_id: UUID, organization_id: UUID) -> None:
+        await set_authentication_user_organization_scope(self.session, user_id, organization_id)
+
     async def get_user(self, user_id: UUID) -> User | None:
         return await self.session.get(User, user_id)
+
+    async def lock_user(self, user_id: UUID) -> User | None:
+        result = await self.session.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
 
     async def memberships(
         self, user_id: UUID, *, active_only: bool = False
@@ -64,6 +79,75 @@ class AuthenticationRepository:
                 OrganizationMembership.organization_id == organization_id,
                 self._effective_membership_predicate(),
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_effective_volunteer_membership(
+        self, user_id: UUID, organization_id: UUID
+    ) -> OrganizationMembership | None:
+        result = await self.session.execute(
+            select(OrganizationMembership)
+            .where(
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.role == "VOLUNTEER",
+                self._effective_membership_predicate(),
+            )
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def lock_effective_volunteer_access(
+        self, user_id: UUID, organization_id: UUID
+    ) -> tuple[OrganizationMembership, VolunteerAccessGrant] | None:
+        """Lock the exact Membership and Grant used to authorize a LIFF session."""
+        database_now = func.now()
+        grant_result = await self.session.execute(
+            select(VolunteerAccessGrant)
+            .where(
+                VolunteerAccessGrant.user_id == user_id,
+                VolunteerAccessGrant.organization_id == organization_id,
+                VolunteerAccessGrant.status == "active",
+                VolunteerAccessGrant.valid_from <= database_now,
+                VolunteerAccessGrant.expires_at > database_now,
+            )
+            .with_for_update()
+        )
+        grant = grant_result.scalar_one_or_none()
+        if grant is None:
+            return None
+        membership_result = await self.session.execute(
+            select(OrganizationMembership)
+            .where(
+                OrganizationMembership.id == grant.membership_id,
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.role == "VOLUNTEER",
+                OrganizationMembership.status == "active",
+                OrganizationMembership.valid_from.is_not(None),
+                OrganizationMembership.expires_at.is_not(None),
+                OrganizationMembership.valid_from <= database_now,
+                OrganizationMembership.expires_at > database_now,
+            )
+            .with_for_update()
+        )
+        membership = membership_result.scalar_one_or_none()
+        return None if membership is None else (membership, grant)
+
+    async def latest_volunteer_application(
+        self, user_id: UUID, organization_id: UUID
+    ) -> VolunteerApplication | None:
+        result = await self.session.execute(
+            select(VolunteerApplication)
+            .where(
+                VolunteerApplication.user_id == user_id,
+                VolunteerApplication.organization_id == organization_id,
+            )
+            .order_by(
+                VolunteerApplication.submitted_at.desc(),
+                VolunteerApplication.id.desc(),
+            )
+            .limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -124,6 +208,17 @@ class AuthenticationRepository:
                 LineUserBinding.line_user_id == line_user_id,
                 LineUserBinding.status == "active",
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def lock_line_binding(self, line_user_id: str) -> LineUserBinding | None:
+        result = await self.session.execute(
+            select(LineUserBinding)
+            .where(
+                LineUserBinding.line_user_id == line_user_id,
+                LineUserBinding.status == "active",
+            )
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 

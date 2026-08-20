@@ -36,3 +36,33 @@ def test_volunteer_access_contract_has_expected_operation_and_schema_surface() -
         "retryVolunteerNotifications",
     ):
         assert operation_id in canonical
+
+
+def test_generated_liff_contract_keeps_state_specific_credentials() -> None:
+    content = GENERATED_TYPES.read_text(encoding="utf-8")
+
+    for schema in (
+        "LiffExchangeNewResponse",
+        "LiffExchangePendingResponse",
+        "LiffExchangeActiveResponse",
+        "LiffExchangeSuspendedResponse",
+    ):
+        assert f"        {schema}:" in content
+    assert 'state: "ACTIVE";' in content
+    assert "access_token: string;" in content
+    assert "refresh_token: string;" in content
+
+    schemas_start = content.index("export interface components")
+    operations_start = content.index("export interface operations")
+    schemas = content[schemas_start:operations_start]
+    for name in (
+        "LiffExchangeNewResponse",
+        "LiffExchangePendingResponse",
+        "LiffExchangeSuspendedResponse",
+    ):
+        start = schemas.index(f"        {name}:")
+        end = schemas.index("        };", start) + len("        };")
+        section = schemas[start:end]
+        assert "access_token" not in section
+        assert "refresh_token" not in section
+        assert "session_id" not in section

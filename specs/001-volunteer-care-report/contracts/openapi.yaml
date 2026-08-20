@@ -93,8 +93,15 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/LiffExchangeRequest" }
       responses:
-        "200": { $ref: "#/components/responses/AuthResponse" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: LIFF 身分與志工 onboarding／授權狀態
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiffExchangeResponse" }
+        "401": { $ref: "#/components/responses/LiffIdentityRejected" }
+        "403": { $ref: "#/components/responses/LiffEntryUnavailable" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /v1/auth/active-shelter-context:
     get:
       tags: [Authentication]
@@ -2206,6 +2213,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    LiffIdentityRejected:
+      description: LINE ID token無效、過期或audience不符；不揭露claim或provider細節
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/LiffIdentityError" }
+    LiffEntryUnavailable:
+      description: Entry無效、撤銷、過期、purpose不符或organization不可用；不揭露內部原因
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/LiffEntryUnavailableError" }
   schemas:
     ErrorResponse:
       type: object
@@ -2216,6 +2233,22 @@ components:
         request_id: { type: string }
         operation_id: { type: [string, "null"], format: uuid }
         details: { type: object, additionalProperties: true }
+    LiffIdentityError:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: { type: string, const: invalid_line_id_token }
+        message: { type: string, const: "無法確認 LINE 身分" }
+        request_id: { type: string }
+    LiffEntryUnavailableError:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: { type: string, const: entry_unavailable }
+        message: { type: string, const: "此志工入口目前無法使用" }
+        request_id: { type: string }
     ManagementDashboard:
       type: object
       required: [organization_id, role, summary, recent_reports]
@@ -2551,9 +2584,75 @@ components:
         refresh_token: { type: string }
     LiffExchangeRequest:
       type: object
-      required: [id_token]
+      additionalProperties: false
+      required: [id_token, shelter_entry_reference]
       properties:
-        id_token: { type: string }
+        id_token: { type: string, minLength: 1, maxLength: 8192 }
+        shelter_entry_reference: { type: string, minLength: 32, maxLength: 512 }
+    LiffExchangeResponse:
+      oneOf:
+        - { $ref: "#/components/schemas/LiffExchangeNewResponse" }
+        - { $ref: "#/components/schemas/LiffExchangePendingResponse" }
+        - { $ref: "#/components/schemas/LiffExchangeActiveResponse" }
+        - { $ref: "#/components/schemas/LiffExchangeSuspendedResponse" }
+      discriminator:
+        propertyName: state
+        mapping:
+          NEW: "#/components/schemas/LiffExchangeNewResponse"
+          PENDING: "#/components/schemas/LiffExchangePendingResponse"
+          ACTIVE: "#/components/schemas/LiffExchangeActiveResponse"
+          SUSPENDED: "#/components/schemas/LiffExchangeSuspendedResponse"
+    LiffExchangeOrganization:
+      type: object
+      additionalProperties: false
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+    LiffExchangeVolunteerUser:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role: { type: string, const: VOLUNTEER }
+    LiffExchangeNewResponse:
+      type: object
+      additionalProperties: false
+      required: [state, organization, next_path]
+      properties:
+        state: { type: string, const: NEW }
+        organization: { $ref: "#/components/schemas/LiffExchangeOrganization" }
+        next_path: { type: string, const: "/volunteer-application" }
+    LiffExchangePendingResponse:
+      type: object
+      additionalProperties: false
+      required: [state, organization]
+      properties:
+        state: { type: string, const: PENDING }
+        organization: { $ref: "#/components/schemas/LiffExchangeOrganization" }
+    LiffExchangeActiveResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [state, access_token, refresh_token, expires_in, session_id, user_id, user, organization, next_path]
+      properties:
+        state: { type: string, const: ACTIVE }
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, example: 900 }
+        session_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        user: { $ref: "#/components/schemas/LiffExchangeVolunteerUser" }
+        organization: { $ref: "#/components/schemas/LiffExchangeOrganization" }
+        next_path: { type: string, const: "/animal-confirmation" }
+    LiffExchangeSuspendedResponse:
+      type: object
+      additionalProperties: false
+      required: [state, organization]
+      properties:
+        state: { type: string, const: SUSPENDED }
+        organization: { $ref: "#/components/schemas/LiffExchangeOrganization" }
     AuthResponse:
       type: object
       required: [access_token, expires_in, session_id, user]

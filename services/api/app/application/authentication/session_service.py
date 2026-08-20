@@ -10,6 +10,7 @@ from services.api.app.application.ports.authentication import (
     AccessTokenPort,
     LineIdentityVerifierPort,
     PasswordHasherPort,
+    VolunteerEntryResolverPort,
 )
 from services.api.app.persistence.models.identity import RefreshTokenRecord, SessionRecord
 from services.api.app.persistence.repositories.authentication_repository import (
@@ -29,6 +30,7 @@ class SessionService:
         password_hasher: PasswordHasherPort,
         access_token: AccessTokenPort,
         line_verifier: LineIdentityVerifierPort | None = None,
+        entry_resolver: VolunteerEntryResolverPort | None = None,
         refresh_ttl_seconds: int = 604800,
         access_ttl_seconds: int = 900,
     ) -> None:
@@ -36,6 +38,7 @@ class SessionService:
         self.password_hasher = password_hasher
         self.access_token = access_token
         self.line_verifier = line_verifier
+        self.entry_resolver = entry_resolver
         self.refresh_ttl_seconds = refresh_ttl_seconds
         self.access_ttl_seconds = access_ttl_seconds
 
@@ -169,7 +172,8 @@ class SessionService:
             ],
         }
 
-    async def exchange_line_identity(self, *, id_token: str) -> dict:
+    async def bind_line_identity(self, *, id_token: str) -> dict:
+        """Preserve the existing LINE binding endpoint independently of LIFF entry exchange."""
         if self.line_verifier is None:
             raise DomainError("line_not_configured", "LINE 身分驗證尚未設定", 503)
         line_user_id = await self.line_verifier.verify(id_token)
@@ -194,6 +198,86 @@ class SessionService:
         )
         await self.repository.add(session)
         return await self._issue_session(user.id, session)
+
+    async def exchange_line_identity(self, *, id_token: str, shelter_entry_reference: str) -> dict:
+        if self.line_verifier is None or self.entry_resolver is None:
+            raise DomainError("line_not_configured", "LINE 身分驗證尚未設定", 503)
+        try:
+            line_user_id = await self.line_verifier.verify(id_token)
+        except DomainError:
+            raise
+        except Exception as exc:
+            raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401) from exc
+        try:
+            entry = await self.entry_resolver.resolve(shelter_entry_reference)
+        except Exception as exc:
+            raise DomainError("liff_exchange_unavailable", "志工入口暫時無法使用", 503) from exc
+        if entry is None:
+            raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
+        public_context = {
+            "organization": {
+                "id": entry.organization_id,
+                "code": entry.organization_code,
+                "name": entry.organization_name,
+            }
+        }
+        try:
+            return await self._exchange_verified_line_identity(
+                line_user_id=line_user_id,
+                organization_id=entry.organization_id,
+                public_context=public_context,
+            )
+        except DomainError:
+            raise
+        except Exception as exc:
+            raise DomainError("liff_exchange_unavailable", "志工入口暫時無法使用", 503) from exc
+
+    async def _exchange_verified_line_identity(
+        self, *, line_user_id: str, organization_id: UUID, public_context: dict
+    ) -> dict:
+        binding = await self.repository.lock_line_binding(line_user_id)
+        if binding is None:
+            return {
+                "state": "NEW",
+                "next_path": "/volunteer-application",
+                **public_context,
+            }
+        await self.repository.set_authentication_context_scope(binding.user_id, organization_id)
+        user = await self.repository.lock_user(binding.user_id)
+        if user is None or user.status != "active":
+            return {"state": "SUSPENDED", **public_context}
+        effective_access = await self.repository.lock_effective_volunteer_access(
+            user.id, organization_id
+        )
+        if effective_access is None:
+            raw_membership = await self.repository.get_membership(user.id, organization_id)
+            if raw_membership is not None and raw_membership.role == "VOLUNTEER":
+                return {"state": "SUSPENDED", **public_context}
+            application = await self.repository.latest_volunteer_application(
+                user.id, organization_id
+            )
+            if application is not None and application.status == "pending":
+                return {"state": "PENDING", **public_context}
+            return {
+                "state": "NEW",
+                "next_path": "/volunteer-application",
+                **public_context,
+            }
+        session = SessionRecord(
+            user_id=user.id,
+            active_organization_id=organization_id,
+            status="active",
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+        )
+        await self.repository.add(session)
+        issued = await self._issue_session(user.id, session)
+        return {
+            "state": "ACTIVE",
+            **issued,
+            "user": {"role": "VOLUNTEER"},
+            **public_context,
+            "next_path": "/animal-confirmation",
+        }
 
     async def _issue_session(
         self, user_id: UUID, session: SessionRecord, *, family_id: UUID | None = None

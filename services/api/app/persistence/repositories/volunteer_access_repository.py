@@ -45,21 +45,30 @@ class VolunteerAccessRepository:
         *,
         token_digest: str,
         purpose: str,
-    ) -> tuple[UUID, UUID] | None:
+    ) -> tuple[UUID, UUID, str, str] | None:
         result = await session.execute(
             text(
-                """SELECT reference_id, organization_id
+                """SELECT reference_id, organization_id, organization_code, organization_name
                 FROM resolve_volunteer_entry_reference(:token_digest, :purpose)"""
             ),
             {"token_digest": token_digest, "purpose": purpose},
         )
         row = result.one_or_none()
-        return None if row is None else (row.reference_id, row.organization_id)
+        return (
+            None
+            if row is None
+            else (
+                row.reference_id,
+                row.organization_id,
+                row.organization_code,
+                row.organization_name,
+            )
+        )
 
     @classmethod
     async def resolve_and_scope(
         cls, session: AsyncSession, raw_reference: str
-    ) -> tuple[UUID, UUID] | None:
+    ) -> tuple[UUID, UUID, str, str] | None:
         resolved = await cls.resolve_entry_reference(
             session,
             token_digest=digest_entry_reference(raw_reference),
@@ -67,7 +76,7 @@ class VolunteerAccessRepository:
         )
         if resolved is None:
             return None
-        _, organization_id = resolved
+        _, organization_id, _, _ = resolved
         await set_organization_scope(session, organization_id)
         return resolved
 
@@ -329,7 +338,7 @@ class VolunteerAccessRepository:
                 ),
             )
             .order_by(VolunteerAccessGrant.expires_at, VolunteerAccessGrant.id)
-            .with_for_update(skip_locked=True)
+            .with_for_update(of=VolunteerAccessGrant, skip_locked=True)
             .limit(min(max(limit, 1), 500))
         )
         return list(result.scalars())

@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     line_channel_id: str = "fake-line-channel-id"
     line_channel_secret: str = "fake-line-channel-secret"
     line_channel_access_token: str = "fake-line-access-token"
+    line_login_channel_id: str = ""
+    line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
     animal_confirmation_secret: str = "local-animal-confirmation-secret"
     auth_jwt_issuer: str = "strayhub-local"

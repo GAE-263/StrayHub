@@ -1659,6 +1659,20 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        LiffIdentityError: {
+            /** @constant */
+            code: "invalid_line_id_token";
+            /** @constant */
+            message: "無法確認 LINE 身分";
+            request_id: string;
+        };
+        LiffEntryUnavailableError: {
+            /** @constant */
+            code: "entry_unavailable";
+            /** @constant */
+            message: "此志工入口目前無法使用";
+            request_id: string;
+        };
         ManagementDashboard: {
             /** Format: uuid */
             organization_id: string;
@@ -1894,6 +1908,63 @@ export interface components {
         };
         LiffExchangeRequest: {
             id_token: string;
+            shelter_entry_reference: string;
+        };
+        LiffExchangeResponse: components["schemas"]["LiffExchangeNewResponse"] | components["schemas"]["LiffExchangePendingResponse"] | components["schemas"]["LiffExchangeActiveResponse"] | components["schemas"]["LiffExchangeSuspendedResponse"];
+        LiffExchangeOrganization: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+        };
+        LiffExchangeVolunteerUser: {
+            /** @constant */
+            role: "VOLUNTEER";
+        };
+        LiffExchangeNewResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "NEW";
+            organization: components["schemas"]["LiffExchangeOrganization"];
+            /** @constant */
+            next_path: "/volunteer-application";
+        };
+        LiffExchangePendingResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "PENDING";
+            organization: components["schemas"]["LiffExchangeOrganization"];
+        };
+        LiffExchangeActiveResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "ACTIVE";
+            access_token: string;
+            refresh_token: string;
+            /** @example 900 */
+            expires_in: number;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            user_id: string;
+            user: components["schemas"]["LiffExchangeVolunteerUser"];
+            organization: components["schemas"]["LiffExchangeOrganization"];
+            /** @constant */
+            next_path: "/animal-confirmation";
+        };
+        LiffExchangeSuspendedResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "SUSPENDED";
+            organization: components["schemas"]["LiffExchangeOrganization"];
         };
         AuthResponse: {
             access_token: string;
@@ -3121,6 +3192,24 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description LINE ID token無效、過期或audience不符；不揭露claim或provider細節 */
+        LiffIdentityRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["LiffIdentityError"];
+            };
+        };
+        /** @description Entry無效、撤銷、過期、purpose不符或organization不可用；不揭露內部原因 */
+        LiffEntryUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["LiffEntryUnavailableError"];
+            };
+        };
     };
     parameters: {
         OrganizationId: string;
@@ -3239,8 +3328,19 @@ export interface operations {
             };
         };
         responses: {
-            200: components["responses"]["AuthResponse"];
-            403: components["responses"]["Forbidden"];
+            /** @description LIFF 身分與志工 onboarding／授權狀態 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiffExchangeResponse"];
+                };
+            };
+            401: components["responses"]["LiffIdentityRejected"];
+            403: components["responses"]["LiffEntryUnavailable"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getActiveShelterContext: {

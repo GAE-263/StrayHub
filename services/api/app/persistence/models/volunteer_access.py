@@ -77,6 +77,11 @@ class ShelterVolunteerEntryReference(IdentityMixin, AuditMixin, Base):
     issued_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     issued_by_actor_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now() + interval '90 days'"),
+        nullable=False,
+    )
     revoked_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     revoked_by_actor_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

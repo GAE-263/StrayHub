@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from services.api.app.api.dependencies import (
     RequestContext,
     authenticated_request_context,
@@ -17,6 +18,9 @@ from services.api.app.application.authentication.session_service import SessionS
 from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
+from services.api.app.infrastructure.line.entry_reference_adapter import (
+    VolunteerEntryReferenceAdapter,
+)
 from services.api.app.infrastructure.line.identity_verification_adapter import (
     configured_line_identity_verifier,
 )
@@ -38,7 +42,69 @@ class RefreshRequest(BaseModel):
 
 
 class LiffExchangeRequest(BaseModel):
-    id_token: str
+    model_config = ConfigDict(extra="forbid")
+
+    id_token: str = Field(min_length=1, max_length=8192)
+    shelter_entry_reference: str = Field(min_length=32, max_length=512)
+
+
+class LiffExchangeOrganization(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    code: str
+    name: str
+
+
+class LiffExchangeVolunteerUser(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["VOLUNTEER"]
+
+
+class LiffExchangeNewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["NEW"]
+    organization: LiffExchangeOrganization
+    next_path: Literal["/volunteer-application"]
+
+
+class LiffExchangePendingResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["PENDING"]
+    organization: LiffExchangeOrganization
+
+
+class LiffExchangeActiveResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["ACTIVE"]
+    access_token: str
+    refresh_token: str
+    expires_in: int
+    session_id: UUID
+    user_id: UUID
+    user: LiffExchangeVolunteerUser
+    organization: LiffExchangeOrganization
+    next_path: Literal["/animal-confirmation"]
+
+
+class LiffExchangeSuspendedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["SUSPENDED"]
+    organization: LiffExchangeOrganization
+
+
+LiffExchangeResponse = Annotated[
+    LiffExchangeNewResponse
+    | LiffExchangePendingResponse
+    | LiffExchangeActiveResponse
+    | LiffExchangeSuspendedResponse,
+    Field(discriminator="state"),
+]
 
 
 class ShelterContextSwitchRequest(BaseModel):
@@ -69,8 +135,9 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
         ),
         line_verifier=configured_line_identity_verifier(
             app_env=settings.app_env,
-            channel_id=settings.line_channel_id,
+            channel_id=settings.line_login_channel_id or settings.line_channel_id,
         ),
+        entry_resolver=VolunteerEntryReferenceAdapter(_session),
         refresh_ttl_seconds=settings.session_refresh_token_ttl_seconds,
         access_ttl_seconds=settings.session_access_token_ttl_seconds,
     )
@@ -109,15 +176,30 @@ async def logout(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/liff/exchange", status_code=status.HTTP_200_OK)
+@router.post(
+    "/liff/exchange",
+    status_code=status.HTTP_200_OK,
+    response_model=LiffExchangeResponse,
+)
 async def liff_exchange(
     payload: LiffExchangeRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
-) -> dict:
-    result = await service.exchange_line_identity(id_token=payload.id_token)
-    await session.commit()
-    return result
+) -> LiffExchangeResponse:
+    result = await service.exchange_line_identity(
+        id_token=payload.id_token,
+        shelter_entry_reference=payload.shelter_entry_reference,
+    )
+    try:
+        response = TypeAdapter(LiffExchangeResponse).validate_python(result)
+        await session.commit()
+    except Exception as exc:
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        raise DomainError("liff_exchange_unavailable", "志工入口暫時無法使用", 503) from exc
+    return response
 
 
 @router.get("/me")

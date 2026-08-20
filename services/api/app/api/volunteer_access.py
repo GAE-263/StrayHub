@@ -227,7 +227,7 @@ def get_line_identity_verifier() -> LineIdentityVerifierPort:
     settings = get_settings()
     return configured_line_identity_verifier(
         app_env=settings.app_env,
-        channel_id=settings.line_channel_id,
+        channel_id=settings.line_login_channel_id or settings.line_channel_id,
     )
 
 
@@ -240,7 +240,7 @@ async def _service_for_entry(
     resolved = await VolunteerAccessRepository.resolve_and_scope(session, raw_reference)
     if resolved is None:
         raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
-    reference_id, organization_id = resolved
+    reference_id, organization_id, *_public_context = resolved
     repository = VolunteerAccessRepository(session, organization_id)
     return (
         VolunteerAccessService(

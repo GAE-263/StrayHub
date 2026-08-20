@@ -18,7 +18,7 @@
 
 ## 決策 2：entry reference 只解析候選 organization
 
-**決策**：沿用 005 的 `VolunteerEntryResolverPort` 與 digest-at-rest `ShelterEntryReference`。後端先對 raw reference 計算 digest，透過固定 purpose、最小輸出的 resolver 取得 `reference_id + organization_id`，隨即設定該 organization 的 RLS scope。reference 不包含 user、role、Membership、期限或授權結果。
+**決策**：沿用005的`VolunteerEntryResolverPort`與digest-at-rest `ShelterEntryReference`。後端在LINE identity驗證後對raw reference計算digest，透過固定purpose、最小輸出的resolver取得安全organization公開context；resolver不得設定ambient organization scope。reference不包含user、role、Membership、期限或授權結果。
 
 **理由**：入口 URL 必然可能被轉傳；把 reference 限制為 organization selector，才能保證同一 URL 對未授權 LINE identity 不產生存取權。005 已提供 rotation、revocation、cross-purpose 拒絕與 runtime 無跨租戶 SELECT 的 contract，004 不應建立第二套解析規則。
 
@@ -30,7 +30,7 @@
 
 ## 決策 3：exchange 以 exact organization 的有效 Membership／Grant 原子建立 Session/context
 
-**決策**：`POST /v1/auth/liff/exchange` 在同一 AsyncSession transaction 依序完成：resolve/scope entry → 驗證 LINE id token → 讀取 active Binding/User/Organization → 以候選 organization 鎖定 exact `VOLUNTEER` Membership 與目前 active Grant → 套用 005 的 `status=active && valid_from <= db_now < expires_at` predicate → 建立 `SessionRecord(active_organization_id=organization_id)` 與 `RefreshTokenRecord` → commit。任一驗證或 flush 失敗即 rollback。
+**決策**：`POST /v1/auth/liff/exchange`在同一AsyncSession transaction依序完成：驗證LINE id token → resolve entry並鎖定Entry／Organization且不開啟ambient tenant scope → 鎖定active Binding → 設定exact user＋organization authentication scope → 鎖定並驗證User → 依全域固定Grant→Membership順序鎖定候選organization的實際Grant與`VOLUNTEER` Membership（與管理撤銷／expiration worker一致）→ 讀取exact Application → 回NEW、PENDING或SUSPENDED且不建立credential，或對ACTIVE套用005的`status=active && valid_from <= db_now < expires_at` predicate → 建立`SessionRecord(active_organization_id=organization_id)`與`RefreshTokenRecord` → 先驗證state-discriminated response再commit。任一resolver、資料庫、response validation、flush或commit失敗即rollback；非LINE identity錯誤統一為不洩漏內因的safe 503。
 
 **理由**：Session 與 Active Shelter Context 實際由同一 `SessionRecord` 表示；把 context 一起寫入同一 row，可避免「有 Session、無 context」或反向部分狀態。鎖定 Membership/Grant 使 concurrent revoke/expire mutation 與 exchange 具備明確 commit 順序；commit 後的撤銷仍由 request-time predicate 與 005 cleanup 阻止後續存取。
 
@@ -42,7 +42,7 @@
 
 ## 決策 4：LIFF exchange 不管理 Membership lifecycle
 
-**決策**：exchange 只讀取並鎖定 005 已建立的有效 Membership/Grant；pending、rejected、future、expired、revoked、disabled 或缺少 Grant 一律拒絕，且不建立、修復、延長、重新啟用或撤銷任何 access record。錯誤只回安全狀態與下一步，既有 Draft／Report／Media 不刪除。
+**決策**：exchange只讀取005的Application／Membership／Grant，不管理其lifecycle。沒有申請／Membership回NEW，pending回PENDING，既有但future、expired、revoked、disabled或缺少Grant回SUSPENDED；三者皆不建立session credential。只有有效exact Membership／Grant回ACTIVE。exchange不建立、修復、延長、重新啟用或撤銷任何access record；既有Draft／Report／Media不刪除。
 
 **理由**：人工核准與限時授權是 005 的 CRM/Audit 邊界。若 exchange 自動修復或授權，會繞過管理員決定與期限治理。
 
@@ -150,6 +150,7 @@
 
 - 正式身分：LIFF SDK 取得的 raw ID token，由後端既有 LINE verifier 驗證。
 - 收容所判定：005 的 opaque entry reference 只解析候選 organization。
+- 狀態判定：有效identity＋entry後依exact organization的Application／Membership／Grant回NEW／PENDING／ACTIVE／SUSPENDED；只有ACTIVE包含credential。
 - 授權判定：exact organization 的 active、已開始、未到期 `VOLUNTEER` Membership + active Grant + active user/org。
 - 原子邊界：Session、Refresh Token 與 Active Shelter Context 同 transaction commit；失敗部分狀態為 0。
 - 前端邊界：children mount 前完成 profile/context/role gate；管理 request ordering 可觀察。

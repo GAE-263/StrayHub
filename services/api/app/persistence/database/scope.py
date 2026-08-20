@@ -15,6 +15,7 @@ async def set_organization_scope(session: AsyncSession, organization_id: UUID) -
     )
     await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
     await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
+    await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
 
 
 async def set_platform_scope(session: AsyncSession, enabled: bool = True) -> None:
@@ -23,6 +24,7 @@ async def set_platform_scope(session: AsyncSession, enabled: bool = True) -> Non
     await session.execute(text("SELECT set_config('app.current_org_id', '', true)"))
     await session.execute(text("SELECT set_config('app.platform_scope', 'true', true)"))
     await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
+    await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
 
 
 async def set_platform_support_scope(session: AsyncSession, target_organization_id: UUID) -> None:
@@ -36,6 +38,7 @@ async def set_platform_support_scope(session: AsyncSession, target_organization_
     await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
     await session.execute(text("SELECT set_config('app.platform_support', 'true', true)"))
     await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
+    await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
 
 
 async def set_authentication_user_scope(session: AsyncSession, user_id: UUID) -> None:
@@ -45,6 +48,25 @@ async def set_authentication_user_scope(session: AsyncSession, user_id: UUID) ->
     await session.execute(
         text("SELECT set_config('app.auth_user_id', :user_id, true)"),
         {"user_id": str(user_id)},
+    )
+    await session.execute(text("SELECT set_config('app.current_org_id', '', true)"))
+    await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
+    await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
+
+
+async def set_authentication_user_organization_scope(
+    session: AsyncSession, user_id: UUID, organization_id: UUID
+) -> None:
+    """Constrain authentication queries to one user in one resolved organization."""
+    if not isinstance(user_id, UUID) or not isinstance(organization_id, UUID):
+        raise DomainError("invalid_scope", "使用者或收容所範圍無效", 400)
+    await session.execute(
+        text("SELECT set_config('app.auth_user_id', :user_id, true)"),
+        {"user_id": str(user_id)},
+    )
+    await session.execute(
+        text("SELECT set_config('app.auth_exact_org_id', :organization_id, true)"),
+        {"organization_id": str(organization_id)},
     )
     await session.execute(text("SELECT set_config('app.current_org_id', '', true)"))
     await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))

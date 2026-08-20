@@ -1,4 +1,8 @@
+from datetime import datetime, timezone
+
 import httpx
+
+from services.api.app.api.errors import DomainError
 
 
 class MockLineIdentityVerifier:
@@ -30,16 +34,42 @@ class LineIdentityVerifier:
 
     async def verify(self, token: str) -> str:
         if not token:
-            raise ValueError("LINE identity token is required")
+            raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401)
         client = self.client or httpx.AsyncClient()
-        response = await client.get(
-            "https://api.line.me/oauth2/v2.1/verify",
-            params={"id_token": token, "client_id": self.channel_id},
-        )
-        if self.client is None:
-            await client.aclose()
-        response.raise_for_status()
-        user_id = response.json().get("sub")
-        if not user_id:
-            raise ValueError("LINE identity response has no user id")
-        return user_id
+        try:
+            response = await client.post(
+                "https://api.line.me/oauth2/v2.1/verify",
+                data={"id_token": token, "client_id": self.channel_id},
+            )
+            if response.status_code >= 500:
+                raise DomainError(
+                    "line_identity_provider_unavailable",
+                    "LINE 身分服務暫時無法使用",
+                    503,
+                )
+            if not response.is_success:
+                raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401)
+            claims = response.json()
+            expires_at = claims.get("exp")
+            now = int(datetime.now(timezone.utc).timestamp())
+            if (
+                claims.get("iss") != "https://access.line.me"
+                or claims.get("aud") != self.channel_id
+                or not isinstance(expires_at, int)
+                or expires_at <= now
+                or not isinstance(claims.get("sub"), str)
+                or not claims["sub"]
+            ):
+                raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401)
+            return claims["sub"]
+        except DomainError:
+            raise
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            raise DomainError(
+                "line_identity_provider_unavailable",
+                "LINE 身分服務暫時無法使用",
+                503,
+            ) from exc
+        finally:
+            if self.client is None:
+                await client.aclose()
