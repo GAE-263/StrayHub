@@ -20,7 +20,7 @@
 **目的**：建立 server-side entry/access primitive、前端 route decision 與不掛載 children 的 boundary；本階段完成前不得開始 user-story implementation。
 
 - [ ] T005 在 `apps/web/lib/auth.ts` 與 `apps/web/lib/liff-session.ts` 建立 typed auth/context/recovery state、transient entry reference storage、session source 標記與 logout/terminal cleanup，明確禁止以 client cache 判定 role 或 Membership
-- [ ] T006 [P] 在 `apps/web/lib/route-access.ts` 與 `apps/web/lib/route-access.test.ts` 實作 `EffectiveRole`、management/volunteer area、context-required、redirect、recovery 與 finite-state decision matrix
+- [x] T006 [P] 在 `apps/web/lib/route-access.ts` 與 `apps/web/lib/route-access.test.ts` 實作 `EffectiveRole`、management/volunteer area、context-required、redirect、recovery 與 finite-state decision matrix（RED：20 matrix assertions先失敗／GREEN：20 passed、typecheck與Prettier通過；authenticated VOLUNTEER的所有management deep link固定導向`/animal-confirmation`，未掛載任何route children）
 - [ ] T007 [P] 在 `services/api/app/infrastructure/line/entry_reference_adapter.py` 實作既有 `VolunteerEntryResolverPort` adapter，呼叫005 fixed-purpose digest resolver並只回安全organization公開context；不得在identity確認前開啟ambient organization scope
 - [ ] T008 在 `services/api/app/persistence/repositories/authentication_repository.py` 增加 exact-organization effective Membership/Grant 查詢與 concurrency lock 支援，重用 005 的 active、valid_from、expires_at、Grant predicate，不建立新的授權規則
 - [ ] T009 [P] 在 `apps/web/components/auth/ProtectedRouteState.tsx` 建立 checking、redirecting、context-required、temporary-error、re-entry 與 safe status/alert 的繁中可及狀態元件
