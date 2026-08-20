@@ -185,7 +185,20 @@ async function mockOrganizationManagement(page: Page, role: string) {
                   volunteer_authorization_status: "revoked",
                 },
               ]
-            : [],
+            : [
+                {
+                  id: "area-a",
+                  name: "隔離區",
+                  area_type: "area",
+                  status: "active",
+                },
+                {
+                  id: "cage-a",
+                  name: "A-01",
+                  area_type: "cage",
+                  status: "inactive",
+                },
+              ],
         }),
       });
       return;
@@ -211,7 +224,9 @@ test("PLATFORM_ADMIN 可看到建立收容所表單", async ({ page }) => {
   await page.getByLabel("初始管理員帳號").fill("local-shelter-admin-a");
   await page.getByLabel("初始管理員暫時密碼").fill("temporary-password");
   await page.getByRole("button", { name: "建立收容所" }).click();
-  await expect(page.getByRole("status")).toContainText("收容所已建立");
+  await expect(
+    page.getByRole("status").filter({ hasText: "收容所已建立" }),
+  ).toBeVisible();
   const audit = await page.evaluate(async () => {
     const response = await fetch(
       "/v1/management/audit?resource_type=organization",
@@ -221,14 +236,14 @@ test("PLATFORM_ADMIN 可看到建立收容所表單", async ({ page }) => {
   expect(audit.items[0].action).toBe("organization.created");
 });
 
-test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
+test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }, testInfo) => {
   await page.addInitScript(() =>
     sessionStorage.setItem("access_token", "test-access"),
   );
   await mockOrganizationManagement(page, "SHELTER_ADMIN");
   await page.goto("/shelters");
   await expect(page.getByRole("heading", { name: "權限管理" })).toBeVisible();
-  await expect(page.getByText("帳號與權限")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "帳號與權限" })).toBeVisible();
   await expect(page.getByText("本機工作人員 A")).toBeVisible();
   await expect(page.getByText("帳號：local-staff-a")).toBeVisible();
   await expect(page.getByText("時區")).toHaveCount(0);
@@ -240,6 +255,32 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "志工" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "工作人員" })).toBeVisible();
   await expect(page.getByText("授權已撤銷")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "籠舍／區域" })).toBeVisible();
+  const areaList = page.getByRole("list", { name: "籠舍與區域清單" });
+  await expect(areaList.getByRole("listitem")).toHaveCount(2);
+  await expect(areaList.getByRole("listitem").nth(0)).toContainText(
+    "隔離區區域啟用中",
+  );
+  await expect(areaList.getByRole("listitem").nth(1)).toContainText(
+    "A-01籠舍已停用",
+  );
+  await expect(areaList.getByText("area", { exact: true })).toHaveCount(0);
+  await expect(areaList.getByText("cage", { exact: true })).toHaveCount(0);
+  for (const viewport of [
+    { width: 360, height: 800 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`ft033-area-list-${viewport.width}.png`),
+      fullPage: true,
+    });
+  }
   await page.getByRole("button", { name: "建立帳號" }).click();
   await expect(
     page.getByRole("heading", { name: "建立機構帳號" }),
@@ -263,7 +304,10 @@ test("SHELTER_ADMIN 只能管理目前收容所設定", async ({ page }) => {
   expect(denied.body.code).toBe("platform_admin_required");
 });
 
-test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({ page }) => {
+test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 360, height: 800 });
   await page.addInitScript(() =>
     sessionStorage.setItem("access_token", "test-access"),
   );
@@ -274,7 +318,14 @@ test("SHELTER_ADMIN 可在已封存路由查詢並恢復成員", async ({ page }
   await expect(page.getByText("封存前：已停用")).toBeVisible();
   await page.getByRole("button", { name: "恢復成員" }).click();
   await page.getByRole("button", { name: "確認調整" }).click();
-  await expect(page.getByRole("status")).toContainText("已恢復成員");
+  const toast = page.getByRole("status").filter({ hasText: "已恢復成員" });
+  await expect(toast).toBeVisible();
+  const toastBox = await toast.boundingBox();
+  expect(toastBox).not.toBeNull();
+  expect((toastBox?.x ?? 0) + (toastBox?.width ?? 0)).toBeLessThanOrEqual(360);
+  await toast.screenshot({ path: testInfo.outputPath("ft018-toast-360.png") });
+  await toast.getByRole("button", { name: "關閉通知" }).click();
+  await expect(toast).toHaveCount(0);
   await expect(
     page.getByText("目前沒有符合條件的封存工作人員。"),
   ).toBeVisible();

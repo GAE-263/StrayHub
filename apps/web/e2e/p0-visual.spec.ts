@@ -1,5 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
+import { mockGovernanceVisualApi } from "./governance-visual-fixtures";
 import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
 
 const viewports = [
@@ -22,22 +23,59 @@ const routes = [
   "/care-report",
 ];
 
+async function expectNoDevIndicator(page: Page) {
+  await expect(page.locator("nextjs-portal")).toBeHidden();
+}
+
+test("visual runtime excludes the Next.js dev indicator", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.locator("main").first()).toBeVisible();
+  await expectNoDevIndicator(page);
+});
+
 for (const route of routes) {
   const slug = route === "/" ? "home" : route.slice(1).replaceAll("/", "-");
-  test(`${route} 建立 P0 visual evidence`, async ({ page }) => {
-    await page.addInitScript(() =>
-      sessionStorage.setItem("access_token", "test-access"),
-    );
-    await mockManagementApi(page);
-    for (const viewport of viewports) {
+  for (const viewport of viewports) {
+    test(`${route} @ ${viewport.width}x${viewport.height} 建立 P0 visual evidence`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem("access_token", "test-access"),
+      );
+      await mockManagementApi(page);
       await page.setViewportSize(viewport);
       await page.goto(route);
       await expect(page.locator("main").first()).toBeVisible();
+      await expectNoDevIndicator(page);
       await expect(page).toHaveScreenshot(`${slug}-${viewport.width}.png`, {
         fullPage: true,
       });
-    }
-  });
+    });
+  }
+}
+
+const governanceRoutes = [
+  "/shelters",
+  "/shelters/archived",
+  "/platform-admins",
+];
+
+for (const route of governanceRoutes) {
+  const slug = route.slice(1).replaceAll("/", "-");
+  for (const viewport of viewports) {
+    test(`${route} @ ${viewport.width}x${viewport.height} 建立治理 visual evidence`, async ({
+      page,
+    }) => {
+      await mockGovernanceVisualApi(page);
+      await page.setViewportSize(viewport);
+      await page.goto(route);
+      await expect(page.locator("main").first()).toBeVisible();
+      await expectNoDevIndicator(page);
+      await expect(page).toHaveScreenshot(`${slug}-${viewport.width}.png`, {
+        fullPage: true,
+      });
+    });
+  }
 }
 
 const volunteerRoutes = [
@@ -50,41 +88,44 @@ const volunteerRoutes = [
 
 for (const route of volunteerRoutes) {
   const slug = route.split("?")[0].slice(1).replaceAll("/", "-");
-  test(`${route} 建立志工授權 visual evidence`, async ({ page }) => {
-    test.skip(
-      process.env.VOLUNTEER_ACCESS_VISUAL_REVIEW !== "approved",
-      "等待 reviewer 確認志工授權 UI 後建立 baseline",
-    );
-    await mockVolunteerAccessApi(page);
-    for (const viewport of viewports) {
+  for (const viewport of viewports) {
+    test(`${route} @ ${viewport.width}x${viewport.height} 建立志工授權 visual evidence`, async ({
+      page,
+    }) => {
+      await mockVolunteerAccessApi(page);
       await page.setViewportSize(viewport);
       await page.goto(route);
       await expect(page.locator("main").first()).toBeVisible();
+      await expectNoDevIndicator(page);
       await expect(page).toHaveScreenshot(`${slug}-${viewport.width}.png`, {
         fullPage: true,
       });
-    }
-  });
+    });
+  }
 }
 
-test("志工批次確認、進度與 partial result 建立 visual evidence", async ({
-  page,
-}) => {
-  test.skip(
-    process.env.VOLUNTEER_ACCESS_VISUAL_REVIEW !== "approved",
-    "等待 reviewer 確認志工授權 UI 後建立 baseline",
-  );
-  await mockVolunteerAccessApi(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/volunteers/applications");
-  await page.getByRole("checkbox", { name: /目前篩選結果全部/ }).check();
-  await page.getByRole("button", { name: "確認並建立批次" }).click();
-  await expect(page).toHaveScreenshot("volunteer-batch-confirmation.png", {
-    fullPage: true,
+for (const viewport of viewports) {
+  test(`志工批次確認與 partial result @ ${viewport.width}x${viewport.height} 建立 visual evidence`, async ({
+    page,
+  }) => {
+    await mockVolunteerAccessApi(page);
+    await page.setViewportSize(viewport);
+    await page.goto("/volunteers/applications");
+    await page.getByRole("checkbox", { name: /目前篩選結果全部/ }).check();
+    await page.getByRole("button", { name: "確認並建立批次" }).click();
+    await expectNoDevIndicator(page);
+    await expect(page.getByRole("alertdialog")).toHaveScreenshot(
+      `volunteer-batch-confirmation-${viewport.width}.png`,
+    );
+    await page.getByRole("button", { name: "送出完整快照" }).click();
+    await expect(page.getByText("批次已建立")).toBeVisible();
+    await page
+      .getByRole("heading", { name: "逐筆結果" })
+      .scrollIntoViewIfNeeded();
+    await expectNoDevIndicator(page);
+    await expect(page).toHaveScreenshot(
+      `volunteer-batch-partial-result-${viewport.width}.png`,
+      { fullPage: false },
+    );
   });
-  await page.getByRole("button", { name: "送出完整快照" }).click();
-  await expect(page.getByText("批次已建立")).toBeVisible();
-  await expect(page).toHaveScreenshot("volunteer-batch-partial-result.png", {
-    fullPage: true,
-  });
-});
+}

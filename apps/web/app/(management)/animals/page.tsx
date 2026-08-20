@@ -102,7 +102,7 @@ export default function AnimalsPage() {
   }, [areaId, page, query, status]);
 
   return (
-    <main aria-labelledby="animals-title">
+    <section aria-labelledby="animals-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">ANIMAL DIRECTORY</span>
@@ -110,7 +110,7 @@ export default function AnimalsPage() {
           <p>搜尋名稱、收容編號與 Cage／Area，進入完整照護歷程。</p>
         </div>
       </div>
-      <section className="panel ui-card">
+      <section className="ui-card ui-card-padded">
         <div className="toolbar" aria-label="動物清單篩選">
           <Field>
             <label htmlFor="animal-query">搜尋</label>
@@ -200,7 +200,7 @@ export default function AnimalsPage() {
                       className="text-link"
                       href={`/animals/${animal.id}/timeline`}
                     >
-                      Timeline →
+                      近期歷程 →
                     </Link>
                   </td>
                 </tr>
@@ -232,6 +232,6 @@ export default function AnimalsPage() {
           </div>
         ) : null}
       </section>
-    </main>
+    </section>
   );
 }

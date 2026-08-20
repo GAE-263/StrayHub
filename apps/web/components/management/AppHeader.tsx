@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { LogOut } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 
@@ -12,6 +13,7 @@ type Props = {
   activeOrganizationId: string;
   onSwitchOrganization: (organizationId: string) => void;
   onLogout: () => void;
+  mobileNavigation?: ReactNode;
 };
 
 export function AppHeader({
@@ -21,16 +23,20 @@ export function AppHeader({
   activeOrganizationId,
   onSwitchOrganization,
   onLogout,
+  mobileNavigation,
 }: Props) {
   return (
     <header className="app-header">
-      <Link className="brand" href="/" aria-label="回到管理首頁">
-        <span className="brand-mark">森</span>
-        <span>
-          <strong>浪浪森友會</strong>
-          <small>CRM 管理工作台</small>
-        </span>
-      </Link>
+      <div className="header-brand-group">
+        {mobileNavigation}
+        <Link className="brand" href="/" aria-label="回到管理首頁">
+          <span className="brand-mark">森</span>
+          <span>
+            <strong>浪浪森友會</strong>
+            <small>CRM 管理工作台</small>
+          </span>
+        </Link>
+      </div>
       <div className="header-context">
         {organizations.length > 1 ? (
           <label className="context-selector">
@@ -55,7 +61,7 @@ export function AppHeader({
         )}
         <span className="user-label">{displayName}</span>
         <Button
-          className="button-quiet"
+          className="header-logout"
           variant="ghost"
           type="button"
           aria-label="登出管理工作台"

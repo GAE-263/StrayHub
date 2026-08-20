@@ -36,6 +36,11 @@ describe("AccessGrantTable", () => {
     );
     expect(html).toContain("更新期限");
     expect(html).toContain("撤銷授權");
+    expect(html).toContain('class="ui-field grant-status-filter"');
+    expect(html).toContain('class="ui-input"');
+    expect(html).toContain('class="ui-table grant-table"');
+    expect(html).toContain("ui-button-secondary");
+    expect(html).toContain("ui-button-destructive");
     expect(html).toContain("歷史週期（不可修改）");
     expect(html).toContain("排班異動");
   });

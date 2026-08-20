@@ -38,8 +38,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-async function renderPage() {
+async function renderPage(delayMs = 0) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
     const path = String(input);
     if (path.endsWith("/auth/me")) {
       return jsonResponse({
@@ -117,6 +120,12 @@ afterEach(async () => {
 });
 
 describe("archived shelter memberships page", () => {
+  it("shows loading before archived membership responses resolve", async () => {
+    await renderPage(40);
+    expect(container?.textContent).toContain("正在載入收容所");
+    expect(container?.textContent).not.toContain("已封存工作人員");
+  });
+
   it("shows archived members in separate staff and volunteer sections", async () => {
     await renderPage();
 

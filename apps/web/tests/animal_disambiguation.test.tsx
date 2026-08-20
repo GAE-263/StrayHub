@@ -121,7 +121,7 @@ describe("animal disambiguation", () => {
     );
 
     const results = container?.querySelectorAll(
-      'section[aria-labelledby="today-list-title"] li',
+      '[aria-labelledby="today-list-title"] li',
     );
     expect(results).toHaveLength(2);
     expect(container?.textContent).toContain("小黑／VAAAG114080610");

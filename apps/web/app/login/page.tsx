@@ -125,7 +125,7 @@ export default function LoginPage() {
         <span className="eyebrow">STRAYHUB CRM</span>
         <h1 id="login-title">浪浪森友會管理入口</h1>
         <p className="muted">
-          登入後會建立 Active Shelter Context，進入角色感知管理工作台。
+          登入後會設定目前收容所，進入角色感知管理工作台。
         </p>
         <form
           onSubmit={submit}
@@ -186,8 +186,7 @@ export default function LoginPage() {
           >
             <h2 id="context-title">確認目前收容所</h2>
             <p className="muted">
-              請選擇這次工作的 Active Shelter Context；後端會重新驗證
-              Membership。
+              請選擇這次工作的目前收容所；後端會重新驗證成員資格。
             </p>
             <Button
               type="button"

@@ -14,6 +14,7 @@ import { Card } from "../../../../components/ui/card";
 import { Button } from "../../../../components/ui/button";
 import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFormDialog";
 import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
+import { Toast } from "../../../../components/ui/toast";
 
 type Props = { params: Promise<{ animalId: string }> };
 type Animal = {
@@ -39,6 +40,7 @@ export default function AnimalProfilePage({ params }: Props) {
       "no_activity" | "events_no_todos" | "pending" | "overdue" | undefined,
   });
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     void authFetch(`/v1/management/animals/${animalId}`)
@@ -109,19 +111,19 @@ export default function AnimalProfilePage({ params }: Props) {
 
   if (error)
     return (
-      <main>
+      <div>
         <ErrorState title="無法載入動物檔案" description={error} />
-      </main>
+      </div>
     );
   if (!animal)
     return (
-      <main>
+      <div>
         <LoadingState title="正在載入動物檔案…" />
-      </main>
+      </div>
     );
 
   return (
-    <main aria-labelledby="animal-profile-title">
+    <section aria-labelledby="animal-profile-title">
       <Breadcrumbs
         items={[
           { label: "動物檔案", href: "/animals" },
@@ -151,7 +153,7 @@ export default function AnimalProfilePage({ params }: Props) {
           localToday={todaySummary.today}
           state={todaySummary.state}
         />
-        <Card className="panel" aria-labelledby="animal-summary-title">
+        <Card className="ui-card-padded" aria-labelledby="animal-summary-title">
           <h2 id="animal-summary-title">基本資料</h2>
           <dl className="detail-list">
             <div>
@@ -177,10 +179,10 @@ export default function AnimalProfilePage({ params }: Props) {
             </div>
           </dl>
         </Card>
-        <Card className="panel" aria-labelledby="animal-actions-title">
+        <Card className="ui-card-padded" aria-labelledby="animal-actions-title">
           <h2 id="animal-actions-title">工作入口</h2>
           <Link className="link-card" href={`/animals/${animal.id}/timeline`}>
-            <strong>Timeline</strong>
+            <strong>近期歷程</strong>
             <p className="muted">查看近 14 日、多筆回報與 AI 狀態。</p>
           </Link>
           <Link
@@ -210,7 +212,13 @@ export default function AnimalProfilePage({ params }: Props) {
         open={reminderOpen}
         animalId={animal.id}
         onClose={() => setReminderOpen(false)}
+        onSaved={setToast}
       />
-    </main>
+      {toast ? (
+        <Toast messageKey={toast} onClose={() => setToast("")}>
+          {toast}
+        </Toast>
+      ) : null}
+    </section>
   );
 }

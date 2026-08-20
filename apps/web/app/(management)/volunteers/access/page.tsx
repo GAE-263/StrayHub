@@ -48,7 +48,7 @@ export default function VolunteerAccessPage() {
   }
 
   return (
-    <main>
+    <div>
       <div className="page-heading">
         <div>
           <span className="eyebrow">VOLUNTEER ACCESS</span>
@@ -58,6 +58,6 @@ export default function VolunteerAccessPage() {
       </div>
       {error ? <p role="alert">{error}</p> : null}
       <AccessGrantTable grants={grants} onMutate={mutate} />
-    </main>
+    </div>
   );
 }

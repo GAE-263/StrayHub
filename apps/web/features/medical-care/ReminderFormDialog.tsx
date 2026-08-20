@@ -8,6 +8,7 @@ import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
+import { Alert } from "../../components/ui/alert";
 import { createReminderSeries } from "./api";
 
 export function ReminderFormDialog({
@@ -19,7 +20,7 @@ export function ReminderFormDialog({
   open: boolean;
   animalId: string;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (message: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [reminderType, setReminderType] = useState("other");
@@ -46,8 +47,7 @@ export function ReminderFormDialog({
       setMessage("提醒建立失敗，請檢查權限與欄位。");
       return;
     }
-    setMessage("提醒已建立");
-    onSaved?.();
+    onSaved?.("提醒已建立");
     onClose();
   }
   return (
@@ -136,7 +136,7 @@ export function ReminderFormDialog({
           週期日期由收容所時區計算；系統不會依體重計算藥量。
         </p>
         <Button type="submit">建立提醒</Button>
-        {message ? <p role="status">{message}</p> : null}
+        {message ? <Alert role="alert">{message}</Alert> : null}
       </form>
     </Dialog>
   );

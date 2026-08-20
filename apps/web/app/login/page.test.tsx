@@ -14,6 +14,6 @@ describe("LoginPage", () => {
     expect(html).toContain('for="username"');
     expect(html).toContain('for="password"');
     expect(html).toContain("登入");
-    expect(html).toContain("Active Shelter Context");
+    expect(html).toContain("目前收容所");
   });
 });

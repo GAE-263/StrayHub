@@ -117,11 +117,14 @@ export default function ManagementHome() {
               ))}
             </div>
             <div className="content-grid">
-              <Card className="panel" aria-labelledby="recent-reports-title">
+              <Card
+                className="ui-card-padded"
+                aria-labelledby="recent-reports-title"
+              >
                 <div className="panel-heading">
                   <h2 id="recent-reports-title">最近回報</h2>
                   <Link className="text-link" href="/reports">
-                    開啟 Report Inbox →
+                    開啟回報收件匣 →
                   </Link>
                 </div>
                 {dashboard.recent_reports.length === 0 ? (
@@ -167,7 +170,10 @@ export default function ManagementHome() {
                   </Table>
                 )}
               </Card>
-              <Card className="panel" aria-labelledby="quick-entry-title">
+              <Card
+                className="ui-card-padded"
+                aria-labelledby="quick-entry-title"
+              >
                 <h2 id="quick-entry-title">快速入口</h2>
                 <Link className="link-card" href="/animals">
                   <strong>動物檔案</strong>
@@ -178,7 +184,7 @@ export default function ManagementHome() {
                   <p className="muted">依日期、動物與狀態處理照護回報。</p>
                 </Link>
                 <Link className="link-card" href="/ai-review">
-                  <strong>AI Review Queue</strong>
+                  <strong>AI 人工覆核</strong>
                   <p className="muted">人工確認、拒絕或修正 AI 結果。</p>
                 </Link>
               </Card>

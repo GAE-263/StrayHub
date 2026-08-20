@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { authFetch } from "../../../../lib/auth";
 import { LoadingState } from "../../../../components/management/StateViews";
 import { Alert } from "../../../../components/ui/alert";
 import { Badge } from "../../../../components/ui/badge";
 import { Button } from "../../../../components/ui/button";
+import { Dialog } from "../../../../components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -14,6 +15,7 @@ import {
 } from "../../../../components/ui/card";
 import { Field } from "../../../../components/ui/field";
 import { Input } from "../../../../components/ui/input";
+import { Toast } from "../../../../components/ui/toast";
 import {
   Table,
   TableBody,
@@ -33,6 +35,8 @@ type Scope = {
   status: string;
 };
 
+type PendingScope = Scope;
+
 export default function ReportableScopePage() {
   const [items, setItems] = useState<Scope[]>([]);
   const [animalId, setAnimalId] = useState("");
@@ -43,6 +47,8 @@ export default function ReportableScopePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pendingScope, setPendingScope] = useState<PendingScope | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -94,23 +100,37 @@ export default function ReportableScopePage() {
 
   const deactivate = async (scope: Scope) => {
     setError("");
-    const response = await authFetch(
-      `/v1/management/reportable-scopes/${scope.id}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "inactive" }),
-      },
-    );
-    if (!response.ok) setError(`停用失敗（HTTP ${response.status}）`);
-    else {
+    setSubmitting(true);
+    try {
+      const response = await authFetch(
+        `/v1/management/reportable-scopes/${scope.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "inactive" }),
+        },
+      );
+      if (!response.ok) throw new Error(`停用失敗（HTTP ${response.status}）`);
       setMessage("範圍已停用，歷史資料保留。");
       load();
+    } catch (requestError: unknown) {
+      setError(
+        requestError instanceof Error ? requestError.message : "停用失敗",
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  const confirmDeactivate = async () => {
+    if (!pendingScope) return;
+    const scope = pendingScope;
+    await deactivate(scope);
+    setPendingScope(null);
+  };
+
   return (
-    <main aria-labelledby="scope-title">
+    <section aria-labelledby="scope-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">REPORTABLE SCOPE</span>
@@ -118,7 +138,7 @@ export default function ReportableScopePage() {
           <p>限制志工今天可看到的動物、Cage／Area 與指定帳號。</p>
         </div>
       </div>
-      {message ? <Alert role="status">{message}</Alert> : null}
+      {message ? <Toast>{message}</Toast> : null}
       {error ? <Alert role="alert">{error}</Alert> : null}
       <Card>
         <CardHeader>
@@ -216,10 +236,10 @@ export default function ReportableScopePage() {
                     </TableCell>
                     <TableCell>
                       <Button
-                        variant="secondary"
+                        variant="destructive"
                         type="button"
                         disabled={scope.status !== "active"}
-                        onClick={() => void deactivate(scope)}
+                        onClick={() => setPendingScope(scope)}
                       >
                         停用
                       </Button>
@@ -231,6 +251,47 @@ export default function ReportableScopePage() {
           )}
         </CardContent>
       </Card>
-    </main>
+      <Dialog
+        open={pendingScope !== null}
+        role="alertdialog"
+        title="確認停用可回報範圍"
+        onClose={() => {
+          if (!submitting) setPendingScope(null);
+        }}
+      >
+        <p className="dialog-description">
+          目標：
+          {pendingScope?.animal_id ?? pendingScope?.area_id ?? "未指定目標"}
+          <br />
+          有效期間：
+          {pendingScope
+            ? `${new Date(pendingScope.starts_at).toLocaleString("zh-TW")} — ${new Date(pendingScope.ends_at).toLocaleString("zh-TW")}`
+            : "—"}
+          <br />
+          {pendingScope?.volunteer_user_id
+            ? `指定志工 ${pendingScope.volunteer_user_id} 將立即無法使用此範圍。`
+            : "所有受此範圍限制的志工將立即無法使用此範圍。"}
+          歷史資料會保留，但目前有效回報入口會停止。
+        </p>
+        <div className="dialog-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={submitting}
+            onClick={() => setPendingScope(null)}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={submitting}
+            onClick={() => void confirmDeactivate()}
+          >
+            {submitting ? "處理中…" : "確認停用"}
+          </Button>
+        </div>
+      </Dialog>
+    </section>
   );
 }

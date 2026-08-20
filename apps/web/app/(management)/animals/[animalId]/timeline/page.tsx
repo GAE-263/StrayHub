@@ -64,7 +64,7 @@ export default function AnimalTimelinePage({ params }: Props) {
   };
 
   return (
-    <main>
+    <div>
       <Breadcrumbs
         items={[
           { label: "動物檔案", href: "/animals" },
@@ -92,6 +92,6 @@ export default function AnimalTimelinePage({ params }: Props) {
       />
       <AnimalTimeline days={days} loading={loading} error={error} />
       <MedicalHistoryPanel animalId={animalId} />
-    </main>
+    </div>
   );
 }

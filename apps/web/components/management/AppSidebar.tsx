@@ -13,9 +13,9 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
     links: [
       { href: "/", label: "總覽", icon: "view" },
       { href: "/animals", label: "動物檔案", icon: "search" },
-      { href: "/reports", label: "報告收件匣", icon: "audit" },
+      { href: "/reports", label: "回報收件匣", icon: "audit" },
       { href: "/care-calendar", label: "照護行事曆", icon: "calendar" },
-      { href: "/ai-review", label: "AI Review Queue", icon: "ai" },
+      { href: "/ai-review", label: "AI 人工覆核", icon: "ai" },
     ],
   },
   {
@@ -38,7 +38,7 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
         roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
         icon: "access",
       },
-      { href: "/settings/audit", label: "Audit Query", icon: "audit" },
+      { href: "/settings/audit", label: "稽核紀錄", icon: "audit" },
       {
         href: "/volunteers/applications",
         label: "志工報名審核",

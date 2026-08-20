@@ -2,10 +2,11 @@ import { expect, test } from "@playwright/test";
 
 test("unknown LINE identity can apply once and reload pending without protected requests", async ({
   page,
-}) => {
+}, testInfo) => {
   let application: { id: string; status: string; version: number } | null =
     null;
   let submitCount = 0;
+  let withdrawCount = 0;
   const responseBody = () => ({
     organization: { id: "org-a", name: "收容所 A", applications_enabled: true },
     application,
@@ -29,6 +30,15 @@ test("unknown LINE identity can apply once and reload pending without protected 
       body: JSON.stringify(responseBody()),
     });
   });
+  await page.route("**/v1/volunteer-applications/*/withdraw", async (route) => {
+    withdrawCount += 1;
+    application = { id: "app-a", status: "withdrawn", version: 2 };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(responseBody()),
+    });
+  });
   const protectedRequests: string[] = [];
   page.on("request", (request) => {
     if (/\/(animals|care-reports|management)/.test(request.url())) {
@@ -39,12 +49,33 @@ test("unknown LINE identity can apply once and reload pending without protected 
     "/volunteer-application?entry=local-entry&id_token=local-id-token",
   );
   await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.locator("nextjs-portal").evaluateAll((portals) => {
+    portals.forEach((portal) => {
+      (portal as HTMLElement).style.display = "none";
+    });
+  });
+  await page.screenshot({
+    path: testInfo.outputPath("ft022-volunteer-application-360.png"),
+    fullPage: true,
+  });
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "立即報名" }).dblclick();
   await expect(page.getByText("等待收容所審核")).toBeVisible();
   expect(submitCount).toBe(1);
   await page.reload();
   await expect(page.getByText("等待收容所審核")).toBeVisible();
+  await page.getByRole("button", { name: "撤回報名" }).click();
+  await expect(
+    page.getByRole("heading", { name: "確認撤回志工報名" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "保留報名" }).click();
+  expect(withdrawCount).toBe(0);
+  await page.getByRole("button", { name: "撤回報名" }).click();
+  await page.getByRole("button", { name: "確認撤回" }).click();
+  await expect(page.getByRole("status")).toContainText("志工報名已撤回");
+  await expect(page.getByText("報名已撤回")).toBeVisible();
+  expect(withdrawCount).toBe(1);
   expect(protectedRequests).toEqual([]);
 });
 

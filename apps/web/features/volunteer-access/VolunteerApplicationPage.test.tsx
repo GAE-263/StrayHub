@@ -1,12 +1,110 @@
 // @vitest-environment jsdom
 
-import React from "react";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
 
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
 describe("VolunteerApplicationPage", () => {
+  it("requires confirmation before withdrawal and shows a success toast", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "org-a",
+          name: "收容所 A",
+          applications_enabled: true,
+        },
+        application: { id: "app-a", status: "withdrawn", version: 2 },
+        grant: null,
+        effective_status: "withdrawn",
+        next_actions: ["reapply"],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          initialStatus={{
+            organization: {
+              id: "org-a",
+              name: "收容所 A",
+              applications_enabled: true,
+            },
+            application: { id: "app-a", status: "pending", version: 1 },
+            grant: null,
+            effective_status: "pending",
+            next_actions: ["wait", "withdraw"],
+          }}
+          idToken="id-token"
+          shelterEntryReference="entry"
+        />,
+      );
+    });
+    const button = (name: string) =>
+      Array.from(container.querySelectorAll("button")).find(
+        (item) => item.textContent?.trim() === name,
+      ) as HTMLButtonElement;
+
+    await act(async () => button("撤回報名").click());
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.querySelector("dialog[open]")).not.toBeNull();
+    await act(async () => button("保留報名").click());
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await act(async () => button("撤回報名").click());
+    await act(async () => {
+      button("確認撤回").click();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("志工報名已撤回");
+    expect(container.querySelector("dialog[open]")).toBeNull();
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses semantic application primitives instead of hard-coded color utilities", () => {
+    const html = renderToStaticMarkup(
+      <VolunteerApplicationPage
+        initialStatus={{
+          organization: {
+            id: "org-a",
+            name: "收容所 A",
+            applications_enabled: true,
+          },
+          application: null,
+          grant: null,
+          effective_status: "none",
+          next_actions: ["apply"],
+        }}
+        idToken="id-token"
+        shelterEntryReference="entry"
+      />,
+    );
+    expect(html).toContain("ui-card");
+    expect(html).toContain("ui-checkbox");
+    expect(html).toContain("ui-button ui-button-default");
+    expect(html).not.toMatch(/(?:emerald|slate|red)-/);
+  });
+
   it.each([
     ["none", "立即報名"],
     ["pending", "等待收容所審核"],

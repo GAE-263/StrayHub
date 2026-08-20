@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CareAgenda } from "./CareAgenda";
+import { CareAgendaFilters } from "./CareAgendaFilters";
 
 describe("CareAgenda", () => {
   it("keeps four visible sections and distinguishes empty sections", () => {
@@ -91,5 +92,30 @@ describe("CareAgenda", () => {
     );
     expect(markup).toContain("1 / 125");
     expect(markup).toContain("載入更多（尚有 124 筆）");
+    expect(markup).toContain('class="reminder-card-grid"');
+  });
+});
+
+describe("CareAgendaFilters", () => {
+  it("uses the bottom-aligned filter layout", () => {
+    const markup = renderToStaticMarkup(
+      <CareAgendaFilters
+        date="2026-08-19"
+        reminderType=""
+        status=""
+        animalId=""
+        assigneeMembershipId=""
+        onDateChange={() => undefined}
+        onReminderTypeChange={() => undefined}
+        onStatusChange={() => undefined}
+        onAnimalIdChange={() => undefined}
+        onAssigneeChange={() => undefined}
+        onToday={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("care-agenda-filters");
+    expect(markup).toContain("上一日");
+    expect(markup).toContain("下一日");
   });
 });

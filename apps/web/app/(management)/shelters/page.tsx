@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Link from "next/link";
@@ -24,6 +25,11 @@ import { Input } from "../../../components/ui/input";
 import { Select } from "../../../components/ui/select";
 import { Toast } from "../../../components/ui/toast";
 import { MembershipPermissionDialog } from "../../../components/management/MembershipPermissionDialog";
+import {
+  EmptyState,
+  LoadingState,
+} from "../../../components/management/StateViews";
+import { statusLabel } from "../../../components/management/ui-status";
 
 type Shelter = {
   id: string;
@@ -71,6 +77,11 @@ type PendingMembershipChange = {
   adminCountAfter: number;
 };
 
+type ToastMessage = {
+  id: number;
+  text: string;
+};
+
 const roleLabels: Record<Membership["role"], string> = {
   SHELTER_ADMIN: "收容所管理員",
   STAFF: "工作人員",
@@ -88,6 +99,11 @@ const membershipStatusLabels: Record<string, string> = {
 const volunteerAuthorizationLabels: Record<string, string> = {
   expired: "授權已到期",
   revoked: "授權已撤銷",
+};
+
+const areaTypeLabels: Record<Area["area_type"], string> = {
+  area: "區域",
+  cage: "籠舍",
 };
 
 const membershipStatusOrder: Record<string, number> = {
@@ -142,9 +158,13 @@ async function responseData<T>(response: Response): Promise<T> {
 export default function SheltersManagementPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [sheltersLoading, setSheltersLoading] = useState(true);
   const [selectedShelterId, setSelectedShelterId] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState(false);
+  const submittingActionRef = useRef(false);
   const [newShelterName, setNewShelterName] = useState("");
   const [organizationCode, setOrganizationCode] = useState("");
   const [initialAdminUsername, setInitialAdminUsername] = useState("");
@@ -162,7 +182,7 @@ export default function SheltersManagementPage() {
   const [areaType, setAreaType] = useState<Area["area_type"]>("area");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [toastMessage, setToastMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState<ToastMessage | null>(null);
   const selectedShelter = useMemo(
     () => shelters.find((shelter) => shelter.id === selectedShelterId),
     [shelters, selectedShelterId],
@@ -206,32 +226,46 @@ export default function SheltersManagementPage() {
 
   const loadShelters = useCallback(
     async (preferredId?: string) => {
-      const data = await request<{ items: Shelter[] }>("/v1/organizations");
-      setShelters(data.items);
-      const nextId = preferredId ?? selectedShelterId;
-      if (data.items.some((shelter) => shelter.id === nextId)) {
-        setSelectedShelterId(nextId);
-      } else if (data.items[0]) {
-        setSelectedShelterId(data.items[0].id);
+      setSheltersLoading(true);
+      try {
+        const data = await request<{ items: Shelter[] }>("/v1/organizations");
+        setShelters(data.items);
+        setSelectedShelterId((current) => {
+          const nextId = preferredId ?? current;
+          if (data.items.some((shelter) => shelter.id === nextId)) {
+            return nextId;
+          }
+          return data.items[0]?.id ?? "";
+        });
+      } finally {
+        setSheltersLoading(false);
       }
     },
-    [request, selectedShelterId],
+    [request],
   );
 
   const loadShelterDetails = useCallback(async () => {
-    if (!selectedShelterId) return;
-    const [membershipData, areaData] = await Promise.all([
-      request<{ items: Membership[] }>(
-        `/v1/organizations/${selectedShelterId}/memberships`,
-      ),
-      selectedShelter?.status === "active"
-        ? request<{ items: Area[] }>(
-            `/v1/organizations/${selectedShelterId}/areas`,
-          )
-        : Promise.resolve({ items: [] as Area[] }),
-    ]);
-    setMemberships(membershipData.items);
-    setAreas(areaData.items);
+    if (!selectedShelterId) {
+      setDetailsLoading(false);
+      return;
+    }
+    setDetailsLoading(true);
+    try {
+      const [membershipData, areaData] = await Promise.all([
+        request<{ items: Membership[] }>(
+          `/v1/organizations/${selectedShelterId}/memberships`,
+        ),
+        selectedShelter?.status === "active"
+          ? request<{ items: Area[] }>(
+              `/v1/organizations/${selectedShelterId}/areas`,
+            )
+          : Promise.resolve({ items: [] as Area[] }),
+      ]);
+      setMemberships(membershipData.items);
+      setAreas(areaData.items);
+    } finally {
+      setDetailsLoading(false);
+    }
   }, [request, selectedShelter, selectedShelterId]);
 
   useEffect(() => {
@@ -248,6 +282,7 @@ export default function SheltersManagementPage() {
     if (!canManageShelterSettings) {
       setMemberships([]);
       setAreas([]);
+      setDetailsLoading(false);
       return;
     }
     void loadShelterDetails().catch((error: Error) =>
@@ -266,13 +301,23 @@ export default function SheltersManagementPage() {
   };
 
   const runAction = async (action: () => Promise<void>) => {
+    if (submittingActionRef.current) return;
+    submittingActionRef.current = true;
+    setSubmittingAction(true);
     setErrorMessage("");
     setMessage("");
     try {
       await action();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
+      submittingActionRef.current = false;
+      setSubmittingAction(false);
     }
+  };
+
+  const showToast = (text: string) => {
+    setToastMessage((current) => ({ id: (current?.id ?? 0) + 1, text }));
   };
 
   const activeAdminCount = useMemo(
@@ -368,13 +413,13 @@ export default function SheltersManagementPage() {
       setAccountPassword("");
       throw error;
     }
-    setMessage("帳號與 Membership 已建立。");
+    setMessage("帳號與成員資格已建立。");
     setAccountUsername("");
     setAccountDisplayName("");
     setAccountPassword("");
     setAccountDialogOpen(false);
     await loadShelterDetails();
-    setToastMessage(
+    showToast(
       createdRole === "SHELTER_ADMIN"
         ? `已建立收容所管理員帳號「${createdIdentity}」`
         : `已建立${roleLabels[createdRole]}帳號「${createdIdentity}」`,
@@ -422,7 +467,7 @@ export default function SheltersManagementPage() {
         await updateMembership(pending.membership, pending.changes);
       }
       setPendingMembershipChange(null);
-      setToastMessage(
+      showToast(
         `已完成${pending.operation}：「${pending.membership.display_name || pending.membership.username || "未命名使用者"}」`,
       );
     } catch (error) {
@@ -438,6 +483,7 @@ export default function SheltersManagementPage() {
   const submitAccountForm = (event: FormEvent) => {
     event.preventDefault();
     if (accountRole === "SHELTER_ADMIN") {
+      setAccountDialogOpen(false);
       setAccountConfirmationOpen(true);
       return;
     }
@@ -566,7 +612,7 @@ export default function SheltersManagementPage() {
   };
 
   return (
-    <main
+    <section
       className="shelter-management-page"
       aria-labelledby="shelter-management-title"
     >
@@ -581,35 +627,48 @@ export default function SheltersManagementPage() {
         <Alert role="alert">授權或操作失敗：{errorMessage}</Alert>
       )}
       {message && <Alert role="status">{message}</Alert>}
-      {toastMessage && <Toast>{toastMessage}</Toast>}
+      {toastMessage && (
+        <Toast
+          messageKey={toastMessage.id}
+          onClose={() => setToastMessage(null)}
+        >
+          {toastMessage.text}
+        </Toast>
+      )}
 
       <Card aria-labelledby="shelter-list-title">
         <CardHeader>
           <CardTitle id="shelter-list-title">收容所</CardTitle>
         </CardHeader>
         <CardContent>
-          <Field>
-            <label htmlFor="selected-shelter">目前管理收容所</label>
-            <Select
-              id="selected-shelter"
-              value={selectedShelterId}
-              onChange={(event) => setSelectedShelterId(event.target.value)}
-            >
-              <option value="">請選擇</option>
-              {shelters.map((shelter) => (
-                <option key={shelter.id} value={shelter.id}>
-                  {shelter.name}（{shelter.status}）
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {sheltersLoading ? (
+            <LoadingState title="正在載入收容所…" />
+          ) : shelters.length === 0 ? (
+            <EmptyState title="目前沒有可管理的收容所" />
+          ) : (
+            <Field>
+              <label htmlFor="selected-shelter">目前管理收容所</label>
+              <Select
+                id="selected-shelter"
+                value={selectedShelterId}
+                onChange={(event) => setSelectedShelterId(event.target.value)}
+              >
+                {shelters.map((shelter) => (
+                  <option key={shelter.id} value={shelter.id}>
+                    {shelter.name}（{shelter.status}）
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           {canManageOrganizations &&
             selectedShelter?.status === "pending_setup" && (
               <Button
                 type="button"
+                disabled={submittingAction}
                 onClick={() => void runAction(activateShelter)}
               >
-                啟用收容所
+                {submittingAction ? "處理中…" : "啟用收容所"}
               </Button>
             )}
           {canManageOrganizations && (
@@ -621,6 +680,7 @@ export default function SheltersManagementPage() {
                   id="shelter-code"
                   value={organizationCode}
                   onChange={(event) => setOrganizationCode(event.target.value)}
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -630,6 +690,7 @@ export default function SheltersManagementPage() {
                   id="shelter-name"
                   value={newShelterName}
                   onChange={(event) => setNewShelterName(event.target.value)}
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -641,6 +702,7 @@ export default function SheltersManagementPage() {
                   onChange={(event) =>
                     setInitialAdminUsername(event.target.value)
                   }
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -655,10 +717,13 @@ export default function SheltersManagementPage() {
                   onChange={(event) =>
                     setInitialAdminPassword(event.target.value)
                   }
+                  disabled={submittingAction}
                   required
                 />
               </Field>
-              <Button type="submit">建立收容所</Button>
+              <Button type="submit" disabled={submittingAction}>
+                {submittingAction ? "處理中…" : "建立收容所"}
+              </Button>
             </form>
           )}
         </CardContent>
@@ -690,43 +755,49 @@ export default function SheltersManagementPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <section
-              className="membership-section"
-              aria-labelledby="volunteer-title"
-            >
-              <div className="membership-section-heading">
-                <div>
-                  <h3 id="volunteer-title">志工</h3>
-                  <p>依既有報名與限時授權流程管理</p>
-                </div>
-                <Badge>{volunteerMemberships.length} 人</Badge>
-              </div>
-              {volunteerMemberships.length > 0 ? (
-                <ul className="membership-list">
-                  {volunteerMemberships.map(renderMembership)}
-                </ul>
-              ) : (
-                <p className="membership-empty">目前沒有志工。</p>
-              )}
-            </section>
-            <section
-              className="membership-section"
-              aria-labelledby="staff-title"
-            >
-              <div className="membership-section-heading">
-                <div>
-                  <h3 id="staff-title">工作人員</h3>
-                </div>
-                <Badge>{managementMemberships.length} 人</Badge>
-              </div>
-              {managementMemberships.length > 0 ? (
-                <ul className="membership-list">
-                  {managementMemberships.map(renderMembership)}
-                </ul>
-              ) : (
-                <p className="membership-empty">目前沒有工作人員。</p>
-              )}
-            </section>
+            {detailsLoading ? (
+              <LoadingState title="正在載入帳號與權限…" />
+            ) : (
+              <>
+                <section
+                  className="membership-section"
+                  aria-labelledby="volunteer-title"
+                >
+                  <div className="membership-section-heading">
+                    <div>
+                      <h3 id="volunteer-title">志工</h3>
+                      <p>依既有報名與限時授權流程管理</p>
+                    </div>
+                    <Badge>{volunteerMemberships.length} 人</Badge>
+                  </div>
+                  {volunteerMemberships.length > 0 ? (
+                    <ul className="membership-list">
+                      {volunteerMemberships.map(renderMembership)}
+                    </ul>
+                  ) : (
+                    <p className="membership-empty">目前沒有志工。</p>
+                  )}
+                </section>
+                <section
+                  className="membership-section"
+                  aria-labelledby="staff-title"
+                >
+                  <div className="membership-section-heading">
+                    <div>
+                      <h3 id="staff-title">工作人員</h3>
+                    </div>
+                    <Badge>{managementMemberships.length} 人</Badge>
+                  </div>
+                  {managementMemberships.length > 0 ? (
+                    <ul className="membership-list">
+                      {managementMemberships.map(renderMembership)}
+                    </ul>
+                  ) : (
+                    <p className="membership-empty">目前沒有工作人員。</p>
+                  )}
+                </section>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -747,6 +818,7 @@ export default function SheltersManagementPage() {
               id="account-username"
               value={accountUsername}
               onChange={(event) => setAccountUsername(event.target.value)}
+              disabled={submittingAction}
               required
             />
           </Field>
@@ -756,6 +828,7 @@ export default function SheltersManagementPage() {
               id="account-display-name"
               value={accountDisplayName}
               onChange={(event) => setAccountDisplayName(event.target.value)}
+              disabled={submittingAction}
               required
             />
           </Field>
@@ -766,6 +839,7 @@ export default function SheltersManagementPage() {
               type="password"
               value={accountPassword}
               onChange={(event) => setAccountPassword(event.target.value)}
+              disabled={submittingAction}
               required
             />
           </Field>
@@ -777,6 +851,7 @@ export default function SheltersManagementPage() {
               onChange={(event) =>
                 setAccountRole(event.target.value as Membership["role"])
               }
+              disabled={submittingAction}
             >
               <option value="SHELTER_ADMIN">收容所管理員</option>
               <option value="STAFF">工作人員</option>
@@ -791,7 +866,9 @@ export default function SheltersManagementPage() {
             >
               取消
             </Button>
-            <Button type="submit">建立帳號</Button>
+            <Button type="submit" disabled={submittingAction}>
+              {submittingAction ? "處理中…" : "建立帳號"}
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -809,6 +886,13 @@ export default function SheltersManagementPage() {
         after={pendingMembershipChange?.after ?? ""}
         adminCountBefore={pendingMembershipChange?.adminCountBefore}
         adminCountAfter={pendingMembershipChange?.adminCountAfter}
+        destructive={Boolean(
+          pendingMembershipChange &&
+          (pendingMembershipChange.operation.includes("停用") ||
+            pendingMembershipChange.operation.includes("封存") ||
+            pendingMembershipChange.adminCountAfter <
+              pendingMembershipChange.adminCountBefore),
+        )}
         onClose={() => setPendingMembershipChange(null)}
         onConfirm={() => void confirmMembershipChange()}
         confirming={confirmingChange}
@@ -824,7 +908,10 @@ export default function SheltersManagementPage() {
           after="啟用中的 SHELTER_ADMIN"
           adminCountBefore={activeAdminCount}
           adminCountAfter={activeAdminCount + 1}
-          onClose={() => setAccountConfirmationOpen(false)}
+          onClose={() => {
+            setAccountConfirmationOpen(false);
+            setAccountDialogOpen(true);
+          }}
           onConfirm={() => {
             setAccountConfirmationOpen(false);
             void runAction(createAccount);
@@ -835,16 +922,29 @@ export default function SheltersManagementPage() {
       {canManageShelterSettings && (
         <Card aria-labelledby="area-list-title">
           <CardHeader>
-            <CardTitle id="area-list-title">Cage / Area</CardTitle>
+            <CardTitle id="area-list-title">籠舍／區域</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul>
-              {areas.map((area) => (
-                <li key={area.id}>
-                  {area.name}（{area.area_type}／<Badge>{area.status}</Badge>）
-                </li>
-              ))}
-            </ul>
+            {detailsLoading ? (
+              <LoadingState title="正在載入籠舍與區域…" />
+            ) : areas.length === 0 ? (
+              <EmptyState
+                title="目前沒有籠舍或區域"
+                description="建立第一個籠舍或區域，供動物檔案與照護流程使用。"
+              />
+            ) : (
+              <ul className="area-list" aria-label="籠舍與區域清單">
+                {areas.map((area) => (
+                  <li className="list-card area-item" key={area.id}>
+                    <strong>{area.name}</strong>
+                    <div className="area-meta">
+                      <Badge>{areaTypeLabels[area.area_type]}</Badge>
+                      <Badge>{statusLabel(area.status)}</Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
             <form onSubmit={(event) => void submit(event, createArea)}>
               <Field>
                 <label htmlFor="area-name">區域名稱</label>
@@ -852,6 +952,7 @@ export default function SheltersManagementPage() {
                   id="area-name"
                   value={areaName}
                   onChange={(event) => setAreaName(event.target.value)}
+                  disabled={submittingAction}
                   required
                 />
               </Field>
@@ -863,21 +964,24 @@ export default function SheltersManagementPage() {
                   onChange={(event) =>
                     setAreaType(event.target.value as Area["area_type"])
                   }
+                  disabled={submittingAction}
                 >
-                  <option value="area">Area</option>
-                  <option value="cage">Cage</option>
+                  <option value="area">區域</option>
+                  <option value="cage">籠舍</option>
                 </Select>
               </Field>
               <Button
                 type="submit"
-                disabled={selectedShelter?.status !== "active"}
+                disabled={
+                  submittingAction || selectedShelter?.status !== "active"
+                }
               >
-                建立區域
+                {submittingAction ? "處理中…" : "建立區域"}
               </Button>
             </form>
           </CardContent>
         </Card>
       )}
-    </main>
+    </section>
   );
 }

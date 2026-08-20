@@ -119,7 +119,7 @@ test("管理核心搜尋、篩選、detail 與 Timeline 展開可用鍵盤完成
   await status.focus();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByText("小森")).toBeVisible();
-  await page.getByRole("link", { name: "查看 Detail →" }).focus();
+  await page.getByRole("link", { name: "查看詳情 →" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/reports\/report-a$/);
 
@@ -175,7 +175,7 @@ test("Report detail AlertDialog 可用 Escape／取消並 restore focus", async 
   await mockManagementApi(page);
   await page.goto("/reports/report-a");
   await page.getByLabel("原因").fill("鍵盤確認封存流程");
-  const archive = page.getByRole("button", { name: "Archive" });
+  const archive = page.getByRole("button", { name: "封存", exact: true });
   await archive.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("alertdialog", { name: "確認封存回報" });

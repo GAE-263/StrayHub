@@ -10,6 +10,7 @@ import { useState } from "react";
 import { ReminderActionDialog } from "./ReminderActionDialog";
 import type { AgendaItem } from "./types";
 import { ReminderSection } from "./ReminderSection";
+import { Toast } from "../../components/ui/toast";
 
 const sections: Array<[AgendaBucket, string]> = [
   ["today_pending", "今天待處理"],
@@ -36,6 +37,7 @@ export function CareAgenda({
   paginationError?: string;
 }) {
   const [selected, setSelected] = useState<AgendaItem | null>(null);
+  const [toast, setToast] = useState("");
   if (loading) return <LoadingState title="正在載入照護行事曆…" />;
   if (error)
     return <ErrorState title="無法載入照護行事曆" description={error} />;
@@ -66,8 +68,16 @@ export function CareAgenda({
       <ReminderActionDialog
         item={selected}
         onClose={() => setSelected(null)}
-        onSaved={() => onChanged?.()}
+        onSaved={(message) => {
+          setToast(message);
+          onChanged?.();
+        }}
       />
+      {toast ? (
+        <Toast messageKey={toast} onClose={() => setToast("")}>
+          {toast}
+        </Toast>
+      ) : null}
     </div>
   );
 }

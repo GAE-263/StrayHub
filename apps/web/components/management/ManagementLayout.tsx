@@ -30,7 +30,7 @@ export function ManagementLayout({ children }: Props) {
 
   useEffect(() => {
     const showContextRequired = () =>
-      setError("目前頁面需要重新選擇 Active Shelter Context。");
+      setError("目前頁面需要重新選擇目前收容所。");
     window.addEventListener("strayhub:context-required", showContextRequired);
     return () =>
       window.removeEventListener(
@@ -51,7 +51,7 @@ export function ManagementLayout({ children }: Props) {
         router.replace("/login");
         return;
       }
-      throw new Error("目前帳號尚未準備好管理工作台 Context。");
+      throw new Error("目前帳號尚未準備好管理工作台權限。");
     }
     const nextProfile = (await profileResponse.json()) as CurrentUser;
     setProfile(nextProfile);
@@ -76,7 +76,7 @@ export function ManagementLayout({ children }: Props) {
         router.replace("/login");
         return;
       }
-      throw new Error("目前帳號尚未準備好管理工作台 Context。");
+      throw new Error("目前帳號尚未準備好管理工作台權限。");
     }
     const context = (await contextResponse.json()) as {
       organization_id?: string;
@@ -137,7 +137,7 @@ export function ManagementLayout({ children }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ organization_id: nextOrganizationId }),
       });
-      if (!response.ok) throw new Error("無法切換 Active Shelter Context");
+      if (!response.ok) throw new Error("無法切換目前收容所");
       const next = organizations.find(
         (organization) => organization.id === nextOrganizationId,
       );
@@ -148,7 +148,9 @@ export function ManagementLayout({ children }: Props) {
       window.location.reload();
     } catch (switchError: unknown) {
       setContextSwitchError(
-        switchError instanceof Error ? switchError.message : "Context 切換失敗",
+        switchError instanceof Error
+          ? switchError.message
+          : "目前收容所切換失敗",
       );
       setLoading(false);
     }
@@ -157,8 +159,8 @@ export function ManagementLayout({ children }: Props) {
   if (loading)
     return (
       <LoadingState
-        title="正在確認工作台 Context…"
-        description="重新驗證 Session 與 Membership。"
+        title="正在確認工作台權限…"
+        description="重新驗證登入狀態與成員資格。"
       />
     );
   if (
@@ -210,8 +212,10 @@ export function ManagementLayout({ children }: Props) {
           void switchOrganization(nextOrganizationId)
         }
         onLogout={() => void logout()}
+        mobileNavigation={
+          <MobileNavigation role={role} onLogout={() => void logout()} />
+        }
       />
-      <MobileNavigation role={role} />
       <div className="app-body">
         <AppSidebar role={role} />
         <main className="app-main">

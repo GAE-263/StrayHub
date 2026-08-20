@@ -99,7 +99,7 @@ export default function VolunteerApplicationsPage() {
   }
 
   return (
-    <main>
+    <div>
       <div className="page-heading">
         <div>
           <span className="eyebrow">VOLUNTEER APPLICATIONS</span>
@@ -108,7 +108,7 @@ export default function VolunteerApplicationsPage() {
         </div>
       </div>
       <form
-        className="panel ui-card mb-4 flex flex-wrap items-end gap-4"
+        className="ui-card ui-card-padded mb-4 flex flex-wrap items-end gap-4"
         onSubmit={(event) => {
           event.preventDefault();
           void loadApplications(organizationId).catch((error) =>
@@ -153,6 +153,6 @@ export default function VolunteerApplicationsPage() {
         onLoadItems={loadItems}
         onLoadBatch={loadBatch}
       />
-    </main>
+    </div>
   );
 }

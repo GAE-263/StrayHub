@@ -32,7 +32,8 @@ test("P1 management routes 在四個 viewport 沒有 critical 或 serious axe vi
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto(route);
-      await expect(page.locator("main").first()).toBeVisible();
+      await expect(page.locator("main")).toHaveCount(1);
+      await expect(page.locator("main")).toBeVisible();
       const results = await new AxeBuilder({ page }).analyze();
       expect(
         results.violations.filter((item) =>

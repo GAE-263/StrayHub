@@ -553,6 +553,52 @@ export async function mockLoginApi(
   const organizations = Array.isArray(input)
     ? input
     : (input.organizations ?? [organization]);
+  await page.route("**/v1/auth/me", async (route) => {
+    if (route.request().method() !== "GET") {
+      await json(route, { message: "Method Not Allowed" }, 405);
+      return;
+    }
+    await json(route, {
+      user: {
+        id: "user-a",
+        username: "local-staff-a",
+        display_name: "林工作人員",
+        platform_role: null,
+        status: "active",
+      },
+      memberships: organizations.map((item, index) => ({
+        id: `membership-${index + 1}`,
+        organization_id: item.id,
+        role: item.role,
+        status: item.status,
+      })),
+    });
+  });
+  await page.route("**/v1/organizations", async (route) => {
+    if (route.request().method() !== "GET") {
+      await json(route, { message: "Method Not Allowed" }, 405);
+      return;
+    }
+    await json(route, { items: organizations });
+  });
+  await page.route("**/v1/management/dashboard", async (route) => {
+    if (route.request().method() !== "GET") {
+      await json(route, { message: "Method Not Allowed" }, 405);
+      return;
+    }
+    await json(route, {
+      organization_id: organizations[0]?.id,
+      role: organizations[0]?.role ?? "STAFF",
+      summary: {
+        reportable_animal_count: 0,
+        today_report_count: 0,
+        active_draft_count: 0,
+        pending_ai_count: 0,
+        alerts: [],
+      },
+      recent_reports: [],
+    });
+  });
   await page.route("**/v1/auth/login", async (route) => {
     await respond(
       route,

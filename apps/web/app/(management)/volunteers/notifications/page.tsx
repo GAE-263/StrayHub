@@ -6,6 +6,11 @@ import {
   NotificationFailureQueue,
   type NotificationFailure,
 } from "../../../../features/volunteer-access/NotificationFailureQueue";
+import { Alert } from "../../../../components/ui/alert";
+import { Button } from "../../../../components/ui/button";
+import { Field } from "../../../../components/ui/field";
+import { Input } from "../../../../components/ui/input";
+import { Select } from "../../../../components/ui/select";
 import { authFetch } from "../../../../lib/auth";
 
 export default function VolunteerNotificationsPage() {
@@ -66,7 +71,7 @@ export default function VolunteerNotificationsPage() {
   }
 
   return (
-    <main>
+    <div>
       <div className="page-heading">
         <div>
           <span className="eyebrow">VOLUNTEER NOTIFICATIONS</span>
@@ -75,55 +80,59 @@ export default function VolunteerNotificationsPage() {
         </div>
       </div>
       <form
-        className="panel ui-card mb-4 flex flex-wrap items-end gap-4"
+        className="ui-card ui-card-padded notification-filters"
         onSubmit={(event) => {
           event.preventDefault();
           void load(organizationId).catch((reason) => setError(reason.message));
         }}
       >
-        <label>
-          事件
-          <input
+        <Field>
+          <label htmlFor="notification-event">事件</label>
+          <Input
+            id="notification-event"
             value={eventType}
             onChange={(event) => setEventType(event.target.value)}
           />
-        </label>
-        <label>
-          狀態
-          <select
+        </Field>
+        <Field>
+          <label htmlFor="notification-status">狀態</label>
+          <Select
+            id="notification-status"
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
             <option value="">全部</option>
             <option value="failed">failed</option>
             <option value="retry_wait">retry_wait</option>
-          </select>
-        </label>
-        <label>
-          失敗時間起
-          <input
+          </Select>
+        </Field>
+        <Field>
+          <label htmlFor="notification-from">失敗時間起</label>
+          <Input
+            id="notification-from"
             type="datetime-local"
             value={failedFrom}
             onChange={(event) => setFailedFrom(event.target.value)}
           />
-        </label>
-        <label>
-          失敗時間迄
-          <input
+        </Field>
+        <Field>
+          <label htmlFor="notification-to">失敗時間迄</label>
+          <Input
+            id="notification-to"
             type="datetime-local"
             value={failedTo}
             onChange={(event) => setFailedTo(event.target.value)}
           />
-        </label>
-        <button type="submit">套用篩選</button>
+        </Field>
+        <Button type="submit">套用篩選</Button>
       </form>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? <Alert role="alert">{error}</Alert> : null}
       <NotificationFailureQueue
         notifications={items}
         nextCursor={nextCursor}
         onRetry={retry}
         onLoadMore={() => load(organizationId, nextCursor, true)}
       />
-    </main>
+    </div>
   );
 }

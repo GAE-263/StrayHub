@@ -32,6 +32,10 @@ describe("NotificationFailureQueue", () => {
     expect(html).toContain("等待自動重試");
     expect(html).toContain("重試已選取");
     expect(html).toContain("disabled");
+    expect(html).toContain("ui-checkbox");
+    expect(html).toContain("ui-table notification-table");
+    expect(html).toContain("ui-button-secondary");
+    expect(html).not.toContain('<p role="status" aria-live="polite"></p>');
     expect(html).not.toContain("line_user_id");
   });
 });

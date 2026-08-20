@@ -36,6 +36,39 @@ test("saving failure preserves volunteer input and retry can succeed", async ({
   ).toBeVisible();
 });
 
+test("care report offline restore can reconnect without showing empty state", async ({
+  page,
+}) => {
+  await mockVolunteerApi(page);
+  let attempts = 0;
+  await page.route("**/v1/line/care-report/drafts/current", async (route) => {
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({ status: 503, body: "offline" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "draft-a",
+        answers: { appetite: "normal" },
+        current_step: "observation",
+        note: "已保留內容",
+      }),
+    });
+  });
+
+  await page.goto("/care-report");
+  await expect(
+    page.getByRole("main", { name: "照護回報備援介面" }).getByRole("alert"),
+  ).toContainText("目前無法連線");
+  await expect(page.getByText("目前沒有可恢復的照護回報")).toHaveCount(0);
+  await page.getByRole("button", { name: "重新連線" }).click();
+  await expect(page.getByLabel("補充心得（選填）")).toHaveValue("已保留內容");
+  expect(attempts).toBe(2);
+});
+
 test("saving state disables duplicate submit", async ({ page }) => {
   let saveRequests = 0;
   let releaseSave: () => void = () => undefined;
@@ -98,7 +131,7 @@ test("管理核心清楚區分 no-results、permission denied 與 network error"
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockManagementApi(page, { reportsStatus: "network" });
   await page.goto("/reports");
-  await expect(page.getByText("無法載入 Report Inbox")).toBeVisible();
+  await expect(page.getByText("無法載入回報收件匣")).toBeVisible();
 });
 
 test("管理首頁以 permission denied 與 network error 提供下一步", async ({

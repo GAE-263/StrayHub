@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { authFetch } from "../../../lib/auth";
 import {
@@ -10,6 +10,7 @@ import {
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { Dialog } from "../../../components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -18,6 +19,8 @@ import {
 } from "../../../components/ui/card";
 import { Field } from "../../../components/ui/field";
 import { Select } from "../../../components/ui/select";
+import { Textarea } from "../../../components/ui/textarea";
+import { Toast } from "../../../components/ui/toast";
 import {
   Table,
   TableBody,
@@ -38,6 +41,11 @@ type Observation = {
   human_review_result: unknown;
 };
 
+type PendingReview = {
+  observation: Observation;
+  action: "confirm" | "reject";
+};
+
 const statusLabels: Record<string, string> = {
   pending: "待處理",
   running: "AI 處理中",
@@ -54,6 +62,12 @@ export default function AiReviewPage() {
   const [items, setItems] = useState<Observation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [pendingReview, setPendingReview] = useState<PendingReview | null>(
+    null,
+  );
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const load = () => {
     setLoading(true);
     const params = new URLSearchParams({ limit: "100" });
@@ -61,14 +75,14 @@ export default function AiReviewPage() {
     void authFetch(`/v1/management/ai-review?${params}`)
       .then(async (response) => {
         if (!response.ok)
-          throw new Error(`AI Queue 載入失敗（HTTP ${response.status}）`);
+          throw new Error(`AI 人工覆核載入失敗（HTTP ${response.status}）`);
         setItems(((await response.json()) as { items: Observation[] }).items);
       })
       .catch((requestError: unknown) =>
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "AI Queue 載入失敗",
+            : "AI 人工覆核載入失敗",
         ),
       )
       .finally(() => setLoading(false));
@@ -78,30 +92,57 @@ export default function AiReviewPage() {
     observation: Observation,
     action: "confirm" | "reject",
   ) => {
-    const reason = window.prompt(
-      action === "confirm" ? "確認原因" : "拒絕原因",
-    );
-    if (!reason) return;
-    const response = await authFetch(
-      `/v1/management/ai-review/${observation.id}/review`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reason }),
-      },
-    );
-    if (!response.ok) setError(`AI 覆核失敗（HTTP ${response.status}）`);
-    else load();
+    setReason("");
+    setPendingReview({ observation, action });
+  };
+
+  const confirmReview = async () => {
+    if (!pendingReview || !reason.trim()) {
+      setError("請填寫覆核原因。");
+      return;
+    }
+    setError("");
+    setSubmitting(true);
+    try {
+      const response = await authFetch(
+        `/v1/management/ai-review/${pendingReview.observation.id}/review`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: pendingReview.action,
+            reason: reason.trim(),
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(`AI 覆核失敗（HTTP ${response.status}）`);
+      setMessage(
+        pendingReview.action === "confirm"
+          ? "AI Observation 已確認。"
+          : "AI Observation 已拒絕，原始輸出仍保留。",
+      );
+      setPendingReview(null);
+      setReason("");
+      load();
+    } catch (requestError: unknown) {
+      setError(
+        requestError instanceof Error ? requestError.message : "AI 覆核失敗",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
   return (
-    <main aria-labelledby="ai-review-title">
+    <section aria-labelledby="ai-review-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">AI REVIEW QUEUE</span>
-          <h1 id="ai-review-title">AI Review Queue</h1>
+          <h1 id="ai-review-title">AI 人工覆核</h1>
           <p>AI 只提供可追溯提示；人工決定另存，不改寫原始回報。</p>
         </div>
       </div>
+      {message ? <Toast>{message}</Toast> : null}
       <Card>
         <CardHeader>
           <CardTitle>AI 待覆核清單</CardTitle>
@@ -125,10 +166,10 @@ export default function AiReviewPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <LoadingState title="正在載入 AI Queue…" />
+            <LoadingState title="正在載入 AI 人工覆核…" />
           ) : error ? (
             <Alert role="alert">
-              <strong>無法載入 AI Queue</strong>
+              <strong>無法載入 AI 人工覆核</strong>
               <p>{error}</p>
             </Alert>
           ) : items.length === 0 ? (
@@ -210,6 +251,59 @@ export default function AiReviewPage() {
           )}
         </CardContent>
       </Card>
-    </main>
+      <Dialog
+        open={pendingReview !== null}
+        role="alertdialog"
+        title={
+          pendingReview?.action === "reject"
+            ? "拒絕 AI Observation"
+            : "確認 AI Observation"
+        }
+        onClose={() => {
+          if (!submitting) setPendingReview(null);
+        }}
+      >
+        <p className="dialog-description">
+          {pendingReview?.action === "reject"
+            ? "拒絕會保留原始 AI 輸出，請記錄可追溯的拒絕原因。"
+            : "確認會將人工覆核結果寫入 Audit，請記錄確認原因。"}
+        </p>
+        <Field>
+          <label htmlFor="ai-review-reason">覆核原因</label>
+          <Textarea
+            id="ai-review-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="請輸入原因"
+            required
+            disabled={submitting}
+          />
+        </Field>
+        <div className="dialog-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={submitting}
+            onClick={() => setPendingReview(null)}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant={
+              pendingReview?.action === "reject" ? "destructive" : "default"
+            }
+            disabled={submitting || !reason.trim()}
+            onClick={() => void confirmReview()}
+          >
+            {submitting
+              ? "處理中…"
+              : pendingReview?.action === "reject"
+                ? "確認拒絕"
+                : "確認覆核"}
+          </Button>
+        </div>
+      </Dialog>
+    </section>
   );
 }

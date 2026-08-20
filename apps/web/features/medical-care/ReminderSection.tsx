@@ -29,7 +29,10 @@ export function ReminderSection({
   onLoadMore?: () => void;
 }) {
   return (
-    <section className="panel ui-card" aria-labelledby={`agenda-${id}`}>
+    <section
+      className="ui-card ui-card-padded"
+      aria-labelledby={`agenda-${id}`}
+    >
       <div className="section-heading">
         <h2 id={`agenda-${id}`}>{title}</h2>
         <Badge>
@@ -40,14 +43,16 @@ export function ReminderSection({
         <EmptyState title="沒有項目" description="目前沒有符合條件的提醒。" />
       ) : (
         <div className="stack-sm">
-          {items.map((item) => (
-            <ReminderCard
-              key={item.occurrence_id}
-              item={item}
-              timezone={timezone}
-              onProcess={() => onProcess(item)}
-            />
-          ))}
+          <div className="reminder-card-grid">
+            {items.map((item) => (
+              <ReminderCard
+                key={item.occurrence_id}
+                item={item}
+                timezone={timezone}
+                onProcess={() => onProcess(item)}
+              />
+            ))}
+          </div>
           {nextCursor && onLoadMore ? (
             <Button type="button" disabled={loadingMore} onClick={onLoadMore}>
               {loadingMore

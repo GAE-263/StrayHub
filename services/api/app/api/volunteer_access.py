@@ -13,8 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from services.api.app.api.dependencies import (
     RequestContext,
     current_request_context,
+    decode_platform_support_reason,
     platform_support_audit_lifecycle,
     request_session,
+    validate_platform_support_request,
 )
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
@@ -49,8 +51,6 @@ def require_volunteer_management(
     support_reason: str | None,
 ) -> str | None:
     if context.platform_scope or context.role == "PLATFORM_ADMIN":
-        from services.api.app.api.dependencies import validate_platform_support_request
-
         return validate_platform_support_request(context, organization_id, support_reason)
     if context.organization_id != organization_id or context.role != "SHELTER_ADMIN":
         raise DomainError("volunteer_management_denied", "無法管理此收容所志工資料", 403)
@@ -199,7 +199,12 @@ async def volunteer_management_scope(
     resource_type: str,
 ) -> AsyncIterator[str | None]:
     if context.platform_scope or context.role == "PLATFORM_ADMIN":
-        audit_reason = (support_reason or "").strip() or "[missing support reason]"
+        try:
+            audit_reason = (
+                decode_platform_support_reason(support_reason) or "[missing support reason]"
+            )
+        except DomainError:
+            audit_reason = "[invalid support reason]"
         await set_platform_support_scope(session, organization_id)
         async with platform_support_audit_lifecycle(
             AuditService(session),

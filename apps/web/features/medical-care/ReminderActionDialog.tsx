@@ -18,7 +18,7 @@ export function ReminderActionDialog({
 }: {
   item: AgendaItem | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (message: string) => void;
 }) {
   const [action, setAction] = useState<
     "completed" | "skipped" | "cancelled" | "rescheduled"
@@ -58,7 +58,13 @@ export function ReminderActionDialog({
           ? new Date(actualCompletedAt).toISOString()
           : undefined,
       });
-      onSaved();
+      const successMessage = {
+        completed: "提醒已完成",
+        skipped: "提醒已略過",
+        cancelled: "提醒已取消",
+        rescheduled: "提醒已改期",
+      }[action];
+      onSaved(successMessage);
       onClose();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提醒處理失敗");

@@ -1,9 +1,19 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { authFetch, clearAuth, type CurrentUser } from "../../../lib/auth";
+import {
+  EmptyState,
+  LoadingState,
+} from "../../../components/management/StateViews";
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -17,6 +27,7 @@ import { Dialog } from "../../../components/ui/dialog";
 import { Field } from "../../../components/ui/field";
 import { Input } from "../../../components/ui/input";
 import { Select } from "../../../components/ui/select";
+import { Toast } from "../../../components/ui/toast";
 
 type Policy = {
   min_active_admins: number;
@@ -60,6 +71,13 @@ type AuditRecord = {
   created_at: string;
 };
 
+type PendingMutation = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  action: () => Promise<void>;
+};
+
 async function readResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = "操作失敗";
@@ -81,6 +99,9 @@ export default function PlatformAdminsPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -92,6 +113,8 @@ export default function PlatformAdminsPage() {
   const [outgoingUserId, setOutgoingUserId] = useState("");
   const [replacementUserId, setReplacementUserId] = useState("");
   const [reason, setReason] = useState("");
+  const [pendingMutation, setPendingMutation] =
+    useState<PendingMutation | null>(null);
 
   const request = useCallback(async <T,>(path: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -100,26 +123,31 @@ export default function PlatformAdminsPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const [adminData, candidateData, profileData] = await Promise.all([
-      request<ListResponse>("/v1/platform/administrators"),
-      request<Candidate[]>("/v1/platform/administrators/candidates"),
-      request<CurrentUser>("/v1/auth/me"),
-    ]);
-    const auditData = await request<AuditRecord[]>(
-      "/v1/platform/administrators/audit?limit=20",
-    );
-    setPolicy(adminData.policy);
-    setAdmins(adminData.items);
-    setCandidates(candidateData);
-    setCurrentUser(profileData);
-    setAuditRecords(auditData);
-    setOutgoingUserId(
-      (current) =>
-        current ||
-        adminData.items.find((item) => item.effective_status === "active")
-          ?.user_id ||
-        "",
-    );
+    setLoading(true);
+    try {
+      const [adminData, candidateData, profileData] = await Promise.all([
+        request<ListResponse>("/v1/platform/administrators"),
+        request<Candidate[]>("/v1/platform/administrators/candidates"),
+        request<CurrentUser>("/v1/auth/me"),
+      ]);
+      const auditData = await request<AuditRecord[]>(
+        "/v1/platform/administrators/audit?limit=20",
+      );
+      setPolicy(adminData.policy);
+      setAdmins(adminData.items);
+      setCandidates(candidateData);
+      setCurrentUser(profileData);
+      setAuditRecords(auditData);
+      setOutgoingUserId(
+        (current) =>
+          current ||
+          adminData.items.find((item) => item.effective_status === "active")
+            ?.user_id ||
+          "",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [request]);
 
   useEffect(() => {
@@ -151,6 +179,26 @@ export default function PlatformAdminsPage() {
     }
   };
 
+  const queueMutation = (mutation: PendingMutation) => {
+    setPendingMutation(mutation);
+  };
+
+  const confirmPendingMutation = async () => {
+    const mutation = pendingMutation;
+    if (!mutation || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      setPendingMutation(null);
+      await mutation.action();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "操作失敗");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
   const mutate = async (path: string, body?: unknown) => {
     const result = await request<MutationResponse>(path, {
       method: "POST",
@@ -171,36 +219,64 @@ export default function PlatformAdminsPage() {
 
   const createAdmin = async (event: FormEvent) => {
     event.preventDefault();
-    await mutate("/v1/platform/administrators", {
-      username,
-      display_name: displayName,
-      temporary_password: temporaryPassword,
+    queueMutation({
+      title: "確認建立平台管理員帳號",
+      description: `將建立並立即啟用「${displayName || username}」的平台管理員帳號，啟用中的管理員數量將變為 ${(policy?.active_count ?? 0) + 1}。`,
+      confirmLabel: "確認建立",
+      action: async () => {
+        await mutate("/v1/platform/administrators", {
+          username,
+          display_name: displayName,
+          temporary_password: temporaryPassword,
+        });
+        setUsername("");
+        setDisplayName("");
+        setTemporaryPassword("");
+        setCreateOpen(false);
+        setMessage("平台管理員帳號已建立。");
+      },
     });
-    setUsername("");
-    setDisplayName("");
-    setTemporaryPassword("");
-    setCreateOpen(false);
-    setMessage("平台管理員帳號已建立。");
   };
 
   const promote = async (event: FormEvent) => {
     event.preventDefault();
-    await mutate(`/v1/platform/administrators/${promoteUserId}/promote`);
-    setPromoteUserId("");
-    setMessage("帳號已提升為平台管理員。");
+    const candidate = candidates.find((item) => item.user_id === promoteUserId);
+    queueMutation({
+      title: "確認提升平台管理員權限",
+      description: `將「${candidate?.display_name ?? promoteUserId}」加入平台管理員，啟用中的管理員數量將變為 ${(policy?.active_count ?? 0) + 1}。`,
+      confirmLabel: "確認提升",
+      action: async () => {
+        await mutate(`/v1/platform/administrators/${promoteUserId}/promote`);
+        setPromoteUserId("");
+        setMessage("帳號已提升為平台管理員。");
+      },
+    });
   };
 
   const replace = async (event: FormEvent) => {
     event.preventDefault();
-    await mutate("/v1/platform/administrators/replacements", {
-      outgoing_user_id: outgoingUserId,
-      replacement_user_id: replacementUserId,
-      reason,
+    const outgoing = activeAdmins.find(
+      (item) => item.user_id === outgoingUserId,
+    );
+    const replacement = candidates.find(
+      (item) => item.user_id === replacementUserId,
+    );
+    queueMutation({
+      title: "確認替換平台管理員",
+      description: `將「${outgoing?.display_name ?? outgoingUserId}」的管理權限交接給「${replacement?.display_name ?? replacementUserId}」，啟用中的管理員數量維持 ${policy?.active_count ?? 0}。原因：${reason}`,
+      confirmLabel: "確認替換",
+      action: async () => {
+        await mutate("/v1/platform/administrators/replacements", {
+          outgoing_user_id: outgoingUserId,
+          replacement_user_id: replacementUserId,
+          reason,
+        });
+        setReplacementOpen(false);
+        setReplacementUserId("");
+        setReason("");
+        setMessage("平台管理員替換已完成。");
+      },
     });
-    setReplacementOpen(false);
-    setReplacementUserId("");
-    setReason("");
-    setMessage("平台管理員替換已完成。");
   };
 
   const renderAdmin = (admin: Admin) => (
@@ -224,9 +300,15 @@ export default function PlatformAdminsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void run(() =>
-                  mutate(`/v1/platform/administrators/${admin.user_id}/enable`),
-                )
+                queueMutation({
+                  title: "確認重新啟用平台管理員",
+                  description: `將「${admin.display_name}」重新啟用，該帳號會恢復平台管理員權限。`,
+                  confirmLabel: "確認重新啟用",
+                  action: () =>
+                    mutate(
+                      `/v1/platform/administrators/${admin.user_id}/enable`,
+                    ).then(() => setMessage("平台管理員已重新啟用。")),
+                })
               }
             >
               重新啟用
@@ -237,11 +319,19 @@ export default function PlatformAdminsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void run(() =>
-                  mutate(
-                    `/v1/platform/administrators/${admin.user_id}/disable`,
-                  ),
-                )
+                queueMutation({
+                  title: "確認停用平台管理員",
+                  description: `將停用「${admin.display_name}」。${
+                    admin.user_id === currentUser?.user.id
+                      ? "這會立即使你目前的管理員 session 登出。"
+                      : "該帳號將無法繼續執行平台管理操作。"
+                  }`,
+                  confirmLabel: "確認停用",
+                  action: () =>
+                    mutate(
+                      `/v1/platform/administrators/${admin.user_id}/disable`,
+                    ).then(() => setMessage("平台管理員已停用。")),
+                })
               }
             >
               停用
@@ -252,9 +342,15 @@ export default function PlatformAdminsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void run(() =>
-                  mutate(`/v1/platform/administrators/${admin.user_id}/demote`),
-                )
+                queueMutation({
+                  title: "確認降低平台管理員權限",
+                  description: `將「${admin.display_name}」降為一般帳號，平台管理員權限會立即移除。`,
+                  confirmLabel: "確認降權",
+                  action: () =>
+                    mutate(
+                      `/v1/platform/administrators/${admin.user_id}/demote`,
+                    ).then(() => setMessage("平台管理員權限已移除。")),
+                })
               }
             >
               降權
@@ -266,7 +362,7 @@ export default function PlatformAdminsPage() {
   );
 
   return (
-    <main
+    <section
       className="platform-admin-page"
       aria-labelledby="platform-admin-title"
     >
@@ -295,8 +391,9 @@ export default function PlatformAdminsPage() {
         </div>
       </div>
       {error ? <Alert role="alert">操作失敗：{error}</Alert> : null}
-      {message ? <Alert role="status">{message}</Alert> : null}
-      {policy ? (
+      {message ? <Toast>{message}</Toast> : null}
+      {loading ? <LoadingState title="正在載入平台管理員…" /> : null}
+      {!loading && policy ? (
         <div className="platform-policy-grid" aria-label="平台管理員政策摘要">
           <Card>
             <CardContent>
@@ -332,12 +429,14 @@ export default function PlatformAdminsPage() {
           <CardTitle>啟用中的平台管理員</CardTitle>
         </CardHeader>
         <CardContent>
-          {activeAdmins.length ? (
+          {loading ? (
+            <LoadingState title="正在載入啟用中的平台管理員…" />
+          ) : activeAdmins.length ? (
             <ul className="platform-admin-list">
               {activeAdmins.map(renderAdmin)}
             </ul>
           ) : (
-            <p>目前沒有啟用中的平台管理員。</p>
+            <EmptyState title="目前沒有啟用中的平台管理員" />
           )}
         </CardContent>
       </Card>
@@ -346,7 +445,9 @@ export default function PlatformAdminsPage() {
           <CardTitle>平台異動紀錄</CardTitle>
         </CardHeader>
         <CardContent>
-          {auditRecords.length ? (
+          {loading ? (
+            <LoadingState title="正在載入平台異動紀錄…" />
+          ) : auditRecords.length ? (
             <ul className="platform-audit-list">
               {auditRecords.map((record) => (
                 <li key={record.id}>
@@ -357,7 +458,7 @@ export default function PlatformAdminsPage() {
               ))}
             </ul>
           ) : (
-            <p>目前沒有平台管理員異動紀錄。</p>
+            <EmptyState title="目前沒有平台管理員異動紀錄" />
           )}
         </CardContent>
       </Card>
@@ -366,12 +467,14 @@ export default function PlatformAdminsPage() {
           <CardTitle>已停用的平台管理員</CardTitle>
         </CardHeader>
         <CardContent>
-          {disabledAdmins.length ? (
+          {loading ? (
+            <LoadingState title="正在載入已停用的平台管理員…" />
+          ) : disabledAdmins.length ? (
             <ul className="platform-admin-list">
               {disabledAdmins.map(renderAdmin)}
             </ul>
           ) : (
-            <p>目前沒有已停用的平台管理員。</p>
+            <EmptyState title="目前沒有已停用的平台管理員" />
           )}
         </CardContent>
       </Card>
@@ -390,6 +493,7 @@ export default function PlatformAdminsPage() {
                 id="promote-user"
                 value={promoteUserId}
                 onChange={(event) => setPromoteUserId(event.target.value)}
+                disabled={submitting}
                 required
               >
                 <option value="">請選擇</option>
@@ -403,9 +507,11 @@ export default function PlatformAdminsPage() {
             <Button
               className="platform-admin-promote-submit"
               type="submit"
-              disabled={!promoteUserId || policy?.available_slots === 0}
+              disabled={
+                submitting || !promoteUserId || policy?.available_slots === 0
+              }
             >
-              提升
+              {submitting ? "處理中…" : "提升"}
             </Button>
           </form>
         </CardContent>
@@ -426,6 +532,7 @@ export default function PlatformAdminsPage() {
               id="platform-username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -435,6 +542,7 @@ export default function PlatformAdminsPage() {
               id="platform-display-name"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -445,6 +553,7 @@ export default function PlatformAdminsPage() {
               type="password"
               value={temporaryPassword}
               onChange={(event) => setTemporaryPassword(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -456,7 +565,9 @@ export default function PlatformAdminsPage() {
             >
               取消
             </Button>
-            <Button type="submit">建立</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "處理中…" : "建立"}
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -476,6 +587,7 @@ export default function PlatformAdminsPage() {
               id="outgoing-admin"
               value={outgoingUserId}
               onChange={(event) => setOutgoingUserId(event.target.value)}
+              disabled={submitting}
               required
             >
               {activeAdmins.map((admin) => (
@@ -491,6 +603,7 @@ export default function PlatformAdminsPage() {
               id="replacement-admin"
               value={replacementUserId}
               onChange={(event) => setReplacementUserId(event.target.value)}
+              disabled={submitting}
               required
             >
               <option value="">請選擇</option>
@@ -507,6 +620,7 @@ export default function PlatformAdminsPage() {
               id="replacement-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
+              disabled={submitting}
               required
             />
           </Field>
@@ -518,10 +632,39 @@ export default function PlatformAdminsPage() {
             >
               取消
             </Button>
-            <Button type="submit">確認替換</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "處理中…" : "確認替換"}
+            </Button>
           </div>
         </form>
       </Dialog>
-    </main>
+      <Dialog
+        open={pendingMutation !== null}
+        title={pendingMutation?.title ?? "確認平台管理員異動"}
+        role="alertdialog"
+        onClose={() => setPendingMutation(null)}
+        className="account-dialog"
+      >
+        <p className="dialog-description">
+          {pendingMutation?.description ?? "請確認這項平台管理員異動。"}
+        </p>
+        <div className="dialog-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setPendingMutation(null)}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void confirmPendingMutation()}
+            disabled={submitting}
+          >
+            {submitting ? "處理中…" : (pendingMutation?.confirmLabel ?? "確認")}
+          </Button>
+        </div>
+      </Dialog>
+    </section>
   );
 }

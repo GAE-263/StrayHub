@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import unquote
 from uuid import UUID
 
 from fastapi import Depends, Header, Request
@@ -37,6 +38,18 @@ class PlatformSupportAuditLifecycle:
     result: str = "success"
 
 
+def decode_platform_support_reason(support_reason: str | None) -> str:
+    raw_reason = (support_reason or "").strip()
+    try:
+        return unquote(raw_reason, encoding="utf-8", errors="strict").strip()
+    except UnicodeDecodeError as exc:
+        raise DomainError(
+            "invalid_platform_support_reason_encoding",
+            "平台支援原因編碼無效",
+            422,
+        ) from exc
+
+
 def validate_platform_support_request(
     context: RequestContext,
     target_organization_id: UUID | None,
@@ -46,7 +59,7 @@ def validate_platform_support_request(
         raise DomainError("platform_admin_required", "需要平台管理員權限", 403)
     if not isinstance(target_organization_id, UUID):
         raise DomainError("platform_target_required", "平台支援必須指定單一收容所", 422)
-    reason = (support_reason or "").strip()
+    reason = decode_platform_support_reason(support_reason)
     if not reason:
         raise DomainError("platform_support_reason_required", "請填寫平台支援原因", 422)
     if len(reason) > 500:
