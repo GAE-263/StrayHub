@@ -75,6 +75,40 @@ def test_demo_build_workflow_never_applies_terraform() -> None:
     assert "terraform plan" not in workflow
 
 
+def test_web_liff_config_is_injected_from_cloud_run_at_request_time() -> None:
+    page = (
+        ROOT / "apps/web/app/(volunteer)/volunteer-entry/page.tsx"
+    ).read_text(encoding="utf-8")
+    cloud_run = (TERRAFORM_ROOT / "cloud-run.tf").read_text(encoding="utf-8")
+    dockerfile = (GCP_ROOT / "Dockerfile.web").read_text(encoding="utf-8")
+    next_config = (ROOT / "apps/web/next.config.ts").read_text(encoding="utf-8")
+    proxy = (
+        ROOT / "apps/web/app/v1/[...path]/route.ts"
+    ).read_text(encoding="utf-8")
+
+    assert 'export const dynamic = "force-dynamic"' in page
+    assert "process.env.LIFF_ID" in page
+    assert 'name  = "LIFF_ID"' in cloud_run
+    assert 'name  = "API_BASE_URL"' in cloud_run
+    assert "google_cloud_run_v2_service.api.uri" in cloud_run
+    assert 'https://${var.domain}' not in cloud_run
+    assert "rewrites" not in next_config
+    assert "process.env.API_BASE_URL" in proxy
+    assert "127.0.0.1:8001" not in proxy
+    assert "MAX_BODY_BYTES" in proxy
+    assert "MAX_RESPONSE_BYTES" in proxy
+    assert "readStream" in proxy
+    assert "pathSegment === \".\"" in proxy
+    assert "pathSegment === \"..\"" in proxy
+    assert "deadline" in proxy
+    assert "AbortController" in proxy
+    assert 'redirect: "manual"' in proxy
+    assert "errorResponse(503" in proxy
+    assert "encodeURIComponent" in proxy
+    assert "NEXT_PUBLIC_LIFF_ID" not in dockerfile
+    assert "NEXT_PUBLIC_API_BASE_URL" not in dockerfile
+
+
 def test_terraform_format_and_validate() -> None:
     terraform = os.environ.get("TERRAFORM_BIN") or shutil.which("terraform")
     assert terraform, "T236 需要 terraform CLI；請安裝後重新執行 Contract Test"

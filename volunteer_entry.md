@@ -6,7 +6,7 @@
 
 | 優先級 | 待完成任務 | 目前狀態 | 完成條件 |
 |---|---|---|---|
-| P0 | 驗證 NEW → 送出報名 → PENDING 的完整入口流程 | 部分完成 | 從 `/volunteer-entry` 進入報名、送出申請、畫面轉為 PENDING，且不把 ID token 放入 URL |
+| P0 | 驗證 NEW → 送出報名 → PENDING 的完整入口流程 | 完成 | Vitest由exchange NEW進入真實報名元件、勾選同意、送出並顯示PENDING；browser／login redirect均移除ID token；390×844標題層級與按鈕間距已人工驗收 |
 | P0 | 驗證管理員核准後建立 Membership／Grant | 完成 | 真實PostgreSQL已驗證並行／重複／stale／cross-org核准只投影exact organization的一組有限期VOLUNTEER Membership與Grant；雙Reviewer通過 |
 | P0 | 驗證核准後第二次 LIFF 進入 | 部分完成 | exchange 回 ACTIVE、internal session 建立、token 先保存、導向 `/animal-confirmation`、`GET /v1/animals` 不再 401 |
 | P0 | 補真實 HTTP exchange integration tests | 完成 | FastAPI HTTP 已覆蓋 NEW、PENDING、ACTIVE、SUSPENDED、401／403／503與response validation／commit failure |
@@ -34,7 +34,7 @@
 
 ## 建議下一步順序
 
-1. **Task 7核准冪等性完成；下一步進入Task 8 LIFF bootstrap／onboarding**
+1. **Task 8完成後進入Task 9 route gate／management request zero**
 2. **完成志工 session boundary 與 401 單次 LIFF 恢復**
 3. **補 Playwright 完整報名與多機構流程**
 4. **更新契約、README、quickstart 及 task ledger**
@@ -44,7 +44,7 @@
 
 ## 目前工作樹狀態
 
-Task 2–6後端安全垂直切片已提交。Task 7在不修改production的前提下，以真實PostgreSQL驗證application row lock、version conflict、exact organization projection及persisted batch replay，第一輪finding已修正且第二輪雙Reviewer通過。Frontend、E2E、真機與整體志工報名／LIFF功能仍未完成。
+Task 2–7已提交。Task 8已完成LIFF init/login、identity exchange、四狀態、NEW→PENDING、ACTIVE canonical response validation與storage-before-replace、所有非ACTIVE／錯誤結果先清舊auth/context、partial storage keyed cleanup＋clear fallback、stale response isolation、safe retry／errors、legacy token URL scrub＋location fallback與fixed destination；已補Server runtime `LIFF_ID`、移除build-time API rewrite並以`/v1/[...path]` runtime proxy轉送至Cloud Run API URI，proxy具1MiB request／10MiB response cap、stream逐chunk且整體10秒deadline、禁止redirect、HTTPS origin限制、dot-segment拒絕、path encoding及安全502／503；避免loopback與空domain URL；390×844人工確認ERROR主標題層級與按鈕間距符合預期；final staged backend 533、frontend 178、deployment contract、typecheck、Task 8 files Prettier與build通過，雙Reviewer通過。E2E、真機與整體志工報名／LIFF功能仍未完成。
 
 ## 執行任務 Ledger
 
@@ -58,7 +58,7 @@ Task 2–6後端安全垂直切片已提交。Task 7在不修改production的前
 | Task 5：Exact-organization exchange states | MERGED INTO TASK 2 | session service、auth repository、entry adapter、combined user+organization scope | 原RLS blocker已以`app.auth_exact_org_id`、policy migration與真實A/B隔離測試修正 | 同Task 2 |
 | Task 6：HTTP atomicity／isolation | 完成 | FastAPI四state／401／403／503、response-before-commit、commit／rollback failure、zero partial state與runtime matrix | fake與真實AsyncSession已驗證flush／commit／rollback failure；獨立連線查User／Organization／Session／Refresh新增為0；combined staged-only `529 passed`且雙Reviewer通過 | `test(api): verify LIFF exchange atomicity` |
 | Task 7：Approval idempotency | 完成 | application→finite Membership→single Grant；並行／重複／stale／cross-org與batch replay | 真實PostgreSQL以`pg_blocking_pids`證明duplicate被application row lock阻擋後409；Membership／Grant各1；stale／cross-org為0；persisted succeeded batch item由新session replay且approval呼叫0次；focused `7 passed`、working `535 passed`、staged-only `532 passed`、Ruff 2檔與雙Reviewer通過；production無修改 | `test(volunteers): enforce idempotent approval membership grants` |
-| Task 8：LIFF bootstrap／onboarding | 待執行 | `/volunteer-entry`、session storage、NEW→PENDING | 候選 Vitest 已存在，尚未人工畫面驗收 | — |
+| Task 8：LIFF bootstrap／onboarding | 完成 | `/volunteer-entry` LIFF init/login/exchange、四狀態、NEW→PENDING、ACTIVE canonical validation／validated storage with keyed cleanup＋clear fallback、non-ACTIVE stale-auth cleanup、stale response isolation與fixed redirect；Server Component runtime讀`LIFF_ID`，`/v1/[...path]` runtime proxy讀`API_BASE_URL`並轉送Cloud Run API URI，1MiB request／10MiB response cap、stream逐chunk且整體10秒deadline、redirect拒絕、HTTPS origin限制、dot-segment拒絕與path encoding，移除build-time rewrite | Security RED修正legacy token URL scrub／location fallback、partial／old credential mixing與cleanup fallback、non-ACTIVE stale auth/context、untrusted state/path及stale failed response overwrite；P0修正loopback API rewrite、P1修正空domain API URL及proxy資源／redirect／path traversal邊界；deployment contract補測、視覺RED修正ERROR主標題層級及提示／按鈕16px間距；390×844 URL人工驗收通過；final staged backend `533 passed`、frontend `178 passed`、typecheck、Task 8 files Prettier與production build通過；雙Reviewer通過 | `feat(web): add LINE LIFF volunteer entry bootstrap` |
 | Task 9～12：Volunteer route/session lifecycle | 待執行 | route gate、animals handoff、401 recovery、shelter label | 尚未實作完整 boundary／single-flight recovery | — |
 | Task 13：Rich Menu safe publication | 待執行 | env substitution、HTTPS、entry URL | 候選 unit test 已存在，尚未完成 dry-run gate | — |
 | Task 14～15：Browser／a11y／visual | 待執行 | Playwright、多機構、360px、keyboard、Axe | 尚未建立 LIFF route matrix；snapshot 未經人工核准 | — |

@@ -34,6 +34,7 @@ export function getAccessToken(): string | null {
 
 export function clearAuth(): void {
   if (typeof window === "undefined") return;
+  let keyedRemovalFailed = false;
   for (const key of [
     ACCESS_TOKEN_KEY,
     REFRESH_TOKEN_KEY,
@@ -41,7 +42,14 @@ export function clearAuth(): void {
     ACTIVE_ORGANIZATION_ID_KEY,
     ACTIVE_ORGANIZATION_CODE_KEY,
   ]) {
-    window.sessionStorage.removeItem(key);
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      keyedRemovalFailed = true;
+    }
+  }
+  if (keyedRemovalFailed) {
+    window.sessionStorage.clear();
   }
   window.dispatchEvent(new Event("strayhub:auth-changed"));
 }

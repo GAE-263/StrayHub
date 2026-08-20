@@ -218,3 +218,17 @@ describe("legacy and primitive cascade contracts", () => {
     expect(css).toContain(".ui-table-cell");
   });
 });
+
+describe("volunteer entry visual hierarchy", () => {
+  it("separates card actions and emphasizes the error heading", () => {
+    const content = ruleBody(".volunteer-entry-content");
+    expect(content).toContain("display: grid");
+    expect(content).toContain("gap: 16px");
+
+    const errorHeading = ruleBody(
+      ".volunteer-entry-error .volunteer-page-heading h1",
+    );
+    expect(errorHeading).toContain("color: var(--danger)");
+    expect(errorHeading).toContain("font-weight: 800");
+  });
+});

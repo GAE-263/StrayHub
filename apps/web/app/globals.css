@@ -1360,6 +1360,14 @@ dialog.ui-sheet[open] {
   color: var(--muted);
   line-height: 1.7;
 }
+.volunteer-entry-content {
+  display: grid;
+  gap: 16px;
+}
+.volunteer-entry-error .volunteer-page-heading h1 {
+  color: var(--danger);
+  font-weight: 800;
+}
 .volunteer-search-grid {
   display: grid;
   gap: 16px;
