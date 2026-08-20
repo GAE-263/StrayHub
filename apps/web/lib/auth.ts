@@ -1,8 +1,14 @@
+import type { EffectiveRole } from "./route-access";
+import { clearLiffSession } from "./liff-session";
+
 export const ACCESS_TOKEN_KEY = "access_token";
 export const REFRESH_TOKEN_KEY = "refresh_token";
 export const SESSION_ID_KEY = "session_id";
 export const ACTIVE_ORGANIZATION_ID_KEY = "active_organization_id";
 export const ACTIVE_ORGANIZATION_CODE_KEY = "active_organization_code";
+export const SESSION_SOURCE_KEY = "session_source";
+
+export type SessionSource = "local" | "liff";
 
 export type AuthOrganization = {
   id: string;
@@ -27,6 +33,14 @@ export type CurrentUser = {
   }>;
 };
 
+export type AuthenticatedRouteContext = {
+  profile: CurrentUser;
+  organizationId: string;
+  organizationName: string | null;
+  effectiveRole: EffectiveRole | null;
+  sessionSource: SessionSource;
+};
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
@@ -41,6 +55,7 @@ export function clearAuth(): void {
     SESSION_ID_KEY,
     ACTIVE_ORGANIZATION_ID_KEY,
     ACTIVE_ORGANIZATION_CODE_KEY,
+    SESSION_SOURCE_KEY,
   ]) {
     try {
       window.sessionStorage.removeItem(key);
@@ -51,6 +66,7 @@ export function clearAuth(): void {
   if (keyedRemovalFailed) {
     window.sessionStorage.clear();
   }
+  clearLiffSession();
   window.dispatchEvent(new Event("strayhub:auth-changed"));
 }
 
@@ -76,6 +92,25 @@ export function storeSession(session: {
   }
   window.sessionStorage.setItem(SESSION_ID_KEY, session.session_id);
   window.dispatchEvent(new Event("strayhub:auth-changed"));
+}
+
+export function getSessionSource(): SessionSource | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const source = window.sessionStorage.getItem(SESSION_SOURCE_KEY);
+    return source === "local" || source === "liff" ? source : null;
+  } catch {
+    return null;
+  }
+}
+
+export function storeSessionSource(source: SessionSource): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SESSION_SOURCE_KEY, source);
+  } catch {
+    // Source is a workflow hint and never an authorization decision.
+  }
 }
 
 export function storeActiveOrganization(organization: AuthOrganization): void {
