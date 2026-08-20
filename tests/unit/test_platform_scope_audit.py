@@ -95,6 +95,25 @@ def test_platform_support_requires_one_target_and_trimmed_reason_before_query() 
             validate_platform_support_request(context, target, reason)
 
 
+def test_platform_support_decodes_browser_safe_unicode_reason() -> None:
+    context = RequestContext(
+        user_id=uuid4(),
+        organization_id=None,
+        membership_id=None,
+        role="PLATFORM_ADMIN",
+        platform_scope=True,
+    )
+
+    assert (
+        validate_platform_support_request(
+            context,
+            uuid4(),
+            "%E6%9F%A5%E8%A9%A2%E5%BF%97%E5%B7%A5%E7%94%B3%E8%AB%8B%E8%88%87%E6%8E%88%E6%AC%8A%E8%A8%AD%E5%AE%9A",
+        )
+        == "查詢志工申請與授權設定"
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("result", ["success", "denied", "not_found", "validation", "exception"])
 async def test_platform_support_audit_lifecycle_records_every_result(result: str) -> None:
