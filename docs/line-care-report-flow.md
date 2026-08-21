@@ -280,20 +280,63 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 ## 9. 送出之後：AI 背景分析
 
 `ReportJobDispatchService.dispatch()` 在**交易提交之後**才呼叫，插一筆
-`ai_processing_jobs`。
+`ai_processing_jobs`（狀態 `pending_enqueue`）。
 
 回報本身不等 AI。志工收到的是「原始照護回報已保存。AI 分析將於背景處理，
 不會阻擋本次回報。」這是刻意的降級設計——AI 掛掉不影響回報。
 
-> **已知缺陷（不是本分支造成）**
+> **原本的缺陷（`main` 上仍存在，本分支已修）**
 >
 > `services/worker/app/handlers/ai_handler.py` 的 `AIJobHandler` 完整實作且有約
 > 9 個測試檔覆蓋，但 `services/worker/worker.py` 的 `run()` 迴圈只呼叫
 > `run_volunteer_iteration()`，從未載入或呼叫 `AIJobHandler`。結果是每一筆
 > `ai_processing_jobs` 永遠停在 `pending_enqueue`。2026-08-20 實測確認。
 >
-> 測試直接實例化 handler，所以 CI 全綠卻掩蓋了缺失的生產接線。照護回報路徑
-> 不受影響。任何預期看到 AI 觀察的部署前都要先處理這個。
+> 那些測試全部用 `SimpleNamespace` 直接實例化 handler，從不碰資料庫，所以 CI
+> 全綠卻掩蓋了缺失的生產接線。這是「單元測試覆蓋率高，接線卻沒人測」的典型。
+
+### Worker 怎麼把 Job 跑完
+
+`services/worker/app/handlers/ai_job_runner.py`
+
+`AIJobHandler` 只做「呼叫供應商、判讀結果」，它拿到的是備妥的 job、report、
+圖片位元組與允許的選項代碼。`AIJobRunner` 補上兩者之間的搬運：
+
+1. **交還逾時工作** — `reclaim_stale(timeout_seconds=300)`，Worker 中途死掉的
+   Job 不會永遠停在 `running`
+2. **認領** — `claim_next()` 用 `FOR UPDATE SKIP LOCKED` 取一筆，寫入
+   `claim_token` 後**立刻提交**。供應商呼叫可能耗時 30 秒，不該一直持有資料列鎖
+3. **組裝上下文** — 讀 `care_reports`、經 `care_report_media` 取出照片並從
+   MinIO 下載位元組、由 `ObservationRepository.effective_options()` 取得
+   `allowed_codes`
+4. **執行** — 交給 `AIJobHandler.handle()`
+5. **保存與釋放** — 寫入 `ai_observations`，再用 `finish()` 釋放 Claim；
+   `finish()` 會比對 `claim_token` 與 `claimed_by`，別人的 Claim 動不了
+
+### 失敗怎麼分類
+
+| Handler 結果 | Job 最終狀態 | 理由 |
+|---|---|---|
+| `succeeded` | `succeeded` | — |
+| `invalid`（驗證失敗） | `failed` | 決定性錯誤，同樣的輸入重跑一次仍然不會通過 |
+| `failed`（供應商錯誤／逾時） | `retry_wait`，超過 3 次才 `failed` | 暫時性錯誤，值得再試 |
+
+重試帶指數退避（60 秒起跳，上限 15 分鐘）。**沒有退避的話重試等於沒有重試**：
+`finish()` 原本把 `available_at` 設成 `now`，同一輪迴圈會立刻重新認領，三次
+重試在幾毫秒內燒完。本分支讓 `finish()` 接受 `available_at`，由呼叫端決定退避。
+
+`retry_wait` 時會把 `report.ai_job_status` 改回 `enqueued`——這筆還會再試，
+對工作人員來說它仍在排隊，顯示「失敗」是誤導。
+
+### 兩條迴圈
+
+`run()` 現在用 `asyncio.gather` 同時跑志工權限迴圈（60 秒）與 AI 迴圈（15 秒）。
+分開的理由有二：志工作業卡住時 AI 佇列仍要消化；而志工送出回報後，不該等上
+一分鐘才開始分析。
+
+本機預設 `ai_provider=mock`（`settings.py:36`），`build_ai_client()` 會回傳
+`MockAIAdapter`，所以展示流程不需要任何外部 AI 服務。要接真實供應商就設定
+`AI_PROVIDER`、`AI_ENDPOINT`、`AI_API_KEY`。
 
 ---
 
@@ -316,6 +359,19 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 問答介面從純文字加 Quick Reply 改為 Flex Message 卡片：分類標題、進度條、
 圖示化選項、退回上一題的頁尾、送出後的完成畫面。配色集中為具名常數。
 `line_message_presenter.py` +411 行，`line_webhook.py` +275 行，四個測試檔同步更新。
+
+
+### `46c5120` — 格式
+
+`ruff format --check` 對前一個 commit 的手寫換行失敗，套用 formatter 的輸出。
+
+### `71cebe0` — 把 AI Job 接進 Worker
+
+修好第 9 節描述的缺陷。新增 `services/worker/app/handlers/ai_job_runner.py`
+承擔 Handler 與資料表之間的搬運，`run()` 改以 `asyncio.gather` 同時執行志工
+權限迴圈與 AI 迴圈，`WorkerJobRepository.finish()` 改為接受 `available_at`
+以支援重試退避。新增 `tests/integration/test_ai_worker_wiring.py`，四個測試
+直接對資料庫驗證整條接線。
 
 ---
 
@@ -344,10 +400,10 @@ PYTHONUTF8=1 PYTHONPATH=<repo 根目錄> uv run --with tzdata pytest -q
 
 ## 12. 測試結果
 
-2026-08-21 於本分支（`c595397`）執行完整套件：
+2026-08-21 於本分支（`71cebe0`）執行完整套件：
 
 ```
-1 failed, 477 passed, 1 warning in 156.46s
+1 failed, 481 passed, 1 warning in 131.05s
 ```
 
 唯一失敗是 `tests/contract/test_gcp_iac_contract.py::test_terraform_format_and_validate`，
@@ -364,6 +420,8 @@ LINE 相關測試全數通過，包含：
 - `tests/integration/test_line_unbound_user.py` — 未綁定使用者
 - `tests/integration/test_line_image_message.py` — 照片訊息
 - `tests/e2e/test_local_line_bot_vertical_flow.py` — LINE Bot 到 PostgreSQL 全鏈路
+- `tests/integration/test_ai_worker_wiring.py` — AI Job 從資料表到供應商再回到
+  `ai_observations` 的接線，含重試退避與 `run()` 必須啟動 AI 迴圈
 
 ---
 
