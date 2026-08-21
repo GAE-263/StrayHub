@@ -46,7 +46,7 @@ CATEGORY_NAMES = {
     "human_interaction": "人際互動",
     "animal_interaction": "動物互動",
     "emotion": "情緒",
-    "walk": "散步",
+    "walk": "散步反應",
     "appearance_special_status": "外觀／特殊狀態",
 }
 
@@ -54,8 +54,8 @@ OPTION_NAMES = {
     "completed": "已完成",
     "partially_completed": "部分完成",
     "not_provided": "未提供",
-    "not_observed": "未觀察到",
-    "uncertain": "不確定",
+    "not_observed": "未觀察",
+    "uncertain": "無法判斷",
     "not_done": "未完成",
     "normal": "正常",
     "less": "較少",
@@ -96,6 +96,33 @@ OPTION_NAMES = {
     "lying_long": "長時間躺臥",
     "different_walk": "行走不同",
     "other": "其他",
+}
+
+# 後綴共用的通用詞無法表達帶主詞的差異：`walk_completion.not_done`（未進行散步）
+# 與 `walk.not_done` 分屬不同觀察類別，卻都會落到「未完成」；照護完成與散步完成
+# 更是五個選項有四個字面相同，連續問兩題時看起來像同一題。以完整 Code 覆寫，
+# 名稱取自 spec.md 的 FR-016 與「情緒與散步反應平台預設選項」表。
+OPTION_NAME_OVERRIDES = {
+    "care_completion.completed": "已完成照護",
+    "care_completion.not_provided": "未提供照護",
+    "walk_completion.completed": "已完成散步",
+    "walk_completion.not_done": "未進行散步",
+    "emotion.usual": "情緒表現與平常相近",
+    "emotion.calm": "平靜或放鬆",
+    "emotion.alert": "警覺",
+    "emotion.excited": "興奮",
+    "emotion.tense": "緊張或不安",
+    "emotion.withdrawn": "退縮或避免互動",
+    "emotion.seeking_interaction": "主動尋求互動",
+    "walk.usual": "散步反應與平常相近",
+    "walk.willing": "願意出門",
+    "walk.exploring": "願意探索環境",
+    "walk.reluctant": "不願出門",
+    "walk.slow_or_stopping": "步伐較慢或頻繁停下",
+    "walk.tries_to_return": "嘗試返回或避免前進",
+    "walk.human_reaction": "對人有明顯反應",
+    "walk.animal_reaction": "對其他動物有明顯反應",
+    "walk.not_done": "未進行散步",
 }
 
 VOLUNTEER_FIXTURE_NAMESPACE = UUID("41c08fbb-fef2-4930-abd9-bd1f77226888")
@@ -370,6 +397,8 @@ async def _seed_application_and_grant_state(
 
 
 def _display_name(code: str) -> str:
+    if code in OPTION_NAME_OVERRIDES:
+        return OPTION_NAME_OVERRIDES[code]
     return OPTION_NAMES.get(code.rsplit(".", 1)[-1], code.rsplit(".", 1)[-1].replace("_", "／"))
 
 
