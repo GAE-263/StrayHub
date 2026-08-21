@@ -286,6 +286,124 @@ def prompt_bubble(
     }
 
 
+def _animal_status_row(label: str, data: str, *, cared_caption: str, cared: bool) -> dict:
+    """One animal in the daily overview: who it is, and whether today is done."""
+    return {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": GREEN_PALE if cared else WHITE,
+        "cornerRadius": _ROUND,
+        "borderWidth": "2px",
+        "borderColor": BORDER,
+        "paddingAll": "14px",
+        "action": {
+            "type": "postback",
+            "label": label[:_LABEL_LIMIT],
+            "data": data,
+            "displayText": label,
+        },
+        "contents": [
+            {
+                "type": "text",
+                "text": "✅" if cared else "⬜",
+                "size": "md",
+                "flex": 0,
+                "gravity": "center",
+            },
+            {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "xs",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": label,
+                        "color": INK,
+                        "size": "md",
+                        "weight": "bold",
+                        "wrap": True,
+                    },
+                    {"type": "text", "text": cared_caption, "color": INK_SOFT, "size": "xs"},
+                ],
+            },
+        ],
+    }
+
+
+def daily_care_bubble(
+    rows: list[tuple[str, str, str, bool]],
+    *,
+    done: int,
+    total: int,
+    shown_through: int,
+    more_data: str | None = None,
+) -> dict:
+    """Today's animals and what still needs doing.
+
+    ``rows`` are (label, postback data, caption, already cared for). The counts
+    describe the whole day, not the page: a volunteer who only ever sees one
+    page must still be able to tell that more animals exist.
+    """
+    body_contents: list[dict] = [
+        _animal_status_row(label, data, cared_caption=caption, cared=cared)
+        for label, data, caption, cared in rows
+    ]
+    if more_data is not None:
+        body_contents.append(
+            {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": CREAM_DEEP,
+                "cornerRadius": _ROUND,
+                "paddingAll": "14px",
+                "action": {
+                    "type": "postback",
+                    "label": "顯示更多",
+                    "data": more_data,
+                    "displayText": "顯示更多",
+                },
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": f"顯示更多（還有 {total - shown_through} 隻）",
+                        "color": GREEN_DEEP,
+                        "size": "sm",
+                        "weight": "bold",
+                        "align": "center",
+                    }
+                ],
+            }
+        )
+    return {
+        "type": "flex",
+        "altText": f"🐾 今日照護毛孩（已回報 {done} / {total}）",
+        "contents": _bubble(
+            _header(
+                "今日照護毛孩",
+                f"共 {total} 隻 · 已回報 {done} 隻",
+                glyph="🐾",
+                progress=_progress_bar(done, total),
+            ),
+            {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": CREAM,
+                "paddingAll": "16px",
+                "spacing": "sm",
+                "contents": body_contents,
+            },
+            {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": CREAM_DEEP,
+                "paddingAll": "12px",
+                "contents": [_hint("點一下毛孩就可以開始回報 🍃")],
+            },
+        ),
+    }
+
+
 def summary_bubble(
     rows: list[tuple[str, str, str]],
     *,

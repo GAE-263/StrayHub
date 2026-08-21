@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,6 +96,31 @@ class CareReportRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def latest_submission_by_animal(
+        self, *, start: datetime, end: datetime
+    ) -> dict[UUID, datetime]:
+        """Newest submission per animal in ``[start, end)``, for the daily overview.
+
+        Deliberately org-wide rather than per-volunteer: what a volunteer needs to
+        know is whether the animal has been cared for today at all, not whether it
+        was cared for by them. Archived reports do not count as care given.
+        """
+        result = await self.session.execute(
+            select(CareReport.animal_id, func.max(CareReport.submitted_at))
+            .where(
+                CareReport.organization_id == self.organization_id,
+                CareReport.submitted_at >= start,
+                CareReport.submitted_at < end,
+                CareReport.archived_at.is_(None),
+            )
+            .group_by(CareReport.animal_id)
+        )
+        return {
+            animal_id: submitted_at
+            for animal_id, submitted_at in result.all()
+            if animal_id is not None and submitted_at is not None
+        }
 
     async def list_for_volunteer(self, volunteer_user_id: UUID) -> list[CareReport]:
         result = await self.session.execute(
