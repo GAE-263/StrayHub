@@ -268,6 +268,8 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
                 "care_report_corrections",
                 "ai_processing_jobs",
                 "audit_records",
+                # 選項使用索引以 care_report_id 為外鍵，必須先於 care_reports 刪除。
+                "observation_option_usages",
                 "care_reports",
                 "care_report_drafts",
                 "media_assets",
