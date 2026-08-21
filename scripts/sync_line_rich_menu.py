@@ -61,9 +61,7 @@ def to_line_rich_menu(document: dict) -> dict:
                 "bounds": {
                     "x": column * cell_width,
                     "y": row * cell_height,
-                    "width": (
-                        cell_width if column < columns - 1 else WIDTH - column * cell_width
-                    ),
+                    "width": (cell_width if column < columns - 1 else WIDTH - column * cell_width),
                     "height": cell_height if row < rows - 1 else HEIGHT - row * cell_height,
                 },
                 "action": line_action,
