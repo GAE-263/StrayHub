@@ -364,6 +364,22 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 請重新傳送或略過照片。」，**而不是讓整個事件失敗**。因為讓 LINE 重送不會讓一張
 壞掉的圖變好，只會讓志工卡住。
 
+**2026-08-21 手機實測驗證**（在此之前這條路只有測試碰過，而測試是直接塞資料列、
+不放真的檔案）：
+
+| 檢查 | 結果 |
+|---|---|
+| MinIO 物件存在 | 234,142 bytes |
+| 真的是 JPEG | 開頭 `ffd8ffe0` |
+| EXIF 已剝除 | 前 4KB 無 `Exif` 標記，`exif_removed=True` 名副其實 |
+| `media_assets` | `status=attached`、`content_type=image/jpeg` |
+| Worker 取得圖片 | 無 `NoSuchKey`，Job 12 秒內 `succeeded` |
+
+順帶澄清一件容易誤判的事：資料庫裡曾出現 3 筆 `failure_reason=NoSuchKey` 的失敗
+Job，時間落在跑完整測試套件的當下。那是 e2e 測試直接寫入資料列、MinIO 裡沒有對應
+物件，而當時剛好有 worker 在跑就把它們撿走了。**不是這條路的缺陷**，但它會讓人
+以為是。測試與常駐 worker 共用同一個本機資料庫時要留意這點。
+
 ---
 
 ## 9. 送出之後：AI 背景分析
@@ -426,6 +442,40 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 本機預設 `ai_provider=mock`（`settings.py:36`），`build_ai_client()` 會回傳
 `MockAIAdapter`，所以展示流程不需要任何外部 AI 服務。要接真實供應商就設定
 `AI_PROVIDER`、`AI_ENDPOINT`、`AI_API_KEY`。
+
+注意 `MockAIAdapter` 不管收到什麼都回 `{"observations": []}`
+（`mock_ai_adapter.py:8`）。本機看到空的分析結果是它的定義，不是失敗——圖片與
+心得都有送進去，只是 mock 不看。
+
+### 待決定：同時有照片與心得時，來源標成哪一個
+
+`ai_observations.source_type` 只有一個欄位，但一筆回報可以同時有心得與照片。
+`ai_handler.py:141` 的判斷順序是心得優先：
+
+```python
+if current_source == "care_report" and note and report is not None:
+    observation.source_type = "note"      # ← 有心得就在這裡結束
+    observation.source_id = report.id
+    return
+if media_assets and ...:
+    observation.source_type = "photo"     # ← 同時有心得時永遠走不到
+    observation.source_id = media_assets[0].id
+```
+
+**只要同時有心得和照片，照片就不會被記為來源**，`source_id` 指向回報本身而不是
+那張圖。2026-08-21 手機實測確認過：一筆有照片的回報，`source_type` 是 `note`。
+
+目前影響是零，因為 mock 不產生任何 observation。接上真實供應商後才有影響：一個
+主要靠影像判讀的模型，產出的觀察會被標成「來自心得」，工作人員覆核時循
+`source_id` 找不到那張圖。而志工同時打字又拍照是最常見的情況，不是邊緣案例。
+
+**現在不動，是因為現在無法驗證哪種標法才對。** mock 不產生 observation，也還沒
+接真實模型，改了沒有東西能證明改對了。而真實模型很可能逐項標示來源（這一項來自
+影像、那一項來自文字），那樣的話「整筆挑一個來源」這個模型本身就要換掉，先改
+判斷順序等於白做。等接上真實供應商、看得到它實際回什麼，再決定：
+
+1. 改判斷順序，有照片優先——一行的事，但反過來變成心得被吃掉
+2. 改成陣列，或讓每一項 observation 各自帶來源——真正解掉，但動 schema 與領域模型
 
 ---
 
