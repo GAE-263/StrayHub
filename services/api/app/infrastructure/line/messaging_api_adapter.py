@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.line_messaging import LineImageContent
 from services.api.app.config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class LineMessagingApiAdapter:
@@ -24,18 +28,35 @@ class LineMessagingApiAdapter:
         try:
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            # The caller only ever sees a generic 503, so record what LINE
+            # actually rejected; without this a malformed message body is
+            # indistinguishable from LINE being down.
+            body = ""
+            try:
+                body = response.text[:2000]
+            except Exception:  # pragma: no cover - defensive
+                pass
+            logger.error(
+                "LINE API rejected %s %s -> %s %s",
+                getattr(response.request, "method", "?"),
+                getattr(response.request, "url", "?"),
+                getattr(response, "status_code", "?"),
+                body,
+            )
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
     async def _post(self, url: str, **kwargs):
         try:
             return await self.client.post(url, **kwargs)
         except httpx.HTTPError as exc:
+            logger.error("LINE API POST %s failed: %r", url, exc)
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
     async def _get(self, url: str, **kwargs):
         try:
             return await self.client.get(url, **kwargs)
         except httpx.HTTPError as exc:
+            logger.error("LINE API GET %s failed: %r", url, exc)
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
     async def reply(self, *, reply_token: str, messages: list[dict]) -> None:
@@ -81,8 +102,9 @@ class LineMessagingApiAdapter:
         return response.json()["richMenuId"]
 
     async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
+        # Binary uploads go to the data host, not the API host.
         response = await self._post(
-            f"{self.api_base}/v2/bot/richmenu/{rich_menu_id}/content",
+            f"{self.data_base}/v2/bot/richmenu/{rich_menu_id}/content",
             headers={**self._headers, "Content-Type": "image/png"},
             content=content,
         )

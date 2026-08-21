@@ -8,6 +8,9 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
+WIDTH = 2500
+HEIGHT = 1686
+
 
 def load_definition(path: Path) -> dict:
     document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -34,7 +37,14 @@ def load_definition(path: Path) -> dict:
 
 def to_line_rich_menu(document: dict) -> dict:
     actions = document["actions"]
-    cell_width = 2500 // len(actions)
+    # ``columns`` lets a definition lay actions out as a grid; omitting it keeps
+    # the original behaviour of one full-height row.
+    columns = int(document.get("columns") or len(actions))
+    if columns < 1:
+        raise ValueError("columns 必須大於 0")
+    rows = -(-len(actions) // columns)
+    cell_width = WIDTH // columns
+    cell_height = HEIGHT // rows
     areas = []
     for index, action in enumerate(actions):
         line_action = {"type": action["type"]}
@@ -43,13 +53,18 @@ def to_line_rich_menu(document: dict) -> dict:
             line_action["displayText"] = action["label"]
         else:
             line_action["uri"] = action["uri"]
+        column, row = index % columns, index // columns
+        # The last cell in each direction absorbs the rounding remainder so the
+        # areas tile the image exactly.
         areas.append(
             {
                 "bounds": {
-                    "x": index * cell_width,
-                    "y": 0,
-                    "width": cell_width if index < len(actions) - 1 else 2500 - index * cell_width,
-                    "height": 1686,
+                    "x": column * cell_width,
+                    "y": row * cell_height,
+                    "width": (
+                        cell_width if column < columns - 1 else WIDTH - column * cell_width
+                    ),
+                    "height": cell_height if row < rows - 1 else HEIGHT - row * cell_height,
                 },
                 "action": line_action,
             }
@@ -58,7 +73,7 @@ def to_line_rich_menu(document: dict) -> dict:
         "name": document.get("name", "strayhub-volunteer-care"),
         "chatBarText": "志工照護回報",
         "selected": True,
-        "size": {"width": 2500, "height": 1686},
+        "size": {"width": WIDTH, "height": HEIGHT},
         "areas": areas,
     }
 
