@@ -34,7 +34,9 @@ class MockLineAdapter:
         self.rich_menus.append(rich_menu)
         return f"mock-rich-menu-{len(self.rich_menus)}"
 
-    async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
+    async def upload_rich_menu_image(
+        self, *, rich_menu_id: str, content: bytes, content_type: str = "image/png"
+    ) -> None:
         if not content:
             raise ValueError("rich menu image is empty")
 

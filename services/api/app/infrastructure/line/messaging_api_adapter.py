@@ -101,11 +101,15 @@ class LineMessagingApiAdapter:
         self._raise_for_status(response)
         return response.json()["richMenuId"]
 
-    async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
-        # Binary uploads go to the data host, not the API host.
+    async def upload_rich_menu_image(
+        self, *, rich_menu_id: str, content: bytes, content_type: str = "image/png"
+    ) -> None:
+        # Binary uploads go to the data host, not the API host.  LINE accepts
+        # PNG and JPEG but rejects the upload when the declared Content-Type
+        # does not match the bytes, so the caller has to say which it is.
         response = await self._post(
             f"{self.data_base}/v2/bot/richmenu/{rich_menu_id}/content",
-            headers={**self._headers, "Content-Type": "image/png"},
+            headers={**self._headers, "Content-Type": content_type},
             content=content,
         )
         self._raise_for_status(response)

@@ -76,6 +76,17 @@ def to_line_rich_menu(document: dict) -> dict:
     }
 
 
+IMAGE_CONTENT_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+def _image_content_type(path: Path) -> str:
+    """LINE rejects the upload when Content-Type disagrees with the bytes."""
+    try:
+        return IMAGE_CONTENT_TYPES[path.suffix.lower()]
+    except KeyError:
+        raise ValueError(f"Rich Menu 底圖只支援 PNG 或 JPEG：{path.name}") from None
+
+
 async def publish(document: dict, image_path: Path | None) -> str:
     from services.api.app.infrastructure.line.messaging_api_adapter import (
         LineMessagingApiAdapter,
@@ -89,6 +100,7 @@ async def publish(document: dict, image_path: Path | None) -> str:
         await adapter.upload_rich_menu_image(
             rich_menu_id=rich_menu_id,
             content=image_path.read_bytes(),
+            content_type=_image_content_type(image_path),
         )
     await adapter.link_rich_menu(rich_menu_id=rich_menu_id)
     await adapter.client.aclose()

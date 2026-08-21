@@ -56,3 +56,20 @@ async def test_real_adapter_rich_menu_flow_is_repeatable_and_validated() -> None
     await adapter.link_rich_menu(rich_menu_id=rich_menu_id)
     assert rich_menu_id == "rich-1"
     assert len(client.calls) == 3
+
+    upload = next(call for call in client.calls if call[1].endswith("/content"))
+    # 二進位內容走 data host，不是 API host。
+    assert upload[1].startswith("https://api-data.line.me")
+    assert upload[2]["headers"]["Content-Type"] == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_rich_menu_image_content_type_follows_the_bytes() -> None:
+    """LINE 會在 Content-Type 與實際位元組不符時拒絕上傳。"""
+    client = Client()
+    adapter = LineMessagingApiAdapter(client=client)
+    await adapter.upload_rich_menu_image(
+        rich_menu_id="rich-1", content=b"jpeg", content_type="image/jpeg"
+    )
+    upload = next(call for call in client.calls if call[1].endswith("/content"))
+    assert upload[2]["headers"]["Content-Type"] == "image/jpeg"

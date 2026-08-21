@@ -1,0 +1,16 @@
+version: 1
+name: strayhub-volunteer-care-2x2
+columns: 2
+actions:
+  - label: 開始照護回報
+    type: postback
+    data: action=start_care_report
+  - label: 今日照護毛孩
+    type: postback
+    data: action=list_reportable_animals
+  - label: 繼續未完成回報
+    type: postback
+    data: action=resume_draft
+  - label: 聯絡工作人員
+    type: postback
+    data: action=contact_staff
