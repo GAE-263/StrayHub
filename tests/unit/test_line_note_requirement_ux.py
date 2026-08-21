@@ -9,7 +9,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from services.api.app.api.line_webhook import _chit_chat_reply, _options_requiring_note
 
 

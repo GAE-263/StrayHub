@@ -15,12 +15,14 @@ class ReportableScopeRepository:
         self.session = session
         self.organization_id = organization_id
 
-    async def active_animal_ids(
-        self, *, volunteer_user_id: UUID, now: datetime | None = None
-    ) -> set[UUID]:
-        current = now or datetime.now(timezone.utc)
-        result = await self.session.execute(
-            select(Animal.id)
+    def _scoped(self, entity, *, volunteer_user_id: UUID, current: datetime):
+        """Every scope query shares this join; a second copy of it would drift.
+
+        An animal can match through both its own row and its area, so the
+        select is DISTINCT — without it the same animal appears twice.
+        """
+        return (
+            select(entity)
             .select_from(DailyReportableScope)
             .join(
                 Animal,
@@ -47,8 +49,37 @@ class ReportableScopeRepository:
                     DailyReportableScope.area_id == Animal.area_id,
                 ),
             )
+            .distinct()
+        )
+
+    async def active_animal_ids(
+        self, *, volunteer_user_id: UUID, now: datetime | None = None
+    ) -> set[UUID]:
+        result = await self.session.execute(
+            self._scoped(
+                Animal.id,
+                volunteer_user_id=volunteer_user_id,
+                current=now or datetime.now(timezone.utc),
+            )
         )
         return {animal_id for animal_id in result.scalars() if animal_id is not None}
+
+    async def active_animals(
+        self, *, volunteer_user_id: UUID, now: datetime | None = None
+    ) -> list[Animal]:
+        """The animals themselves, so callers stop re-reading the whole shelter.
+
+        Ordered by shelter number then name so the sequence a volunteer sees is
+        stable between taps; ``id`` breaks remaining ties.
+        """
+        result = await self.session.execute(
+            self._scoped(
+                Animal,
+                volunteer_user_id=volunteer_user_id,
+                current=now or datetime.now(timezone.utc),
+            ).order_by(Animal.shelter_number, Animal.name, Animal.id)
+        )
+        return list(result.scalars())
 
     async def is_animal_reportable(
         self, *, animal_id: UUID, volunteer_user_id: UUID, now: datetime | None = None

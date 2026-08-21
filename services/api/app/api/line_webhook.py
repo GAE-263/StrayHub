@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Header, Request
 from services.api.app.api.errors import DomainError
@@ -24,6 +25,7 @@ from services.api.app.application.line_message_presenter import (
     WOOD,
     WOOD_DEEP,
     celebration_bubble,
+    daily_care_bubble,
     prompt_bubble,
     question_bubble,
     summary_bubble,
@@ -40,9 +42,11 @@ from services.api.app.domain.line_care_report_state import (
     DraftStateMachine,
 )
 from services.api.app.domain.line_webhook_security import verify_line_signature
+from services.api.app.domain.organization_timezone import local_day_range, local_today
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.database.engine import session_factory
+from services.api.app.persistence.models.identity import Organization
 from services.api.app.persistence.models.shelter_area import ShelterArea
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
@@ -51,6 +55,7 @@ from services.api.app.persistence.repositories.authentication_repository import 
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
 )
+from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
 from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
@@ -138,32 +143,114 @@ async def _animal_confirmation_messages(session, animal, organization_id: UUID) 
     return messages
 
 
-async def _reportable_animals(
+# LINE accepts 13 quick replies; the last slot is kept for "more" so a longer
+# list is paged rather than silently cut off.
+_SELECTION_PAGE = 12
+_OVERVIEW_PAGE = 8
+
+
+def _animal_label(animal) -> str:
+    return f"{animal.name}／{animal.shelter_number or '無收容編號'}"
+
+
+async def _scoped_animals(session, organization_id: UUID, volunteer_user_id: UUID) -> list:
+    """Today's animals for this volunteer, straight from the scope query.
+
+    Reading the whole shelter and filtering in Python — as this used to — costs
+    more the larger the shelter gets, and made the ordering of any slice depend
+    on whatever order the unrelated search returned.
+    """
+    return await ReportableScopeRepository(session, organization_id).active_animals(
+        volunteer_user_id=volunteer_user_id
+    )
+
+
+def _reportable_animals(
+    animals: list,
+    *,
+    offset: int = 0,
+    draft_token: str | None = None,
+) -> list[dict]:
+    extra = {"draft_token": draft_token} if draft_token else {}
+    page = animals[offset : offset + _SELECTION_PAGE]
+    items = [
+        _postback(
+            _animal_label(animal),
+            urlencode({"action": "select_animal", "animal_id": str(animal.id), **extra}),
+        )
+        for animal in page
+    ]
+    remaining = len(animals) - (offset + len(page))
+    if remaining > 0:
+        # Dropping these silently would tell a volunteer his remaining animals
+        # do not exist today.
+        items.append(
+            _postback(
+                f"更多（還有 {remaining} 隻）",
+                urlencode(
+                    {
+                        "action": "more_animals",
+                        "offset": str(offset + _SELECTION_PAGE),
+                        **extra,
+                    }
+                ),
+            )
+        )
+    return items
+
+
+async def _daily_care_overview(
     session,
     organization_id: UUID,
     volunteer_user_id: UUID,
     *,
-    draft_token: str | None = None,
+    offset: int = 0,
 ) -> list[dict]:
-    animals = await AnimalRepository(session, organization_id).search("")
-    allowed = await ReportableScopeRepository(session, organization_id).active_animal_ids(
-        volunteer_user_id=volunteer_user_id
+    """The card behind 今日照護毛孩: who needs care today, and what is already done."""
+    animals = await _scoped_animals(session, organization_id, volunteer_user_id)
+    if not animals:
+        return [_text("今日目前沒有可回報的動物。")]
+    organization = (
+        await session.execute(select(Organization).where(Organization.id == organization_id))
+    ).scalar_one_or_none()
+    if organization is None:
+        raise DomainError("organization_not_found", "收容所不存在", 404)
+    zone = organization.timezone
+    start, end = local_day_range(local_today(zone), zone)
+    submitted = await CareReportRepository(session, organization_id).latest_submission_by_animal(
+        start=start, end=end
     )
-    action = "select_animal"
-    return [
-        _postback(
-            f"{animal.name}／{animal.shelter_number or '無收容編號'}",
-            urlencode(
-                {
-                    "action": action,
-                    "animal_id": str(animal.id),
-                    **({"draft_token": draft_token} if draft_token else {}),
-                }
-            ),
+    page = animals[offset : offset + _OVERVIEW_PAGE]
+    rows = []
+    for animal in page:
+        cared_at = submitted.get(animal.id)
+        if cared_at is None:
+            caption = "尚未回報"
+        else:
+            caption = f"已回報 · {cared_at.astimezone(ZoneInfo(zone)):%H:%M}"
+        rows.append(
+            (
+                _animal_label(animal),
+                urlencode({"action": "select_animal", "animal_id": str(animal.id)}),
+                caption,
+                cared_at is not None,
+            )
         )
-        for animal in animals
-        if animal.id in allowed
-    ][:6]
+    shown_through = offset + len(page)
+    more_data = (
+        urlencode({"action": "today_overview", "offset": str(shown_through)})
+        if shown_through < len(animals)
+        else None
+    )
+    return [
+        daily_care_bubble(
+            rows,
+            done=sum(1 for animal in animals if animal.id in submitted),
+            total=len(animals),
+            shown_through=shown_through,
+            more_data=more_data,
+        )
+    ]
 
 
 # The answer key and its CRM category code agree everywhere except walk.
@@ -448,15 +535,38 @@ async def _handle_postback(
 ) -> UUID | None:
     values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
     action = values.get("action", [""])[0]
-    if action in {"start_care_report", "list_reportable_animals"}:
-        items = await _reportable_animals(session, organization_id, user_id)
-        if not items:
+    if action in {"start_care_report", "more_animals"}:
+        animals = await _scoped_animals(session, organization_id, user_id)
+        if not animals:
             await _reply(line, event, [_text("今日目前沒有可回報的動物。")])
             return None
+        offset = _offset_value(values.get("offset", [""])[0])
+        items = _reportable_animals(
+            animals,
+            offset=offset,
+            draft_token=values.get("draft_token", [""])[0] or None,
+        )
+        if not items:
+            # The list shrank between taps; start over rather than show nothing.
+            items = _reportable_animals(animals)
+            offset = 0
+        prompt = "請選擇本次照護的動物。" if offset == 0 else "請繼續選擇本次照護的動物。"
         await _reply(
             line,
             event,
-            [{"type": "text", "text": "請選擇本次照護的動物。", "quickReply": {"items": items}}],
+            [{"type": "text", "text": prompt, "quickReply": {"items": items}}],
+        )
+        return None
+    if action in {"list_reportable_animals", "today_overview"}:
+        await _reply(
+            line,
+            event,
+            await _daily_care_overview(
+                session,
+                organization_id,
+                user_id,
+                offset=_offset_value(values.get("offset", [""])[0]),
+            ),
         )
         return None
     token = values.get("draft_token", [""])[0]
@@ -469,7 +579,9 @@ async def _handle_postback(
         draft = await CareReportDraftRepository(session, organization_id).get_by_token(token)
         if draft is None or draft.volunteer_user_id != user_id or draft.status != "active":
             raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
-        items = await _reportable_animals(session, organization_id, user_id, draft_token=token)
+        items = _reportable_animals(
+            await _scoped_animals(session, organization_id, user_id), draft_token=token
+        )
         await _reply(
             line,
             event,
@@ -648,6 +760,14 @@ async def _handle_postback(
             raw_token=token,
         )
     return result.report_id
+
+
+def _offset_value(value: str) -> int:
+    """Paging offsets arrive from postback data, so treat them as untrusted."""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _uuid_value(value: str) -> UUID | None:

@@ -14,7 +14,6 @@ from uuid import uuid4
 
 import asyncpg
 import pytest
-
 from services.api.app.application.line_draft_conversation import LineDraftConversationService
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope
