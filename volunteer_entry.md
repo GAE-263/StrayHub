@@ -19,7 +19,7 @@
 | P0 | 防止失效 session 顯示 stale 動物資料 | 未完成 | session/context 失效時立即卸載受保護內容，不保留前一個 organization 的動物資料 |
 | P0 | 顯示目前協助的收容所 | 未完成 | `/animal-confirmation` 及 `/care-report` 顯示後端確認的 organization 名稱 |
 | P0 | 補 Rich Menu 實際 dry-run 與發布驗證 | 完成 | 缺變數時 fail-fast；resolved URL為HTTPS且指向`/volunteer-entry?entry=…`，不得含placeholder；safe publication tests與dry-run gate已通過 |
-| P0 | 更新 LIFF／tunnel 開發文件 | 未完成 | README 或 004 quickstart 清楚記錄 Web/API tunnel、LIFF Endpoint、environment 及手機測試步驟 |
+| P0 | 更新 LIFF／tunnel 開發文件 | 完成 | README、004 quickstart、contract index與controlled-line evidence template清楚記錄兩條HTTPS tunnel、LIFF Endpoint／`openid`、runtime environment、Rich Menu dry-run、Case A–D與credential遮罩規則 |
 | P0 | 更新 004 契約文件 | 完成 | additive與canonical contract、runtime Pydantic及generated type的四狀態與401／403／503分類一致 |
 | P0 | 執行 Alembic migration 實測 | 完成 | 真實PostgreSQL已反覆完成0030→0029→0030 round-trip並執行resolver／RLS tests |
 | P0 | 完整 Python 品質門檻 | 未完成 | `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 全部通過 |
@@ -63,7 +63,8 @@ Task 2–7已提交。Task 8已完成LIFF init/login、identity exchange、四�
 | Task 13：Rich Menu safe publication | 完成 | env substitution、HTTPS、entry URL | safe publication unit tests與dry-run gate已通過；既有commit `f728f32` | `f728f32 fix(line): render safe volunteer Rich Menu URLs` |
 | Task 14：Browser／LIFF route matrix | 完成 | Playwright onboarding與multi-organization route evidence | LIFF route matrix與cross-organization browser scenarios已通過；既有commit `f466ac3` | `f466ac3 fix(web): isolate volunteer recovery epochs` |
 | Task 15：360px／keyboard／Axe／visual | 完成 | P0 responsive、keyboard、Axe及visual baseline；測試fixture改用`/volunteer-entry`主入口 | responsive／keyboard／Axe `61 passed`；visual `77 passed`；typecheck、Task 15 spec Prettier、`git diff --check`通過；使用者已明確接受目前visual baseline | `test(web): validate volunteer entry accessibility visuals` |
-| Task 16～20：Docs／full gates／controlled LINE／completion | 待執行 | tunnel、真機、完整 gate、Spec Kit、人工計時 | 需要後續技術與外部驗收證據 | — |
+| Task 16：LIFF／tunnel／真機驗收文件 | 完成 | README、004 quickstart、contract index、controlled-line evidence template | 文件commands、paths與env names已對齊current code；`PYTHONPATH=.`修正entry script入口；`git diff --check`與documentation path review通過；尚未宣稱真機Case A–D完成 | `docs: add LIFF tunnel and phone acceptance guide` |
+| Task 17～20：Full gates／controlled LINE／completion／人工計時 | 待執行 | 完整品質gate、真機Case A–D、Spec Kit ledger、005 T110 | 需要後續技術與外部驗收證據 | — |
 
 ## 2026-08-20 Task 1 Reconciliation
 

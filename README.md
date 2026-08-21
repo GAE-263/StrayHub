@@ -64,6 +64,24 @@ uv run python -m scripts.reset_local --yes
 
 登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8001/v1/*`，再依登入帳號的 Membership 或平台管理員授權設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
 
+## LIFF HTTPS tunnel 與手機驗收
+
+正式 LIFF／手機測試不可使用 `localhost`、fake LIFF ID 或單一 tunnel 同時承載 Web 與 API。完整流程與遮罩後證據格式見 [`specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md`](specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md)。
+
+1. 先在本機啟動 FastAPI `127.0.0.1:8001` 與 Next.js `127.0.0.1:3001`。
+2. 建立兩條獨立的HTTPS tunnel：Web→`3001`、API→`8001`。可使用：
+
+   ```bash
+   cloudflared tunnel --url http://127.0.0.1:3001
+   cloudflared tunnel --url http://127.0.0.1:8001
+   ```
+
+   或在受控環境使用兩個獨立的`ngrok http 3001`／`ngrok http 8001` process。
+
+3. 將API tunnel origin設定為Next.js server runtime的`API_BASE_URL`，將LIFF Console取得的LIFF ID設定為`LIFF_ID`，再重新啟動Next.js；兩者不是`NEXT_PUBLIC_*` client fallback。
+4. 在同一LINE Login channel的LIFF Console設定HTTPS Web tunnel `/volunteer-entry` Endpoint並啟用`openid` scope。Rich Menu則使用`https://liff.line.me/<LIFF_ID>/volunteer-entry?entry=<opaque-reference>`，由`sync_line_rich_menu.py` dry-run驗證。
+5. 使用受控LINE帳號執行controlled evidence中的Case A–D；raw ID token、raw entry reference、LINE user ID、Secret與protected data不得寫入Git、issue、terminal transcript或截圖。
+
 ## 一鍵本機展示
 
 ```bash
