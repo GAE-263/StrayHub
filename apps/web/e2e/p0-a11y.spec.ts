@@ -1,7 +1,31 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mockManagementApi } from "./fixtures";
-import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
+import {
+  mockLiffBrowser,
+  mockVolunteerAccessApi,
+} from "./volunteer-access-fixtures";
+
+async function mockVolunteerEntryNew(
+  page: Parameters<typeof mockLiffBrowser>[0],
+) {
+  await page.route("**/v1/auth/liff/exchange", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "NEW",
+        organization: {
+          id: "org-a",
+          code: "ORG-A",
+          name: "收容所 A",
+        },
+        user: { role: "VOLUNTEER" },
+      }),
+    });
+  });
+  await mockLiffBrowser(page);
+}
 
 const viewports = [
   { width: 360, height: 800 },
@@ -50,12 +74,15 @@ test("志工報名與管理 routes 沒有 critical 或 serious axe violations", 
 }) => {
   await mockVolunteerAccessApi(page);
   for (const route of [
-    "/volunteer-application?entry=entry&id_token=id-token",
+    "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
     "/volunteers/applications",
     "/volunteers/access",
     "/volunteers/notifications",
     "/settings/volunteer-access",
   ]) {
+    if (route.startsWith("/volunteer-entry")) {
+      await mockVolunteerEntryNew(page);
+    }
     await page.goto(route);
     await expect(page.locator("main").first()).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();

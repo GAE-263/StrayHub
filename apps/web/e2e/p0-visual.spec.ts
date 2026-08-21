@@ -1,7 +1,31 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
 import { mockGovernanceVisualApi } from "./governance-visual-fixtures";
-import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
+import {
+  mockLiffBrowser,
+  mockVolunteerAccessApi,
+} from "./volunteer-access-fixtures";
+
+async function mockVolunteerEntryNew(
+  page: Parameters<typeof mockLiffBrowser>[0],
+) {
+  await page.route("**/v1/auth/liff/exchange", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "NEW",
+        organization: {
+          id: "org-a",
+          code: "ORG-A",
+          name: "收容所 A",
+        },
+        user: { role: "VOLUNTEER" },
+      }),
+    });
+  });
+  await mockLiffBrowser(page);
+}
 
 const viewports = [
   { width: 360, height: 800 },
@@ -79,7 +103,7 @@ for (const route of governanceRoutes) {
 }
 
 const volunteerRoutes = [
-  "/volunteer-application?entry=entry&id_token=id-token",
+  "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
   "/volunteers/applications",
   "/settings/volunteer-access",
   "/volunteers/access",
@@ -92,7 +116,11 @@ for (const route of volunteerRoutes) {
     test(`${route} @ ${viewport.width}x${viewport.height} 建立志工授權 visual evidence`, async ({
       page,
     }) => {
-      await mockVolunteerAccessApi(page);
+      if (route.startsWith("/volunteer-entry")) {
+        await mockVolunteerEntryNew(page);
+      } else {
+        await mockVolunteerAccessApi(page);
+      }
       await page.setViewportSize(viewport);
       await page.goto(route);
       await expect(page.locator("main").first()).toBeVisible();
