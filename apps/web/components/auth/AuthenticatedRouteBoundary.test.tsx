@@ -9,6 +9,7 @@ import {
   AuthenticatedRouteBoundary,
   type BoundaryLoadResult,
 } from "./AuthenticatedRouteBoundary";
+import { useVolunteerShelterContext } from "./VolunteerShelterContext";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -41,9 +42,18 @@ const profile: CurrentUser = {
 function result(source: SessionSource = "liff"): BoundaryLoadResult {
   return {
     profile,
-    context: { organization_id: "org-a", session_id: "session-a" },
+    context: {
+      organization_id: "org-a",
+      organization_name: "南港收容所",
+      session_id: "session-a",
+    },
     sessionSource: source,
   };
+}
+
+function ShelterContextProbe() {
+  const context = useVolunteerShelterContext();
+  return <span>{context?.organizationName}</span>;
 }
 
 beforeEach(() => {
@@ -76,6 +86,7 @@ describe("AuthenticatedRouteBoundary", () => {
           loadContext={loadContext}
         >
           <span>protected animal data</span>
+          <ShelterContextProbe />
         </AuthenticatedRouteBoundary>,
       );
     });
@@ -85,6 +96,42 @@ describe("AuthenticatedRouteBoundary", () => {
 
     await act(async () => resolveLoad(result()));
     expect(container.textContent).toContain("protected animal data");
+    expect(container.textContent).toContain("南港收容所");
+  });
+
+  it("passes the default server context name to protected children", async () => {
+    window.sessionStorage.setItem("access_token", "access-a");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/v1/auth/me")) {
+          return new Response(JSON.stringify(profile), { status: 200 });
+        }
+        return new Response(
+          JSON.stringify({
+            organization_id: "org-a",
+            organization_name: "南港收容所",
+            session_id: "session-a",
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    await act(async () => {
+      root.render(
+        <AuthenticatedRouteBoundary
+          area="volunteer"
+          pathname="/animal-confirmation"
+        >
+          <ShelterContextProbe />
+        </AuthenticatedRouteBoundary>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(container.textContent).toContain("南港收容所");
   });
 
   it("allows a management role only with a matching active context", async () => {
@@ -141,7 +188,11 @@ describe("AuthenticatedRouteBoundary", () => {
   it("requires context before mounting a management role", async () => {
     const loadContext = vi.fn(async () => ({
       ...result("local"),
-      context: { organization_id: "", session_id: "session-a" },
+      context: {
+        organization_id: "",
+        organization_name: "",
+        session_id: "session-a",
+      },
       profile: {
         ...profile,
         memberships: [
@@ -182,6 +233,7 @@ describe("AuthenticatedRouteBoundary", () => {
           onRedirect={onRedirect}
         >
           <span>protected animal data</span>
+          <ShelterContextProbe />
         </AuthenticatedRouteBoundary>,
       );
     });
@@ -213,6 +265,7 @@ describe("AuthenticatedRouteBoundary", () => {
           loadContext={loadContext}
         >
           <span>protected animal data</span>
+          <ShelterContextProbe />
         </AuthenticatedRouteBoundary>,
       );
     });
@@ -264,6 +317,7 @@ describe("AuthenticatedRouteBoundary", () => {
           loadContext={loadContext}
         >
           <span>protected animal data</span>
+          <ShelterContextProbe />
         </AuthenticatedRouteBoundary>,
       );
     });
@@ -275,6 +329,7 @@ describe("AuthenticatedRouteBoundary", () => {
           loadContext={loadContext}
         >
           <span>protected animal data</span>
+          <ShelterContextProbe />
         </AuthenticatedRouteBoundary>,
       );
     });

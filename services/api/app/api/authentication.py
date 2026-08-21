@@ -214,15 +214,25 @@ async def current_user(
 
 @router.get("/active-shelter-context")
 async def active_context(
-    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    request_context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    if context.session_id is None:
+    if request_context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
-    context = await ActiveShelterContextService(AuthenticationRepository(session)).get(
-        session_id=context.session_id
+    repository = AuthenticationRepository(session)
+    active_session = await ActiveShelterContextService(repository).get(
+        session_id=request_context.session_id
     )
-    return {"organization_id": context.active_organization_id, "session_id": context.id}
+    if active_session.active_organization_id is None:
+        raise DomainError("invalid_context", "目前收容所無效", 409)
+    organization = await repository.get_organization(active_session.active_organization_id)
+    if organization is None:
+        raise DomainError("invalid_context", "目前收容所無效", 409)
+    return {
+        "organization_id": active_session.active_organization_id,
+        "organization_name": organization.name,
+        "session_id": active_session.id,
+    }
 
 
 @router.put("/active-shelter-context")
@@ -233,8 +243,19 @@ async def switch_context(
 ) -> dict:
     if request_context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
+    repository = AuthenticationRepository(session)
     context = await ActiveShelterContextService(
-        AuthenticationRepository(session), audit=AuditService(session)
+        repository, audit=AuditService(session)
     ).switch(session_id=request_context.session_id, organization_id=payload.organization_id)
+    if context.active_organization_id is None:
+        raise DomainError("invalid_context", "目前收容所無效", 409)
+    organization = await repository.get_organization(context.active_organization_id)
+    if organization is None:
+        raise DomainError("invalid_context", "目前收容所無效", 409)
+    response = {
+        "organization_id": context.active_organization_id,
+        "organization_name": organization.name,
+        "session_id": context.id,
+    }
     await session.commit()
-    return {"organization_id": context.active_organization_id, "session_id": context.id}
+    return response

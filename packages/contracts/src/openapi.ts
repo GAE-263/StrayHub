@@ -2004,6 +2004,7 @@ export interface components {
         ActiveShelterContext: {
             /** Format: uuid */
             organization_id: string;
+            organization_name: string;
             /** Format: uuid */
             session_id: string;
         };

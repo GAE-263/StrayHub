@@ -20,12 +20,16 @@ import {
   ProtectedRouteState,
   type ProtectedRouteStateKind,
 } from "./ProtectedRouteState";
+import {
+  VolunteerShelterContext,
+  type VolunteerShelterContextValue,
+} from "./VolunteerShelterContext";
 
 export type BoundaryLoadResult = {
   profile: CurrentUser;
   context: {
     organization_id: string;
-    organization_name?: string | null;
+    organization_name: string;
     session_id: string;
   };
   sessionSource: SessionSource;
@@ -127,6 +131,8 @@ export function AuthenticatedRouteBoundary({
   onContactManager,
 }: AuthenticatedRouteBoundaryProps) {
   const [state, setState] = useState<ProtectedRouteStateKind>("checking");
+  const [shelterContext, setShelterContext] =
+    useState<VolunteerShelterContextValue | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const runEpoch = useRef(0);
   const source = sessionSource ?? getSessionSource() ?? "local";
@@ -140,6 +146,7 @@ export function AuthenticatedRouteBoundary({
       if (isCurrent()) setState(nextState);
     };
 
+    setShelterContext(null);
     if (!loadContext && !getAccessToken()) {
       clearAuth({ preserveLiffSession: source === "liff" });
       if (source === "liff") {
@@ -156,6 +163,10 @@ export function AuthenticatedRouteBoundary({
     try {
       const result = await loader();
       if (!isCurrent()) return;
+      setShelterContext({
+        organizationId: result.context.organization_id,
+        organizationName: result.context.organization_name,
+      });
       activeSource = result.sessionSource;
       const effectiveRole = deriveEffectiveRole(
         result.profile,
@@ -178,6 +189,7 @@ export function AuthenticatedRouteBoundary({
     } catch (error) {
       if (!isCurrent()) return;
       if (isUnauthorized(error)) {
+        setShelterContext(null);
         clearAuth({ preserveLiffSession: activeSource === "liff" });
         if (activeSource === "liff") {
           updateState("re-entry");
@@ -186,6 +198,7 @@ export function AuthenticatedRouteBoundary({
           if (isCurrent()) onRedirect?.("/login");
         }
       } else {
+        setShelterContext(null);
         updateState("temporary-error");
       }
     }
@@ -208,14 +221,16 @@ export function AuthenticatedRouteBoundary({
   );
 
   return (
-    <ProtectedRouteState
-      state={state}
-      onRetry={retry}
-      onReenter={onReenter}
-      onBack={onBack}
-      onContactManager={onContactManager}
-    >
-      {children}
-    </ProtectedRouteState>
+    <VolunteerShelterContext.Provider value={shelterContext}>
+      <ProtectedRouteState
+        state={state}
+        onRetry={retry}
+        onReenter={onReenter}
+        onBack={onBack}
+        onContactManager={onContactManager}
+      >
+        {children}
+      </ProtectedRouteState>
+    </VolunteerShelterContext.Provider>
   );
 }

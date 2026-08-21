@@ -2705,9 +2705,10 @@ components:
           items: { $ref: "#/components/schemas/Membership" }
     ActiveShelterContext:
       type: object
-      required: [organization_id, session_id]
+      required: [organization_id, organization_name, session_id]
       properties:
         organization_id: { type: string, format: uuid }
+        organization_name: { type: string }
         session_id: { type: string, format: uuid }
     WebhookSession:
       type: object

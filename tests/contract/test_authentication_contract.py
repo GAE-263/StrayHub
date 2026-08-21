@@ -44,6 +44,16 @@ def test_authentication_contract_declares_all_session_operations() -> None:
     assert paths["/v1/auth/active-shelter-context"]["put"].get("security") is None
 
 
+def test_active_shelter_context_contract_includes_server_confirmed_name() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text(encoding="utf-8")
+    )
+    schema = document["components"]["schemas"]["ActiveShelterContext"]
+
+    assert "organization_name" in schema["required"]
+    assert schema["properties"]["organization_name"] == {"type": "string"}
+
+
 def test_authentication_contract_does_not_put_organization_or_role_in_token_schema() -> None:
     document = yaml.safe_load(
         Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text(encoding="utf-8")

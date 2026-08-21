@@ -1,6 +1,12 @@
 "use client";
 
-import React, { FormEvent, useCallback, useEffect, useState } from "react";
+import React, {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AnimalConfirmationCard } from "../../../features/animal-selection/AnimalConfirmationCard";
 import { Button } from "../../../components/ui/button";
 import {
@@ -12,6 +18,7 @@ import {
 import { Field } from "../../../components/ui/field";
 import { Input } from "../../../components/ui/input";
 import { authFetch } from "../../../lib/auth";
+import { useVolunteerShelterContext } from "../../../components/auth/VolunteerShelterContext";
 
 type AnimalCandidate = {
   id: string;
@@ -53,6 +60,8 @@ async function responseData<T>(response: Response): Promise<T> {
 }
 
 export default function AnimalConfirmationPage() {
+  const shelterContext = useVolunteerShelterContext();
+  const contextRequestEpoch = useRef(0);
   const [candidates, setCandidates] = useState<AnimalCandidate[]>([]);
   const [selected, setSelected] = useState<AnimalConfirmation | null>(null);
   const [query, setQuery] = useState("");
@@ -79,32 +88,48 @@ export default function AnimalConfirmationPage() {
   }, []);
 
   const loadToday = useCallback(async () => {
-    const data = await request<{ items: AnimalCandidate[] }>("/v1/animals");
-    setCandidates(data.items);
+    return request<{ items: AnimalCandidate[] }>("/v1/animals");
   }, [request]);
 
   useEffect(() => {
-    void loadToday().catch(showRequestError);
+    const epoch = ++contextRequestEpoch.current;
+    setCandidates([]);
+    setSelected(null);
+    void loadToday()
+      .then((data) => {
+        if (contextRequestEpoch.current === epoch) setCandidates(data.items);
+      })
+      .catch((error: unknown) => {
+        if (contextRequestEpoch.current === epoch) showRequestError(error);
+      });
     const token = new URLSearchParams(window.location.search).get("qr_token");
     if (token) setQrToken(token);
-  }, [loadToday]);
+    return () => {
+      contextRequestEpoch.current += 1;
+    };
+  }, [loadToday, shelterContext?.organizationId]);
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (
+    action: (epoch: number) => Promise<void>,
+    epoch = contextRequestEpoch.current,
+  ) => {
+    if (contextRequestEpoch.current !== epoch) return;
     setErrorMessage("");
     setMessage("");
     try {
-      await action();
+      await action(epoch);
     } catch (error) {
-      showRequestError(error);
+      if (contextRequestEpoch.current === epoch) showRequestError(error);
     }
   };
 
   const search = async (event: FormEvent) => {
     event.preventDefault();
-    await run(async () => {
+    await run(async (epoch) => {
       const data = await request<{ items: AnimalCandidate[] }>(
         `/v1/animals/search?query=${encodeURIComponent(query)}`,
       );
+      if (contextRequestEpoch.current !== epoch) return;
       setCandidates(data.items);
       setSelected(null);
     });
@@ -112,7 +137,7 @@ export default function AnimalConfirmationPage() {
 
   const resolveQr = async (event: FormEvent) => {
     event.preventDefault();
-    await run(async () => {
+    await run(async (epoch) => {
       const candidate = await request<AnimalCandidate>(
         "/v1/qr-tokens/resolve",
         {
@@ -120,6 +145,7 @@ export default function AnimalConfirmationPage() {
           body: JSON.stringify({ qr_token: qrToken }),
         },
       );
+      if (contextRequestEpoch.current !== epoch) return;
       setCandidates([candidate]);
       setSelected(null);
       setMessage("QR Code 已解析，請確認動物身分。");
@@ -127,18 +153,19 @@ export default function AnimalConfirmationPage() {
   };
 
   const selectCandidate = async (candidate: AnimalCandidate) => {
-    await run(async () => {
+    await run(async (epoch) => {
       const confirmed = await request<AnimalConfirmation>(
         `/v1/animals/${candidate.id}/confirm`,
         { method: "POST" },
       );
+      if (contextRequestEpoch.current !== epoch) return;
       setSelected(confirmed);
     });
   };
 
   const createDraft = async () => {
     if (!selected) return;
-    await run(async () => {
+    await run(async (epoch) => {
       const draft = await request<{ id: string }>("/v1/care-report-drafts", {
         method: "POST",
         body: JSON.stringify({
@@ -146,6 +173,7 @@ export default function AnimalConfirmationPage() {
           confirmation_token: selected.confirmation_token,
         }),
       });
+      if (contextRequestEpoch.current !== epoch) return;
       setMessage(`已建立回報草稿：${draft.id}`);
     });
   };
@@ -159,6 +187,9 @@ export default function AnimalConfirmationPage() {
         <span className="eyebrow">VOLUNTEER CARE</span>
         <h1 id="animal-confirmation-title">選擇照護動物</h1>
         <p>請先從今日名單、QR Code 或收容編號找到候選動物，再明確確認。</p>
+        {shelterContext?.organizationName && (
+          <p role="status">目前協助收容所：{shelterContext.organizationName}</p>
+        )}
       </div>
       {errorMessage && (
         <p className="notice error" role="alert">
