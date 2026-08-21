@@ -9,13 +9,13 @@ actions:
     data: action=start_care_report
   - label: 掃描 QR Code
     type: uri
-    uri: ${LIFF_BASE_URL}/animal-confirmation
+    uri: ${LIFF_BASE_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}
   - label: 今日照護毛孩
     type: postback
     data: action=list_reportable_animals
   - label: 繼續未完成回報
     type: postback
     data: action=resume_draft
-  - label: 開啟管理入口
-    type: uri
-    uri: ${LIFF_BASE_URL}/care-report
+  - label: 聯絡工作人員
+    type: postback
+    data: action=contact_staff
