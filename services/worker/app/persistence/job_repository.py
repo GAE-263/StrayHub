@@ -80,6 +80,7 @@ class WorkerJobRepository:
         claim_token: str,
         status: str,
         failure_reason: str | None = None,
+        available_at: datetime | None = None,
     ) -> AIProcessingJob:
         if status not in {"succeeded", "failed", "retry_wait"}:
             raise DomainError("invalid_job_status", "AI Job 結束狀態無效", 422)
@@ -97,7 +98,8 @@ class WorkerJobRepository:
         job.status = status
         job.failure_reason = failure_reason
         job.completed_at = now if status in {"succeeded", "failed"} else None
-        job.available_at = now if status == "retry_wait" else None
+        # 未指定重試時間時維持立即可取，呼叫端要退避就自己給 available_at。
+        job.available_at = (available_at or now) if status == "retry_wait" else None
         job.claim_token = None
         job.claimed_at = None
         job.claimed_by = None
