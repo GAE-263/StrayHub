@@ -277,6 +277,33 @@ async def _note_validator(session, organization_id: UUID):
     ).validate_note_requirement
 
 
+def _chit_chat_reply(draft) -> str:
+    if draft is None:
+        return "想開始回報的話，請按下方選單的「開始照護回報」🐾"
+    return "這一步請用卡片上的按鈕選擇；要補充文字的話，走到心得那一步再輸入就可以了 🐾"
+
+
+async def _options_requiring_note(session, organization_id: UUID, answers: dict) -> list[str]:
+    """回傳目前答案中要求補充文字的選項，格式為「分類：選項」。
+
+    這個要求在志工選到該選項的當下就成立，驗證卻只發生在送出時。若心得那一步
+    仍照常提供「略過心得」，等於先邀請志工略過、再因為他略過而拒絕他。
+    """
+    options = await ObservationRepository(session, organization_id).effective_options(
+        include_disabled_history=True
+    )
+    by_code = {option.code: option for option in options}
+    titles = await _category_titles(session, organization_id)
+    labels = []
+    for code in answers.values():
+        option = by_code.get(code)
+        if option is None or not option.requires_note:
+            continue
+        category = code.split(".", 1)[0]
+        labels.append(f"{titles.get(category, category)}：{option.display_name}")
+    return labels
+
+
 async def _reply_next_step(
     session,
     line: LineMessagingPort,
@@ -333,20 +360,38 @@ async def _reply_next_step(
             )
         )
     elif state == DraftState.AWAITING_NOTE:
-        messages.append(
-            prompt_bubble(
-                title="今天有什麼想說的嗎",
-                caption="照護回報 · 選填",
-                body_text="想補充的事情直接打字傳過來就好 ✏️\n例如今天特別黏人、或是走路好像怪怪的。",
-                glyph="💭",
-                start=WOOD,
-                end=WOOD_DEEP,
-                choices=[
-                    ("略過心得", f"action=skip_note&draft_token={raw_token}", "⏭"),
-                    ("上一步", f"action=back&draft_token={raw_token}", "←"),
-                ],
+        required = await _options_requiring_note(session, organization_id, draft.answers)
+        if required:
+            # 略過一定會在送出時被擋下，所以這一步不再提供略過。
+            listed = "\n".join(f"・{label}" for label in required)
+            messages.append(
+                prompt_bubble(
+                    title="這幾題需要補充說明",
+                    caption="照護回報 · 必填",
+                    body_text=f"你選了下面的選項，請直接打字說明 ✏️\n\n{listed}",
+                    glyph="✍️",
+                    start=WOOD,
+                    end=WOOD_DEEP,
+                    choices=[
+                        ("上一步", f"action=back&draft_token={raw_token}", "←"),
+                    ],
+                )
             )
-        )
+        else:
+            messages.append(
+                prompt_bubble(
+                    title="今天有什麼想說的嗎",
+                    caption="照護回報 · 選填",
+                    body_text="想補充的事情直接打字傳過來就好 ✏️\n例如今天特別黏人、或是走路好像怪怪的。",
+                    glyph="💭",
+                    start=WOOD,
+                    end=WOOD_DEEP,
+                    choices=[
+                        ("略過心得", f"action=skip_note&draft_token={raw_token}", "⏭"),
+                        ("上一步", f"action=back&draft_token={raw_token}", "←"),
+                    ],
+                )
+            )
     elif state == DraftState.REVIEWING:
         review_options = await ObservationRepository(session, organization_id).effective_options(
             include_disabled_history=True
@@ -666,24 +711,32 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         and event.get("message", {}).get("type") == "text"
                     ):
                         draft_repository = CareReportDraftRepository(session, organization_id)
-                        text_result = await LineDraftConversationService(draft_repository).handle(
-                            token=None,
-                            volunteer_user_id=user_id,
-                            action="note",
-                            value=event["message"].get("text", ""),
-                            event_id=event_id,
-                        )
-                        report_id_to_dispatch = text_result.report_id
                         draft = await draft_repository.get_active_for_volunteer(user_id)
-                        if draft is not None:
-                            await _reply_next_step(
-                                session,
-                                line,
-                                event,
-                                organization_id=organization_id,
-                                draft=draft,
-                                raw_token="",
+                        if draft is None or draft.current_step != DraftState.AWAITING_NOTE.value:
+                            # 只有心得那一步在等文字。志工其他時候打的字是聊天，
+                            # 不是漏填的欄位，回一句錯誤訊息只會讓人以為壞掉了。
+                            await _reply(line, event, [_text(_chit_chat_reply(draft))])
+                        else:
+                            text_result = await LineDraftConversationService(
+                                draft_repository
+                            ).handle(
+                                token=None,
+                                volunteer_user_id=user_id,
+                                action="note",
+                                value=event["message"].get("text", ""),
+                                event_id=event_id,
                             )
+                            report_id_to_dispatch = text_result.report_id
+                            draft = await draft_repository.get_active_for_volunteer(user_id)
+                            if draft is not None:
+                                await _reply_next_step(
+                                    session,
+                                    line,
+                                    event,
+                                    organization_id=organization_id,
+                                    draft=draft,
+                                    raw_token="",
+                                )
                     elif (
                         event.get("type") == "message"
                         and event.get("message", {}).get("type") == "image"
