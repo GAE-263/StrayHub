@@ -47,13 +47,19 @@ LINE 平台  ──POST──▶  /v1/line/webhook
 
 選單定義在 `infra/local/line-rich-menu.yaml`，五個按鈕：
 
-| 按鈕 | 送出的 postback data |
-|---|---|
-| 開始照護回報 | `action=start_care_report` |
-| 掃描 QR Code | （URI，開啟 LIFF） |
-| 今日照護毛孩 | `action=list_reportable_animals` |
-| 繼續未完成回報 | `action=resume_draft` |
-| 聯絡工作人員 | `action=contact_staff` |
+| 按鈕 | 送出的 postback data | 做什麼 |
+|---|---|---|
+| 開始照護回報 | `action=start_care_report` | 列出今天可回報的動物供選擇 |
+| 掃描 QR Code | （URI，開啟 LIFF） | — |
+| 今日照護毛孩 | `action=list_reportable_animals` | 今日總覽：誰照顧過了、誰還沒 |
+| 繼續未完成回報 | `action=resume_draft` | 回到未送出的草稿 |
+| 聯絡工作人員 | `action=contact_staff` | 回一句引導文字 |
+
+前兩者的分頁另有 `action=more_animals`／`action=today_overview` 兩個 postback，
+只帶 `offset`，不是選單按鈕。
+
+> 到 `7b3d515` 為止，前兩顆按鈕跑的是同一個 `if` 分支，回覆逐字相同——四格選單裡
+> 有兩格做同一件事。見第 11 節。
 
 `scripts/sync_line_rich_menu.py` 把這份 YAML 轉成 LINE 要的 `areas` 座標陣列
 並上傳。底圖尺寸固定 2500×1686。
@@ -260,16 +266,14 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 `(organization_id, volunteer_user_id, key)`。
 
 
-### 已知問題：補充說明的檢查時機
+### 補充說明的檢查時機（`3d11d45`／`76ea523` 已修）
 
 13 題裡有 6 題帶「其他」選項（護食、人際互動、動物互動、情緒、散步反應、
 外觀／特殊狀態）。這些選項的 `requires_note` 為真，選了就必須填文字。
 
-但 `note_validator` 只傳給 `ReportSubmissionService`，**只有送出那一刻才檢查**
-（`line_draft_conversation.py` 的 submit 分支）。中間沒有任何提示，而
-`awaiting_media`／`awaiting_note` 兩步還照常顯示「略過照片」「略過心得」。
-
-實測（2026-08-21）走出來的結果：
+原本 `note_validator` 只傳給 `ReportSubmissionService`，**只有送出那一刻才檢查**。
+中間沒有任何提示，而 `awaiting_media`／`awaiting_note` 兩步還照常顯示「略過照片」
+「略過心得」。2026-08-21 實測走出來的結果：
 
 ```
 05:13:11  第 8 題選「其他」      ← 義務在此產生，無提示
@@ -277,19 +281,29 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 05:13:41  送出 → failed: observation_note_required
 ```
 
-**系統先邀請志工略過，再因為他略過而拒絕他。** 錯誤訊息「此選項需要補充說明」
-也沒有指出是 13 個答案裡的哪一個。草稿會停在 `reviewing`，答案不會遺失——
-在摘要按「修改」可退回心得補填（`back()` 在這兩個狀態不清除任何答案）。
+**系統先邀請志工略過，再因為他略過而拒絕他。** 志工的反應是放棄整筆回報，不是
+回頭修改——在收容所現場那就是一筆丟掉的照護紀錄。
 
 規格只要求「選『其他』或需補充的選項時要求文字」（FR-023），**沒有規定檢查
-時機**，所以修正不需要偏離規格。可行的最小修法有兩個，尚未實作：
+時機**，所以修正不需要偏離規格。`_reply_next_step` 現在在 `AWAITING_NOTE` 先呼叫
+`_options_requiring_note()`：答案裡有需補充的選項時換掉文案、逐項列出是哪個分類
+的哪個選項，並拿掉「略過心得」。失敗因此不再發生，而不是延後發生。
 
-1. `_reply_next_step` 在 `AWAITING_NOTE` 時檢查答案裡有無需補充的選項，
-   有的話換掉文案並拿掉「略過心得」按鈕
-2. `observation_note_required` 的訊息帶上分類與選項名稱
+同一個 commit 也修掉文字訊息一律被當成心得的行為。志工在其他步驟隨口打一句話會
+收到「目前步驟不接受心得」，讀起來像系統壞了；現在只有心得那一步把文字當心得。
 
-還有一層模型上的粗糙：`requires_note` 是**每個選項**的屬性，`note` 卻是
-**整份回報共用一個欄位**。所以在心得欄打任何文字都能通過，即使內容與該選項
+**後續修正 `76ea523`：** 上面那張卡片列出項目時，分類名稱原本是從選項代碼的前綴
+推出來的。「外觀／特殊狀態」的分類代碼是 `appearance_special_status`，它的選項卻
+以 `appearance.` 開頭，推出來的鍵查不到標題，於是掉回印出原始代碼——志工在卡片上
+看到的是「appearance：其他」。13 題裡只有這一題代碼與前綴不一致，其餘 12 題恰好
+一致，所以原本的測試怎麼寫都不會發現。現在改走 `category_id` 外鍵認分類，與
+`line_draft_conversation.py:54` 既有的作法一致，不再依賴代碼字串的巧合。
+
+問題卡片的標題不受影響，它走的是 `_ANSWER_CATEGORY_CODES` 的答案鍵對應——這也是
+為什麼只有必填卡片露餡。
+
+還有一層模型上的粗糙**尚未處理**：`requires_note` 是**每個選項**的屬性，`note`
+卻是**整份回報共用一個欄位**。所以在心得欄打任何文字都能通過，即使內容與該選項
 無關。要真正解決得引入每題補充欄位，那會動到領域模型與規格。
 
 ---
@@ -323,8 +337,8 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 **為什麼要快照**：選項字典和動物資料日後會被管理端改動。若不留快照，半年前的
 紀錄會隨著字典更新而改變意思，歷史就不可信了。
 
-動物名稱與收容編號的快照確實有寫入。但 `answer_snapshots`（選項顯示名稱的快照）
-**只有 LIFF／API 路徑會填，LINE Bot 路徑不會**——見第 10 節的已知問題。
+動物名稱與收容編號的快照確實有寫入。`answer_snapshots`（選項顯示名稱的快照）
+兩條送出路徑現在都會填；`1d8082f` 之前只有 LIFF／API 會填，見第 10 節。
 
 ### 其他
 
@@ -442,36 +456,42 @@ context，端點路徑與查詢參數都不接受——`animal_timeline.py:104` 
 明細端點把結果包在 `{"report": ...}` 裡（`report_inbox.py:65`），列表則直接回陣列；
 列表不計算 `media_ids`，只有明細會查 `care_report_media`。
 
-### 已知問題：LINE 送出的回報沒有顯示快照
+### LINE 送出的回報沒有顯示快照（`1d8082f` 已修）
 
 | 送出路徑 | `answer_snapshots` | `usage_service` |
 |---|---|---|
 | LIFF／API（`care_reports.py:297-329`） | 建立完整快照 | 有傳 |
-| **LINE Bot**（`line_draft_conversation.py:113-121`） | **沒傳** | **沒傳** |
+| LINE Bot（`line_draft_conversation.py`） | 修正前**沒傳**，現已補上 | 同上 |
 
 LIFF 路徑會為每一題組出 `category_code`、`code`、`display_name`、`description`
 與 `source` 再交給 `ReportSubmissionService`；LINE 路徑建構同一個服務時兩個參數
 都省略了。結果是 `care_reports.answer_snapshots` 存進 JSON `null`，Timeline 的
 `observation_snapshots` 也是 `null`，消費端只能用**當前**語彙解讀裸代碼。
 
-> 注意：這個欄位存的是 JSON `null` 而非 SQL NULL，所以 `WHERE answer_snapshots
-> IS NULL` 查不到它。同樣的序列化行為也出現在 `ai_observations.validated_ai_observation`。
-
 `plan.md:161` 要求「歷史回報保存當時的 Code 與顯示快照」。LINE Bot 是志工的
-主要管道，卻是唯一不留快照的路徑。
+主要管道，卻曾是唯一不留快照的路徑。
 
 **2026-08-21 實際發生過一次**：本分支把 `walk.exploring` 從「探索」改成
 「願意探索環境」、`walk.not_done` 從「未完成」改成「未進行散步」。8/20 的回報
 是用舊名稱記錄的，但因為沒有快照，那筆歷史紀錄在管理端的顯示文字就被當天的
 改動一併改掉了。這正是快照機制存在的理由。
 
-`usage_service` 沒傳的影響目前是零，因為使用次數只對組織自訂選項計算
-（`observation_options.py:190`），現階段沒有自訂選項。等收容所開始自訂，
-「這個選項被 N 筆回報使用」的計數會漏掉所有 LINE 來的回報。
+`line_draft_conversation.py` 現在比照 `care_reports.py` 組出 `answer_snapshots`
+再傳進 `ReportSubmissionService`——該參數本來就存在，服務本身沒有改。分類同樣
+走 `category_id` 外鍵認（`line_draft_conversation.py:54`），代碼前綴只當退路。
 
-修法很小且尚未實作：`line_draft_conversation.py` 比照 `care_reports.py` 組出
-`answer_snapshots` 再傳進 `ReportSubmissionService`——該參數本來就存在，
-服務本身不需要改。
+**2026-08-21 手機實測驗證**：一筆 Bot 送出的回報寫進 13 筆 `answer_snapshots`
+與 13 筆 `observation_option_usages`，`animal_name_snapshot` 與
+`shelter_number_snapshot` 皆有值。
+
+> 注意：修正前的舊回報，欄位存的是 JSON `null` 而非 SQL NULL，所以
+> `WHERE answer_snapshots IS NULL` 查不到它們。同樣的序列化行為也出現在
+> `ai_observations.validated_ai_observation`。要回填舊資料得留意這點。
+
+`usage_service` 補上的影響目前仍是零，因為使用次數只對組織自訂選項計算
+（`observation_options.py:190`），現階段沒有自訂選項。等收容所開始自訂，
+「這個選項被 N 筆回報使用」的計數才會需要它——但屆時 LINE 來的回報已經有紀錄，
+不必回頭補。
 
 ---
 
@@ -538,6 +558,62 @@ JPEG，但在宣告型別與實際位元組不符時拒收，所以 JPEG 底圖�
 `assert len(client.calls) == 3`——數對了呼叫次數，主機錯的、標頭錯的全都放行。
 本次補上兩個斷言，分別守住 data host 與 Content-Type。
 
+### `3d11d45` — 心得步驟不再邀請志工略過必填的補充說明
+
+見第 6 節。修正前的失敗不是延後發生，而是先邀請再拒絕。
+
+### `1d8082f` — Bot 送出的回報補上顯示快照與選項使用索引
+
+見第 10 節。LINE Bot 曾是唯一不留快照的送出路徑。
+
+### `4fe780b` — 測試清理時先刪除選項使用索引
+
+`1d8082f` 讓 Bot 路徑開始寫入 `observation_option_usages`，那張表以
+`care_report_id` 為外鍵，而兩個 e2e 測試的清理程序在刪 `care_reports` 之前沒有先
+刪它，於是撞上 `ForeignKeyViolationError`。不是生產缺陷，是測試清理的順序問題。
+
+值得記一筆的是**這次測試發揮了作用**。前面幾個缺陷都是測試沒抓到才藏住的；這一次
+測試立刻擋下新引入的問題。差別在於那兩個 e2e 測試真的碰資料庫、真的走完整條路徑。
+
+### `76ea523` — 必填補充說明的卡片不再顯示英文分類代碼
+
+見第 6 節。2026-08-21 手機實測撞到，志工在卡片上看到「appearance：其他」。
+
+### `3ee3c41` — 可回報動物清單不再靜默丟掉超過六隻的部分
+
+清單以 `[:6]` 截斷且沒有任何提示。志工今天若被派了 8 隻，他只會看到 6 隻，剩下兩隻
+在介面上完全不存在——沒有「更多」、沒有總數、沒有任何線索，他會以為今天就是這 6 隻。
+在收容所現場，那是靜默漏掉的照護紀錄。
+
+LINE 的 quick reply 上限是 13，6 是自己加的。改成一頁 12 筆，最後一格放「更多
+（還有 N 隻）」帶 `offset` 往下翻。`offset` 來自 postback，當作不可信輸入處理。
+
+取資料的方式一併改掉。原本用 `AnimalRepository.search("")` 撈出全組織所有動物，再用
+Python 的 `in allowed` 過濾，最後才切前 6 筆——**切到哪幾隻取決於一個不相干查詢回傳
+的順序**。改用新增的 `ReportableScopeRepository.active_animals()`，範圍直接下推到
+SQL，並以收容編號、名字、id 排序。該查詢與 `active_animal_ids` 共用同一段 join，避免
+兩份條件各自漂移；動物可能同時經由自身與所在區域命中，所以加上 `DISTINCT`。
+
+### `7b3d515` — 今日照護毛孩改成真的今日總覽
+
+「開始照護回報」與「今日照護毛孩」原本被寫進**同一個 `if` 分支**，回覆的訊息、動物
+清單、後續流程逐字相同。四格選單裡有兩格做同一件事，而名字建立的預期是錯的——
+「今日照護毛孩」聽起來會告訴你今天還剩哪幾隻沒照護，實際上只是再問一次要回報哪一隻。
+
+現在它回一張總覽卡：今天範圍內的每一隻動物、各自今天回報了沒、已回報的顯示時間，
+標頭給出「共 N 隻 · 已回報 M 隻」與進度條。點任何一隻就進回報流程。
+
+兩個判斷值得記下：
+
+- **「已回報」以整個收容所為準**，不是「這位志工回報過」。志工需要知道的是這隻今天
+  有沒有人照顧，不是有沒有他自己照顧——否則兩個人重複做同一隻，真正沒人管的繼續沒
+  人管。已封存的回報不算數。
+- **一天的界線走收容所時區**（`local_day_range`），不是 UTC 午夜。台北的一天從
+  UTC 16:00 起算，用 UTC 午夜切會把傍晚的回報算到隔天。
+
+總覽一頁 8 隻，超過同樣用 `offset` 翻頁；計數描述的是一整天而不是當頁，否則分頁會讓
+志工誤以為工作快做完了。
+
 ---
 
 ## 12. 在這台 Windows 機器上跑
@@ -565,16 +641,21 @@ PYTHONUTF8=1 PYTHONPATH=<repo 根目錄> uv run --with tzdata pytest -q
 
 ## 13. 測試結果
 
-2026-08-21 於本分支（`b6e932c`）執行完整套件：
+2026-08-21 於本分支（`7b3d515`）執行完整套件：
 
 ```
-1 failed, 482 passed, 1 warning in 215.87s
+1 failed, 508 passed, 1 warning in 110.11s
 ```
 
 唯一失敗是 `tests/contract/test_gcp_iac_contract.py::test_terraform_format_and_validate`，
 原因是這台機器沒有安裝 `terraform` CLI，該測試第一行就 assert 它存在
 （`test_gcp_iac_contract.py:80`）。**與本分支的改動無關**——它檢查的是 Terraform
 IaC 的格式，不碰 LINE 流程。裝了 `terraform` 或設定 `TERRAFORM_BIN` 就會通過。
+
+> 用 `-k` 篩選子集執行時，`tests/integration/test_line_answer_snapshots.py` 可能因
+> 執行順序改變而失敗（`ProactorEventLoop` 已關閉，共用連線池握著上一個測試的迴圈）。
+> 這在乾淨的 `HEAD` 上同樣重現，是 pytest-asyncio 與共用 engine 的既有問題，跑完整
+> 套件不會發生。
 
 LINE 相關測試全數通過，包含：
 
@@ -587,6 +668,12 @@ LINE 相關測試全數通過，包含：
 - `tests/e2e/test_local_line_bot_vertical_flow.py` — LINE Bot 到 PostgreSQL 全鏈路
 - `tests/integration/test_ai_worker_wiring.py` — AI Job 從資料表到供應商再回到
   `ai_observations` 的接線，含重試退避與 `run()` 必須啟動 AI 迴圈
+- `tests/unit/test_line_note_requirement_ux.py` — 必填補充說明的提示時機，含分類
+  代碼與選項前綴不一致的案例
+- `tests/unit/test_line_animal_paging.py` — 動物清單分頁，含「走完所有分頁應該剛好
+  看到全部 30 隻」
+- `tests/unit/test_line_daily_care_overview.py` — 今日總覽，含計數必須描述一整天而
+  非當頁、一天的界線走收容所時區
 
 ---
 
