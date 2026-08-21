@@ -220,6 +220,39 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 都只會產生一筆紀錄。唯一鍵定義在 `care_report.py` 的 `ReportIdempotencyKey`：
 `(organization_id, volunteer_user_id, key)`。
 
+
+### 已知問題：補充說明的檢查時機
+
+13 題裡有 6 題帶「其他」選項（護食、人際互動、動物互動、情緒、散步反應、
+外觀／特殊狀態）。這些選項的 `requires_note` 為真，選了就必須填文字。
+
+但 `note_validator` 只傳給 `ReportSubmissionService`，**只有送出那一刻才檢查**
+（`line_draft_conversation.py` 的 submit 分支）。中間沒有任何提示，而
+`awaiting_media`／`awaiting_note` 兩步還照常顯示「略過照片」「略過心得」。
+
+實測（2026-08-21）走出來的結果：
+
+```
+05:13:11  第 8 題選「其他」      ← 義務在此產生，無提示
+05:13:14 ~ 05:13:37  又走 5 題、略過照片、略過心得、看摘要
+05:13:41  送出 → failed: observation_note_required
+```
+
+**系統先邀請志工略過，再因為他略過而拒絕他。** 錯誤訊息「此選項需要補充說明」
+也沒有指出是 13 個答案裡的哪一個。草稿會停在 `reviewing`，答案不會遺失——
+在摘要按「修改」可退回心得補填（`back()` 在這兩個狀態不清除任何答案）。
+
+規格只要求「選『其他』或需補充的選項時要求文字」（FR-023），**沒有規定檢查
+時機**，所以修正不需要偏離規格。可行的最小修法有兩個，尚未實作：
+
+1. `_reply_next_step` 在 `AWAITING_NOTE` 時檢查答案裡有無需補充的選項，
+   有的話換掉文案並拿掉「略過心得」按鈕
+2. `observation_note_required` 的訊息帶上分類與選項名稱
+
+還有一層模型上的粗糙：`requires_note` 是**每個選項**的屬性，`note` 卻是
+**整份回報共用一個欄位**。所以在心得欄打任何文字都能通過，即使內容與該選項
+無關。要真正解決得引入每題補充欄位，那會動到領域模型與規格。
+
 ---
 
 ## 7. 資料落在哪些表
@@ -372,6 +405,21 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 權限迴圈與 AI 迴圈，`WorkerJobRepository.finish()` 改為接受 `available_at`
 以支援重試退避。新增 `tests/integration/test_ai_worker_wiring.py`，四個測試
 直接對資料庫驗證整條接線。
+
+
+### `73874c3` — 修正本機種子語彙的顯示名稱
+
+`scripts/seed_local.py` 的 `OPTION_NAMES` 以代碼後綴為 key，同一個後綴只能有
+一個名稱。結果 `walk_completion.not_done` 與 `walk.not_done` 都顯示「未完成」，
+而規格第 434 行明確說這兩者是不同的觀察類別；照護完成與散步完成更是五個選項
+有四個字面相同，連續問兩題時看起來像同一題。
+
+新增以完整 Code 為 key 的 `OPTION_NAME_OVERRIDES`，名稱取自 spec.md 的 FR-016
+與「情緒與散步反應平台預設選項」表：`care_completion.completed` →「已完成照護」、
+`walk_completion.not_done` →「未進行散步」等。`walk` 分類改名為「散步反應」，
+共用後綴 `not_observed`／`uncertain` 統一為規格用語「未觀察」／「無法判斷」。
+
+只改顯示名稱，不動 Code、狀態機或領域模型——規格明訂「Code 不依顯示名稱」。
 
 ---
 
