@@ -7,6 +7,9 @@ from uuid import UUID
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.observation_option_usage_service import (
+    ObservationOptionUsageService,
+)
 from services.api.app.application.report_submission import ReportSubmissionService
 from services.api.app.domain.line_care_report_state import (
     DraftAnswers,
@@ -18,6 +21,7 @@ from services.api.app.persistence.repositories.care_report_draft_repository impo
     CareReportDraftRepository,
 )
 from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
+from services.api.app.persistence.repositories.observation_repository import ObservationRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
     ReportableScopeRepository,
 )
@@ -27,6 +31,35 @@ from services.api.app.persistence.repositories.reportable_scope_repository impor
 class ConversationResult:
     state: DraftState
     report_id: UUID | None = None
+
+
+async def _build_answer_snapshots(session, organization_id, answers: dict) -> dict:
+    """保存送出當下的選項顯示名稱。
+
+    Code 是正式業務值，顯示名稱由管理端維護且日後會被改名或停用。沒有快照的話，
+    歷史回報會隨著語彙更新而改變意思。LIFF 路徑一直有做這件事，LINE Bot 路徑
+    卻漏了，而 Bot 才是志工的主要管道。
+    """
+    repository = ObservationRepository(session, organization_id)
+    options = await repository.effective_options(include_disabled_history=True)
+    categories = await repository.categories(include_disabled=True)
+    category_codes = {category.id: category.code for category in categories}
+    options_by_code = {option.code: option for option in options}
+    snapshots = {}
+    for field, code in answers.items():
+        option = options_by_code.get(code)
+        if option is None:
+            continue
+        snapshots[field] = {
+            "category_code": category_codes.get(option.category_id, code.split(".", 1)[0]),
+            "code": code,
+            "display_name": option.display_name,
+            "description": option.description,
+            "source": (
+                "platform_default" if option.organization_id is None else "organization_extension"
+            ),
+        }
+    return snapshots
 
 
 class LineDraftConversationService:
@@ -110,15 +143,18 @@ class LineDraftConversationService:
                 volunteer_user_id=volunteer_user_id,
             ):
                 raise DomainError("animal_not_reportable", "動物目前不在你的今日可回報範圍", 403)
+            session = self.draft_repository.session
+            organization_id = self.draft_repository.organization_id
             report = await ReportSubmissionService(
                 self.draft_repository,
-                CareReportRepository(
-                    self.draft_repository.session,
-                    self.draft_repository.organization_id,
-                ),
+                CareReportRepository(session, organization_id),
                 answer_validator=self.answer_validator,
-                audit=AuditService(self.draft_repository.session),
+                audit=AuditService(session),
                 note_validator=self.note_validator,
+                answer_snapshots=await _build_answer_snapshots(
+                    session, organization_id, dict(draft.answers)
+                ),
+                usage_service=ObservationOptionUsageService(session, organization_id),
             ).submit(
                 draft_id=draft.id,
                 volunteer_user_id=volunteer_user_id,
