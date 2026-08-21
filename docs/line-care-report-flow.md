@@ -3,7 +3,7 @@
 這份文件走一遍「志工在 LINE 上按下按鈕 → 一筆照護紀錄存進資料庫」的完整路徑，
 對照實際程式碼與行號。寫給想接手或修改這條流程的人。
 
-對應分支：`practice/line-flex-ui`。第 10 節說明這個分支相對 `main` 改了什麼。
+對應分支：`practice/line-flex-ui`。第 11 節說明這個分支相對 `main` 改了什麼。
 
 ---
 
@@ -284,6 +284,9 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 **為什麼要快照**：選項字典和動物資料日後會被管理端改動。若不留快照，半年前的
 紀錄會隨著字典更新而改變意思，歷史就不可信了。
 
+動物名稱與收容編號的快照確實有寫入。但 `answer_snapshots`（選項顯示名稱的快照）
+**只有 LIFF／API 路徑會填，LINE Bot 路徑不會**——見第 10 節的已知問題。
+
 ### 其他
 
 - `care_report_media` — 紀錄與照片的關聯
@@ -302,7 +305,7 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 3. 建立 `media_assets` 並掛到 `draft_media_assets`
 
 抓圖走的是 **`api-data.line.me`**，不是 `api.line.me`——LINE 的二進位內容在不同
-主機上。這正是本分支修掉的 bug，見第 10 節。
+主機上。這正是本分支修掉的 bug，見第 11 節。
 
 失敗處理值得注意：照片處理失敗會把事件標成 `processed` 並回覆「照片處理失敗，
 請重新傳送或略過照片。」，**而不是讓整個事件失敗**。因為讓 LINE 重送不會讓一張
@@ -373,7 +376,67 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 
 ---
 
-## 10. 本分支改了什麼
+## 10. 管理端怎麼讀到這些資料
+
+志工在 LINE 送出之後，工作人員從 Next.js 管理端看到同一筆資料。讀取路徑：
+
+```
+POST /v1/auth/login                     回傳 organizations 清單
+    ↓
+PUT  /v1/auth/active-shelter-context    必須先選定目前收容所
+    ↑ 沒選的話所有管理端 API 回 409 shelter_context_required
+    ↓
+GET  /v1/management/reports             回報收件匣（列表）
+GET  /v1/management/reports/{id}        明細，另含 media_ids 與 ai_observations
+GET  /v1/animals/{id}/timeline          動物歷程，需 start_date／end_date
+```
+
+**多租戶隔離的入口就是那個 409**。`organization_id` 一律來自驗證過的 request
+context，端點路徑與查詢參數都不接受——`animal_timeline.py:104` 的註解說得很直接：
+
+> The organization scope comes from the verified request context, never
+> from a query parameter or path segment.
+
+角色也擋：Timeline 只有 `PLATFORM_ADMIN`／`SHELTER_ADMIN`／`STAFF` 能看
+（`animal_timeline.py:109`）。
+
+明細端點把結果包在 `{"report": ...}` 裡（`report_inbox.py:65`），列表則直接回陣列；
+列表不計算 `media_ids`，只有明細會查 `care_report_media`。
+
+### 已知問題：LINE 送出的回報沒有顯示快照
+
+| 送出路徑 | `answer_snapshots` | `usage_service` |
+|---|---|---|
+| LIFF／API（`care_reports.py:297-329`） | 建立完整快照 | 有傳 |
+| **LINE Bot**（`line_draft_conversation.py:113-121`） | **沒傳** | **沒傳** |
+
+LIFF 路徑會為每一題組出 `category_code`、`code`、`display_name`、`description`
+與 `source` 再交給 `ReportSubmissionService`；LINE 路徑建構同一個服務時兩個參數
+都省略了。結果是 `care_reports.answer_snapshots` 存進 JSON `null`，Timeline 的
+`observation_snapshots` 也是 `null`，消費端只能用**當前**語彙解讀裸代碼。
+
+> 注意：這個欄位存的是 JSON `null` 而非 SQL NULL，所以 `WHERE answer_snapshots
+> IS NULL` 查不到它。同樣的序列化行為也出現在 `ai_observations.validated_ai_observation`。
+
+`plan.md:161` 要求「歷史回報保存當時的 Code 與顯示快照」。LINE Bot 是志工的
+主要管道，卻是唯一不留快照的路徑。
+
+**2026-08-21 實際發生過一次**：本分支把 `walk.exploring` 從「探索」改成
+「願意探索環境」、`walk.not_done` 從「未完成」改成「未進行散步」。8/20 的回報
+是用舊名稱記錄的，但因為沒有快照，那筆歷史紀錄在管理端的顯示文字就被當天的
+改動一併改掉了。這正是快照機制存在的理由。
+
+`usage_service` 沒傳的影響目前是零，因為使用次數只對組織自訂選項計算
+（`observation_options.py:190`），現階段沒有自訂選項。等收容所開始自訂，
+「這個選項被 N 筆回報使用」的計數會漏掉所有 LINE 來的回報。
+
+修法很小且尚未實作：`line_draft_conversation.py` 比照 `care_reports.py` 組出
+`answer_snapshots` 再傳進 `ReportSubmissionService`——該參數本來就存在，
+服務本身不需要改。
+
+---
+
+## 11. 本分支改了什麼
 
 相對 `origin/main`（`8d300cc`）：
 
@@ -423,7 +486,7 @@ postback action 的 `label` 上限 20 字元，超過 LINE 會直接退回整則
 
 ---
 
-## 11. 在這台 Windows 機器上跑
+## 12. 在這台 Windows 機器上跑
 
 專案在 macOS 開發，Windows 需要三個環境修正，都不改動 repo：
 
@@ -446,7 +509,7 @@ PYTHONUTF8=1 PYTHONPATH=<repo 根目錄> uv run --with tzdata pytest -q
 
 ---
 
-## 12. 測試結果
+## 13. 測試結果
 
 2026-08-21 於本分支（`71cebe0`）執行完整套件：
 
@@ -473,7 +536,7 @@ LINE 相關測試全數通過，包含：
 
 ---
 
-## 13. 想改東西的話，改哪裡
+## 14. 想改東西的話，改哪裡
 
 | 想做的事 | 動這裡 |
 |---|---|
