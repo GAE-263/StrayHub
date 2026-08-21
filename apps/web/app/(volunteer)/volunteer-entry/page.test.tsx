@@ -300,7 +300,7 @@ describe("volunteer entry LIFF bootstrap", () => {
     expect(replace).toHaveBeenCalledWith("/animal-confirmation");
   });
 
-  it("completes a claimed recovery exchange after the entry page unmounts", async () => {
+  it("cancels a claimed recovery exchange when the entry page unmounts", async () => {
     const entry = "opaque-entry-reference-0123456789abcdef";
     window.history.replaceState(
       {},
@@ -313,26 +313,11 @@ describe("volunteer entry LIFF bootstrap", () => {
       exchangeAttempts: 1,
       state: "recovering",
     });
-    let resolveFetch:
+    let firstSignal: AbortSignal | undefined;
+    let resolveFirstFetch:
       ((value: { ok: true; json: () => Promise<unknown> }) => void) | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockReturnValue(
-        new Promise((resolve) => {
-          resolveFetch = resolve;
-        }),
-      ),
-    );
-
-    await renderPage();
-    expect(getRecoveryEpoch()?.state).toBe("exchanging");
-
-    await act(async () => {
-      root?.unmount();
-      await Promise.resolve();
-    });
-    resolveFetch?.({
-      ok: true,
+    const successfulExchange = {
+      ok: true as const,
       json: async () => ({
         state: "ACTIVE",
         access_token: "internal-access-token",
@@ -340,13 +325,46 @@ describe("volunteer entry LIFF bootstrap", () => {
         session_id: "session-a",
         organization: { id: "org-a", code: "ORG-A", name: "收容所 A" },
         user: { role: "VOLUNTEER" },
-        next_path: "/animal-confirmation",
       }),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockImplementationOnce((_url, options: RequestInit) => {
+          firstSignal = options.signal ?? undefined;
+          return new Promise((resolve) => {
+            resolveFirstFetch = resolve;
+          });
+        })
+        .mockResolvedValueOnce(successfulExchange),
+    );
+
+    await renderPage();
+    expect(getRecoveryEpoch()?.state).toBe("exchanging");
+
+    await act(async () => {
+      window.history.replaceState(
+        {},
+        "",
+        "/volunteer-entry?entry=opaque-entry-reference-fedcba9876543210&recovery=exchange",
+      );
+      root?.unmount();
+      await Promise.resolve();
     });
+    expect(firstSignal?.aborted).toBe(true);
+    expect(getRecoveryEpoch()).toBeNull();
+    resolveFirstFetch?.(successfulExchange);
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
+    await renderPage();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(getRecoveryEpoch()?.state).toBe("recovered");
     expect(replace).toHaveBeenCalledWith("/animal-confirmation");
   });
@@ -920,6 +938,8 @@ describe("volunteer entry LIFF bootstrap", () => {
     );
     storeRecoveryEpoch({
       ...createRecoveryEpoch(1, "/animal-confirmation"),
+      entryReference:
+        "opaque-entry-reference-0123456789abcdef" as OpaqueEntryReference,
       exchangeAttempts: 1,
       state: "recovering",
     });

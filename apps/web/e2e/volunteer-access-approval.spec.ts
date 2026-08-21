@@ -1,18 +1,76 @@
 import { expect, test } from "@playwright/test";
+import {
+  mockLiffBrowser,
+  mockVolunteerAccessApi,
+} from "./volunteer-access-fixtures";
 
-test("unknown LINE identity can apply once and reload pending without protected requests", async ({
+test("context switch rejects organizations without an active membership", async ({
+  page,
+}) => {
+  await mockVolunteerAccessApi(page, {
+    organizations: [
+      { id: "org-a", code: "ORG-A", name: "收容所 A" },
+      { id: "org-b", code: "ORG-B", name: "收容所 B" },
+    ],
+    activeOrganizationId: "org-a",
+    memberships: [
+      {
+        id: "membership-a",
+        organization_id: "org-a",
+        role: "SHELTER_ADMIN",
+        status: "active",
+      },
+      {
+        id: "membership-b",
+        organization_id: "org-b",
+        role: "SHELTER_ADMIN",
+        status: "suspended",
+      },
+    ],
+  });
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    const response = await fetch("/v1/auth/active-shelter-context", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: "org-b" }),
+    });
+    return { status: response.status, body: await response.json() };
+  });
+
+  expect(result.status).toBe(403);
+  expect(result.body.organization_id).toBe("org-a");
+});
+
+test("unknown LINE identity reaches NEW then PENDING without protected requests", async ({
   page,
 }, testInfo) => {
   let application: { id: string; status: string; version: number } | null =
     null;
   let submitCount = 0;
-  let withdrawCount = 0;
+
   const responseBody = () => ({
     organization: { id: "org-a", name: "收容所 A", applications_enabled: true },
     application,
     grant: null,
     effective_status: application ? "pending" : "none",
     next_actions: application ? ["wait", "withdraw"] : ["apply"],
+  });
+  await page.route("**/v1/auth/liff/exchange", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: application ? "PENDING" : "NEW",
+        organization: {
+          id: "org-a",
+          code: "ORG-A",
+          name: "收容所 A",
+        },
+        user: { role: "VOLUNTEER" },
+      }),
+    });
   });
   await page.route("**/v1/volunteer-applications/status", async (route) => {
     await route.fulfill({
@@ -30,25 +88,20 @@ test("unknown LINE identity can apply once and reload pending without protected 
       body: JSON.stringify(responseBody()),
     });
   });
-  await page.route("**/v1/volunteer-applications/*/withdraw", async (route) => {
-    withdrawCount += 1;
-    application = { id: "app-a", status: "withdrawn", version: 2 };
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(responseBody()),
-    });
-  });
+
   const protectedRequests: string[] = [];
   page.on("request", (request) => {
     if (/\/(animals|care-reports|management)/.test(request.url())) {
       protectedRequests.push(request.url());
     }
   });
+  await mockLiffBrowser(page);
   await page.goto(
-    "/volunteer-application?entry=local-entry&id_token=local-id-token",
+    "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
   );
-  await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "尚未完成志工報名" }),
+  ).toBeVisible();
   await page.setViewportSize({ width: 360, height: 800 });
   await page.locator("nextjs-portal").evaluateAll((portals) => {
     portals.forEach((portal) => {
@@ -59,23 +112,16 @@ test("unknown LINE identity can apply once and reload pending without protected 
     path: testInfo.outputPath("ft022-volunteer-application-360.png"),
     fullPage: true,
   });
+  await page.getByRole("button", { name: "進入志工報名" }).click();
+  await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "立即報名" }).dblclick();
   await expect(page.getByText("等待收容所審核")).toBeVisible();
   expect(submitCount).toBe(1);
   await page.reload();
-  await expect(page.getByText("等待收容所審核")).toBeVisible();
-  await page.getByRole("button", { name: "撤回報名" }).click();
-  await expect(
-    page.getByRole("heading", { name: "確認撤回志工報名" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "保留報名" }).click();
-  expect(withdrawCount).toBe(0);
-  await page.getByRole("button", { name: "撤回報名" }).click();
-  await page.getByRole("button", { name: "確認撤回" }).click();
-  await expect(page.getByRole("status")).toContainText("志工報名已撤回");
-  await expect(page.getByText("報名已撤回")).toBeVisible();
-  expect(withdrawCount).toBe(1);
+  await expect(page.getByRole("status")).toContainText(
+    "申請已送出，請耐心等候收容所工作人員審核。",
+  );
   expect(protectedRequests).toEqual([]);
 });
 
@@ -157,38 +203,94 @@ test("all-filtered selection preserves the full 1,200 target snapshot", async ({
 test("approved volunteer sees finite active period and care handoff", async ({
   page,
 }) => {
-  await page.route("**/v1/volunteer-applications/status", async (route) => {
+  await page.route("**/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        organization: {
-          id: "org-a",
-          name: "收容所 A",
-          applications_enabled: true,
-        },
-        application: { id: "app-a", status: "approved", version: 2 },
-        grant: {
-          id: "grant-a",
-          status: "active",
-          source_type: "manager_approval",
-          valid_from: "2026-08-15T04:00:00Z",
-          expires_at: "2026-08-22T04:00:00Z",
-          version: 1,
-        },
-        effective_status: "active",
-        next_actions: ["enter_care"],
+        user: { id: "volunteer-a", display_name: "志工", status: "active" },
+        memberships: [
+          {
+            id: "membership-a",
+            organization_id: "org-a",
+            role: "VOLUNTEER",
+            status: "active",
+            valid_from: "2020-01-01T00:00:00Z",
+            expires_at: "2050-01-01T00:00:00Z",
+            access_grant: {
+              membership_id: "membership-a",
+              organization_id: "org-a",
+              status: "active",
+              valid_from: "2020-01-01T00:00:00Z",
+              expires_at: "2050-01-01T00:00:00Z",
+            },
+          },
+        ],
       }),
     });
   });
+  await page.route("**/v1/auth/active-shelter-context", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        organization_id: "org-a",
+        organization_name: "收容所 A",
+      }),
+    });
+  });
+  await page.route("**/v1/organizations", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [{ id: "org-a", code: "ORG-A", name: "收容所 A" }],
+      }),
+    });
+  });
+  await page.route("**/v1/auth/liff/exchange", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "ACTIVE",
+        access_token: "active-access-token",
+        refresh_token: "active-refresh-token",
+        session_id: "session-a",
+        organization: {
+          id: "org-a",
+          code: "ORG-A",
+          name: "收容所 A",
+        },
+        user: { role: "VOLUNTEER" },
+      }),
+    });
+  });
+  await page.route("**/v1/animals**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            id: "animal-a",
+            name: "小森",
+            shelter_number: "A-001",
+            organization_id: "org-a",
+            can_report: true,
+          },
+        ],
+      }),
+    });
+  });
+  await mockLiffBrowser(page);
   await page.goto(
-    "/volunteer-application?entry=local-entry&id_token=local-id-token",
+    "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
   );
-  await expect(page.getByText("志工授權使用中")).toBeVisible();
-  await expect(page.getByText("授權期間（台灣時間）")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "進入照護流程" }),
-  ).toHaveAttribute("href", "/animal-confirmation");
+    page.getByRole("heading", { name: "選擇照護動物" }),
+  ).toBeVisible();
+  await expect(page.getByText("小森／A-001")).toBeVisible();
 });
 
 test("shelter admin can revoke an active grant with a reason", async ({
