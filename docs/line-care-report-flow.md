@@ -107,6 +107,45 @@ LINE 在沒收到 200 時會重送同一個事件。每個事件有唯一的 `we
 沒綁定會拋 `line_binding_required`，webhook 回覆一段 LIFF 連結請志工先綁定
 （`line_webhook.py:85`）。**`organization_id` 從這裡開始貫穿全程**，是多租戶隔離的根據。
 
+
+### 新志工怎麼取得綁定
+
+上面那句「請志工先綁定」講得太輕鬆了。實際上綁定**不是志工自己能完成的動作**，
+而且本機環境的預設值讓它完全走不通。
+
+陌生人加好友、按下選單，目前只會得到一個點了跳「系統錯誤」的連結，然後沒有下文。
+
+四道關卡，本機環境一道都沒開：
+
+| # | 關卡 | 現況 |
+|---|---|---|
+| 1 | LIFF App | `.env` 的 `LIFF_ID=fake-liff-id`，連結指向不存在的 App |
+| 2 | 身分驗證器 | `APP_ENV=local` 且 `LINE_CHANNEL_ID` 以 `fake-` 開頭時，`configured_line_identity_verifier()` 回傳 `MockLineIdentityVerifier`，只接受 `local-id-token:` 開頭的假 token，真實 LIFF 的 id_token 一定被拒 |
+| 3 | `/v1/line/bind` | `exchange_line_identity()`（`session_service.py:176-178`）查不到既有綁定就直接 403。**它是登入，不是註冊** |
+| 4 | 綁定建立點 | 真正建立 `User` 與 `LineUserBinding` 的地方在 `volunteer_access_service.py:193-201`，由收容所處理志工申請時觸發 |
+
+第 3、4 點是**刻意的設計，不是缺陷**。收容所不會讓任何人加個 LINE 就能回報動物
+狀況，所以正規路徑是：
+
+```
+加好友 → 填志工申請（POST /v1/volunteer-applications）
+      → 工作人員在管理端審核
+      → 核准時建立 User + membership + LineUserBinding
+      → 之後 LINE 才認得他
+```
+
+**未綁定的人什麼都做不了。** 檢查在伺服器端的 `_resolve_context()`，postback 帶
+任何參數都繞不過去，`organization_id` 一律來自驗證過的 context。他看不到任何動物、
+任何回報。缺的是體驗，不是安全。
+
+要開放自助綁定需要三件事：在 LINE Developers 建 LIFF App 並把真實 LIFF ID 填進
+`.env`；把 `LINE_CHANNEL_ID` 換成真實 Channel ID（否則驗證器還是走 mock）；確認
+`APP_ENV` 與 channel_id 的組合不會落回 mock 分支。
+
+由於 LIFF 端點必須是固定網址，而開發期間用的是會變動的 ngrok 隧道，這件事適合
+等部署到有固定網域之後再做。
+
+
 ---
 
 ## 4. 狀態機：13 題怎麼問完
@@ -484,6 +523,21 @@ LIFF 路徑會為每一題組出 `category_code`、`code`、`display_name`、`de
 
 只改顯示名稱，不動 Code、狀態機或領域模型——規格明訂「Code 不依顯示名稱」。
 
+
+### `b6e932c` — Rich Menu 底圖上傳依實際格式宣告 Content-Type
+
+`upload_rich_menu_image` 把 Content-Type 寫死成 `image/png`。LINE 同時接受 PNG 與
+JPEG，但在宣告型別與實際位元組不符時拒收，所以 JPEG 底圖永遠傳不上去。轉檔繞不過去：
+實際使用的 2500×1686 底圖 JPEG 只有 371 KB，轉成 PNG 會膨脹到 1642 KB，超過 LINE 的
+1 MB 上限。
+
+新增 `content_type` 參數（預設仍為 `image/png`），由 sync 腳本依副檔名帶入。Port 介面
+與 Mock Adapter 一併同步，並新增 `infra/local/line-rich-menu-2x2.yaml` 對應實際版面。
+
+這個 bug 與 `483cbbf` 的主機錯誤**疊在同一個二十行的函式上**。覆蓋它的測試寫的是
+`assert len(client.calls) == 3`——數對了呼叫次數，主機錯的、標頭錯的全都放行。
+本次補上兩個斷言，分別守住 data host 與 Content-Type。
+
 ---
 
 ## 12. 在這台 Windows 機器上跑
@@ -511,10 +565,10 @@ PYTHONUTF8=1 PYTHONPATH=<repo 根目錄> uv run --with tzdata pytest -q
 
 ## 13. 測試結果
 
-2026-08-21 於本分支（`71cebe0`）執行完整套件：
+2026-08-21 於本分支（`b6e932c`）執行完整套件：
 
 ```
-1 failed, 481 passed, 1 warning in 131.05s
+1 failed, 482 passed, 1 warning in 215.87s
 ```
 
 唯一失敗是 `tests/contract/test_gcp_iac_contract.py::test_terraform_format_and_validate`，
