@@ -3,7 +3,7 @@ export const LIFF_RECOVERY_EPOCH_KEY = "liff_recovery_epoch";
 const ENTRY_REFERENCE_PATTERN = /^[A-Za-z0-9_-]{32,512}$/;
 
 export type LiffRecoveryState =
-  "idle" | "recovering" | "recovered" | "terminal";
+  "idle" | "recovering" | "exchanging" | "recovered" | "terminal";
 
 export type LiffRecoveryEpoch = {
   epochId: number;
@@ -12,6 +12,11 @@ export type LiffRecoveryEpoch = {
   originalPath: string;
   state: LiffRecoveryState;
 };
+
+export type LiffRecoveryStart =
+  "started" | "in-flight" | "terminal" | "unavailable";
+
+export type LiffRecoveryClaim = "claimed" | "in-flight" | "unavailable";
 
 const RECOVERABLE_PATHS = new Set(["/animal-confirmation", "/care-report"]);
 
@@ -82,19 +87,21 @@ export function createRecoveryEpoch(
   };
 }
 
-export function storeRecoveryEpoch(epoch: LiffRecoveryEpoch): void {
+export function storeRecoveryEpoch(epoch: LiffRecoveryEpoch): boolean {
   const storage = getStorage();
-  if (!storage) return;
+  if (!storage) return false;
   if (
     epoch.entryReference !== null &&
     !isValidLiffEntryReference(epoch.entryReference)
   ) {
-    return;
+    return false;
   }
   try {
     storage.setItem(LIFF_RECOVERY_EPOCH_KEY, JSON.stringify(epoch));
+    return true;
   } catch {
     // Recovery metadata cannot grant access and is safe to discard.
+    return false;
   }
 }
 
@@ -109,7 +116,9 @@ function isRecoveryEpoch(value: unknown): value is LiffRecoveryEpoch {
       (typeof epoch.entryReference === "string" &&
         isValidLiffEntryReference(epoch.entryReference))) &&
     isSafeOriginalPath(epoch.originalPath) &&
-    ["idle", "recovering", "recovered", "terminal"].includes(epoch.state ?? "")
+    ["idle", "recovering", "exchanging", "recovered", "terminal"].includes(
+      epoch.state ?? "",
+    )
   );
 }
 
@@ -123,6 +132,71 @@ export function getRecoveryEpoch(): LiffRecoveryEpoch | null {
     return isRecoveryEpoch(parsed) ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+export function beginLiffRecovery(originalPath: string): LiffRecoveryStart {
+  const current = getRecoveryEpoch();
+  if (current?.state === "recovering" || current?.state === "exchanging") {
+    return "in-flight";
+  }
+  if (current?.state === "recovered" || current?.state === "terminal") {
+    if (current.state === "recovered") {
+      return storeRecoveryEpoch({ ...current, state: "terminal" })
+        ? "terminal"
+        : "unavailable";
+    }
+    return "terminal";
+  }
+  const entryReference = getLiffEntryReference();
+  if (!entryReference) return "unavailable";
+  const nextEpoch = {
+    ...createRecoveryEpoch((current?.epochId ?? -1) + 1, originalPath),
+    entryReference: entryReference as OpaqueEntryReference,
+    exchangeAttempts: 1,
+    state: "recovering",
+  } satisfies LiffRecoveryEpoch;
+  if (!storeRecoveryEpoch(nextEpoch)) return "unavailable";
+  return "started";
+}
+
+export function claimLiffRecoveryExchange(): LiffRecoveryClaim {
+  const current = getRecoveryEpoch();
+  if (!current || current.state !== "recovering") {
+    return current?.state === "exchanging" ? "in-flight" : "unavailable";
+  }
+  if (current.exchangeAttempts !== 1) return "unavailable";
+  return storeRecoveryEpoch({ ...current, state: "exchanging" })
+    ? "claimed"
+    : "unavailable";
+}
+
+export function markLiffRecoveryRecovered(): boolean {
+  const current = getRecoveryEpoch();
+  if (current?.state === "recovering" || current?.state === "exchanging") {
+    return storeRecoveryEpoch({ ...current, state: "recovered" });
+  }
+  return false;
+}
+
+export function markLiffRecoveryTerminal(): void {
+  const current = getRecoveryEpoch();
+  if (
+    current?.state === "recovering" ||
+    current?.state === "exchanging" ||
+    current?.state === "recovered"
+  ) {
+    storeRecoveryEpoch({ ...current, state: "terminal" });
+  }
+}
+
+export function resetLiffRecovery(): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(LIFF_RECOVERY_EPOCH_KEY);
+  } catch {
+    // Recovery metadata is optional and never grants access.
   }
 }
 

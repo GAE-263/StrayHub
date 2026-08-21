@@ -4,9 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearLiffSession,
+  beginLiffRecovery,
+  claimLiffRecoveryExchange,
   createRecoveryEpoch,
   getLiffEntryReference,
   getRecoveryEpoch,
+  markLiffRecoveryRecovered,
+  type OpaqueEntryReference,
+  resetLiffRecovery,
   storeLiffEntryReference,
   storeRecoveryEpoch,
 } from "./liff-session";
@@ -80,5 +85,65 @@ describe("LIFF transient session state", () => {
     });
 
     expect(() => storeLiffEntryReference("entry-a")).not.toThrow();
+  });
+
+  it("fails closed when recovery epoch persistence is unavailable", () => {
+    const storage = {
+      getItem: vi.fn((key: string) =>
+        key === "liff_entry_reference"
+          ? "opaque-entry-reference-0123456789abcdef"
+          : null,
+      ),
+      setItem: vi.fn(() => {
+        throw new Error("storage unavailable");
+      }),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as Storage;
+    vi.spyOn(window, "sessionStorage", "get").mockReturnValue(storage);
+
+    expect(beginLiffRecovery("/animal-confirmation")).toBe("unavailable");
+    expect(getRecoveryEpoch()).toBeNull();
+  });
+
+  it("stops a recovery epoch after a post-recovery unauthorized response", () => {
+    storeLiffEntryReference("opaque-entry-reference-0123456789abcdef");
+
+    expect(beginLiffRecovery("/animal-confirmation")).toBe("started");
+    expect(beginLiffRecovery("/animal-confirmation")).toBe("in-flight");
+    expect(claimLiffRecoveryExchange()).toBe("claimed");
+    expect(claimLiffRecoveryExchange()).toBe("in-flight");
+    expect(markLiffRecoveryRecovered()).toBe(true);
+    expect(beginLiffRecovery("/animal-confirmation")).toBe("terminal");
+    expect(getRecoveryEpoch()?.state).toBe("terminal");
+
+    resetLiffRecovery();
+    expect(beginLiffRecovery("/animal-confirmation")).toBe("started");
+  });
+
+  it("fails closed when terminal recovery cannot be persisted", () => {
+    const recovered = {
+      ...createRecoveryEpoch(7, "/animal-confirmation"),
+      entryReference:
+        "opaque-entry-reference-0123456789abcdef" as OpaqueEntryReference,
+      exchangeAttempts: 1 as const,
+      state: "recovered" as const,
+    };
+    const storage = {
+      getItem: vi.fn((key: string) =>
+        key === "liff_entry_reference"
+          ? recovered.entryReference
+          : JSON.stringify(recovered),
+      ),
+      setItem: vi.fn(() => {
+        throw new Error("storage unavailable");
+      }),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as Storage;
+    vi.spyOn(window, "sessionStorage", "get").mockReturnValue(storage);
+
+    expect(beginLiffRecovery("/animal-confirmation")).toBe("unavailable");
+    expect(getRecoveryEpoch()?.state).toBe("recovered");
   });
 });

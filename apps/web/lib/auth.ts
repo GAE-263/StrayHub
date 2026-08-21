@@ -97,14 +97,23 @@ export function clearAuth(
   window.dispatchEvent(new Event("strayhub:auth-changed"));
 }
 
-export function authFetch(
+export async function authFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
+  options: { emitUnauthorized?: boolean } = {},
 ): Promise<Response> {
   const headers = new Headers(init?.headers);
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
+  const response = await fetch(input, { ...init, headers });
+  if (
+    response.status === 401 &&
+    options.emitUnauthorized !== false &&
+    typeof window !== "undefined"
+  ) {
+    window.dispatchEvent(new Event("strayhub:liff-unauthorized"));
+  }
+  return response;
 }
 
 export function storeSession(session: {

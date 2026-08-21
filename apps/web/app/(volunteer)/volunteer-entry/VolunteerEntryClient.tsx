@@ -1,7 +1,7 @@
 "use client";
 
 import liff from "@line/liff";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { Alert } from "../../../components/ui/alert";
@@ -17,7 +17,18 @@ import {
   clearAuth,
   storeActiveOrganization,
   storeSession,
+  storeSessionSource,
 } from "../../../lib/auth";
+import {
+  beginLiffRecovery,
+  claimLiffRecoveryExchange,
+  getRecoveryEpoch,
+  isValidLiffEntryReference,
+  markLiffRecoveryRecovered,
+  markLiffRecoveryTerminal,
+  resetLiffRecovery,
+  storeLiffEntryReference,
+} from "../../../lib/liff-session";
 import { scrubLegacyIdToken } from "./liffUrl";
 
 type EntryState =
@@ -140,47 +151,150 @@ type VolunteerEntryClientProps = {
   liffId: string;
 };
 
+let activeRecoveryEpochId: number | null = null;
+let activeRecoveryExchangeController: AbortController | null = null;
+let activeRecoveryClaimedAt = 0;
+const RECOVERY_EXCHANGE_TIMEOUT_MS = 15_000;
+
+function releaseActiveRecoveryClaim(abort = false): void {
+  if (abort) activeRecoveryExchangeController?.abort();
+  activeRecoveryExchangeController = null;
+  activeRecoveryEpochId = null;
+  activeRecoveryClaimedAt = 0;
+}
+
+function markRecoveryFailure(entryUrl: URL): void {
+  const recoveryState = getRecoveryEpoch()?.state;
+  const isRecovery =
+    recoveryState === "recovering" || recoveryState === "exchanging";
+  markLiffRecoveryTerminal();
+  releaseActiveRecoveryClaim();
+  if (!isRecovery) return;
+  entryUrl.searchParams.set("recovery", "terminal");
+  window.history.replaceState({}, "", entryUrl.toString());
+}
+
 export default function VolunteerEntryClient({
   liffId,
 }: VolunteerEntryClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [state, setState] = useState<EntryState>("INITIALIZING");
   const [error, setError] = useState("");
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [idToken, setIdToken] = useState("");
   const [showApplication, setShowApplication] = useState(false);
   const runId = useRef(0);
+  const cleanupGeneration = useRef(0);
 
-  const bootstrap = useCallback(async () => {
+  // prettier-ignore
+  const bootstrap = useCallback(async (manualRetry = false) => {
+    const existingEpoch = getRecoveryEpoch();
+    if (existingEpoch?.state === "exchanging") {
+      const sameActiveEpoch =
+        activeRecoveryEpochId !== null &&
+        activeRecoveryEpochId === existingEpoch.epochId;
+      if (
+        manualRetry &&
+        sameActiveEpoch &&
+        Date.now() - activeRecoveryClaimedAt < RECOVERY_EXCHANGE_TIMEOUT_MS
+      )
+        return;
+      if (manualRetry) {
+        if (sameActiveEpoch) releaseActiveRecoveryClaim(true);
+        resetLiffRecovery();
+      } else {
+        setState("ERROR");
+        setError("系統工作階段已失效，請重新嘗試進入志工服務。");
+        return;
+      }
+    }
+    const initialUrl = new URL(window.location.href);
     const currentRun = ++runId.current;
     setState("INITIALIZING");
     setError("");
     setShowApplication(false);
 
-    const entryUrl = new URL(window.location.href);
+    const entryUrl = initialUrl;
     const entry = entryUrl.searchParams.get("entry")?.trim() ?? "";
+    const recoveryMode = entryUrl.searchParams.get("recovery");
+    const recoveryState = getRecoveryEpoch()?.state;
+    let exchangeEpochId: number | null = null;
+    if (recoveryMode === "terminal" && !manualRetry) {
+      setState("ERROR");
+      setError("系統工作階段已失效，請重新嘗試進入志工服務。");
+      return;
+    }
+    if (recoveryState === "terminal" && !manualRetry) {
+      setState("ERROR");
+      setError("系統工作階段已失效，請重新嘗試進入志工服務。");
+      return;
+    }
+    const recoveryEntry = getRecoveryEpoch()?.entryReference;
+    const canAdoptRecoveringEpoch =
+      recoveryState === "recovering" && recoveryEntry === entry;
+    if (
+      !manualRetry &&
+      (recoveryState === "recovering" || recoveryState === "exchanging") &&
+      recoveryMode !== "exchange" &&
+      !canAdoptRecoveringEpoch
+    ) {
+      setState("ERROR");
+      setError("系統工作階段已失效，請重新嘗試進入志工服務。");
+      return;
+    }
+    if (manualRetry || getRecoveryEpoch()?.state === "recovered") {
+      resetLiffRecovery();
+      if (!manualRetry) {
+        entryUrl.searchParams.delete("recovery");
+        window.history.replaceState({}, "", entryUrl.toString());
+      }
+    }
     if (!scrubLegacyIdToken(entryUrl)) {
+      markRecoveryFailure(entryUrl);
       setState("ERROR");
       setError("正在安全地重新開啟志工服務，請稍候。");
       return;
     }
 
+    let exchangeTimeoutId: number | undefined;
     try {
-      clearAuth();
+      storeLiffEntryReference(entry);
+      clearAuth({ preserveLiffSession: true });
     } catch {
+      markRecoveryFailure(entryUrl);
       setState("ERROR");
       setError("無法清除舊的系統工作階段，請重新開啟志工服務。");
       return;
     }
 
     if (!liffId) {
+      markRecoveryFailure(entryUrl);
       setState("ERROR");
       setError("志工服務尚未完成設定，請聯絡工作人員。");
       return;
     }
     if (!entry) {
+      markRecoveryFailure(entryUrl);
       setState("ERROR");
       setError("缺少收容所入口資訊，請從 LINE Rich Menu 重新開啟。");
+      return;
+    }
+    const shouldClaimExchange =
+      manualRetry ||
+      recoveryMode === "exchange" ||
+      isValidLiffEntryReference(entry);
+    const recoveryStart = shouldClaimExchange
+      ? beginLiffRecovery(window.location.pathname)
+      : "started";
+    if (
+      shouldClaimExchange &&
+      (manualRetry || recoveryMode !== "exchange") &&
+      recoveryStart !== "started" &&
+      !(canAdoptRecoveringEpoch && recoveryStart === "in-flight")
+    ) {
+      setState("ERROR");
+      setError("無法建立新的工作階段，請重新開啟志工服務。");
       return;
     }
 
@@ -191,46 +305,83 @@ export default function VolunteerEntryClient({
         setState("LOGIN_REQUIRED");
         const redirectUri = entryUrl;
         redirectUri.searchParams.set("entry", entry);
+        if (shouldClaimExchange) {
+          redirectUri.searchParams.set("recovery", "exchange");
+        }
         liff.login({ redirectUri: redirectUri.toString() });
         return;
       }
 
       const rawIdToken = liff.getIDToken();
       if (!rawIdToken) {
+        markRecoveryFailure(entryUrl);
         setState("ERROR");
         setError("無法取得 LINE 身分資訊，請重新嘗試。");
         return;
       }
       setIdToken(rawIdToken);
+      const claim = shouldClaimExchange
+        ? claimLiffRecoveryExchange()
+        : "claimed";
+      if (claim !== "claimed") {
+        if (claim === "unavailable") markRecoveryFailure(entryUrl);
+        setState("ERROR");
+        setError("系統工作階段已失效，請重新嘗試進入志工服務。");
+        return;
+      }
+      activeRecoveryEpochId = getRecoveryEpoch()?.epochId ?? null;
+      exchangeEpochId = activeRecoveryEpochId;
+      const exchangeController = new AbortController();
+      activeRecoveryExchangeController = exchangeController;
+      activeRecoveryClaimedAt = Date.now();
+      exchangeTimeoutId = window.setTimeout(
+        () => exchangeController.abort(),
+        RECOVERY_EXCHANGE_TIMEOUT_MS,
+      );
       setState("EXCHANGING");
       const response = await fetch(`/v1/auth/liff/exchange`, {
         method: "POST",
+        signal: exchangeController.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id_token: rawIdToken,
           shelter_entry_reference: entry,
         }),
       });
-      if (currentRun !== runId.current) return;
+      if (
+        currentRun !== runId.current ||
+        (exchangeEpochId !== null &&
+          getRecoveryEpoch()?.epochId !== exchangeEpochId)
+      )
+        return;
       const body = (await response
         .json()
         .catch(() => ({}))) as ExchangeResponse & {
         code?: string;
       };
-      if (currentRun !== runId.current) return;
+      window.clearTimeout(exchangeTimeoutId);
+      if (
+        currentRun !== runId.current ||
+        (exchangeEpochId !== null &&
+          getRecoveryEpoch()?.epochId !== exchangeEpochId)
+      )
+        return;
       if (!response.ok) {
+        markRecoveryFailure(entryUrl);
         setState("ERROR");
         setError(safeExchangeError(response.status, body.code));
         return;
       }
       if (!isExchangeResultState(body.state)) {
+        markRecoveryFailure(entryUrl);
         setState("ERROR");
         setError("無法確認志工資格，請重新開啟志工服務。");
         return;
       }
       if (body.state === "ACTIVE") {
         if (!isValidActiveResponse(body)) {
-          clearAuth();
+          markRecoveryFailure(entryUrl);
+          clearAuth({ preserveLiffSession: true });
           setState("ERROR");
           setError("系統工作階段建立失敗，請重新嘗試。");
           return;
@@ -243,12 +394,22 @@ export default function VolunteerEntryClient({
             refresh_token: body.refresh_token,
             session_id: body.session_id,
           });
+          storeSessionSource("liff");
+          if (shouldClaimExchange && !markLiffRecoveryRecovered()) {
+            clearAuth({ preserveLiffSession: true });
+            markRecoveryFailure(entryUrl);
+            setState("ERROR");
+            setError("無法保存系統工作階段，請重新嘗試。");
+            return;
+          }
+          releaseActiveRecoveryClaim();
           storeActiveOrganization({
             ...body.organization,
             role: body.user.role,
           });
         } catch {
-          clearAuth();
+          markRecoveryFailure(entryUrl);
+          clearAuth({ preserveLiffSession: true });
           setState("ERROR");
           setError("無法保存系統工作階段，請重新嘗試。");
           return;
@@ -256,21 +417,40 @@ export default function VolunteerEntryClient({
         router.replace("/animal-confirmation");
         return;
       }
+      markRecoveryFailure(entryUrl);
       setOrganization(body.organization ?? null);
       setState(body.state);
     } catch {
-      if (currentRun !== runId.current) return;
+      if (exchangeTimeoutId !== undefined) {
+        window.clearTimeout(exchangeTimeoutId);
+      }
+      if (
+        currentRun !== runId.current ||
+        (exchangeEpochId !== null &&
+          getRecoveryEpoch()?.epochId !== exchangeEpochId)
+      )
+        return;
+      markRecoveryFailure(entryUrl);
       setState("ERROR");
       setError("目前無法連線確認志工資格，請稍後重新嘗試。");
     }
   }, [liffId, router]);
 
   useEffect(() => {
+    cleanupGeneration.current += 1;
     void bootstrap();
+    const effectGeneration = cleanupGeneration.current;
     return () => {
-      runId.current += 1;
+      queueMicrotask(() => {
+        if (
+          cleanupGeneration.current === effectGeneration &&
+          getRecoveryEpoch()?.state !== "exchanging"
+        ) {
+          runId.current += 1;
+        }
+      });
     };
-  }, [bootstrap]);
+  }, [bootstrap, searchParams.toString()]);
 
   const entry =
     typeof window === "undefined"
@@ -318,7 +498,7 @@ export default function VolunteerEntryClient({
             </Button>
           ) : null}
           {state === "ERROR" ? (
-            <Button type="button" onClick={() => void bootstrap()}>
+            <Button type="button" onClick={() => void bootstrap(true)}>
               重新嘗試
             </Button>
           ) : null}

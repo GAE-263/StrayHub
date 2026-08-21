@@ -18,12 +18,23 @@ const { routerRef, replace, login, init, isLoggedIn, getIDToken } = vi.hoisted(
   },
 );
 
-vi.mock("next/navigation", () => ({ useRouter: () => routerRef.current }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => routerRef.current,
+  useSearchParams: () =>
+    React.useState(() => new URLSearchParams(window.location.search))[0],
+}));
 vi.mock("@line/liff", () => ({
   default: { init, login, isLoggedIn, getIDToken },
 }));
 
 import { scrubLegacyIdToken } from "./liffUrl";
+import { getSessionSource } from "../../../lib/auth";
+import {
+  createRecoveryEpoch,
+  getRecoveryEpoch,
+  storeRecoveryEpoch,
+} from "../../../lib/liff-session";
+import type { OpaqueEntryReference } from "../../../lib/liff-session";
 import VolunteerEntryPage from "./page";
 
 (
@@ -108,6 +119,22 @@ describe("volunteer entry LIFF bootstrap", () => {
     const redirectUri = login.mock.calls[0][0].redirectUri as string;
     expect(redirectUri).toContain("/volunteer-entry?entry=entry-a");
     expect(view.textContent).toContain("正在前往 LINE 登入");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves the recovery exchange mode across a valid LIFF login redirect", async () => {
+    const entry = "opaque-entry-reference-0123456789abcdef";
+    window.history.replaceState({}, "", `/volunteer-entry?entry=${entry}`);
+    isLoggedIn.mockReturnValue(false);
+    vi.stubGlobal("fetch", vi.fn());
+
+    await renderPage();
+
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(login.mock.calls[0][0].redirectUri).toContain(
+      `entry=${entry}&recovery=exchange`,
+    );
+    expect(getRecoveryEpoch()?.state).toBe("recovering");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -208,7 +235,156 @@ describe("volunteer entry LIFF bootstrap", () => {
         }),
       }),
     );
+    expect(getSessionSource()).toBe("liff");
     expect(replace).toHaveBeenCalledWith("/animal-confirmation");
+  });
+
+  it("keeps automatic recovery alive across React StrictMode effect replay", async () => {
+    const entry = "opaque-entry-reference-0123456789abcdef";
+    window.history.replaceState(
+      {},
+      "",
+      `/volunteer-entry?entry=${entry}&recovery=exchange`,
+    );
+    storeRecoveryEpoch({
+      ...createRecoveryEpoch(1, "/animal-confirmation"),
+      entryReference: entry as OpaqueEntryReference,
+      exchangeAttempts: 1,
+      state: "recovering",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          state: "ACTIVE",
+          access_token: "internal-access-token",
+          refresh_token: "internal-refresh-token",
+          session_id: "session-a",
+          organization: { id: "org-a", code: "ORG-A", name: "收容所 A" },
+          user: { role: "VOLUNTEER" },
+          next_path: "/animal-confirmation",
+        }),
+      }),
+    );
+
+    await renderPage({ strict: true });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith("/animal-confirmation");
+  });
+
+  it("adopts a fresh recovery epoch across React StrictMode effect replay", async () => {
+    const entry = "opaque-entry-reference-0123456789abcdef";
+    window.history.replaceState({}, "", `/volunteer-entry?entry=${entry}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          state: "ACTIVE",
+          access_token: "internal-access-token",
+          refresh_token: "internal-refresh-token",
+          session_id: "session-a",
+          organization: { id: "org-a", code: "ORG-A", name: "收容所 A" },
+          user: { role: "VOLUNTEER" },
+          next_path: "/animal-confirmation",
+        }),
+      }),
+    );
+
+    await renderPage({ strict: true });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(getRecoveryEpoch()?.state).toBe("recovered");
+    expect(replace).toHaveBeenCalledWith("/animal-confirmation");
+  });
+
+  it("completes a claimed recovery exchange after the entry page unmounts", async () => {
+    const entry = "opaque-entry-reference-0123456789abcdef";
+    window.history.replaceState(
+      {},
+      "",
+      `/volunteer-entry?entry=${entry}&recovery=exchange`,
+    );
+    storeRecoveryEpoch({
+      ...createRecoveryEpoch(1, "/animal-confirmation"),
+      entryReference: entry as OpaqueEntryReference,
+      exchangeAttempts: 1,
+      state: "recovering",
+    });
+    let resolveFetch:
+      ((value: { ok: true; json: () => Promise<unknown> }) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+      ),
+    );
+
+    await renderPage();
+    expect(getRecoveryEpoch()?.state).toBe("exchanging");
+
+    await act(async () => {
+      root?.unmount();
+      await Promise.resolve();
+    });
+    resolveFetch?.({
+      ok: true,
+      json: async () => ({
+        state: "ACTIVE",
+        access_token: "internal-access-token",
+        refresh_token: "internal-refresh-token",
+        session_id: "session-a",
+        organization: { id: "org-a", code: "ORG-A", name: "收容所 A" },
+        user: { role: "VOLUNTEER" },
+        next_path: "/animal-confirmation",
+      }),
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(getRecoveryEpoch()?.state).toBe("recovered");
+    expect(replace).toHaveBeenCalledWith("/animal-confirmation");
+  });
+
+  it("allows manual retry to replace a stale exchanging epoch after reload", async () => {
+    const entry = "opaque-entry-reference-0123456789abcdef";
+    window.history.replaceState(
+      {},
+      "",
+      `/volunteer-entry?entry=${entry}&recovery=exchange`,
+    );
+    storeRecoveryEpoch({
+      ...createRecoveryEpoch(1, "/animal-confirmation"),
+      entryReference: entry as OpaqueEntryReference,
+      exchangeAttempts: 1,
+      state: "exchanging",
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        state: "PENDING",
+        organization: { id: "org-a", code: "ORG-A", name: "收容所 A" },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = await renderPage();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      view
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(view.textContent).toContain("志工申請審核中");
   });
 
   it("ignores an untrusted ACTIVE next path", async () => {
@@ -701,6 +877,11 @@ describe("volunteer entry LIFF bootstrap", () => {
   });
 
   it("retries exchange only after the user presses retry", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef",
+    );
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new Error("temporary network detail"))
@@ -720,12 +901,57 @@ describe("volunteer entry LIFF bootstrap", () => {
       view
         .querySelector("button")
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      view
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(view.textContent).toContain("志工申請審核中");
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("marks a failed recovery URL terminal before a reload can retry it", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef&recovery=exchange",
+    );
+    storeRecoveryEpoch({
+      ...createRecoveryEpoch(1, "/animal-confirmation"),
+      exchangeAttempts: 1,
+      state: "recovering",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network")));
+
+    await renderPage();
+
+    expect(new URL(window.location.href).searchParams.get("recovery")).toBe(
+      "terminal",
+    );
+  });
+
+  it("honors a terminal URL marker even when persisted state is recovered", async () => {
+    const entry = "opaque-entry-reference-0123456789abcdef";
+    window.history.replaceState(
+      {},
+      "",
+      `/volunteer-entry?entry=${entry}&recovery=terminal`,
+    );
+    storeRecoveryEpoch({
+      ...createRecoveryEpoch(1, "/animal-confirmation"),
+      entryReference: entry as OpaqueEntryReference,
+      exchangeAttempts: 1,
+      state: "recovered",
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = await renderPage();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(view.textContent).toContain("系統工作階段已失效");
   });
 
   it("ignores an older failed exchange after a newer bootstrap succeeds", async () => {
