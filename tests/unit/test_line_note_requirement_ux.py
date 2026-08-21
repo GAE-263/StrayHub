@@ -14,10 +14,13 @@ from services.api.app.api.line_webhook import _chit_chat_reply, _options_requiri
 
 
 class _Option:
-    def __init__(self, code: str, display_name: str, requires_note: bool) -> None:
+    def __init__(
+        self, code: str, display_name: str, requires_note: bool, category_id: str
+    ) -> None:
         self.code = code
         self.display_name = display_name
         self.requires_note = requires_note
+        self.category_id = category_id
 
 
 class _ObservationRepositoryStub:
@@ -33,14 +36,22 @@ class _ObservationRepositoryStub:
 
 
 OPTIONS = [
-    _Option("resource_guarding.other", "其他", True),
-    _Option("resource_guarding.tense", "緊繃", False),
-    _Option("emotion.other", "其他", True),
-    _Option("emotion.calm", "平靜或放鬆", False),
+    _Option("resource_guarding.other", "其他", True, "cat-guarding"),
+    _Option("resource_guarding.tense", "緊繃", False, "cat-guarding"),
+    _Option("emotion.other", "其他", True, "cat-emotion"),
+    _Option("emotion.calm", "平靜或放鬆", False, "cat-emotion"),
+    # 這個分類的代碼與選項前綴不一致，是 2026-08-21 手機實測踩到的那一個。
+    _Option("appearance.other", "其他", True, "cat-appearance"),
+    _Option("appearance.normal", "看起來正常", False, "cat-appearance"),
 ]
 CATEGORIES = [
-    SimpleNamespace(code="resource_guarding", display_name="護食"),
-    SimpleNamespace(code="emotion", display_name="情緒"),
+    SimpleNamespace(id="cat-guarding", code="resource_guarding", display_name="護食"),
+    SimpleNamespace(id="cat-emotion", code="emotion", display_name="情緒"),
+    SimpleNamespace(
+        id="cat-appearance",
+        code="appearance_special_status",
+        display_name="外觀／特殊狀態",
+    ),
 ]
 
 
@@ -53,11 +64,6 @@ def patched_repository(monkeypatch: pytest.MonkeyPatch) -> None:
         "ObservationRepository",
         lambda session, organization_id: _ObservationRepositoryStub(OPTIONS, CATEGORIES),
     )
-
-    async def fake_titles(session, organization_id):
-        return {category.code: category.display_name for category in CATEGORIES}
-
-    monkeypatch.setattr(webhook, "_category_titles", fake_titles)
 
 
 @pytest.mark.asyncio
@@ -77,6 +83,19 @@ async def test_requirement_names_the_category_and_option(patched_repository: Non
 async def test_every_option_needing_text_is_listed(patched_repository: None) -> None:
     answers = {"resource_guarding": "resource_guarding.other", "emotion": "emotion.other"}
     assert await _options_requiring_note(None, None, answers) == ["護食：其他", "情緒：其他"]
+
+
+@pytest.mark.asyncio
+async def test_category_title_survives_a_prefix_that_differs_from_its_code(
+    patched_repository: None,
+) -> None:
+    """分類要走 category_id 認，不能從選項代碼的前綴推。
+
+    「外觀／特殊狀態」的代碼是 appearance_special_status，選項卻以 appearance.
+    開頭。用前綴查標題會落空，志工在卡片上看到的是英文代碼 appearance。
+    """
+    answers = {"appearance_special_status": "appearance.other"}
+    assert await _options_requiring_note(None, None, answers) == ["外觀／特殊狀態：其他"]
 
 
 @pytest.mark.asyncio

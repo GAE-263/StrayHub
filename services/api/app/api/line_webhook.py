@@ -289,18 +289,21 @@ async def _options_requiring_note(session, organization_id: UUID, answers: dict)
     這個要求在志工選到該選項的當下就成立，驗證卻只發生在送出時。若心得那一步
     仍照常提供「略過心得」，等於先邀請志工略過、再因為他略過而拒絕他。
     """
-    options = await ObservationRepository(session, organization_id).effective_options(
-        include_disabled_history=True
-    )
+    repository = ObservationRepository(session, organization_id)
+    options = await repository.effective_options(include_disabled_history=True)
     by_code = {option.code: option for option in options}
-    titles = await _category_titles(session, organization_id)
+    # 分類要走 category_id 認，不能從選項代碼的前綴推：「外觀／特殊狀態」的代碼是
+    # appearance_special_status，它的選項卻以 appearance. 開頭，推出來查不到標題，
+    # 志工會在卡片上看到英文代碼。
+    categories = await repository.categories(include_disabled=True)
+    titles = {category.id: category.display_name for category in categories}
     labels = []
     for code in answers.values():
         option = by_code.get(code)
         if option is None or not option.requires_note:
             continue
-        category = code.split(".", 1)[0]
-        labels.append(f"{titles.get(category, category)}：{option.display_name}")
+        title = titles.get(option.category_id) or code.split(".", 1)[0]
+        labels.append(f"{title}：{option.display_name}")
     return labels
 
 
