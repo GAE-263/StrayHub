@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from services.api.app.application.effective_observation_service import EffectiveOption
-from services.api.app.application.line_message_presenter import quick_reply_for_options
+from services.api.app.application.line_message_presenter import question_bubble
 
 
 def test_us4_independent_surface_and_history_regression() -> None:
@@ -13,11 +13,14 @@ def test_us4_independent_surface_and_history_regression() -> None:
     assert "answer_snapshots" in model
     assert "observation_snapshots" in timeline
 
-    payload = quick_reply_for_options(
+    payload = question_bubble(
         [EffectiveOption("emotion.us4", "管理後的新名稱")],
         draft_token="us4-draft",
         step="emotion",
+        title="情緒",
+        position=11,
+        total=13,
     )
-    action = payload["quickReply"]["items"][0]["action"]
+    action = payload["contents"]["body"]["contents"][0]["action"]
     assert action["displayText"] == "管理後的新名稱"
     assert "value=emotion.us4" in action["data"]

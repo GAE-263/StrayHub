@@ -4,6 +4,7 @@ from __future__ import annotations
 # shape; E501 is suppressed for those literal payloads only.
 # ruff: noqa: E501
 import json
+import logging
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
@@ -19,13 +20,21 @@ from services.api.app.application.line_draft_conversation import (
 )
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
-from services.api.app.application.line_message_presenter import quick_reply_for_options
+from services.api.app.application.line_message_presenter import (
+    WOOD,
+    WOOD_DEEP,
+    celebration_bubble,
+    prompt_bubble,
+    question_bubble,
+    summary_bubble,
+)
 from services.api.app.application.line_webhook_session import LineWebhookSessionService
 from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.config.settings import get_settings
 from services.api.app.domain.line_care_report_state import (
+    REQUIRED_ANSWER_KEYS,
     DraftAnswers,
     DraftState,
     DraftStateMachine,
@@ -49,6 +58,7 @@ from services.api.app.persistence.repositories.reportable_scope_repository impor
 )
 from sqlalchemy import select
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
 
 
@@ -76,15 +86,21 @@ def _liff_binding_message() -> str:
     return f"請先開啟 LIFF 完成身分綁定或選擇收容所：https://liff.line.me/{get_settings().liff_id}"
 
 
+def _postback_action(label: str, data: str, *, display_text: str | None = None) -> dict:
+    """A bare action object, as required by a template's ``actions`` list."""
+    return {
+        "type": "postback",
+        "label": label[:20],
+        "data": data,
+        "displayText": display_text or label,
+    }
+
+
 def _postback(label: str, data: str, *, display_text: str | None = None) -> dict:
+    """A quick reply item, which wraps the action in an ``action`` envelope."""
     return {
         "type": "action",
-        "action": {
-            "type": "postback",
-            "label": label[:20],
-            "data": data,
-            "displayText": display_text or label,
-        },
+        "action": _postback_action(label, data, display_text=display_text),
     }
 
 
@@ -150,6 +166,46 @@ async def _reportable_animals(
     ][:6]
 
 
+# The answer key and its CRM category code agree everywhere except walk.
+_ANSWER_CATEGORY_CODES = {"walk_reaction": "walk"}
+
+# Decorative only. The heading text itself still comes from the CRM vocabulary;
+# these just give each question a recognisable face in the chat.
+_CATEGORY_GLYPHS = {
+    "care_completion": "🧺",
+    "walk_completion": "🚶",
+    "feeding": "🍚",
+    "water": "💧",
+    "activity": "⚡",
+    "urination": "💦",
+    "defecation": "💩",
+    "resource_guarding": "🦴",
+    "human_interaction": "🤝",
+    "animal_interaction": "🐕",
+    "emotion": "💚",
+    "walk": "🌿",
+    "appearance_special_status": "🔍",
+}
+
+
+def _glyph_for(key: str) -> str:
+    return _CATEGORY_GLYPHS.get(_ANSWER_CATEGORY_CODES.get(key, key), "🐾")
+
+
+def _current_answer_key(state: DraftState, answers: dict, reconfirmation_keys) -> str:
+    return DraftStateMachine(
+        state=state,
+        answers=DraftAnswers(dict(answers)),
+        reconfirmation_keys=set(reconfirmation_keys or []),
+    ).next_answer_key()
+
+
+async def _category_titles(session, organization_id: UUID) -> dict[str, str]:
+    """Question headings come from the CRM vocabulary, never from a local copy."""
+    categories = await ObservationRepository(session, organization_id).categories()
+    return {category.code: category.display_name for category in categories}
+
+
 async def _answer_options(
     session,
     organization_id: UUID,
@@ -179,7 +235,7 @@ async def _answer_options(
         "animal_interaction": "animal_interaction.",
         "emotion": "emotion.",
         "walk_reaction": "walk.",
-        "appearance_special_status": "appearance_special_status.",
+        "appearance_special_status": "appearance.",
     }
     prefix = prefixes[key]
     return [option for option in options if option.code.startswith(prefix)]
@@ -229,7 +285,13 @@ async def _reply_next_step(
     organization_id: UUID,
     draft,
     raw_token: str,
+    prefix_messages: list[dict] | None = None,
 ) -> None:
+    # A LINE reply token may be used exactly once, so a caller that wants to say
+    # something before the next step must pass it as prefix_messages rather than
+    # issuing its own reply; a second reply on the same event is rejected with
+    # "Invalid reply token".
+    messages: list[dict] = list(prefix_messages or [])
     state = DraftState(draft.current_step)
     if state in {
         DraftState.ANSWERING_COMPLETION,
@@ -240,105 +302,91 @@ async def _reply_next_step(
         DraftState.ANSWERING_BEHAVIOR,
         DraftState.ANSWERING_SPECIAL_STATUS,
     }:
+        reconfirmation_keys = getattr(draft, "reconfirmation_keys", None)
         options = await _answer_options(
-            session,
-            organization_id,
-            state,
-            draft.answers,
-            getattr(draft, "reconfirmation_keys", None),
+            session, organization_id, state, draft.answers, reconfirmation_keys
         )
-        answer_message = quick_reply_for_options(options, draft_token=raw_token, step=state.value)
-        answer_message["quickReply"]["items"].append(
-            _postback("上一步", f"action=back&draft_token={raw_token}")
-        )
-        await _reply(
-            line,
-            event,
-            [answer_message],
+        key = _current_answer_key(state, draft.answers, reconfirmation_keys)
+        titles = await _category_titles(session, organization_id)
+        messages.append(
+            question_bubble(
+                options,
+                draft_token=raw_token,
+                step=state.value,
+                title=titles.get(_ANSWER_CATEGORY_CODES.get(key, key), key),
+                position=REQUIRED_ANSWER_KEYS.index(key) + 1,
+                total=len(REQUIRED_ANSWER_KEYS),
+                glyph=_glyph_for(key),
+            )
         )
     elif state == DraftState.AWAITING_MEDIA:
-        await _reply(
-            line,
-            event,
-            [
-                _text("可以傳送一張或多張照片；若要略過，請按下略過照片。"),
-                {
-                    "type": "template",
-                    "altText": "照片選擇",
-                    "template": {
-                        "type": "buttons",
-                        "text": "照片",
-                        "actions": [
-                            _postback("略過照片", f"action=skip_media&draft_token={raw_token}"),
-                            _postback("上一步", f"action=back&draft_token={raw_token}"),
-                        ],
-                    },
-                },
-            ],
+        messages.append(
+            prompt_bubble(
+                title="拍一張今天的牠",
+                caption="照護回報 · 選填",
+                body_text="直接在聊天室傳照片就可以了，想傳幾張都行 📷\n沒拍到也沒關係，按略過就好。",
+                glyph="📸",
+                choices=[
+                    ("略過照片", f"action=skip_media&draft_token={raw_token}", "⏭"),
+                    ("上一步", f"action=back&draft_token={raw_token}", "←"),
+                ],
+            )
         )
     elif state == DraftState.AWAITING_NOTE:
-        await _reply(
-            line,
-            event,
-            [
-                _text("心得可直接輸入；若沒有補充，請按下略過心得。"),
-                {
-                    "type": "template",
-                    "altText": "心得選擇",
-                    "template": {
-                        "type": "buttons",
-                        "text": "心得",
-                        "actions": [
-                            _postback("略過心得", f"action=skip_note&draft_token={raw_token}"),
-                            _postback("上一步", f"action=back&draft_token={raw_token}"),
-                        ],
-                    },
-                },
-            ],
+        messages.append(
+            prompt_bubble(
+                title="今天有什麼想說的嗎",
+                caption="照護回報 · 選填",
+                body_text="想補充的事情直接打字傳過來就好 ✏️\n例如今天特別黏人、或是走路好像怪怪的。",
+                glyph="💭",
+                start=WOOD,
+                end=WOOD_DEEP,
+                choices=[
+                    ("略過心得", f"action=skip_note&draft_token={raw_token}", "⏭"),
+                    ("上一步", f"action=back&draft_token={raw_token}", "←"),
+                ],
+            )
         )
     elif state == DraftState.REVIEWING:
         review_options = await ObservationRepository(session, organization_id).effective_options(
             include_disabled_history=True
         )
         labels = {option.code: option.display_name for option in review_options}
-        summary_lines = [
-            f"{key}：{labels.get(value, value)}" for key, value in draft.answers.items()
+        titles = await _category_titles(session, organization_id)
+        rows = [
+            (
+                _glyph_for(key),
+                titles.get(_ANSWER_CATEGORY_CODES.get(key, key), key),
+                labels.get(value, value),
+            )
+            for key, value in draft.answers.items()
         ]
-        if draft.note:
-            summary_lines.append(f"心得：{draft.note}")
-        await _reply(
-            line,
-            event,
-            [
-                _text("回報摘要：\n" + "\n".join(summary_lines) + "\n\n確認送出前仍可修改。"),
-                {
-                    "type": "template",
-                    "altText": "回報確認",
-                    "template": {
-                        "type": "buttons",
-                        "text": "回報摘要",
-                        "actions": [
-                            _postback(
-                                "送出回報",
-                                f"action={'submit' if raw_token else 'submit_current'}&draft_token={raw_token}",
-                            ),
-                            _postback(
-                                "取消回報",
-                                f"action={'cancel' if raw_token else 'cancel_current'}&draft_token={raw_token}",
-                            ),
-                            _postback(
-                                "修改",
-                                f"action=back&draft_token={raw_token}",
-                            ),
-                            _postback(
-                                "更換動物",
-                                f"action=reselect_animal&draft_token={raw_token}",
-                            ),
-                        ],
-                    },
-                },
-            ],
+        animal = await AnimalRepository(session, organization_id).get(draft.animal_id)
+        messages.append(
+            summary_bubble(
+                rows,
+                note=draft.note,
+                animal_name=animal.name if animal is not None else "",
+                choices=[
+                    (
+                        "送出回報",
+                        f"action={'submit' if raw_token else 'submit_current'}"
+                        f"&draft_token={raw_token}",
+                        "✅",
+                    ),
+                    ("再改一下", f"action=back&draft_token={raw_token}", "✏️"),
+                    ("換一隻", f"action=reselect_animal&draft_token={raw_token}", "🔄"),
+                    (
+                        "取消回報",
+                        f"action={'cancel' if raw_token else 'cancel_current'}"
+                        f"&draft_token={raw_token}",
+                        "🗑",
+                    ),
+                ],
+            )
         )
+    if messages:
+        await _reply(line, event, messages)
 
 
 async def _handle_postback(
@@ -417,7 +465,7 @@ async def _handle_postback(
                     "template": {
                         "type": "buttons",
                         "text": "是這隻動物嗎？",
-                        "actions": [_postback("確認是這隻", data)],
+                        "actions": [_postback_action("確認是這隻", data)],
                     },
                 },
             ],
@@ -457,8 +505,18 @@ async def _handle_postback(
                 membership_id=membership_id,
                 animal_id=animal.id,
             )
+            # A new draft starts in CONFIRMING_ANIMAL; advance it so the reply
+            # below carries the first question instead of stalling here.
+            await LineDraftConversationService(
+                CareReportDraftRepository(session, organization_id)
+            ).handle(
+                token=raw_token,
+                volunteer_user_id=user_id,
+                action="confirm_animal",
+                value=None,
+                event_id=event.get("webhookEventId", ""),
+            )
             message = f"已確認 {animal.name}，現在開始照護回報。"
-        await _reply(line, event, [_text(message)])
         await _reply_next_step(
             session,
             line,
@@ -466,6 +524,7 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token=raw_token,
+            prefix_messages=[_text(message)],
         )
         return None
     if action == "resume_draft" and not token:
@@ -475,7 +534,6 @@ async def _handle_postback(
         if draft is None:
             await _reply(line, event, [_text("目前沒有可繼續的回報。")])
             return None
-        await _reply(line, event, [_text("已恢復未完成回報，請繼續回答目前問題。")])
         await _reply_next_step(
             session,
             line,
@@ -483,6 +541,7 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token="",
+            prefix_messages=[_text("已恢復未完成回報，請繼續回答目前問題。")],
         )
         return None
     if not token and action not in {
@@ -525,8 +584,11 @@ async def _handle_postback(
         event_id=event.get("webhookEventId", ""),
     )
     if result.report_id is not None:
+        animal = await AnimalRepository(session, organization_id).get(draft.animal_id)
         await _reply(
-            line, event, [_text("原始照護回報已保存。AI 分析將於背景處理，不會阻擋本次回報。")]
+            line,
+            event,
+            [celebration_bubble(animal_name=animal.name if animal is not None else "")],
         )
     else:
         await _reply_next_step(
@@ -646,6 +708,13 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                 if isinstance(error, DomainError)
                                 else "media_processing_failed"
                             )
+                            # The volunteer only ever sees "try again or skip",
+                            # so the cause has to be recorded here or it is lost.
+                            logger.exception(
+                                "draft media attach failed for draft %s: %s",
+                                draft.id,
+                                error_code,
+                            )
                             await identity.complete_event(
                                 stored_event, status="processed", error_code=error_code
                             )
@@ -663,7 +732,17 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         draft.current_step = DraftState.AWAITING_NOTE.value
                         draft.last_interaction_at = datetime.now(timezone.utc)
                         await session.flush()
-                        await _reply(line, event, [_text("照片已附加，請繼續完成回報。")])
+                        # Carry on to the note step in the same reply; otherwise
+                        # the volunteer is left with no control to continue.
+                        await _reply_next_step(
+                            session,
+                            line,
+                            event,
+                            organization_id=organization_id,
+                            draft=draft,
+                            raw_token="",
+                            prefix_messages=[_text("照片已附加。")],
+                        )
                     await identity.complete_event(stored_event)
                     results.append({"webhook_event_id": event_id, "status": "processed"})
                 except DomainError as error:

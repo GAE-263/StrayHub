@@ -4,7 +4,7 @@ from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
 )
-from services.api.app.application.line_message_presenter import quick_reply_for_options
+from services.api.app.application.line_message_presenter import question_bubble
 
 
 def _service() -> EffectiveObservationService:
@@ -17,11 +17,16 @@ def _service() -> EffectiveObservationService:
     )
 
 
-def test_quick_reply_uses_display_name_for_label_and_stable_code_for_postback() -> None:
-    payload = quick_reply_for_options(
-        [_service().options["emotion.calm"]], draft_token="draft-1", step="emotion"
+def test_question_bubble_uses_display_name_for_label_and_stable_code_for_postback() -> None:
+    payload = question_bubble(
+        [_service().options["emotion.calm"]],
+        draft_token="draft-1",
+        step="emotion",
+        title="情緒",
+        position=11,
+        total=13,
     )
-    action = payload["quickReply"]["items"][0]["action"]
+    action = payload["contents"]["body"]["contents"][0]["action"]
     assert action["label"] == "平靜／放鬆"
     assert "value=emotion.calm" in action["data"]
     assert action["displayText"] == "平靜／放鬆"

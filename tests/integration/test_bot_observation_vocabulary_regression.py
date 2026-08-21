@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from services.api.app.application.effective_observation_service import EffectiveOption
-from services.api.app.application.line_message_presenter import quick_reply_for_options
+from services.api.app.application.line_message_presenter import question_bubble
 
 
 def test_bot_presenter_has_no_business_vocabulary_copy() -> None:
@@ -13,8 +13,10 @@ def test_bot_presenter_has_no_business_vocabulary_copy() -> None:
 
 def test_management_and_bot_share_the_same_code_and_effective_option_shape() -> None:
     option = EffectiveOption("emotion.us4", "新的情緒描述", requires_note=True)
-    payload = quick_reply_for_options([option], draft_token="same-draft", step="emotion")
-    action = payload["quickReply"]["items"][0]["action"]
+    payload = question_bubble(
+        [option], draft_token="same-draft", step="emotion", title="情緒", position=11, total=13
+    )
+    action = payload["contents"]["body"]["contents"][0]["action"]
     assert option.code in action["data"]
     assert option.display_name == action["label"]
     assert option.requires_note is True
