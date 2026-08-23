@@ -4,6 +4,7 @@ import pytest
 from services.api.app.application.care_agenda_service import CareAgendaService
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope
+
 from tests.integration.test_care_reminder_actions import (
     _cleanup,
     _context,
