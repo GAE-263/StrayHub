@@ -11,8 +11,10 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
     Uuid,
@@ -127,6 +129,11 @@ class VolunteerApplication(IdentityMixin, AuditMixin, Base):
             "submitted_at",
             "id",
         ),
+        UniqueConstraint(
+            "organization_id",
+            "id",
+            name="uq_volunteer_applications_org_id",
+        ),
     )
 
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
@@ -145,6 +152,63 @@ class VolunteerApplication(IdentityMixin, AuditMixin, Base):
     version: Mapped[int] = mapped_column(
         Integer, default=1, server_default=text("1"), nullable=False
     )
+
+
+class VolunteerApplicationProfile(AuditMixin, Base):
+    __tablename__ = "volunteer_application_profiles"
+    __table_args__ = (
+        CheckConstraint(
+            "(pii_deleted_at IS NULL AND applicant_name_ciphertext IS NOT NULL "
+            "AND phone_ciphertext IS NOT NULL) OR "
+            "(pii_deleted_at IS NOT NULL AND applicant_name_ciphertext IS NULL "
+            "AND phone_ciphertext IS NULL AND basic_profile_ciphertext IS NULL "
+            "AND insurance_identity_ciphertext IS NULL)",
+            name="ck_volunteer_application_profiles_deleted_payload",
+        ),
+        CheckConstraint(
+            "(insurance_identity_ciphertext IS NULL "
+            "AND insurance_identity_delete_after IS NULL) OR "
+            "(pii_deleted_at IS NULL AND insurance_identity_ciphertext IS NOT NULL "
+            "AND insurance_identity_delete_after IS NOT NULL "
+            "AND insurance_identity_delete_after >= created_at "
+            "AND insurance_identity_delete_after <= created_at + interval '30 days')",
+            name="ck_volunteer_application_profiles_insurance_deadline",
+        ),
+        CheckConstraint(
+            "retention_expires_at > created_at",
+            name="ck_volunteer_application_profiles_retention_future",
+        ),
+        CheckConstraint(
+            "length(trim(encryption_algorithm)) > 0 AND length(trim(encryption_key_version)) > 0",
+            name="ck_volunteer_application_profiles_encryption_metadata",
+        ),
+        Index(
+            "ix_volunteer_application_profiles_org_retention",
+            "organization_id",
+            "retention_expires_at",
+            "application_id",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "application_id"],
+            ["volunteer_applications.organization_id", "volunteer_applications.id"],
+            name="fk_volunteer_application_profiles_application_scope",
+        ),
+    )
+
+    application_id: Mapped[UUID] = mapped_column(primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"))
+    applicant_name_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    phone_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    basic_profile_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    insurance_identity_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    pii_schema_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    encryption_algorithm: Mapped[str] = mapped_column(String(30), nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    retention_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    insurance_identity_delete_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pii_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class VolunteerAccessGrant(IdentityMixin, AuditMixin, Base):

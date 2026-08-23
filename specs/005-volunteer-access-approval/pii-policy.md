@@ -161,15 +161,20 @@ PII reveal必須與audit fail-closed耦合：在任何plaintext離開server boun
 
 ## Task 5最低驗收條件
 
-- [ ] Model + reversible Alembic migration建立一對一、tenant-scoped encrypted profile，沒有plaintext PII column。
-- [ ] Encryption port與local/test AES-GCM adapter使用field-specific associated data並回傳key version。
-- [ ] Production provider設定fail closed；不接受production plaintext master-key fallback。
-- [ ] Service建立／讀取profile時驗證organization/application binding。
-- [ ] Ciphertext round-trip、wrong tenant/application/field AAD、tamper與unknown key version測試。
-- [ ] ORM／DB read-back證明plaintext不在PII columns，migration upgrade/downgrade/re-upgrade通過。
-- [ ] API response、Audit、exception與log redaction測試包含sentinel姓名、手機與身分識別值。
-- [ ] PII reveal在audit持久化成功前不產生plaintext response；audit flush／commit失敗時固定拒絕，且測試證明沒有未稽核揭露。
-- [ ] Insurance identity conditional collection與30天上限；一般申請不建立該ciphertext。
-- [ ] Retention deadline與soft-deleted profile fail-closed；實際worker／hard-delete可在後續獨立task交付，但不得遺失deadline。
-- [ ] Real PostgreSQL RLS證明same-org允許、cross-org與public scope拒絕。
-- [ ] Focused/full tests、Ruff、migration、staged snapshot與獨立security review通過。
+- [x] Model + reversible Alembic migration建立一對一、tenant-scoped encrypted profile，沒有plaintext PII column。
+- [x] Encryption port與local/test AES-GCM adapter使用field-specific associated data並回傳key version。
+- [x] Production provider設定fail closed；不接受production plaintext master-key fallback。
+- [x] Service建立／讀取profile時驗證organization/application binding。
+- [x] Ciphertext round-trip、wrong tenant/application/field AAD、tamper與unknown key version測試。
+- [x] ORM／DB read-back證明plaintext不在PII columns，migration upgrade/downgrade/re-upgrade通過。
+- [x] API response、Audit、exception與log redaction測試包含sentinel姓名、手機與身分識別值。
+- [x] PII reveal在audit持久化成功前不產生plaintext response；audit flush／commit失敗時固定拒絕，且測試證明沒有未稽核揭露。
+- [x] Insurance identity conditional collection與30天上限；一般申請不建立該ciphertext。
+- [x] Retention deadline與soft-deleted profile fail-closed；實際worker／hard-delete可在後續獨立task交付，但不得遺失deadline。
+- [x] Real PostgreSQL RLS證明same-org允許、cross-org與public scope拒絕。
+- [x] Focused/full tests、Ruff、migration、staged snapshot與獨立security review通過。
+
+Task 5 verification evidence（2026-08-23）：真實PostgreSQL runtime-role測試涵蓋public
+create／reveal、persisted policy／membership locks、ORM ciphertext read-back與durable audit RLS；
+empty-database測試執行0033 upgrade→0032 downgrade→0033 upgrade。最終candidate需維持full
+pytest、Ruff、`git diff --check`及fresh independent P0/P1 review全數通過後才可commit。

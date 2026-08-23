@@ -17,11 +17,12 @@ from services.api.app.domain.volunteer_access import (
     digest_entry_reference,
 )
 from services.api.app.persistence.database.scope import set_organization_scope
-from services.api.app.persistence.models.identity import Organization, User
+from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
     VolunteerAccessGrant,
     VolunteerApplication,
+    VolunteerApplicationProfile,
     VolunteerDecisionBatch,
     VolunteerDecisionBatchItem,
     VolunteerNotificationDelivery,
@@ -109,6 +110,31 @@ class VolunteerAccessRepository:
         self, application_id: UUID, *, for_update: bool = False
     ) -> VolunteerApplication | None:
         statement = self._application_scope().where(VolunteerApplication.id == application_id)
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def application_profile(
+        self, application_id: UUID, *, for_update: bool = False
+    ) -> VolunteerApplicationProfile | None:
+        statement = select(VolunteerApplicationProfile).where(
+            VolunteerApplicationProfile.organization_id == self.organization_id,
+            VolunteerApplicationProfile.application_id == application_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def active_membership(
+        self, user_id: UUID, *, for_update: bool = False
+    ) -> OrganizationMembership | None:
+        statement = select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == self.organization_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.status == "active",
+        )
         if for_update:
             statement = statement.with_for_update()
         result = await self.session.execute(statement)

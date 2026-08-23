@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     auth_jwt_active_private_key: str | None = None
     auth_jwt_active_public_key: str | None = None
     auth_jwt_previous_public_key: str | None = None
+    pii_encryption_provider: str = "local-aes-gcm"
+    pii_allow_local_provider: bool = False
+    pii_active_key_version: str = "local-v1"
+    pii_local_key_base64: SecretStr | None = None
     session_access_token_ttl_seconds: int = Field(default=900, ge=1)
     session_refresh_token_ttl_seconds: int = Field(default=604800, ge=1)
     draft_ttl_seconds: int = Field(default=86400, ge=1)
