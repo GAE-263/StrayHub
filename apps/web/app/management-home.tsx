@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ManagementLayout } from "../components/management/ManagementLayout";
+
 import { authFetch, clearAuth, getAccessToken } from "../lib/auth";
 import {
   EmptyState,
@@ -85,7 +85,6 @@ export default function ManagementHome() {
   }, []);
 
   return (
-    <ManagementLayout>
       <section aria-labelledby="management-home-title">
         <div className="page-heading">
           <div>
@@ -192,6 +191,5 @@ export default function ManagementHome() {
           </>
         ) : null}
       </section>
-    </ManagementLayout>
   );
 }

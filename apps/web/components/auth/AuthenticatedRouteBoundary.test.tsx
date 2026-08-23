@@ -24,6 +24,7 @@ const profile: CurrentUser = {
     {
       id: "membership-a",
       organization_id: "org-a",
+      user_id: "user-a",
       role: "VOLUNTEER",
       status: "active",
       valid_from: new Date(Date.now() - 60_000).toISOString(),

@@ -15,15 +15,26 @@ import { ErrorState, LoadingState } from "./StateViews";
 import { StatusBanner } from "./StatusBanner";
 
 type Props = { children: React.ReactNode };
+type OrganizationSummary = { id: string; code: string; name: string };
+
+export function resolveOrganizationLabel(
+  organizations: OrganizationSummary[],
+  organizationId: string | null,
+  isPlatformGovernanceRoute: boolean,
+): string {
+  if (isPlatformGovernanceRoute) return "平台治理";
+  return (
+    organizations.find((organization) => organization.id === organizationId)?.name ??
+    "未選擇收容所"
+  );
+}
 
 export function ManagementLayout({ children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [profile, setProfile] = useState<CurrentUser | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
-  const [organizations, setOrganizations] = useState<
-    Array<{ id: string; code: string; name: string }>
-  >([]);
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [contextSwitchError, setContextSwitchError] = useState("");
@@ -191,13 +202,11 @@ export function ManagementLayout({ children }: Props) {
       />
     );
   }
-  const organizationLabel = isPlatformGovernanceRoute
-    ? "平台治理"
-    : typeof window !== "undefined"
-      ? (window.sessionStorage.getItem("active_organization_code") ??
-        organizationId?.slice(0, 8) ??
-        "未選擇收容所")
-      : (organizationId?.slice(0, 8) ?? "未選擇收容所");
+  const organizationLabel = resolveOrganizationLabel(
+    organizations,
+    organizationId,
+    isPlatformGovernanceRoute,
+  );
 
   return (
     <div className="app-frame">

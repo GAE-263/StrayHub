@@ -60,6 +60,19 @@ class AuthenticationRepository:
         result = await self.session.execute(statement)
         return list(result.scalars())
 
+    async def access_grants_for_memberships(
+        self, user_id: UUID, membership_ids: list[UUID]
+    ) -> list[VolunteerAccessGrant]:
+        if not membership_ids:
+            return []
+        result = await self.session.execute(
+            select(VolunteerAccessGrant).where(
+                VolunteerAccessGrant.user_id == user_id,
+                VolunteerAccessGrant.membership_id.in_(membership_ids),
+            )
+        )
+        return list(result.scalars())
+
     async def get_membership(
         self, user_id: UUID, organization_id: UUID
     ) -> OrganizationMembership | None:

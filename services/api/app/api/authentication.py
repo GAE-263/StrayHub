@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -111,6 +112,55 @@ class ShelterContextSwitchRequest(BaseModel):
     organization_id: UUID
 
 
+class CurrentUserAccessGrant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    membership_id: UUID
+    organization_id: UUID
+    status: Literal["active", "expired", "revoked"]
+    valid_from: datetime
+    expires_at: datetime
+
+
+class CurrentUserCapabilities(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    can_view_medical_care: bool
+    can_manage_series: bool
+
+
+class CurrentUserMembership(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    organization_id: UUID
+    user_id: UUID
+    role: Literal["SHELTER_ADMIN", "STAFF", "VOLUNTEER"]
+    status: Literal["invited", "active", "disabled", "expired", "revoked", "archived"]
+    valid_from: datetime | None
+    expires_at: datetime | None
+    access_grant: CurrentUserAccessGrant | None
+    medical_care_access: bool
+    capabilities: CurrentUserCapabilities
+
+
+class CurrentUserProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    username: str | None
+    display_name: str | None
+    platform_role: str | None
+    status: Literal["active", "disabled"]
+
+
+class CurrentUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user: CurrentUserProfile
+    memberships: list[CurrentUserMembership]
+
+
 def get_session_service(_session: AsyncSession = Depends(request_session)) -> SessionService:  # noqa: B008
     settings = get_settings()
     if not settings.auth_jwt_active_private_key or not settings.auth_jwt_active_public_key:
@@ -203,14 +253,16 @@ async def liff_exchange(
     return response
 
 
-@router.get("/me")
+@router.get("/me", response_model=CurrentUserResponse)
 async def current_user(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     service: SessionService = Depends(get_session_service),  # noqa: B008
-) -> dict:
+) -> CurrentUserResponse:
     if context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
-    return await service.current_user(session_id=context.session_id)
+    return CurrentUserResponse.model_validate(
+        await service.current_user(session_id=context.session_id)
+    )
 
 
 @router.get("/active-shelter-context")

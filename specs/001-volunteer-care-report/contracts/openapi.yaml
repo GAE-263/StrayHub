@@ -2768,6 +2768,52 @@ components:
               },
           }
         scope: { $ref: "#/components/schemas/AccessScope" }
+    CurrentUserAccessGrant:
+      type: object
+      additionalProperties: false
+      required: [membership_id, organization_id, status, valid_from, expires_at]
+      properties:
+        membership_id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        status: { type: string, enum: [active, expired, revoked] }
+        valid_from: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    CurrentUserMembership:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organization_id,
+          user_id,
+          role,
+          status,
+          valid_from,
+          expires_at,
+          access_grant,
+          medical_care_access,
+          capabilities,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role: { type: string, enum: [SHELTER_ADMIN, STAFF, VOLUNTEER] }
+        status: { type: string, enum: [invited, active, disabled, expired, revoked, archived] }
+        valid_from: { type: [string, "null"], format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        access_grant:
+          oneOf:
+            - $ref: "#/components/schemas/CurrentUserAccessGrant"
+            - { type: "null" }
+        medical_care_access: { type: boolean }
+        capabilities:
+          type: object
+          additionalProperties: false
+          required: [can_view_medical_care, can_manage_series]
+          properties:
+            can_view_medical_care: { type: boolean }
+            can_manage_series: { type: boolean }
     CurrentUserResponse:
       type: object
       required: [user, memberships]
@@ -2775,7 +2821,7 @@ components:
         user: { $ref: "#/components/schemas/User" }
         memberships:
           type: array
-          items: { $ref: "#/components/schemas/Membership" }
+          items: { $ref: "#/components/schemas/CurrentUserMembership" }
     ActiveShelterContext:
       type: object
       required: [organization_id, organization_name, session_id]

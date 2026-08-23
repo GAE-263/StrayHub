@@ -2014,9 +2014,43 @@ export interface components {
             roles: ("PLATFORM_ADMIN" | "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER")[];
             scope: components["schemas"]["AccessScope"];
         };
+        CurrentUserAccessGrant: {
+            /** Format: uuid */
+            membership_id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** @enum {string} */
+            status: "active" | "expired" | "revoked";
+            /** Format: date-time */
+            valid_from: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        CurrentUserMembership: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            user_id: string;
+            /** @enum {string} */
+            role: "SHELTER_ADMIN" | "STAFF" | "VOLUNTEER";
+            /** @enum {string} */
+            status: "invited" | "active" | "disabled" | "expired" | "revoked" | "archived";
+            /** Format: date-time */
+            valid_from: string | null;
+            /** Format: date-time */
+            expires_at: string | null;
+            access_grant: components["schemas"]["CurrentUserAccessGrant"] | null;
+            medical_care_access: boolean;
+            capabilities: {
+                can_view_medical_care: boolean;
+                can_manage_series: boolean;
+            };
+        };
         CurrentUserResponse: {
             user: components["schemas"]["User"];
-            memberships: components["schemas"]["Membership"][];
+            memberships: components["schemas"]["CurrentUserMembership"][];
         };
         ActiveShelterContext: {
             /** Format: uuid */

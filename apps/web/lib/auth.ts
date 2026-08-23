@@ -32,6 +32,7 @@ export type CurrentUser = {
   memberships: Array<{
     id: string;
     organization_id: string;
+    user_id: string;
     role: string;
     status: string;
     valid_from?: string | null;

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from services.api.app.persistence.models.identity import (
     SessionRecord,
     User,
 )
+from services.api.app.persistence.models.volunteer_access import VolunteerAccessGrant
 
 
 class FakeAuthRepository:
@@ -32,6 +34,7 @@ class FakeAuthRepository:
             role="VOLUNTEER",
             status="active",
         )
+        self.grants: list[VolunteerAccessGrant] = []
         self.binding = LineUserBinding(
             id=uuid4(), line_user_id="line-user", user_id=user.id, status="active"
         )
@@ -71,6 +74,13 @@ class FakeAuthRepository:
         if user_id != self.user.id or (active_only and self.membership.status != "active"):
             return []
         return [self.membership]
+
+    async def access_grants_for_memberships(self, user_id, membership_ids):
+        return [
+            grant
+            for grant in self.grants
+            if grant.user_id == user_id and grant.membership_id in membership_ids
+        ]
 
     async def get_line_binding(self, line_user_id):
         return self.binding if line_user_id == self.binding.line_user_id else None
@@ -151,6 +161,79 @@ class FakeEntryResolver:
         if raw_reference != "valid-entry":
             return None
         return ActiveVolunteerEntryReference(uuid4(), self.organization_id, "SHELTER", "Shelter")
+
+
+@pytest.mark.asyncio
+async def test_current_user_exposes_membership_and_matching_grant_validity() -> None:
+    user = User(id=uuid4(), username="volunteer", display_name="Volunteer", status="active")
+    repository = FakeAuthRepository(user)
+    now = datetime.now(timezone.utc)
+    repository.membership.valid_from = now - timedelta(hours=1)
+    repository.membership.expires_at = now + timedelta(hours=1)
+    repository.grants.append(
+        VolunteerAccessGrant(
+            id=uuid4(),
+            organization_id=repository.organization.id,
+            user_id=user.id,
+            membership_id=repository.membership.id,
+            application_id=uuid4(),
+            status="active",
+            valid_from=now - timedelta(hours=1),
+            expires_at=now + timedelta(hours=1),
+        )
+    )
+    session = SessionRecord(
+        id=uuid4(),
+        user_id=user.id,
+        status="active",
+        expires_at=now + timedelta(hours=1),
+    )
+    repository.sessions[session.id] = session
+    service = SessionService(
+        repository, password_hasher=Argon2PasswordHasher(), access_token=token_adapter()
+    )
+
+    result = await service.current_user(session_id=session.id)
+
+    membership = result["memberships"][0]
+    assert membership["valid_from"] == repository.membership.valid_from
+    assert membership["expires_at"] == repository.membership.expires_at
+    assert membership["access_grant"]["membership_id"] == repository.membership.id
+    assert membership["access_grant"]["organization_id"] == repository.organization.id
+    assert membership["access_grant"]["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_current_user_does_not_attach_grant_from_another_organization() -> None:
+    user = User(id=uuid4(), username="volunteer", display_name="Volunteer", status="active")
+    repository = FakeAuthRepository(user)
+    now = datetime.now(timezone.utc)
+    repository.grants.append(
+        VolunteerAccessGrant(
+            id=uuid4(),
+            organization_id=uuid4(),
+            user_id=user.id,
+            membership_id=repository.membership.id,
+            application_id=uuid4(),
+            status="active",
+            valid_from=now - timedelta(hours=1),
+            expires_at=now + timedelta(hours=1),
+        )
+    )
+    session = SessionRecord(
+        id=uuid4(),
+        user_id=user.id,
+        status="active",
+        expires_at=now + timedelta(hours=1),
+    )
+    repository.sessions[session.id] = session
+    service = SessionService(
+        repository, password_hasher=Argon2PasswordHasher(), access_token=token_adapter()
+    )
+
+    result = await service.current_user(session_id=session.id)
+
+    assert result["memberships"][0]["access_grant"] is None
 
 
 @pytest.mark.asyncio

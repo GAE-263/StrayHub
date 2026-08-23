@@ -12,7 +12,11 @@ from services.api.app.application.ports.authentication import (
     PasswordHasherPort,
     VolunteerEntryResolverPort,
 )
-from services.api.app.persistence.models.identity import RefreshTokenRecord, SessionRecord
+from services.api.app.persistence.models.identity import (
+    OrganizationMembership,
+    RefreshTokenRecord,
+    SessionRecord,
+)
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
@@ -143,6 +147,50 @@ class SessionService:
         user = await self.repository.get_user(session.user_id)
         if user is None or user.status != "active":
             raise DomainError("invalid_session", "使用者無效", 401)
+        memberships = await self.repository.memberships(user.id)
+        grants = await self.repository.access_grants_for_memberships(
+            user.id, [membership.id for membership in memberships]
+        )
+        grant_by_membership_id = {grant.membership_id: grant for grant in grants}
+
+        def serialize_membership(membership: OrganizationMembership) -> dict:
+            grant = grant_by_membership_id.get(membership.id)
+            matching_grant = (
+                grant
+                if grant is not None and grant.organization_id == membership.organization_id
+                else None
+            )
+            return {
+                "id": membership.id,
+                "organization_id": membership.organization_id,
+                "user_id": membership.user_id,
+                "role": membership.role,
+                "status": membership.status,
+                "valid_from": membership.valid_from,
+                "expires_at": membership.expires_at,
+                "access_grant": (
+                    {
+                        "membership_id": matching_grant.membership_id,
+                        "organization_id": matching_grant.organization_id,
+                        "status": matching_grant.status,
+                        "valid_from": matching_grant.valid_from,
+                        "expires_at": matching_grant.expires_at,
+                    }
+                    if matching_grant is not None
+                    else None
+                ),
+                "medical_care_access": membership.medical_care_access,
+                "capabilities": {
+                    "can_view_medical_care": membership.status == "active"
+                    and (
+                        membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"}
+                        or (membership.role == "STAFF" and membership.medical_care_access)
+                    ),
+                    "can_manage_series": membership.status == "active"
+                    and membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"},
+                },
+            }
+
         return {
             "user": {
                 "id": user.id,
@@ -151,25 +199,7 @@ class SessionService:
                 "platform_role": user.platform_role,
                 "status": user.status,
             },
-            "memberships": [
-                {
-                    "id": membership.id,
-                    "organization_id": membership.organization_id,
-                    "role": membership.role,
-                    "status": membership.status,
-                    "medical_care_access": membership.medical_care_access,
-                    "capabilities": {
-                        "can_view_medical_care": membership.status == "active"
-                        and (
-                            membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"}
-                            or (membership.role == "STAFF" and membership.medical_care_access)
-                        ),
-                        "can_manage_series": membership.status == "active"
-                        and membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"},
-                    },
-                }
-                for membership in await self.repository.memberships(user.id)
-            ],
+            "memberships": [serialize_membership(membership) for membership in memberships],
         }
 
     async def bind_line_identity(self, *, id_token: str) -> dict:
