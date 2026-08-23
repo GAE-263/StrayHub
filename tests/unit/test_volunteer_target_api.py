@@ -161,7 +161,7 @@ def _status_result(effective_status: str) -> VolunteerStatusResult:
             version=1,
         )
     return VolunteerStatusResult(
-        organization=PublicOrganizationResult(ORG_A, "Shelter A", True),
+        organization=PublicOrganizationResult(ORG_A, "Shelter A", True, False),
         application=application,
         grant=grant,
         effective_status=effective_status,
@@ -204,7 +204,7 @@ def test_management_mutation_requests_forbid_unknown_and_duplicate_fields() -> N
 
 def test_response_maps_application_without_orm_display_name() -> None:
     result = VolunteerStatusResult(
-        organization=PublicOrganizationResult(ORG_A, "Shelter A", True),
+        organization=PublicOrganizationResult(ORG_A, "Shelter A", True, False),
         application=SimpleNamespace(
             id=uuid4(),
             organization_id=ORG_A,

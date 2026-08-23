@@ -123,6 +123,7 @@ export async function mockVolunteerAccessApi(
           id: "org-a",
           name: "收容所 A",
           applications_enabled: true,
+          insurance_required: false,
         },
         application: null,
         grant: null,

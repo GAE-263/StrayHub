@@ -13,7 +13,7 @@ export type VolunteerStatus = {
     id: string;
     name: string;
     applications_enabled: boolean;
-    insurance_required?: boolean;
+    insurance_required: boolean;
   };
   application: {
     id: string;

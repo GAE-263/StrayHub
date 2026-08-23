@@ -51,7 +51,12 @@ test("unknown LINE identity reaches NEW then PENDING without protected requests"
   let submitCount = 0;
 
   const responseBody = () => ({
-    organization: { id: "org-a", name: "收容所 A", applications_enabled: true },
+    organization: {
+      id: "org-a",
+      name: "收容所 A",
+      applications_enabled: true,
+      insurance_required: false,
+    },
     application,
     grant: null,
     effective_status: application ? "pending" : "none",
@@ -114,6 +119,8 @@ test("unknown LINE identity reaches NEW then PENDING without protected requests"
   });
   await page.getByRole("button", { name: "進入志工報名" }).click();
   await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
+  await page.locator("#applicant-name").fill("王小明");
+  await page.locator("#phone-number").fill("0912345678");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "立即報名" }).dblclick();
   await expect(page.getByText("等待收容所審核")).toBeVisible();
