@@ -44,7 +44,7 @@ uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --p
 npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
 
 # Worker
-uv run python services/worker/worker.py
+uv run python -m services.worker.worker
 ```
 
 - API health check：<http://127.0.0.1:8001/healthz>

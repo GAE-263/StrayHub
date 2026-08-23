@@ -104,7 +104,7 @@ uv run python -m uvicorn services.api.app.main:app \
 pids+=("$!")
 npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
 pids+=("$!")
-uv run python services/worker/worker.py &
+uv run python -m services.worker.worker &
 pids+=("$!")
 
 wait "${pids[0]}" "${pids[1]}" "${pids[2]}"
