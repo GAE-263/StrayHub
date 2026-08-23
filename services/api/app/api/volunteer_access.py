@@ -5,11 +5,11 @@ import binascii
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from services.api.app.api.dependencies import (
     RequestContext,
     current_request_context,
@@ -18,7 +18,7 @@ from services.api.app.api.dependencies import (
     request_session,
     validate_platform_support_request,
 )
-from services.api.app.api.errors import DomainError
+from services.api.app.api.errors import DomainError, ErrorResponse
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.ports.authentication import LineIdentityVerifierPort
 from services.api.app.application.volunteer_access_service import (
@@ -30,19 +30,60 @@ from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
 from services.api.app.config.settings import get_settings
+from services.api.app.domain.volunteer_target import (
+    EntryTarget,
+    OrganizationTarget,
+    VolunteerTarget,
+    build_volunteer_target,
+)
 from services.api.app.infrastructure.line.identity_verification_adapter import (
     configured_line_identity_verifier,
 )
-from services.api.app.persistence.database.scope import set_platform_support_scope
+from services.api.app.persistence.database.scope import (
+    set_organization_scope,
+    set_platform_support_scope,
+)
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
+)
+from services.api.app.persistence.repositories.organization_repository import (
+    OrganizationRepository,
 )
 from services.api.app.persistence.repositories.volunteer_access_repository import (
     VolunteerAccessRepository,
 )
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter(tags=["Volunteer Applications"])
+router = APIRouter(
+    tags=["Volunteer Applications"],
+    responses={
+        401: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+
+ApplicationStatus = Literal["pending", "approved", "rejected", "withdrawn"]
+EffectiveAccessStatus = Literal[
+    "none",
+    "pending",
+    "upcoming",
+    "active",
+    "expired",
+    "revoked",
+    "rejected",
+    "withdrawn",
+]
+GrantStatus = Literal["active", "expired", "revoked"]
+NextAction = Literal[
+    "apply",
+    "wait",
+    "withdraw",
+    "enter_care",
+    "reapply",
+    "contact_shelter",
+    "return_to_line",
+]
 
 
 def require_volunteer_management(
@@ -58,18 +99,84 @@ def require_volunteer_management(
 
 
 class VolunteerIdentityRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "required": ["organization_id"],
+                    "properties": {
+                        "organization_id": {"type": "string", "format": "uuid"},
+                        "shelter_entry_reference": {"type": "null"},
+                    },
+                },
+                {
+                    "required": ["shelter_entry_reference"],
+                    "properties": {
+                        "organization_id": {"type": "null"},
+                        "shelter_entry_reference": {
+                            "type": "string",
+                            "minLength": 32,
+                            "maxLength": 512,
+                            "pattern": r"^[A-Za-z0-9._~-]+$",
+                        },
+                    },
+                },
+            ]
+        },
+    )
+
+    id_token: str = Field(min_length=1)
+    organization_id: UUID | None = None
+    shelter_entry_reference: str | None = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> VolunteerIdentityRequest:
+        try:
+            build_volunteer_target(
+                organization_id=self.organization_id,
+                shelter_entry_reference=self.shelter_entry_reference,
+            )
+        except DomainError as exc:
+            raise ValueError(exc.code) from exc
+        return self
+
+    @property
+    def target(self) -> VolunteerTarget:
+        return build_volunteer_target(
+            organization_id=self.organization_id,
+            shelter_entry_reference=self.shelter_entry_reference,
+        )
+
+
+class VolunteerEntryIdentityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id_token: str = Field(min_length=1)
-    shelter_entry_reference: str = Field(min_length=1)
+    shelter_entry_reference: str = Field(
+        min_length=32,
+        max_length=512,
+        pattern=r"^[A-Za-z0-9._~-]+$",
+    )
+
+    @model_validator(mode="after")
+    def validate_entry_target(self) -> VolunteerEntryIdentityRequest:
+        try:
+            build_volunteer_target(
+                organization_id=None,
+                shelter_entry_reference=self.shelter_entry_reference,
+            )
+        except DomainError as exc:
+            raise ValueError(exc.code) from exc
+        return self
 
 
-class VolunteerApplicationCreateRequest(VolunteerIdentityRequest):
+class VolunteerApplicationCreateRequest(VolunteerEntryIdentityRequest):
     client_request_id: UUID
     consent_acknowledged: Literal[True]
 
 
-class VolunteerApplicationWithdrawRequest(VolunteerIdentityRequest):
+class VolunteerApplicationWithdrawRequest(VolunteerEntryIdentityRequest):
     expected_version: int = Field(ge=1)
 
 
@@ -81,38 +188,168 @@ class PublicOrganizationResponse(BaseModel):
     applications_enabled: bool
 
 
+class PublicVolunteerOrganizationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    code: str
+    name: str
+    service_area: str | None
+    insurance_required: bool
+
+
 class VolunteerApplicationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     organization_id: UUID
-    display_name: str = "LINE 志工"
-    status: str
+    display_name: str
+    status: ApplicationStatus
     submitted_at: datetime
     decided_at: datetime | None = None
     decision_reason: str | None = None
-    version: int
+    version: int = Field(ge=1)
 
 
 class VolunteerGrantSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    status: str
-    source_type: str
-    policy_version_used: int | None = None
-    duration_hours_used: int | None = None
+    status: GrantStatus
+    source_type: Literal["manager_approval", "legacy_migration"]
+    policy_version_used: int | None = Field(default=None, ge=1)
+    duration_hours_used: int | None = Field(default=None, ge=1)
     valid_from: datetime
     expires_at: datetime
-    version: int
+    version: int = Field(ge=1)
 
 
 class VolunteerApplicationStatusResponse(BaseModel):
     organization: PublicOrganizationResponse
-    application: VolunteerApplicationResponse | None
-    grant: VolunteerGrantSummaryResponse | None
-    effective_status: str
-    next_actions: list[str]
+    application: VolunteerApplicationResponse | None = None
+    grant: VolunteerGrantSummaryResponse | None = None
+    effective_status: EffectiveAccessStatus
+    next_actions: list[NextAction]
+
+
+class VolunteerApplicationListResponse(BaseModel):
+    items: list[VolunteerApplicationResponse]
+    matching_count: int = Field(ge=0)
+    next_cursor: str | None
+
+
+class VolunteerAccessGrant(BaseModel):
+    id: UUID
+    organization_id: UUID
+    user_id: UUID
+    membership_id: UUID
+    application_id: UUID
+    display_name: str
+    status: GrantStatus
+    source_type: Literal["manager_approval", "legacy_migration"]
+    policy_version_used: int | None = Field(default=None, ge=1)
+    duration_hours_used: int | None = Field(default=None, ge=1)
+    valid_from: datetime
+    expires_at: datetime
+    approved_at: datetime
+    revocation_reason: str | None = None
+    version: int = Field(ge=1)
+    notification: VolunteerNotification | None = None
+
+
+class VolunteerAccessGrantListResponse(BaseModel):
+    items: list[VolunteerAccessGrant]
+    next_cursor: str | None
+
+
+BatchStatus = Literal["queued", "processing", "completed", "completed_with_errors"]
+BatchItemResult = Literal["pending", "succeeded", "conflict", "failed"]
+
+
+class VolunteerDecisionBatchResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    operation_id: UUID
+    decision: Literal["approve", "reject"]
+    selection_mode: Literal["explicit_items", "all_filtered"]
+    snapshot_at: datetime
+    policy_version_used: int | None = Field(default=None, ge=1)
+    default_duration_hours_used: int | None = Field(default=None, ge=1)
+    status: BatchStatus
+    requested_count: int = Field(ge=1)
+    processed_count: int = Field(ge=0)
+    succeeded_count: int = Field(ge=0)
+    conflict_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    chunk_size: Literal[500]
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class VolunteerDecisionItemResponse(BaseModel):
+    application_id: UUID
+    result: BatchItemResult
+    error_code: str | None = None
+    resulting_application_version: int | None = Field(default=None, ge=1)
+    membership_id: UUID | None = None
+    grant_id: UUID | None = None
+    grant: VolunteerGrantSummaryResponse | None = None
+
+
+class VolunteerDecisionBatchItemListResponse(BaseModel):
+    items: list[VolunteerDecisionItemResponse]
+    next_cursor: str | None
+
+
+NotificationStatus = Literal["pending", "sending", "retry_wait", "sent", "failed"]
+NotificationFailureStatus = Literal["retry_wait", "failed"]
+NotificationEventType = Literal[
+    "application_submitted",
+    "application_withdrawn",
+    "approved",
+    "rejected",
+    "grant_changed",
+    "expired",
+    "revoked",
+]
+
+
+class VolunteerNotification(BaseModel):
+    id: UUID
+    organization_id: UUID
+    recipient_display_name: str
+    event_type: NotificationEventType
+    resource_type: Literal["volunteer_application", "volunteer_access_grant"]
+    resource_id: UUID
+    status: NotificationStatus
+    attempt_count: int = Field(ge=0)
+    last_error_code: str | None = None
+    last_failed_at: datetime | None = None
+    updated_at: datetime
+
+
+VolunteerAccessGrant.model_rebuild()
+
+
+class VolunteerNotificationListResponse(BaseModel):
+    items: list[VolunteerNotification]
+    next_cursor: str | None
+
+
+class VolunteerNotificationRetryItem(BaseModel):
+    notification_id: UUID
+    result: Literal["requeued", "conflict", "failed"]
+    error_code: str | None = None
+
+
+class VolunteerNotificationRetryResponse(BaseModel):
+    id: UUID
+    operation_id: UUID
+    requested_count: int = Field(ge=1)
+    requeued_count: int = Field(ge=0)
+    conflict_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    items: list[VolunteerNotificationRetryItem]
 
 
 class VolunteerAccessPolicyResponse(BaseModel):
@@ -120,17 +357,27 @@ class VolunteerAccessPolicyResponse(BaseModel):
 
     organization_id: UUID
     applications_enabled: bool
-    default_grant_duration_hours: int
-    version: int
+    default_grant_duration_hours: int = Field(ge=1)
+    version: int = Field(ge=1)
 
 
 class VolunteerAccessPolicyUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"minProperties": 2})
+
     expected_version: int = Field(ge=1)
-    applications_enabled: bool | None = None
-    default_grant_duration_hours: int | None = Field(default=None, ge=1)
+    applications_enabled: bool = Field(default=None)
+    default_grant_duration_hours: int = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_update_fields(self) -> VolunteerAccessPolicyUpdateRequest:
+        if not {"applications_enabled", "default_grant_duration_hours"} & self.model_fields_set:
+            raise ValueError("at least one policy field is required")
+        return self
 
 
 class VolunteerDecisionItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     application_id: UUID
     expected_version: int = Field(ge=1)
     valid_from: datetime | None = None
@@ -138,29 +385,56 @@ class VolunteerDecisionItemRequest(BaseModel):
 
 
 class ExplicitVolunteerDecisionSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     mode: Literal["explicit_items"]
-    items: list[VolunteerDecisionItemRequest] = Field(min_length=1, max_length=500)
+    items: list[VolunteerDecisionItemRequest] = Field(
+        min_length=1, max_length=500, json_schema_extra={"uniqueItems": True}
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_items(self) -> ExplicitVolunteerDecisionSelection:
+        if len({item.application_id for item in self.items}) != len(self.items):
+            raise ValueError("duplicate application_id")
+        return self
 
 
 class VolunteerApplicationBatchFilter(BaseModel):
-    status: Literal["pending"] = "pending"
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["pending"]
     submitted_from: datetime | None = None
     submitted_to: datetime | None = None
 
 
 class AllFilteredVolunteerDecisionSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     mode: Literal["all_filtered"]
     filter: VolunteerApplicationBatchFilter
-    overrides: list[VolunteerDecisionItemRequest] = Field(default_factory=list, max_length=500)
+    overrides: list[VolunteerDecisionItemRequest] = Field(
+        default_factory=list, max_length=500, json_schema_extra={"uniqueItems": True}
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_overrides(self) -> AllFilteredVolunteerDecisionSelection:
+        if len({item.application_id for item in self.overrides}) != len(self.overrides):
+            raise ValueError("duplicate application_id")
+        return self
 
 
 class VolunteerDecisionBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     operation_id: UUID
     decision: Literal["approve", "reject"]
-    reason: str | None = Field(default=None, max_length=500)
+    reason: str | None = Field(default=None, min_length=1, max_length=500)
     default_valid_from: datetime | None = None
     default_expires_at: datetime | None = None
-    selection: ExplicitVolunteerDecisionSelection | AllFilteredVolunteerDecisionSelection
+    selection: Annotated[
+        ExplicitVolunteerDecisionSelection | AllFilteredVolunteerDecisionSelection,
+        Field(discriminator="mode"),
+    ]
 
 
 class GrantPeriodUpdateRequest(BaseModel):
@@ -186,7 +460,15 @@ class VolunteerNotificationRetryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation_id: UUID
-    notification_ids: list[UUID] = Field(min_length=1, max_length=500)
+    notification_ids: list[UUID] = Field(
+        min_length=1, max_length=500, json_schema_extra={"uniqueItems": True}
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_notification_ids(self) -> VolunteerNotificationRetryRequest:
+        if len(set(self.notification_ids)) != len(self.notification_ids):
+            raise ValueError("duplicate notification_id")
+        return self
 
 
 @asynccontextmanager
@@ -254,11 +536,48 @@ async def _service_for_entry(
     )
 
 
+async def _service_for_target(
+    session: AsyncSession,
+    payload: VolunteerIdentityRequest,
+    verifier: LineIdentityVerifierPort,
+    verified_line_user_id: str | None = None,
+) -> tuple[VolunteerAccessService, UUID | None, str | None]:
+    verified_line_user_id = (
+        verified_line_user_id
+        if verified_line_user_id is not None
+        else await verifier.verify(payload.id_token)
+    )
+    target = payload.target
+    if isinstance(target, OrganizationTarget):
+        await set_organization_scope(session, target.organization_id)
+        repository = VolunteerAccessRepository(session, target.organization_id)
+        service = await VolunteerAccessService.for_organization_status(
+            target.organization_id,
+            repository,
+            AuthenticationRepository(session),
+            verifier,
+            audit=AuditService(session),
+            notifications=VolunteerNotificationService(repository),
+        )
+        return service, None, verified_line_user_id
+    assert isinstance(target, EntryTarget)
+    service, reference_id = await _service_for_entry(
+        session, target.shelter_entry_reference, verifier
+    )
+    return service, reference_id, verified_line_user_id
+
+
+def _legacy_entry_reference(payload: VolunteerEntryIdentityRequest) -> str:
+    return payload.shelter_entry_reference
+
+
 def _response(result: VolunteerStatusResult) -> VolunteerApplicationStatusResponse:
     return VolunteerApplicationStatusResponse.model_validate(
         {
             "organization": result.organization,
-            "application": result.application,
+            "application": None
+            if result.application is None
+            else _application_dict(result.application),
             "grant": result.grant,
             "effective_status": result.effective_status,
             "next_actions": result.next_actions,
@@ -269,22 +588,46 @@ def _response(result: VolunteerStatusResult) -> VolunteerApplicationStatusRespon
 @router.post(
     "/v1/volunteer-applications/status",
     response_model=VolunteerApplicationStatusResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": []},
 )
 async def resolve_volunteer_application_status(
     payload: VolunteerIdentityRequest,
     session: AsyncSession = Depends(request_session),  # noqa: B008
     verifier: LineIdentityVerifierPort = Depends(get_line_identity_verifier),  # noqa: B008
 ) -> VolunteerApplicationStatusResponse:
-    service, reference_id = await _service_for_entry(
-        session, payload.shelter_entry_reference, verifier
-    )
-    result = await service.status(id_token=payload.id_token, entry_reference_id=reference_id)
+    try:
+        verified_line_user_id = await verifier.verify(payload.id_token)
+        service, target_id, verified_line_user_id = await _service_for_target(
+            session, payload, verifier, verified_line_user_id
+        )
+        result = await service.status(
+            id_token=payload.id_token,
+            entry_reference_id=target_id,
+            verified_line_user_id=verified_line_user_id,
+        )
+    except SQLAlchemyError as exc:
+        raise DomainError("dependency_unavailable", "志工申請狀態暫時無法使用", 503) from exc
     return _response(result)
 
 
 @router.post(
     "/v1/volunteer-applications",
     response_model=VolunteerApplicationStatusResponse,
+    responses={
+        201: {"model": VolunteerApplicationStatusResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": []},
 )
 async def submit_volunteer_application(
     payload: VolunteerApplicationCreateRequest,
@@ -292,23 +635,36 @@ async def submit_volunteer_application(
     session: AsyncSession = Depends(request_session),  # noqa: B008
     verifier: LineIdentityVerifierPort = Depends(get_line_identity_verifier),  # noqa: B008
 ) -> VolunteerApplicationStatusResponse:
-    service, reference_id = await _service_for_entry(
-        session, payload.shelter_entry_reference, verifier
-    )
-    result = await service.submit(
-        id_token=payload.id_token,
-        entry_reference_id=reference_id,
-        client_request_id=payload.client_request_id,
-        consent_acknowledged=payload.consent_acknowledged,
-    )
-    await session.commit()
+    try:
+        verified_line_user_id = await verifier.verify(payload.id_token)
+        entry_reference = _legacy_entry_reference(payload)
+        service, reference_id = await _service_for_entry(session, entry_reference, verifier)
+        result = await service.submit(
+            id_token=payload.id_token,
+            entry_reference_id=reference_id,
+            verified_line_user_id=verified_line_user_id,
+            client_request_id=payload.client_request_id,
+            consent_acknowledged=payload.consent_acknowledged,
+        )
+        response_body = _response(result.status)
+        await session.commit()
+    except SQLAlchemyError as exc:
+        raise DomainError("dependency_unavailable", "志工申請暫時無法使用", 503) from exc
     response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
-    return _response(result.status)
+    return response_body
 
 
 @router.post(
     "/v1/volunteer-applications/{applicationId}/withdraw",
     response_model=VolunteerApplicationStatusResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": []},
 )
 async def withdraw_volunteer_application(
     applicationId: UUID,  # noqa: N803
@@ -316,17 +672,51 @@ async def withdraw_volunteer_application(
     session: AsyncSession = Depends(request_session),  # noqa: B008
     verifier: LineIdentityVerifierPort = Depends(get_line_identity_verifier),  # noqa: B008
 ) -> VolunteerApplicationStatusResponse:
-    service, reference_id = await _service_for_entry(
-        session, payload.shelter_entry_reference, verifier
-    )
-    result = await service.withdraw(
-        id_token=payload.id_token,
-        entry_reference_id=reference_id,
-        application_id=applicationId,
-        expected_version=payload.expected_version,
-    )
-    await session.commit()
-    return _response(result)
+    try:
+        verified_line_user_id = await verifier.verify(payload.id_token)
+        entry_reference = _legacy_entry_reference(payload)
+        service, reference_id = await _service_for_entry(session, entry_reference, verifier)
+        result = await service.withdraw(
+            id_token=payload.id_token,
+            entry_reference_id=reference_id,
+            verified_line_user_id=verified_line_user_id,
+            application_id=applicationId,
+            expected_version=payload.expected_version,
+        )
+        response_body = _response(result)
+        await session.commit()
+    except SQLAlchemyError as exc:
+        raise DomainError("dependency_unavailable", "志工申請暫時無法使用", 503) from exc
+    return response_body
+
+
+@router.get(
+    "/v1/public/volunteer-organizations",
+    response_model=list[PublicVolunteerOrganizationResponse],
+    responses={503: {"model": ErrorResponse}},
+    openapi_extra={"security": []},
+)
+async def list_public_volunteer_organizations(
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> list[PublicVolunteerOrganizationResponse]:
+    try:
+        rows = await OrganizationRepository(session).list_public_volunteer_organizations()
+    except SQLAlchemyError as exc:
+        raise DomainError(
+            "dependency_unavailable",
+            "公開收容所清單暫時無法使用",
+            503,
+        ) from exc
+    return [
+        PublicVolunteerOrganizationResponse(
+            id=organization_id,
+            code=code,
+            name=name,
+            service_area=service_area,
+            insurance_required=insurance_required,
+        )
+        for organization_id, code, name, service_area, insurance_required in rows
+    ]
 
 
 def _management_service(
@@ -418,6 +808,8 @@ def _batch_dict(batch) -> dict:
         "decision": batch.decision,
         "selection_mode": batch.selection_mode,
         "snapshot_at": batch.snapshot_at,
+        "policy_version_used": batch.policy_version_used,
+        "default_duration_hours_used": batch.default_duration_hours_used,
         "status": batch.status,
         "requested_count": batch.requested_count,
         "processed_count": batch.processed_count,
@@ -433,6 +825,11 @@ def _batch_dict(batch) -> dict:
 @router.get(
     "/v1/organizations/{organizationId}/volunteer-access-policy",
     response_model=VolunteerAccessPolicyResponse,
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
 )
 async def get_volunteer_access_policy(
     organizationId: UUID,  # noqa: N803
@@ -455,6 +852,12 @@ async def get_volunteer_access_policy(
 @router.patch(
     "/v1/organizations/{organizationId}/volunteer-access-policy",
     response_model=VolunteerAccessPolicyResponse,
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
 )
 async def update_volunteer_access_policy(
     organizationId: UUID,  # noqa: N803
@@ -477,14 +880,20 @@ async def update_volunteer_access_policy(
             applications_enabled=payload.applications_enabled,
             default_grant_duration_hours=payload.default_grant_duration_hours,
         )
+    response_body = _policy_response(policy)
     await session.commit()
-    return _policy_response(policy)
+    return response_body
 
 
-@router.get("/v1/organizations/{organizationId}/volunteer-applications")
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-applications",
+    response_model=VolunteerApplicationListResponse,
+    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def list_volunteer_applications(
     organizationId: UUID,  # noqa: N803
-    application_status: str | None = Query(default=None, alias="status"),
+    application_status: ApplicationStatus | None = Query(default=None, alias="status"),  # noqa: B008
     submitted_from: datetime | None = None,
     submitted_to: datetime | None = None,
     cursor: str | None = None,
@@ -523,10 +932,15 @@ async def list_volunteer_applications(
     }
 
 
-@router.get("/v1/organizations/{organizationId}/volunteer-access-grants")
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-access-grants",
+    response_model=VolunteerAccessGrantListResponse,
+    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def list_volunteer_access_grants(
     organizationId: UUID,  # noqa: N803
-    grant_status: str | None = Query(default=None, alias="status"),
+    grant_status: GrantStatus | None = Query(default=None, alias="status"),  # noqa: B008
     cursor: str | None = None,
     limit: int = Query(default=100, ge=1, le=200),
     context: RequestContext = Depends(current_request_context),  # noqa: B008
@@ -564,11 +978,24 @@ async def list_volunteer_access_grants(
     }
 
 
-@router.patch("/v1/organizations/{organizationId}/volunteer-access-grants/{grantId}")
+@router.patch(
+    "/v1/organizations/{organizationId}/volunteer-access-grants/{grantId}",
+    response_model=VolunteerAccessGrant,
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def update_volunteer_access_grant(
     organizationId: UUID,  # noqa: N803
     grantId: UUID,  # noqa: N803
-    payload: GrantPeriodUpdateRequest | GrantRevokeRequest,
+    payload: Annotated[
+        GrantPeriodUpdateRequest | GrantRevokeRequest,
+        Field(discriminator="action"),
+    ],
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
     support_reason: str | None = Header(default=None, alias="X-Platform-Support-Reason"),
@@ -590,15 +1017,23 @@ async def update_volunteer_access_grant(
             **arguments,
         )
         user = await AuthenticationRepository(session).get_user(grant.user_id)
+    response_body = VolunteerAccessGrant.model_validate(
+        _grant_dict(grant, display_name="LINE 志工" if user is None else user.display_name)
+    )
     await session.commit()
-    return _grant_dict(grant, display_name="LINE 志工" if user is None else user.display_name)
+    return response_body
 
 
-@router.get("/v1/organizations/{organizationId}/volunteer-notifications")
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-notifications",
+    response_model=VolunteerNotificationListResponse,
+    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def list_volunteer_notification_failures(
     organizationId: UUID,  # noqa: N803
-    event_type: str | None = None,
-    notification_status: str | None = Query(default=None, alias="status"),
+    event_type: NotificationEventType | None = None,
+    notification_status: NotificationFailureStatus | None = Query(default=None, alias="status"),  # noqa: B008
     failed_from: datetime | None = None,
     failed_to: datetime | None = None,
     cursor: str | None = None,
@@ -643,16 +1078,31 @@ async def list_volunteer_notification_failures(
                     "updated_at": delivery.updated_at,
                 }
             )
+    response_body = VolunteerNotificationListResponse.model_validate(
+        {
+            "items": items,
+            "next_cursor": (
+                _encode_notification_cursor(page_deliveries[-1])
+                if len(deliveries) > limit
+                else None
+            ),
+        }
+    )
     await session.commit()
-    return {
-        "items": items,
-        "next_cursor": (
-            _encode_notification_cursor(page_deliveries[-1]) if len(deliveries) > limit else None
-        ),
-    }
+    return response_body
 
 
-@router.post("/v1/organizations/{organizationId}/volunteer-notifications/retry")
+@router.post(
+    "/v1/organizations/{organizationId}/volunteer-notifications/retry",
+    response_model=VolunteerNotificationRetryResponse,
+    responses={
+        202: {"model": VolunteerNotificationRetryResponse},
+        403: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def retry_volunteer_notifications(
     organizationId: UUID,  # noqa: N803
     payload: VolunteerNotificationRetryRequest,
@@ -676,27 +1126,40 @@ async def retry_volunteer_notifications(
             actor_user_id=context.user_id,
             platform_support_reason=normalized_support_reason,
         )
+    response_body = VolunteerNotificationRetryResponse.model_validate(
+        {
+            "id": batch.id,
+            "operation_id": batch.operation_id,
+            "requested_count": batch.requested_count,
+            "requeued_count": batch.requeued_count,
+            "conflict_count": batch.conflict_count,
+            "failed_count": sum(item.result == "failed" for item in items),
+            "items": [
+                {
+                    "notification_id": item.notification_delivery_id,
+                    "result": item.result,
+                    "error_code": item.error_code,
+                }
+                for item in items
+            ],
+        }
+    )
     await session.commit()
     response.status_code = status.HTTP_200_OK if existing is not None else status.HTTP_202_ACCEPTED
-    return {
-        "id": batch.id,
-        "operation_id": batch.operation_id,
-        "requested_count": batch.requested_count,
-        "requeued_count": batch.requeued_count,
-        "conflict_count": batch.conflict_count,
-        "failed_count": sum(item.result == "failed" for item in items),
-        "items": [
-            {
-                "notification_id": item.notification_delivery_id,
-                "result": item.result,
-                "error_code": item.error_code,
-            }
-            for item in items
-        ],
-    }
+    return response_body
 
 
-@router.post("/v1/organizations/{organizationId}/volunteer-decision-batches")
+@router.post(
+    "/v1/organizations/{organizationId}/volunteer-decision-batches",
+    response_model=VolunteerDecisionBatchResponse,
+    responses={
+        201: {"model": VolunteerDecisionBatchResponse},
+        403: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def create_volunteer_decision_batch(
     organizationId: UUID,  # noqa: N803
     payload: VolunteerDecisionBatchRequest,
@@ -743,12 +1206,18 @@ async def create_volunteer_decision_batch(
             if override is not None:
                 item.override_valid_from = override.valid_from
                 item.override_expires_at = override.expires_at
+    response_body = VolunteerDecisionBatchResponse.model_validate(_batch_dict(batch))
     await session.commit()
     response.status_code = status.HTTP_200_OK if existing is not None else status.HTTP_201_CREATED
-    return _batch_dict(batch)
+    return response_body
 
 
-@router.get("/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}")
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}",
+    response_model=VolunteerDecisionBatchResponse,
+    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def get_volunteer_decision_batch(
     organizationId: UUID,  # noqa: N803
     batchId: UUID,  # noqa: N803
@@ -770,12 +1239,17 @@ async def get_volunteer_decision_batch(
     return _batch_dict(batch)
 
 
-@router.get("/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}/items")
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}/items",
+    response_model=VolunteerDecisionBatchItemListResponse,
+    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
 async def list_volunteer_decision_batch_items(
     organizationId: UUID,  # noqa: N803
     batchId: UUID,  # noqa: N803
-    item_result: str | None = Query(default=None, alias="result"),
-    cursor: UUID | None = None,
+    item_result: BatchItemResult | None = Query(default=None, alias="result"),  # noqa: B008
+    cursor: str = Query(default=None),  # noqa: B008
     limit: int = Query(default=100, ge=1, le=200),
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008

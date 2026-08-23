@@ -5,6 +5,7 @@ import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.infrastructure.line.identity_verification_adapter import (
     LineIdentityVerifier,
+    MockLineIdentityVerifier,
 )
 
 
@@ -85,3 +86,13 @@ async def test_line_verifier_maps_provider_rejection_without_exposing_token() ->
     assert error.value.code == "invalid_line_id_token"
     assert "sensitive-raw-token" not in str(error.value)
     await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token", ["", "not-a-local-token", "local-id-token:"])
+async def test_mock_line_verifier_maps_invalid_tokens_to_401(token: str) -> None:
+    with pytest.raises(DomainError) as error:
+        await MockLineIdentityVerifier().verify(token)
+
+    assert error.value.code == "invalid_line_id_token"
+    assert error.value.status_code == 401

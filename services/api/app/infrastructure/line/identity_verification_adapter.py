@@ -12,10 +12,10 @@ class MockLineIdentityVerifier:
 
     async def verify(self, token: str) -> str:
         if not token or not token.startswith(self.prefix):
-            raise ValueError("local LINE identity token is invalid")
+            raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401)
         subject = token.removeprefix(self.prefix)
         if not subject:
-            raise ValueError("local LINE identity token has no subject")
+            raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401)
         return subject if subject.startswith("U") else f"U{subject}"
 
 

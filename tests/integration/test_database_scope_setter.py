@@ -5,8 +5,12 @@ import asyncpg
 import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.persistence.database.scope import (
+    set_authentication_user_organization_scope,
+    set_authentication_user_scope,
     set_organization_scope,
     set_platform_scope,
+    set_platform_support_scope,
+    set_public_volunteer_directory_scope,
 )
 
 
@@ -41,6 +45,35 @@ async def test_scope_setter_rejects_non_uuid_and_untrusted_platform_toggle() -> 
     with pytest.raises(DomainError, match="不得關閉受控平台範圍"):
         await set_platform_scope(session, enabled=False)
     assert session.statements == []
+
+
+@pytest.mark.asyncio
+async def test_generic_scope_setters_clear_public_directory_capability_in_same_transaction() -> (
+    None
+):
+    organization_id = uuid4()
+    user_id = uuid4()
+
+    for setter in (
+        lambda session: set_organization_scope(session, organization_id),
+        lambda session: set_platform_scope(session),
+        lambda session: set_platform_support_scope(session, organization_id),
+        lambda session: set_authentication_user_scope(session, user_id),
+        lambda session: set_authentication_user_organization_scope(
+            session, user_id, organization_id
+        ),
+    ):
+        session = RecordingSession()
+        await set_public_volunteer_directory_scope(session)
+        await setter(session)
+        public_statements = [
+            statement
+            for statement, _parameters in session.statements
+            if "app.public_volunteer_directory" in statement
+        ]
+        assert public_statements[-1] == (
+            "SELECT set_config('app.public_volunteer_directory', 'false', true)"
+        )
 
 
 def _database_url() -> str:

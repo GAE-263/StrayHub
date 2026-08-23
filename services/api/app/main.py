@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
+from sqlalchemy.exc import SQLAlchemyError
 
 from services.api.app.api.ai_observations import router as ai_observations_router
 from services.api.app.api.animal_selection import router as animal_selection_router
@@ -9,7 +12,12 @@ from services.api.app.api.authentication import router as authentication_router
 from services.api.app.api.care_reminders import router as care_reminders_router
 from services.api.app.api.care_reports import router as care_reports_router
 from services.api.app.api.dashboard import router as dashboard_router
-from services.api.app.api.errors import DomainError, domain_error_handler
+from services.api.app.api.errors import (
+    DomainError,
+    domain_error_handler,
+    request_validation_error_handler,
+    sqlalchemy_error_handler,
+)
 from services.api.app.api.line_binding import router as line_binding_router
 from services.api.app.api.line_drafts import router as line_drafts_router
 from services.api.app.api.line_webhook import router as line_webhook_router
@@ -27,7 +35,39 @@ from services.api.app.api.reportable_scope import router as reportable_scope_rou
 from services.api.app.api.volunteer_access import router as volunteer_access_router
 
 app = FastAPI(title="StrayHub CRM Care Report API", version="0.1.0")
+
+
+def _custom_openapi() -> dict:
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+    )
+    schema.setdefault("components", {}).setdefault("securitySchemes", {})["bearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": (
+            "RS256 簽署的短效 Access Token；"
+            "每次受保護 Request 仍必須通過 Server-side Session 與 Organization Scope 驗證。"
+        ),
+    }
+    schema["security"] = [{"bearerAuth": []}]
+    schema.setdefault("paths", {}).get("/healthz", {}).get("get", {})["security"] = []
+    public_directory = (
+        schema.setdefault("paths", {}).get("/v1/public/volunteer-organizations", {}).get("get", {})
+    )
+    public_directory["responses"].pop("401", None)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _custom_openapi
 app.add_exception_handler(DomainError, domain_error_handler)
+app.add_exception_handler(RequestValidationError, request_validation_error_handler)
+app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
 app.include_router(authentication_router)
 app.include_router(dashboard_router)
 app.include_router(management_animals_router)
@@ -52,6 +92,6 @@ app.include_router(care_reminders_router)
 app.include_router(assigned_care_router)
 
 
-@app.get("/healthz", tags=["Health"])
+@app.get("/healthz", tags=["Health"], openapi_extra={"security": []})
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}

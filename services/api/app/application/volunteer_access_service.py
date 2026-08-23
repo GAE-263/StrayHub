@@ -109,6 +109,85 @@ class VolunteerAccessService:
         self.audit = audit
         self.notifications = notifications
 
+    @classmethod
+    async def for_organization(
+        cls,
+        organization_id: UUID,
+        repository: VolunteerAccessRepository,
+        identities: AuthenticationRepository,
+        verifier: LineIdentityVerifierPort,
+        *,
+        audit: AuditService | None = None,
+        notifications: VolunteerNotificationService | None = None,
+    ) -> VolunteerAccessService:
+        """Resolve and validate one organization-scoped volunteer service.
+
+        The organization ID selects the target, but the database remains the
+        source of truth for its active state and display data.  The repository
+        is checked before any lookup so a service can never be built around a
+        repository scoped to a different tenant.
+        """
+        if (
+            not isinstance(organization_id, UUID)
+            or getattr(repository, "organization_id", None) != organization_id
+        ):
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
+
+        organization = await identities.get_organization(organization_id)
+        if organization is None or organization.status != "active":
+            raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
+
+        policy = await repository.policy()
+        if not policy.applications_enabled:
+            raise DomainError(
+                "volunteer_applications_disabled",
+                "此收容所目前暫停接受新申請",
+                403,
+            )
+
+        return cls(
+            repository,
+            identities,
+            verifier,
+            audit=audit,
+            notifications=notifications,
+        )
+
+    @classmethod
+    async def for_organization_status(
+        cls,
+        organization_id: UUID,
+        repository: VolunteerAccessRepository,
+        identities: AuthenticationRepository,
+        verifier: LineIdentityVerifierPort,
+        *,
+        audit: AuditService | None = None,
+        notifications: VolunteerNotificationService | None = None,
+    ) -> VolunteerAccessService:
+        """Build an organization-scoped service for status reads only.
+
+        Status remains readable for an active organization when its policy
+        disables new applications.  The submit factory above intentionally
+        keeps the applications-enabled gate.
+        """
+        if (
+            not isinstance(organization_id, UUID)
+            or getattr(repository, "organization_id", None) != organization_id
+        ):
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
+
+        organization = await identities.get_organization(organization_id)
+        if organization is None or organization.status != "active":
+            raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
+        await repository.policy()
+        return cls(
+            repository,
+            identities,
+            verifier,
+            audit=audit,
+            notifications=notifications,
+        )
+
     @staticmethod
     def validate_entry_reference(raw_reference: str) -> str:
         normalized = raw_reference.strip()
@@ -150,11 +229,20 @@ class VolunteerAccessService:
         return VolunteerStatusResult(organization, application, grant, status, next_actions)
 
     async def status(
-        self, *, id_token: str, entry_reference_id: UUID, now: datetime | None = None
+        self,
+        *,
+        id_token: str,
+        entry_reference_id: UUID | None,
+        verified_line_user_id: str | None = None,
+        now: datetime | None = None,
     ) -> VolunteerStatusResult:
-        if not isinstance(entry_reference_id, UUID):
+        if entry_reference_id is not None and not isinstance(entry_reference_id, UUID):
             raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
-        line_user_id = await self.verifier.verify(id_token)
+        line_user_id = (
+            verified_line_user_id
+            if verified_line_user_id is not None
+            else await self.verifier.verify(id_token)
+        )
         organization = await self._public_organization()
         binding = await self.identities.get_line_binding(line_user_id)
         return await self._status_for_user(
@@ -166,13 +254,18 @@ class VolunteerAccessService:
         *,
         id_token: str,
         entry_reference_id: UUID,
+        verified_line_user_id: str | None = None,
         client_request_id: UUID,
         consent_acknowledged: bool,
         now: datetime | None = None,
     ) -> VolunteerSubmitResult:
         if not consent_acknowledged:
             raise DomainError("consent_required", "請先確認志工報名同意事項", 422)
-        line_user_id = await self.verifier.verify(id_token)
+        line_user_id = (
+            verified_line_user_id
+            if verified_line_user_id is not None
+            else await self.verifier.verify(id_token)
+        )
         organization = await self._public_organization()
         binding = await self.identities.get_line_binding(line_user_id)
         user_id = None if binding is None else binding.user_id
@@ -248,11 +341,16 @@ class VolunteerAccessService:
         *,
         id_token: str,
         entry_reference_id: UUID,
+        verified_line_user_id: str | None = None,
         application_id: UUID,
         expected_version: int,
         now: datetime | None = None,
     ) -> VolunteerStatusResult:
-        line_user_id = await self.verifier.verify(id_token)
+        line_user_id = (
+            verified_line_user_id
+            if verified_line_user_id is not None
+            else await self.verifier.verify(id_token)
+        )
         organization = await self._public_organization()
         binding = await self.identities.get_line_binding(line_user_id)
         if binding is None:

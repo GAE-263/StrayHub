@@ -1,7 +1,12 @@
+import asyncio
 from pathlib import Path
 
+import pytest
 import yaml
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
+from services.api.app.api.errors import request_validation_error_handler
 from services.api.app.api.volunteer_access import (
     GrantPeriodUpdateRequest,
     GrantRevokeRequest,
@@ -11,6 +16,8 @@ from services.api.app.api.volunteer_access import (
     VolunteerNotificationRetryRequest,
     router,
 )
+from services.api.app.main import app
+from sqlalchemy.exc import SQLAlchemyError
 
 
 def test_application_contract_declares_status_submit_withdraw_and_safe_errors() -> None:
@@ -18,13 +25,67 @@ def test_application_contract_declares_status_submit_withdraw_and_safe_errors() 
         Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
     )
     paths = document["paths"]
-    assert paths["/v1/volunteer-applications/status"]["post"]["operationId"] == (
-        "resolveVolunteerApplicationStatus"
-    )
+    status = paths["/v1/volunteer-applications/status"]["post"]
+    assert status["operationId"] == ("resolveVolunteerApplicationStatus")
+    assert status["security"] == []
+    assert "401" in status["responses"]
     submit = paths["/v1/volunteer-applications"]["post"]
-    assert {"200", "201", "403", "409", "422", "503"} <= submit["responses"].keys()
+    assert submit["security"] == []
+    assert {"200", "201", "401", "403", "409", "422", "503"} <= submit["responses"].keys()
     withdraw = paths["/v1/volunteer-applications/{applicationId}/withdraw"]["post"]
-    assert {"200", "404", "409", "422"} <= withdraw["responses"].keys()
+    assert withdraw["security"] == []
+    assert {"200", "401", "404", "409", "422", "503"} <= withdraw["responses"].keys()
+    assert paths["/v1/public/volunteer-organizations"]["get"]["security"] == []
+    assert paths["/v1/volunteer-applications"]["post"]["responses"]["422"]["description"] == (
+        "Validation error; organization targets are not supported by this mutation contract"
+    )
+    assert paths["/v1/volunteer-applications/{applicationId}/withdraw"]["post"]["responses"]["422"][
+        "description"
+    ] == ("Validation error; organization targets are not supported by this mutation contract")
+
+
+def test_app_normalizes_database_failures_to_dependency_unavailable() -> None:
+    assert SQLAlchemyError in app.exception_handlers
+
+
+def test_app_sanitizes_request_validation_errors() -> None:
+    assert app.exception_handlers[RequestValidationError] is request_validation_error_handler
+
+
+@pytest.mark.asyncio
+async def test_validation_error_response_does_not_echo_sensitive_target_values() -> None:
+    raw_token = "raw-line-id-token-must-not-echo"
+    raw_reference = "raw-entry-reference-must-not-echo"
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/volunteer-applications/status",
+            "headers": [],
+        }
+    )
+
+    response = await request_validation_error_handler(request, RequestValidationError([]))
+
+    assert response.status_code == 422
+    assert raw_token not in response.body.decode()
+    assert raw_reference not in response.body.decode()
+
+
+def test_validation_error_response_does_not_reflect_caller_request_id() -> None:
+    raw_request_id = "caller-secret-must-not-echo"
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/volunteer-applications/status",
+            "headers": [(b"x-request-id", raw_request_id.encode())],
+        }
+    )
+
+    response = asyncio.run(request_validation_error_handler(request, RequestValidationError([])))
+
+    assert raw_request_id not in response.body.decode()
 
 
 def test_application_router_and_payloads_match_canonical_contract() -> None:
@@ -39,10 +100,247 @@ def test_application_router_and_payloads_match_canonical_contract() -> None:
     assert ("/v1/volunteer-applications/{applicationId}/withdraw", "POST") in routes
     assert set(VolunteerIdentityRequest.model_fields) == {
         "id_token",
+        "organization_id",
         "shelter_entry_reference",
+    }
+    assert VolunteerIdentityRequest.model_fields["organization_id"].default is None
+    assert VolunteerIdentityRequest.model_fields["shelter_entry_reference"].default is None
+    assert set(VolunteerApplicationCreateRequest.model_fields) == {
+        "id_token",
+        "shelter_entry_reference",
+        "client_request_id",
+        "consent_acknowledged",
+    }
+    assert set(VolunteerApplicationWithdrawRequest.model_fields) == {
+        "id_token",
+        "shelter_entry_reference",
+        "expected_version",
     }
     assert VolunteerApplicationCreateRequest.model_fields["consent_acknowledged"].is_required()
     assert VolunteerApplicationWithdrawRequest.model_fields["expected_version"].is_required()
+
+
+def test_public_volunteer_organization_directory_and_identity_schema_are_canonical() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    paths = document["paths"]
+    assert paths["/v1/public/volunteer-organizations"]["get"]["operationId"] == (
+        "listPublicVolunteerOrganizations"
+    )
+    schemas = document["components"]["schemas"]
+    identity = schemas["VolunteerIdentityRequest"]
+    assert identity["required"] == ["id_token"]
+    assert identity["additionalProperties"] is False
+    assert len(identity["oneOf"]) == 2
+    assert {tuple(branch["required"]) for branch in identity["oneOf"]} == {
+        ("organization_id",),
+        ("shelter_entry_reference",),
+    }
+    public = schemas["PublicVolunteerOrganization"]
+    assert public["required"] == ["id", "code", "name", "service_area", "insurance_required"]
+    assert public["additionalProperties"] is False
+    assert set(public["properties"]) == {
+        "id",
+        "code",
+        "name",
+        "service_area",
+        "insurance_required",
+    }
+
+
+def test_entry_reference_contract_matches_runtime_target_constraints() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    schemas = document["components"]["schemas"]
+    for schema_name in (
+        "VolunteerIdentityRequest",
+        "VolunteerApplicationCreateRequest",
+        "VolunteerApplicationWithdrawRequest",
+    ):
+        reference = schemas[schema_name]["properties"]["shelter_entry_reference"]
+        assert reference["minLength"] == 32
+        assert reference["maxLength"] == 512
+        assert reference["pattern"] == r"^[A-Za-z0-9._~-]+$"
+
+
+def test_mutation_request_contracts_are_entry_only_until_organization_mutations_exist() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    schemas = document["components"]["schemas"]
+    for schema_name, expected_required in (
+        (
+            "VolunteerApplicationCreateRequest",
+            ["id_token", "shelter_entry_reference", "client_request_id", "consent_acknowledged"],
+        ),
+        (
+            "VolunteerApplicationWithdrawRequest",
+            ["id_token", "shelter_entry_reference", "expected_version"],
+        ),
+    ):
+        schema = schemas[schema_name]
+        assert schema["required"] == expected_required
+        assert "organization_id" not in schema["properties"]
+        assert "oneOf" not in schema
+
+
+def test_runtime_openapi_mutation_schemas_are_entry_only() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    for schema_name in ("VolunteerApplicationCreateRequest", "VolunteerApplicationWithdrawRequest"):
+        schema = schemas[schema_name]
+        assert "organization_id" not in schema["properties"]
+        assert "shelter_entry_reference" in schema["required"]
+        assert "oneOf" not in schema
+
+
+def test_runtime_openapi_identity_schema_declares_exactly_one_target() -> None:
+    schema = app.openapi()["components"]["schemas"]["VolunteerIdentityRequest"]
+    assert len(schema["oneOf"]) == 2
+    assert {tuple(branch["required"]) for branch in schema["oneOf"]} == {
+        ("organization_id",),
+        ("shelter_entry_reference",),
+    }
+
+
+def test_runtime_openapi_volunteer_error_and_nullable_response_schemas_match_contract() -> None:
+    document = app.openapi()
+    schemas = document["components"]["schemas"]
+    status_response = schemas["VolunteerApplicationStatusResponse"]
+    assert "application" not in status_response["required"]
+    assert "grant" not in status_response["required"]
+    assert set(schemas["ErrorResponse"]["required"]) == {"code", "message", "request_id"}
+    details = schemas["ErrorResponse"]["properties"]["details"]
+    assert details["type"] == "object"
+    assert "anyOf" not in details
+    application = schemas["VolunteerApplicationResponse"]
+    assert "display_name" in application["required"]
+    assert application["properties"]["status"]["enum"] == [
+        "pending",
+        "approved",
+        "rejected",
+        "withdrawn",
+    ]
+    assert application["properties"]["version"]["minimum"] == 1
+    grant = schemas["VolunteerGrantSummaryResponse"]
+    assert grant["properties"]["status"]["enum"] == ["active", "expired", "revoked"]
+    assert grant["properties"]["source_type"]["enum"] == [
+        "manager_approval",
+        "legacy_migration",
+    ]
+    assert grant["properties"]["version"]["minimum"] == 1
+    assert status_response["properties"]["effective_status"]["enum"] == [
+        "none",
+        "pending",
+        "upcoming",
+        "active",
+        "expired",
+        "revoked",
+        "rejected",
+        "withdrawn",
+    ]
+    assert status_response["properties"]["next_actions"]["items"]["enum"] == [
+        "apply",
+        "wait",
+        "withdraw",
+        "enter_care",
+        "reapply",
+        "contact_shelter",
+        "return_to_line",
+    ]
+    policy = schemas["VolunteerAccessPolicyResponse"]
+    assert policy["properties"]["default_grant_duration_hours"]["minimum"] == 1
+    assert policy["properties"]["version"]["minimum"] == 1
+
+    expected_errors = {
+        "/v1/volunteer-applications/status": {"401", "403", "422", "503"},
+        "/v1/volunteer-applications": {"401", "403", "409", "422", "503"},
+        "/v1/volunteer-applications/{applicationId}/withdraw": {
+            "401",
+            "404",
+            "409",
+            "422",
+            "503",
+        },
+    }
+    for path, codes in expected_errors.items():
+        operation = document["paths"][path]["post"]
+        assert codes <= operation["responses"].keys()
+        for code in codes:
+            response = operation["responses"][code]
+            assert response["content"]["application/json"]["schema"]["$ref"].endswith(
+                "/ErrorResponse"
+            )
+    submit_responses = document["paths"]["/v1/volunteer-applications"]["post"]["responses"]
+    assert {"200", "201"} <= submit_responses.keys()
+    assert submit_responses["201"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/VolunteerApplicationStatusResponse"
+    )
+
+
+def test_runtime_openapi_management_volunteer_routes_declare_canonical_responses() -> None:
+    paths = app.openapi()["paths"]
+    expected = {
+        ("/v1/organizations/{organizationId}/volunteer-access-policy", "get"): (
+            "VolunteerAccessPolicyResponse",
+            {"403", "404"},
+        ),
+        ("/v1/organizations/{organizationId}/volunteer-access-policy", "patch"): (
+            "VolunteerAccessPolicyResponse",
+            {"403", "404", "422"},
+        ),
+        ("/v1/organizations/{organizationId}/volunteer-applications", "get"): (
+            "VolunteerApplicationListResponse",
+            {"403", "404"},
+        ),
+        ("/v1/organizations/{organizationId}/volunteer-access-grants", "get"): (
+            "VolunteerAccessGrantListResponse",
+            {"403", "404"},
+        ),
+        ("/v1/organizations/{organizationId}/volunteer-notifications/retry", "post"): (
+            "VolunteerNotificationRetryResponse",
+            {"202", "403", "409", "422"},
+        ),
+        ("/v1/organizations/{organizationId}/volunteer-decision-batches", "post"): (
+            "VolunteerDecisionBatchResponse",
+            {"201", "403", "409", "422"},
+        ),
+    }
+    for (path, method), (model_name, error_codes) in expected.items():
+        operation = paths[path][method]
+        success = operation["responses"]["200" if method == "get" else "200"]
+        assert success["content"]["application/json"]["schema"]["$ref"].endswith(f"/{model_name}")
+        assert error_codes <= operation["responses"].keys()
+        assert {"401", "503"} <= operation["responses"].keys()
+        assert operation["security"] == [{"bearerAuth": []}]
+
+    assert app.openapi()["security"] == [{"bearerAuth": []}]
+    assert paths["/v1/public/volunteer-organizations"]["get"]["security"] == []
+    assert paths["/v1/volunteer-applications/status"]["post"]["security"] == []
+    assert paths["/v1/volunteer-applications"]["post"]["security"] == []
+    assert paths["/v1/volunteer-applications/{applicationId}/withdraw"]["post"]["security"] == []
+    batch_item_operation = paths[
+        "/v1/organizations/{organizationId}/volunteer-decision-batches/{batchId}/items"
+    ]["get"]
+    cursor_parameter = next(
+        parameter
+        for parameter in batch_item_operation["parameters"]
+        if parameter["name"] == "cursor"
+    )
+    assert cursor_parameter["schema"]["type"] == "string"
+    assert app.openapi()["components"]["securitySchemes"]["bearerAuth"] == {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": (
+            "RS256 簽署的短效 Access Token；"
+            "每次受保護 Request 仍必須通過 Server-side Session 與 Organization Scope 驗證。"
+        ),
+    }
+    grant_schema = app.openapi()["components"]["schemas"]["VolunteerAccessGrant"]
+    notification_schema = grant_schema["properties"]["notification"]
+    assert notification_schema["anyOf"][0]["$ref"].endswith("/VolunteerNotification")
 
 
 def test_management_contract_supports_policy_and_resumable_decision_batches() -> None:

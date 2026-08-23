@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TypeVar
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, select, text, tuple_
+from sqlalchemy import Select, String, and_, cast, func, select, text, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -380,7 +380,7 @@ class VolunteerAccessRepository:
     async def batch_items_after(
         self,
         batch_id: UUID,
-        cursor: UUID | None,
+        cursor: str | None,
         *,
         result: str | None = None,
         limit: int = 100,
@@ -390,13 +390,16 @@ class VolunteerAccessRepository:
             VolunteerDecisionBatchItem.batch_id == batch_id,
         )
         if cursor is not None:
-            statement = statement.where(VolunteerDecisionBatchItem.id > cursor)
+            cursor_column = cast(VolunteerDecisionBatchItem.id, String)
+            statement = statement.where(cursor_column > cursor)
         if result is not None:
             if result not in {"pending", "succeeded", "conflict", "failed"}:
                 raise DomainError("invalid_batch_item_result", "逐筆結果篩選無效", 422)
             statement = statement.where(VolunteerDecisionBatchItem.result == result)
         query_result = await self.session.execute(
-            statement.order_by(VolunteerDecisionBatchItem.id).limit(min(max(limit, 1), 500))
+            statement.order_by(cast(VolunteerDecisionBatchItem.id, String)).limit(
+                min(max(limit, 1), 500)
+            )
         )
         return list(query_result.scalars())
 

@@ -36,6 +36,9 @@ class OrganizationVolunteerAccessPolicy(AuditMixin, Base):
     applications_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true"), nullable=False
     )
+    insurance_required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     default_grant_duration_hours: Mapped[int] = mapped_column(
         Integer, default=168, server_default=text("168"), nullable=False
     )

@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -84,6 +84,14 @@ async def post_exchange(service: ResultService, transaction: TransactionProbe) -
         app.dependency_overrides.pop(request_session, None)
 
 
+def assert_safe_error_response(response: httpx.Response, *, code: str, message: str) -> None:
+    body = response.json()
+    assert body["code"] == code
+    assert body["message"] == message
+    assert body["request_id"] != "task6-request"
+    UUID(body["request_id"])
+
+
 @pytest.mark.asyncio
 async def test_invalid_service_response_rolls_back_before_http_failure() -> None:
     transaction = TransactionProbe()
@@ -100,11 +108,9 @@ async def test_invalid_service_response_rolls_back_before_http_failure() -> None
     response = await post_exchange(service, transaction)
 
     assert response.status_code == 503
-    assert response.json() == {
-        "code": "liff_exchange_unavailable",
-        "message": "志工入口暫時無法使用",
-        "request_id": "task6-request",
-    }
+    assert_safe_error_response(
+        response, code="liff_exchange_unavailable", message="志工入口暫時無法使用"
+    )
     assert transaction.commits == 0
     assert transaction.rollbacks == 1
     assert transaction.pending_rows == 0
@@ -125,11 +131,9 @@ async def test_commit_failure_rolls_back_and_returns_safe_dependency_error() -> 
     response = await post_exchange(service, transaction)
 
     assert response.status_code == 503
-    assert response.json() == {
-        "code": "liff_exchange_unavailable",
-        "message": "志工入口暫時無法使用",
-        "request_id": "task6-request",
-    }
+    assert_safe_error_response(
+        response, code="liff_exchange_unavailable", message="志工入口暫時無法使用"
+    )
     assert transaction.commits == 0
     assert transaction.rollbacks >= 1
     assert transaction.pending_rows == 0
@@ -150,11 +154,9 @@ async def test_rollback_failure_cannot_mask_safe_dependency_error() -> None:
     response = await post_exchange(service, transaction)
 
     assert response.status_code == 503
-    assert response.json() == {
-        "code": "liff_exchange_unavailable",
-        "message": "志工入口暫時無法使用",
-        "request_id": "task6-request",
-    }
+    assert_safe_error_response(
+        response, code="liff_exchange_unavailable", message="志工入口暫時無法使用"
+    )
     assert transaction.rollbacks == 2
     assert transaction.pending_rows == 0
 
@@ -191,11 +193,7 @@ async def test_http_errors_are_safe_and_leave_no_partial_state(
     response = await post_exchange(ResultService(transaction, error=error), transaction)
 
     assert response.status_code == status_code
-    assert response.json() == {
-        "code": code,
-        "message": message,
-        "request_id": "task6-request",
-    }
+    assert_safe_error_response(response, code=code, message=message)
     assert transaction.commits == 0
     assert transaction.rollbacks == 1
     assert transaction.pending_rows == 0

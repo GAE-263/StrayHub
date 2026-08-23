@@ -143,7 +143,7 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
     )
 
 
-@router.post("/login", status_code=status.HTTP_200_OK)
+@router.post("/login", status_code=status.HTTP_200_OK, openapi_extra={"security": []})
 async def login(
     payload: LoginRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
@@ -154,7 +154,7 @@ async def login(
     return result
 
 
-@router.post("/refresh", status_code=status.HTTP_200_OK)
+@router.post("/refresh", status_code=status.HTTP_200_OK, openapi_extra={"security": []})
 async def refresh(
     payload: RefreshRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
@@ -180,6 +180,7 @@ async def logout(
     "/liff/exchange",
     status_code=status.HTTP_200_OK,
     response_model=LiffExchangeResponse,
+    openapi_extra={"security": []},
 )
 async def liff_exchange(
     payload: LiffExchangeRequest,
@@ -244,9 +245,9 @@ async def switch_context(
     if request_context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
     repository = AuthenticationRepository(session)
-    context = await ActiveShelterContextService(
-        repository, audit=AuditService(session)
-    ).switch(session_id=request_context.session_id, organization_id=payload.organization_id)
+    context = await ActiveShelterContextService(repository, audit=AuditService(session)).switch(
+        session_id=request_context.session_id, organization_id=payload.organization_id
+    )
     if context.active_organization_id is None:
         raise DomainError("invalid_context", "目前收容所無效", 409)
     organization = await repository.get_organization(context.active_organization_id)

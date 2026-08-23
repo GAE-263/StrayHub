@@ -1060,6 +1060,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/volunteer-organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得可供志工選擇的公開收容所清單 */
+        get: operations["listPublicVolunteerOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/volunteer-applications/status": {
         parameters: {
             query?: never;
@@ -2547,15 +2564,28 @@ export interface components {
         NotificationEventType: "application_submitted" | "application_withdrawn" | "approved" | "rejected" | "grant_changed" | "expired" | "revoked";
         VolunteerIdentityRequest: {
             id_token: string;
+            /** Format: uuid */
+            organization_id?: string | null;
+            shelter_entry_reference?: string | null;
+        } & ({
+            /** Format: uuid */
+            organization_id: string;
+            shelter_entry_reference?: null;
+        } | {
+            organization_id?: null;
             shelter_entry_reference: string;
-        };
-        VolunteerApplicationCreateRequest: components["schemas"]["VolunteerIdentityRequest"] & {
+        });
+        VolunteerApplicationCreateRequest: {
+            id_token: string;
+            shelter_entry_reference: string;
             /** Format: uuid */
             client_request_id: string;
             /** @constant */
             consent_acknowledged: true;
         };
-        VolunteerApplicationWithdrawRequest: components["schemas"]["VolunteerIdentityRequest"] & {
+        VolunteerApplicationWithdrawRequest: {
+            id_token: string;
+            shelter_entry_reference: string;
             expected_version: number;
         };
         VolunteerApplicationStatusResponse: {
@@ -2571,6 +2601,14 @@ export interface components {
             name: string;
             /** @description false 只阻止新申請；既有 applicant 仍可讀取 own status */
             applications_enabled: boolean;
+        };
+        PublicVolunteerOrganization: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            service_area: string | null;
+            insurance_required: boolean;
         };
         VolunteerApplication: {
             /** Format: uuid */
@@ -2626,7 +2664,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            mode: "ExplicitVolunteerDecisionSelection";
+            mode: "explicit_items";
             items: components["schemas"]["VolunteerDecisionItemRequest"][];
         };
         AllFilteredVolunteerDecisionSelection: {
@@ -2634,7 +2672,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            mode: "AllFilteredVolunteerDecisionSelection";
+            mode: "all_filtered";
             filter: components["schemas"]["VolunteerApplicationBatchFilter"];
             overrides?: components["schemas"]["VolunteerDecisionItemRequest"][];
         };
@@ -2737,7 +2775,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            action: "GrantPeriodUpdateRequest";
+            action: "update_period";
             expected_version: number;
             /** Format: date-time */
             valid_from: string;
@@ -2752,7 +2790,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            action: "GrantRevokeRequest";
+            action: "revoke";
             expected_version: number;
             reason: string;
         };
@@ -5173,6 +5211,27 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    listPublicVolunteerOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 僅包含公開志工入口所需的收容所欄位 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicVolunteerOrganization"][];
+                };
+            };
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     resolveVolunteerApplicationStatus: {
         parameters: {
             query?: never;
@@ -5195,6 +5254,7 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["EntryUnavailable"];
             422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
@@ -5231,8 +5291,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["EntryUnavailable"];
             409: components["responses"]["Conflict"];
+            /** @description Validation error; organization targets are not supported by this mutation contract */
             422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
         };
@@ -5261,9 +5323,12 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerApplicationStatusResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["ScopedNotFound"];
             409: components["responses"]["Conflict"];
+            /** @description Validation error; organization targets are not supported by this mutation contract */
             422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getVolunteerAccessPolicy: {
@@ -5289,8 +5354,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerAccessPolicy"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateVolunteerAccessPolicy: {
@@ -5320,9 +5387,11 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerAccessPolicy"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
             422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listVolunteerApplications: {
@@ -5354,8 +5423,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerApplicationListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     createVolunteerDecisionBatch: {
@@ -5394,9 +5465,11 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerDecisionBatchResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getVolunteerDecisionBatch: {
@@ -5423,8 +5496,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerDecisionBatchResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listVolunteerDecisionBatchItems: {
@@ -5455,8 +5530,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerDecisionBatchItemListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listVolunteerAccessGrants: {
@@ -5486,8 +5563,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerAccessGrantListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     updateVolunteerAccessGrant: {
@@ -5518,10 +5597,12 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerAccessGrant"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listVolunteerNotificationFailures: {
@@ -5554,8 +5635,10 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerNotificationListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     retryVolunteerNotifications: {
@@ -5594,9 +5677,11 @@ export interface operations {
                     "application/json": components["schemas"]["VolunteerNotificationRetryResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listMedicalRecords: {

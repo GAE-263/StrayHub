@@ -1,7 +1,7 @@
 import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -166,11 +166,11 @@ async def test_http_failure_after_session_and_refresh_flush_rolls_back_all_rows(
             )
 
         assert response.status_code == 503
-        assert response.json() == {
-            "code": "liff_exchange_unavailable",
-            "message": "志工入口暫時無法使用",
-            "request_id": "task6-flush-failure",
-        }
+        body = response.json()
+        assert body["code"] == "liff_exchange_unavailable"
+        assert body["message"] == "志工入口暫時無法使用"
+        assert body["request_id"] != "task6-flush-failure"
+        UUID(body["request_id"])
         async with session_factory() as verification_session:
             for model, record_id in (
                 (RefreshTokenRecord, refresh_id),
@@ -233,11 +233,11 @@ async def test_real_commit_failure_rolls_back_flushed_session_and_refresh_rows()
             )
 
         assert response.status_code == 503
-        assert response.json() == {
-            "code": "liff_exchange_unavailable",
-            "message": "志工入口暫時無法使用",
-            "request_id": "task6-real-commit-failure",
-        }
+        body = response.json()
+        assert body["code"] == "liff_exchange_unavailable"
+        assert body["message"] == "志工入口暫時無法使用"
+        assert body["request_id"] != "task6-real-commit-failure"
+        UUID(body["request_id"])
         assert commit_failure_session is not None
         assert commit_failure_session.rollback_calls == 1
         async with session_factory() as verification_session:

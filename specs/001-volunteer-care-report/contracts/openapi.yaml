@@ -1315,10 +1315,28 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /v1/public/volunteer-organizations:
+    get:
+      tags: [Volunteer Applications]
+      operationId: listPublicVolunteerOrganizations
+      summary: 取得可供志工選擇的公開收容所清單
+      security: []
+      responses:
+        '200':
+          description: 僅包含公開志工入口所需的收容所欄位
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicVolunteerOrganization'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /v1/volunteer-applications/status:
     post:
       tags: [Volunteer Applications]
       operationId: resolveVolunteerApplicationStatus
+      security: []
       summary: 以 LINE 身分與收容所入口取得自己的申請／授權狀態；未知 identity 不建立持久化資料
       requestBody:
         required: true
@@ -1333,6 +1351,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/EntryUnavailable'
         '422':
@@ -1343,6 +1363,7 @@ paths:
     post:
       tags: [Volunteer Applications]
       operationId: submitVolunteerApplication
+      security: []
       summary: 以 LINE 身分提交單一收容所志工申請
       requestBody:
         required: true
@@ -1363,11 +1384,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/EntryUnavailable'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
+          description: Validation error; organization targets are not supported by this mutation contract
           $ref: '#/components/responses/ValidationError'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
@@ -1375,6 +1399,7 @@ paths:
     post:
       tags: [Volunteer Applications]
       operationId: withdrawVolunteerApplication
+      security: []
       summary: 撤回自己的 pending 申請
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
@@ -1391,12 +1416,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerApplicationStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/ScopedNotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
+          description: Validation error; organization targets are not supported by this mutation contract
           $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /v1/organizations/{organizationId}/volunteer-access-policy:
     parameters:
       - $ref: '#/components/parameters/OrganizationId'
@@ -1413,6 +1443,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerAccessPolicy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1435,6 +1469,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerAccessPolicy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1484,6 +1522,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerApplicationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1517,6 +1559,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerDecisionBatchResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '409':
@@ -1540,6 +1586,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerDecisionBatchResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1578,6 +1628,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerDecisionBatchItemListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1614,6 +1668,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerAccessGrantListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1639,6 +1697,9 @@ paths:
                 - $ref: '#/components/schemas/GrantRevokeRequest'
               discriminator:
                 propertyName: action
+                mapping:
+                  update_period: '#/components/schemas/GrantPeriodUpdateRequest'
+                  revoke: '#/components/schemas/GrantRevokeRequest'
       responses:
         '200':
           description: 授權已更新；可能因縮短而立即 expired
@@ -1646,6 +1707,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerAccessGrant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1702,6 +1767,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerNotificationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '403':
           $ref: '#/components/responses/ManagementDenied'
         '404':
@@ -1729,6 +1798,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VolunteerNotificationRetryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
         '202':
           description: retry batch 已建立；可重試項目已回到 queue
           content:
@@ -3450,7 +3523,40 @@ components:
          expired, revoked]
     VolunteerIdentityRequest:
       type: object
-      required: [id_token, shelter_entry_reference]
+      required: [id_token]
+      additionalProperties: false
+      properties:
+        id_token:
+          type: string
+          minLength: 1
+        organization_id:
+          type: [string, 'null']
+          format: uuid
+        shelter_entry_reference:
+          type: [string, 'null']
+          minLength: 32
+          maxLength: 512
+          pattern: '^[A-Za-z0-9._~-]+$'
+      oneOf:
+        - required: [organization_id]
+          properties:
+            organization_id:
+              type: string
+              format: uuid
+            shelter_entry_reference:
+              type: 'null'
+        - required: [shelter_entry_reference]
+          properties:
+            organization_id:
+              type: 'null'
+            shelter_entry_reference:
+              type: string
+              minLength: 32
+              maxLength: 512
+              pattern: '^[A-Za-z0-9._~-]+$'
+    VolunteerApplicationCreateRequest:
+      type: object
+      required: [id_token, shelter_entry_reference, client_request_id, consent_acknowledged]
       additionalProperties: false
       properties:
         id_token:
@@ -3458,30 +3564,31 @@ components:
           minLength: 1
         shelter_entry_reference:
           type: string
-          minLength: 1
-    VolunteerApplicationCreateRequest:
-      allOf:
-        - $ref: '#/components/schemas/VolunteerIdentityRequest'
-        - type: object
-          required: [client_request_id, consent_acknowledged]
-          additionalProperties: false
-          properties:
-            client_request_id:
-              type: string
-              format: uuid
-            consent_acknowledged:
-              type: boolean
-              const: true
+          minLength: 32
+          maxLength: 512
+          pattern: '^[A-Za-z0-9._~-]+$'
+        client_request_id:
+          type: string
+          format: uuid
+        consent_acknowledged:
+          type: boolean
+          const: true
     VolunteerApplicationWithdrawRequest:
-      allOf:
-        - $ref: '#/components/schemas/VolunteerIdentityRequest'
-        - type: object
-          required: [expected_version]
-          additionalProperties: false
-          properties:
-            expected_version:
-              type: integer
-              minimum: 1
+      type: object
+      required: [id_token, shelter_entry_reference, expected_version]
+      additionalProperties: false
+      properties:
+        id_token:
+          type: string
+          minLength: 1
+        shelter_entry_reference:
+          type: string
+          minLength: 32
+          maxLength: 512
+          pattern: '^[A-Za-z0-9._~-]+$'
+        expected_version:
+          type: integer
+          minimum: 1
     VolunteerApplicationStatusResponse:
       type: object
       required: [organization, effective_status, next_actions]
@@ -3515,6 +3622,22 @@ components:
         applications_enabled:
           type: boolean
           description: false 只阻止新申請；既有 applicant 仍可讀取 own status
+    PublicVolunteerOrganization:
+      type: object
+      required: [id, code, name, service_area, insurance_required]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        service_area:
+          type: [string, 'null']
+        insurance_required:
+          type: boolean
     VolunteerApplication:
       type: object
       required: [id, organization_id, display_name, status, submitted_at, version]
@@ -3613,6 +3736,9 @@ components:
             - $ref: '#/components/schemas/AllFilteredVolunteerDecisionSelection'
           discriminator:
             propertyName: mode
+            mapping:
+              explicit_items: '#/components/schemas/ExplicitVolunteerDecisionSelection'
+              all_filtered: '#/components/schemas/AllFilteredVolunteerDecisionSelection'
     ExplicitVolunteerDecisionSelection:
       type: object
       required: [mode, items]

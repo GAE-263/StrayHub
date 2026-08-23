@@ -17,7 +17,7 @@ class LineBindRequest(BaseModel):
     id_token: str
 
 
-@router.post("/bind")
+@router.post("/bind", openapi_extra={"security": []})
 async def bind_line_identity(
     payload: LineBindRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008

@@ -39,6 +39,10 @@ async def test_authentication_scope_keeps_exact_user_and_organization() -> None:
         ),
         ("SELECT set_config('app.current_org_id', '', true)", None),
         ("SELECT set_config('app.platform_scope', 'false', true)", None),
+        (
+            "SELECT set_config('app.public_volunteer_directory', 'false', true)",
+            None,
+        ),
     ]
 
 
