@@ -45,7 +45,7 @@ async def test_status_unknown_identity_does_not_persist_user_binding_or_membersh
         added = []
 
         async def policy(self):
-            return SimpleNamespace(applications_enabled=True)
+            return SimpleNamespace(applications_enabled=True, insurance_required=False)
 
         async def applications_for_user(self, user_id):
             raise AssertionError("unknown identity must not query applicant history")
@@ -72,9 +72,16 @@ def test_entry_purpose_is_fixed_and_blank_reference_is_rejected() -> None:
 
 
 class _FactoryRepository:
-    def __init__(self, organization_id: UUID, *, applications_enabled: bool = True) -> None:
+    def __init__(
+        self,
+        organization_id: UUID,
+        *,
+        applications_enabled: bool = True,
+        insurance_required: bool = False,
+    ) -> None:
         self.organization_id = organization_id
         self.applications_enabled = applications_enabled
+        self.insurance_required = insurance_required
         self.policy_calls = 0
         # These values model untrusted context that must never become the public source.
         self.client_organization_code = "CLIENT-CODE"
@@ -82,7 +89,10 @@ class _FactoryRepository:
 
     async def policy(self):
         self.policy_calls += 1
-        return SimpleNamespace(applications_enabled=self.applications_enabled)
+        return SimpleNamespace(
+            applications_enabled=self.applications_enabled,
+            insurance_required=self.insurance_required,
+        )
 
 
 class _FactoryAuthenticationRepository:
@@ -218,7 +228,7 @@ async def test_status_uses_preverified_line_identity_without_verifying_again() -
         organization_id = uuid4()
 
         async def policy(self):
-            return SimpleNamespace(applications_enabled=True)
+            return SimpleNamespace(applications_enabled=True, insurance_required=False)
 
         async def applications_for_user(self, _user_id):
             raise AssertionError("unknown binding should not load application history")

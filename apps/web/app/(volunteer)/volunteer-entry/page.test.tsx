@@ -780,7 +780,17 @@ describe("volunteer entry LIFF bootstrap", () => {
     });
     expect(view.textContent).toContain("成為志工");
 
+    const setValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
     await act(async () => {
+      setValue(view.querySelector<HTMLInputElement>("#applicant-name")!, "王小明");
+      setValue(view.querySelector<HTMLInputElement>("#phone-number")!, "0912345678");
       view
         .querySelector<HTMLInputElement>('input[type="checkbox"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -809,6 +819,8 @@ describe("volunteer entry LIFF bootstrap", () => {
       consent_acknowledged?: boolean;
       id_token?: string;
       shelter_entry_reference?: string;
+      applicant_name?: string;
+      phone_number?: string;
     };
     expect(statusBody).toEqual({
       id_token: "raw-line-id-token",
@@ -819,6 +831,8 @@ describe("volunteer entry LIFF bootstrap", () => {
         consent_acknowledged: true,
         id_token: "raw-line-id-token",
         shelter_entry_reference: "entry-a",
+        applicant_name: "王小明",
+        phone_number: "0912345678",
       }),
     );
     expect(submitBody.client_request_id).toEqual(expect.any(String));

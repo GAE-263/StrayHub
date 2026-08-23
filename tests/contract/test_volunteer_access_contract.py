@@ -252,6 +252,9 @@ def test_runtime_openapi_volunteer_error_and_nullable_response_schemas_match_con
     status_response = schemas["VolunteerApplicationStatusResponse"]
     assert "application" not in status_response["required"]
     assert "grant" not in status_response["required"]
+    public_organization = schemas["PublicOrganizationResponse"]
+    assert "insurance_required" in public_organization["required"]
+    assert public_organization["properties"]["insurance_required"]["type"] == "boolean"
     assert set(schemas["ErrorResponse"]["required"]) == {"code", "message", "request_id"}
     details = schemas["ErrorResponse"]["properties"]["details"]
     assert details["type"] == "object"

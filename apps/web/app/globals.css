@@ -1441,6 +1441,7 @@ dialog.ui-sheet[open] {
 .volunteer-application-heading,
 .volunteer-application-content,
 .volunteer-application-actions,
+.volunteer-application-fields,
 .volunteer-grant-summary {
   display: grid;
   gap: 16px;
@@ -1452,6 +1453,10 @@ dialog.ui-sheet[open] {
 }
 .volunteer-application-card .ui-card-header p {
   color: var(--muted);
+}
+.volunteer-application-fields label {
+  display: grid;
+  gap: 6px;
 }
 .volunteer-consent {
   align-items: flex-start;

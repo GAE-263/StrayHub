@@ -2652,6 +2652,7 @@ export interface components {
             name: string;
             /** @description false 只阻止新申請；既有 applicant 仍可讀取 own status */
             applications_enabled: boolean;
+            insurance_required: boolean;
         };
         PublicVolunteerOrganization: {
             /** Format: uuid */

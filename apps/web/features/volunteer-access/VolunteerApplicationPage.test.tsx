@@ -12,6 +12,95 @@ import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("VolunteerApplicationPage", () => {
+  it("collects required applicant details before submitting the LIFF application", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "org-a",
+          name: "收容所 A",
+          applications_enabled: true,
+        },
+        application: { id: "app-a", status: "pending", version: 1 },
+        grant: null,
+        effective_status: "pending",
+        next_actions: ["wait", "withdraw"],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          initialStatus={{
+            organization: {
+              id: "org-a",
+              name: "收容所 A",
+              applications_enabled: true,
+            },
+            application: null,
+            grant: null,
+            effective_status: "none",
+            next_actions: ["apply"],
+          }}
+          idToken="id-token"
+          shelterEntryReference="opaque-entry-reference-0123456789abcdef"
+        />,
+      );
+    });
+
+    const setValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const applicantName = container.querySelector<HTMLInputElement>(
+      "#applicant-name",
+    );
+    const phoneNumber = container.querySelector<HTMLInputElement>("#phone-number");
+    expect(applicantName).not.toBeNull();
+    expect(phoneNumber).not.toBeNull();
+
+    await act(async () => {
+      setValue(applicantName!, "王小明");
+      setValue(phoneNumber!, "0912345678");
+      container
+        .querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.click();
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent?.trim() === "立即報名")
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/v1/volunteer-applications",
+      expect.objectContaining({
+        body: expect.stringContaining('"applicant_name":"王小明"'),
+      }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(
+      expect.objectContaining({
+        applicant_name: "王小明",
+        phone_number: "0912345678",
+        consent_acknowledged: true,
+        shelter_entry_reference: "opaque-entry-reference-0123456789abcdef",
+      }),
+    );
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
   it("requires confirmation before withdrawal and shows a success toast", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -61,7 +61,11 @@ export function VolunteerApplicationPage({
   const [status, setStatus] = useState<VolunteerStatus | null>(initialStatus);
   const [loading, setLoading] = useState(initialStatus === null);
   const [submitting, setSubmitting] = useState(false);
+  const [applicantName, setApplicantName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [insuranceIdentity, setInsuranceIdentity] = useState("");
   const [consent, setConsent] = useState(false);
+  const [insuranceConsent, setInsuranceConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -92,7 +96,15 @@ export function VolunteerApplicationPage({
   }, [idToken, initialStatus, shelterEntryReference]);
 
   async function submit() {
-    if (submitting || !consent) return;
+    const insuranceRequired = status?.organization.insurance_required === true;
+    if (
+      submitting ||
+      !consent ||
+      !applicantName.trim() ||
+      !phoneNumber.trim() ||
+      (insuranceRequired && (!insuranceIdentity.trim() || !insuranceConsent))
+    )
+      return;
     setSubmitting(true);
     setError(null);
     try {
@@ -102,6 +114,14 @@ export function VolunteerApplicationPage({
         body: JSON.stringify({
           id_token: idToken,
           shelter_entry_reference: shelterEntryReference,
+          applicant_name: applicantName.trim(),
+          phone_number: phoneNumber.trim(),
+          ...(insuranceRequired
+            ? {
+                insurance_identity: insuranceIdentity.trim(),
+                insurance_consent_acknowledged: true,
+              }
+            : {}),
           client_request_id: crypto.randomUUID(),
           consent_acknowledged: true,
         }),
@@ -151,6 +171,13 @@ export function VolunteerApplicationPage({
     "expired",
     "revoked",
   ].includes(effectiveStatus);
+  const insuranceRequired = status?.organization.insurance_required === true;
+  const submitDisabled =
+    !consent ||
+    !applicantName.trim() ||
+    !phoneNumber.trim() ||
+    (insuranceRequired && (!insuranceIdentity.trim() || !insuranceConsent)) ||
+    submitting;
 
   return (
     <main className="volunteer-application-page">
@@ -200,6 +227,54 @@ export function VolunteerApplicationPage({
             ) : null}
             {canApply && status?.organization.applications_enabled !== false ? (
               <div className="volunteer-application-actions">
+                <div className="volunteer-application-fields">
+                  <label htmlFor="applicant-name">
+                    姓名
+                    <input
+                      id="applicant-name"
+                      type="text"
+                      autoComplete="name"
+                      value={applicantName}
+                      onChange={(event) => setApplicantName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label htmlFor="phone-number">
+                    手機號碼
+                    <input
+                      id="phone-number"
+                      type="tel"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      value={phoneNumber}
+                      onChange={(event) => setPhoneNumber(event.target.value)}
+                      required
+                    />
+                  </label>
+                  {insuranceRequired ? (
+                    <>
+                      <label htmlFor="insurance-identity">
+                        保險身分資料
+                        <input
+                          id="insurance-identity"
+                          type="text"
+                          value={insuranceIdentity}
+                          onChange={(event) => setInsuranceIdentity(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label className="volunteer-consent">
+                        <Checkbox
+                          checked={insuranceConsent}
+                          onChange={(event) =>
+                            setInsuranceConsent(event.target.checked)
+                          }
+                        />
+                        <span>我同意此資料僅供保險資格確認使用。</span>
+                      </label>
+                    </>
+                  ) : null}
+                </div>
                 <label className="volunteer-consent">
                   <Checkbox
                     checked={consent}
@@ -209,7 +284,7 @@ export function VolunteerApplicationPage({
                 </label>
                 <Button
                   type="button"
-                  disabled={!consent || submitting}
+                  disabled={submitDisabled}
                   onClick={submit}
                 >
                   {submitting

@@ -3695,7 +3695,7 @@ components:
             enum: [apply, wait, withdraw, enter_care, reapply, contact_shelter, return_to_line]
     PublicOrganization:
       type: object
-      required: [id, name, applications_enabled]
+      required: [id, name, applications_enabled, insurance_required]
       properties:
         id:
           type: string
@@ -3705,6 +3705,8 @@ components:
         applications_enabled:
           type: boolean
           description: false 只阻止新申請；既有 applicant 仍可讀取 own status
+        insurance_required:
+          type: boolean
     PublicVolunteerOrganization:
       type: object
       required: [id, code, name, service_area, insurance_required]

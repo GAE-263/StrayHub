@@ -198,6 +198,7 @@ class PublicOrganizationResponse(BaseModel):
     id: UUID
     name: str
     applications_enabled: bool
+    insurance_required: bool
 
 
 class PublicVolunteerOrganizationResponse(BaseModel):

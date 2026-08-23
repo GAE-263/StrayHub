@@ -43,6 +43,7 @@ class PublicOrganizationResult:
     id: UUID
     name: str
     applications_enabled: bool
+    insurance_required: bool
 
 
 @dataclass(frozen=True)
@@ -212,6 +213,7 @@ class VolunteerAccessService:
             id=organization.id,
             name=organization.name,
             applications_enabled=policy.applications_enabled,
+            insurance_required=policy.insurance_required,
         )
 
     async def _status_for_user(
