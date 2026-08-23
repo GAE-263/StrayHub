@@ -4,6 +4,8 @@ EXPAND = Path("services/api/migrations/versions/0024_volunteer_access_expand.py"
 ENFORCE = Path("services/api/migrations/versions/0025_volunteer_access_enforce.py")
 SYSTEM_ACTOR = Path("services/api/migrations/versions/0026_audit_system_actor.py")
 INSURANCE_POLICY = Path("services/api/migrations/versions/0031_volunteer_insurance_policy.py")
+PUBLIC_DIRECTORY = Path("services/api/migrations/versions/0032_public_volunteer_directory_scope.py")
+ALEMBIC_ENV = Path("services/api/migrations/env.py")
 
 
 def test_two_phase_migration_declares_policy_staging_and_single_head_chain() -> None:
@@ -55,3 +57,17 @@ def test_insurance_policy_migration_declares_exact_chain_and_safe_column() -> No
         'op.drop_column("organization_volunteer_access_policies", "insurance_required")'
         in migration
     )
+
+
+def test_public_directory_revision_id_remains_backward_compatible() -> None:
+    migration = PUBLIC_DIRECTORY.read_text()
+    revision = next(
+        line.split('"', 2)[1] for line in migration.splitlines() if line.startswith("revision = ")
+    )
+    assert revision == "0032_public_volunteer_directory_scope"
+
+
+def test_alembic_version_storage_supports_long_revision_ids() -> None:
+    migration_env = ALEMBIC_ENV.read_text()
+    assert "String(255)" in migration_env
+    assert "ALTER TABLE alembic_version" in migration_env
