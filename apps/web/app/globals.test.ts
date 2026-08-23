@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(new URL("./globals.css", import.meta.url), "utf8");
+const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
 
 function ruleBody(selector: string) {
   const match = css.match(

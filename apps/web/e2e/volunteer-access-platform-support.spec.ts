@@ -39,24 +39,28 @@ test("platform admin supplies an audited reason before loading and saving volunt
     });
   });
 
-  const policyRequests: Array<{ method: string; reason: string | undefined }> = [];
-  await page.route("**/v1/organizations/*/volunteer-access-policy", async (route) => {
-    const request = route.request();
-    policyRequests.push({
-      method: request.method(),
-      reason: request.headers()["x-platform-support-reason"],
-    });
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        organization_id: organizationId,
-        applications_enabled: request.method() === "GET",
-        default_grant_duration_hours: 168,
-        version: request.method() === "GET" ? 1 : 2,
-      }),
-    });
-  });
+  const policyRequests: Array<{ method: string; reason: string | undefined }> =
+    [];
+  await page.route(
+    "**/v1/organizations/*/volunteer-access-policy",
+    async (route) => {
+      const request = route.request();
+      policyRequests.push({
+        method: request.method(),
+        reason: request.headers()["x-platform-support-reason"],
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          organization_id: organizationId,
+          applications_enabled: request.method() === "GET",
+          default_grant_duration_hours: 168,
+          version: request.method() === "GET" ? 1 : 2,
+        }),
+      });
+    },
+  );
 
   await page.addInitScript((activeOrganizationId) => {
     window.sessionStorage.setItem("access_token", "platform-admin-token");
@@ -72,7 +76,9 @@ test("platform admin supplies an audited reason before loading and saving volunt
 
   await page.getByLabel("平台支援原因").fill(supportReason);
   await page.getByRole("button", { name: "載入設定" }).click();
-  await expect(page.getByRole("checkbox", { name: "開放志工新申請" })).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: "開放志工新申請" }),
+  ).toBeChecked();
   expect(policyRequests).toEqual([
     {
       method: "GET",
@@ -82,7 +88,9 @@ test("platform admin supplies an audited reason before loading and saving volunt
 
   await page.getByRole("checkbox", { name: "開放志工新申請" }).uncheck();
   await page.getByRole("button", { name: "儲存設定" }).click();
-  await expect(page.getByText("設定已儲存，只影響後續建立的授權。")).toBeVisible();
+  await expect(
+    page.getByText("設定已儲存，只影響後續建立的授權。"),
+  ).toBeVisible();
   expect(policyRequests).toEqual([
     {
       method: "GET",

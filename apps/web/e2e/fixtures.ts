@@ -513,8 +513,51 @@ export async function mockVolunteerApi(
   options: { saveStatus?: number } = {},
 ) {
   let saveStatus = options.saveStatus ?? 200;
+  const membershipValidFrom = new Date(Date.now() - 60_000).toISOString();
+  const membershipExpiresAt = new Date(Date.now() + 3_600_000).toISOString();
+  await page.addInitScript(() => {
+    sessionStorage.setItem("access_token", "test-access");
+    sessionStorage.setItem("active_organization_id", "org-a");
+    sessionStorage.setItem("active_organization_code", "ORG-A");
+  });
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/auth/me")) {
+      await json(route, {
+        user: {
+          id: "volunteer-a",
+          display_name: "志工甲",
+          platform_role: null,
+          status: "active",
+        },
+        memberships: [
+          {
+            id: "membership-a",
+            organization_id: "org-a",
+            role: "VOLUNTEER",
+            status: "active",
+            valid_from: membershipValidFrom,
+            expires_at: membershipExpiresAt,
+            access_grant: {
+              membership_id: "membership-a",
+              organization_id: "org-a",
+              status: "active",
+              valid_from: membershipValidFrom,
+              expires_at: membershipExpiresAt,
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/auth/active-shelter-context")) {
+      await json(route, {
+        organization_id: "org-a",
+        organization_name: "浪浪森友會 A",
+        session_id: "test-session",
+      });
+      return;
+    }
     if (
       url.pathname === "/v1/animals" ||
       url.pathname === "/v1/animals/search"

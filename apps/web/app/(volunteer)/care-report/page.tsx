@@ -21,6 +21,10 @@ type Draft = {
 export default function CareReportPage() {
   const shelterContext = useVolunteerShelterContext();
   const contextRequestEpoch = useRef(0);
+  const loadedContext = useRef<{
+    initialized: boolean;
+    organizationId: string | null;
+  }>({ initialized: false, organizationId: null });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
@@ -57,14 +61,18 @@ export default function CareReportPage() {
   }
 
   useEffect(() => {
+    const organizationId = shelterContext?.organizationId;
+    if (!organizationId) return;
+    if (
+      loadedContext.current.initialized &&
+      loadedContext.current.organizationId === organizationId
+    ) {
+      return;
+    }
+    loadedContext.current = { initialized: true, organizationId };
     const epoch = ++contextRequestEpoch.current;
-    let cancelled = false;
     setDraft(null);
-    void load(() => cancelled, epoch);
-    return () => {
-      cancelled = true;
-      contextRequestEpoch.current += 1;
-    };
+    void load(() => contextRequestEpoch.current !== epoch, epoch);
     // Initial draft restoration runs once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shelterContext?.organizationId]);

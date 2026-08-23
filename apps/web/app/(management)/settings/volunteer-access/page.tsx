@@ -53,7 +53,9 @@ export default function VolunteerAccessSettingsPage() {
       }
       await fetchPolicy();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "無法載入志工授權設定");
+      setError(
+        reason instanceof Error ? reason.message : "無法載入志工授權設定",
+      );
     } finally {
       setLoading(false);
     }
@@ -143,11 +145,7 @@ export default function VolunteerAccessSettingsPage() {
           <p className="policy-note">
             平台管理員跨收容所查詢與修改都會記錄此原因。
           </p>
-          <Button
-            type="submit"
-            variant="secondary"
-            disabled={loading}
-          >
+          <Button type="submit" variant="secondary" disabled={loading}>
             {loading ? "載入中…" : "載入設定"}
           </Button>
         </form>
@@ -166,7 +164,9 @@ export default function VolunteerAccessSettingsPage() {
               variant="secondary"
               type="button"
               onClick={() =>
-                void (requiresSupportReason ? loadWithSupportReason() : initialize())
+                void (requiresSupportReason
+                  ? loadWithSupportReason()
+                  : initialize())
               }
             >
               重試

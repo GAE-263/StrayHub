@@ -123,6 +123,11 @@ for (const route of volunteerRoutes) {
       }
       await page.setViewportSize(viewport);
       await page.goto(route);
+      if (route.startsWith("/volunteer-entry")) {
+        await expect(
+          page.getByRole("heading", { name: "尚未完成志工報名" }),
+        ).toBeVisible();
+      }
       await expect(page.locator("main").first()).toBeVisible();
       await expectNoDevIndicator(page);
       await expect(page).toHaveScreenshot(`${slug}-${viewport.width}.png`, {
