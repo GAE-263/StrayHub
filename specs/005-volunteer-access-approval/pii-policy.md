@@ -179,5 +179,8 @@ create／reveal、persisted policy／membership locks、ORM ciphertext read-back
 empty-database測試執行0033 upgrade→0032 downgrade→0033 upgrade。Raw insurance identity與
 `insurance_identity.submitted` audit evidence使用同一organization-scoped transaction；audit只記錄
 consent、purpose、persisted policy/key version與absolute deletion deadline，不記plaintext/ciphertext，
+並記錄server-derived actor role與request ID。Collection auditor不得持有或自選session；service將
+repository transaction直接傳入audit operation，production adapter只使用該傳入transaction；
+任意auditor failure皆由service boundary rollback並轉為固定redacted 503，
 且audit flush／RLS failure會rollback profile與audit。最終candidate需維持full pytest、Ruff、
 `git diff --check`及fresh independent P0/P1 review全數通過後才可commit。

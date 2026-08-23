@@ -64,6 +64,7 @@ class VolunteerPiiService:
         insurance_purpose_code: str | None,
         insurance_policy_version: str | None,
         now: datetime,
+        request_id: UUID | None = None,
     ) -> VolunteerApplicationProfile:
         application = await repository.application(application_id, for_update=True)
         if application is None:
@@ -83,24 +84,40 @@ class VolunteerPiiService:
             insurance_policy_version=insurance_policy_version,
             now=now,
         )
-        if profile.insurance_identity_ciphertext is not None and self.collection_auditor is None:
+        if profile.insurance_identity_ciphertext is not None and (
+            self.collection_auditor is None or not isinstance(request_id, UUID)
+        ):
             raise DomainError("pii_audit_unavailable", "個人資料稽核暫時無法使用", 503)
         persisted = await repository.add(profile)
         if persisted.insurance_identity_ciphertext is not None:
             assert self.collection_auditor is not None
             assert persisted.insurance_identity_delete_after is not None
-            await self.collection_auditor.persist_atomic_collection(
-                PiiCollectionAuditEvent(
-                    organization_id=application.organization_id,
-                    application_id=application.id,
-                    actor_user_id=application.user_id,
-                    consent_acknowledged=insurance_consent_acknowledged,
-                    purpose_code="insurance_verification",
-                    policy_version=f"organization-policy-v{policy.version}",
-                    encryption_key_version=persisted.encryption_key_version,
-                    delete_after=persisted.insurance_identity_delete_after,
+            try:
+                await self.collection_auditor.persist_atomic_collection(
+                    PiiCollectionAuditEvent(
+                        organization_id=application.organization_id,
+                        application_id=application.id,
+                        actor_user_id=application.user_id,
+                        actor_role="APPLICANT",
+                        request_id=request_id,
+                        consent_acknowledged=insurance_consent_acknowledged,
+                        purpose_code="insurance_verification",
+                        policy_version=f"organization-policy-v{policy.version}",
+                        encryption_key_version=persisted.encryption_key_version,
+                        delete_after=persisted.insurance_identity_delete_after,
+                    ),
+                    transaction=repository.session,
                 )
-            )
+            except Exception:
+                try:
+                    await repository.session.rollback()
+                except Exception:
+                    pass
+                raise DomainError(
+                    "pii_audit_unavailable",
+                    "個人資料稽核暫時無法使用",
+                    503,
+                ) from None
         return persisted
 
     @staticmethod

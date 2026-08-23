@@ -38,9 +38,12 @@ class _ProfileCreateRepository:
         self,
         application: VolunteerApplication,
         policy: OrganizationVolunteerAccessPolicy,
+        *,
+        session=None,
     ) -> None:
         self.application_value = application
         self.policy_value = policy
+        self.session = session or object()
         self.added = None
         self.lock_calls: list[str] = []
 
@@ -63,9 +66,24 @@ class _ProfileCreateRepository:
 class _CollectionAuditor:
     def __init__(self) -> None:
         self.event = None
+        self.transaction = None
 
-    async def persist_atomic_collection(self, event) -> None:
+    async def persist_atomic_collection(self, event, *, transaction) -> None:
         self.event = event
+        self.transaction = transaction
+
+
+class _RollbackSession:
+    def __init__(self) -> None:
+        self.rollbacks = 0
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+class _FailingCollectionAuditor(_CollectionAuditor):
+    async def persist_atomic_collection(self, event, *, transaction) -> None:
+        raise RuntimeError("synthetic provider diagnostics must not escape")
 
 
 class _ProfileRevealRepository:
@@ -298,6 +316,7 @@ async def test_service_encrypts_required_insurance_identity_with_thirty_day_dead
         organization_id=uuid4(),
         user_id=uuid4(),
     )
+    repository = _ProfileCreateRepository(application, _insurance_policy(application))
     collection_auditor = _CollectionAuditor()
     service = VolunteerPiiService(
         AesGcmPiiCipher(
@@ -308,8 +327,8 @@ async def test_service_encrypts_required_insurance_identity_with_thirty_day_dead
     )
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     sentinel_identity = "A123456789"
+    request_id = uuid4()
 
-    repository = _ProfileCreateRepository(application, _insurance_policy(application))
     profile = await service.create_profile(
         repository=repository,  # type: ignore[arg-type]
         application_id=application.id,
@@ -321,6 +340,7 @@ async def test_service_encrypts_required_insurance_identity_with_thirty_day_dead
         insurance_collection_mode="strayhub_temporary",
         insurance_purpose_code="insurance_verification",
         insurance_policy_version="organization-policy-v3",
+        request_id=request_id,
         now=now,
     )
 
@@ -330,8 +350,11 @@ async def test_service_encrypts_required_insurance_identity_with_thirty_day_dead
     assert sentinel_identity.encode() not in profile.insurance_identity_ciphertext
     assert profile.insurance_identity_delete_after == now + timedelta(days=30)
     assert collection_auditor.event.organization_id == application.organization_id
+    assert collection_auditor.transaction is repository.session
     assert collection_auditor.event.application_id == application.id
     assert collection_auditor.event.actor_user_id == application.user_id
+    assert collection_auditor.event.actor_role == "APPLICANT"
+    assert collection_auditor.event.request_id == request_id
     assert collection_auditor.event.consent_acknowledged is True
     assert collection_auditor.event.purpose_code == "insurance_verification"
     assert collection_auditor.event.policy_version == "organization-policy-v3"
@@ -384,6 +407,51 @@ async def test_raw_insurance_identity_fails_closed_without_collection_auditor() 
     assert error.value.code == "pii_audit_unavailable"
     assert error.value.status_code == 503
     assert repository.added is None
+
+
+@pytest.mark.asyncio
+async def test_collection_auditor_failure_rolls_back_and_is_redacted_by_service() -> None:
+    application = VolunteerApplication(
+        id=uuid4(),
+        organization_id=uuid4(),
+        user_id=uuid4(),
+    )
+    transaction = _RollbackSession()
+    repository = _ProfileCreateRepository(
+        application,
+        _insurance_policy(application),
+        session=transaction,
+    )
+    service = VolunteerPiiService(
+        AesGcmPiiCipher(
+            keys={"local-v1": bytes(range(32))},
+            active_key_version="local-v1",
+        ),
+        collection_auditor=_FailingCollectionAuditor(),
+    )
+
+    with pytest.raises(DomainError) as error:
+        await service.create_profile(
+            repository=repository,  # type: ignore[arg-type]
+            application_id=application.id,
+            applicant_name="王小明",
+            phone_number="0912345678",
+            basic_profile=None,
+            insurance_identity="A123456789",
+            insurance_consent_acknowledged=True,
+            insurance_collection_mode="strayhub_temporary",
+            insurance_purpose_code="insurance_verification",
+            insurance_policy_version="organization-policy-v3",
+            request_id=uuid4(),
+            now=datetime(2026, 8, 23, tzinfo=timezone.utc),
+        )
+
+    assert repository.added is not None
+    assert transaction.rollbacks == 1
+    assert error.value.code == "pii_audit_unavailable"
+    assert error.value.status_code == 503
+    assert "synthetic provider diagnostics" not in str(error.value)
+    assert error.value.__cause__ is None
 
 
 @pytest.mark.asyncio
@@ -557,6 +625,7 @@ async def test_retention_purge_removes_insurance_identity_at_thirty_days_only() 
         organization_id=uuid4(),
         user_id=uuid4(),
     )
+    repository = _ProfileCreateRepository(application, _insurance_policy(application))
     service = VolunteerPiiService(
         AesGcmPiiCipher(
             keys={"local-v1": bytes(range(32))},
@@ -565,7 +634,6 @@ async def test_retention_purge_removes_insurance_identity_at_thirty_days_only() 
         collection_auditor=_CollectionAuditor(),
     )
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
-    repository = _ProfileCreateRepository(application, _insurance_policy(application))
     profile = await service.create_profile(
         repository=repository,  # type: ignore[arg-type]
         application_id=application.id,
@@ -577,6 +645,7 @@ async def test_retention_purge_removes_insurance_identity_at_thirty_days_only() 
         insurance_collection_mode="strayhub_temporary",
         insurance_purpose_code="insurance_verification",
         insurance_policy_version="organization-policy-v3",
+        request_id=uuid4(),
         now=now,
     )
 
@@ -918,11 +987,11 @@ async def test_crm_reveal_never_returns_insurance_identity() -> None:
 
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     application = VolunteerApplication(id=uuid4(), organization_id=uuid4(), user_id=uuid4())
+    repository = _ProfileCreateRepository(application, _insurance_policy(application))
     service = VolunteerPiiService(
         AesGcmPiiCipher(keys={"local-v1": bytes(range(32))}, active_key_version="local-v1"),
         collection_auditor=_CollectionAuditor(),
     )
-    repository = _ProfileCreateRepository(application, _insurance_policy(application))
     profile = await service.create_profile(
         repository=repository,  # type: ignore[arg-type]
         application_id=application.id,
@@ -934,6 +1003,7 @@ async def test_crm_reveal_never_returns_insurance_identity() -> None:
         insurance_collection_mode="strayhub_temporary",
         insurance_purpose_code="insurance_verification",
         insurance_policy_version="organization-policy-v3",
+        request_id=uuid4(),
         now=now,
     )
     audit = CaptureAudit()

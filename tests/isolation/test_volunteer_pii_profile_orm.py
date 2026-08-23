@@ -35,6 +35,7 @@ async def test_runtime_repository_persists_and_reads_encrypted_profile() -> None
     membership_id = uuid4()
     application_id = uuid4()
     rollback_application_id = uuid4()
+    collection_request_id = uuid4()
     sentinel_name = "測試志工ORM"
     sentinel_phone = "0900000099"
     sentinel_identity = "A123456789"
@@ -110,7 +111,7 @@ async def test_runtime_repository_persists_and_reads_encrypted_profile() -> None
             repository = VolunteerAccessRepository(session, organization_id)
             create_service = VolunteerPiiService(
                 AesGcmPiiCipher(keys={"test-v1": bytes(range(32))}, active_key_version="test-v1"),
-                collection_auditor=TransactionalPiiCollectionAuditor(session),
+                collection_auditor=TransactionalPiiCollectionAuditor(),
             )
             await create_service.create_profile(
                 repository=repository,
@@ -123,6 +124,7 @@ async def test_runtime_repository_persists_and_reads_encrypted_profile() -> None
                 insurance_collection_mode="strayhub_temporary",
                 insurance_purpose_code="insurance_verification",
                 insurance_policy_version="organization-policy-v3",
+                request_id=collection_request_id,
                 now=now,
             )
             await session.commit()
@@ -157,6 +159,8 @@ async def test_runtime_repository_persists_and_reads_encrypted_profile() -> None
         audit_payload = repr(audit_row["after_data"])
         assert "insurance_verification" in audit_payload
         assert "organization-policy-v3" in audit_payload
+        assert "APPLICANT" in audit_payload
+        assert str(collection_request_id) in audit_payload
         assert sentinel_identity not in audit_payload
         assert "ciphertext" not in audit_payload
 
@@ -175,16 +179,16 @@ async def test_runtime_repository_persists_and_reads_encrypted_profile() -> None
         async with maker() as session:
 
             class WrongScopeCollectionAuditor(TransactionalPiiCollectionAuditor):
-                async def persist_atomic_collection(self, event) -> None:
-                    await set_organization_scope(session, uuid4())
-                    await super().persist_atomic_collection(event)
+                async def persist_atomic_collection(self, event, *, transaction) -> None:
+                    await set_organization_scope(transaction, uuid4())
+                    await super().persist_atomic_collection(event, transaction=transaction)
 
             await session.execute(text("SET LOCAL ROLE strayhub_runtime"))
             await set_organization_scope(session, organization_id)
             repository = VolunteerAccessRepository(session, organization_id)
             failing_service = VolunteerPiiService(
                 AesGcmPiiCipher(keys={"test-v1": bytes(range(32))}, active_key_version="test-v1"),
-                collection_auditor=WrongScopeCollectionAuditor(session),
+                collection_auditor=WrongScopeCollectionAuditor(),
             )
             with pytest.raises(DomainError) as error:
                 await failing_service.create_profile(
@@ -198,6 +202,7 @@ async def test_runtime_repository_persists_and_reads_encrypted_profile() -> None
                     insurance_collection_mode="strayhub_temporary",
                     insurance_purpose_code="insurance_verification",
                     insurance_policy_version="organization-policy-v3",
+                    request_id=uuid4(),
                     now=now,
                 )
             assert error.value.code == "pii_audit_unavailable"

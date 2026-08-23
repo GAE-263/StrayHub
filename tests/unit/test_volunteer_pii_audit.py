@@ -92,12 +92,15 @@ async def test_committed_reveal_auditor_commits_only_allowlisted_metadata() -> N
 @pytest.mark.asyncio
 async def test_collection_auditor_flushes_allowlisted_metadata_without_committing() -> None:
     session = _Session()
-    auditor = pii_reveal_audit.TransactionalPiiCollectionAuditor(session)
+    auditor = pii_reveal_audit.TransactionalPiiCollectionAuditor()
     sentinel_identity = "A123456789"
+    request_id = uuid4()
     event = PiiCollectionAuditEvent(
         organization_id=uuid4(),
         application_id=uuid4(),
         actor_user_id=uuid4(),
+        actor_role="APPLICANT",
+        request_id=request_id,
         consent_acknowledged=True,
         purpose_code="insurance_verification",
         policy_version="organization-policy-v3",
@@ -105,7 +108,7 @@ async def test_collection_auditor_flushes_allowlisted_metadata_without_committin
         delete_after=datetime(2026, 9, 22, tzinfo=timezone.utc),
     )
 
-    await auditor.persist_atomic_collection(event)
+    await auditor.persist_atomic_collection(event, transaction=session)  # type: ignore[arg-type]
 
     assert session.events == ["add", "flush"]
     assert session.record.action == "insurance_identity.submitted"
@@ -113,10 +116,12 @@ async def test_collection_auditor_flushes_allowlisted_metadata_without_committin
     assert session.record.actor_user_id == event.actor_user_id
     assert session.record.resource_id == event.application_id
     assert session.record.after_data == {
+        "actor_role": "APPLICANT",
         "consent_acknowledged": True,
         "data_category": "insurance_identity",
         "purpose_code": "insurance_verification",
         "policy_version": "organization-policy-v3",
+        "request_id": str(request_id),
         "encryption_key_version": "test-v1",
         "delete_after": "2026-09-22T00:00:00+00:00",
     }
@@ -127,12 +132,14 @@ async def test_collection_auditor_flushes_allowlisted_metadata_without_committin
 @pytest.mark.asyncio
 async def test_collection_auditor_rolls_back_and_redacts_flush_failure() -> None:
     session = _FailingCollectionSession()
-    auditor = pii_reveal_audit.TransactionalPiiCollectionAuditor(session)
+    auditor = pii_reveal_audit.TransactionalPiiCollectionAuditor()
     sentinel = "synthetic audit database failure"
     event = PiiCollectionAuditEvent(
         organization_id=uuid4(),
         application_id=uuid4(),
         actor_user_id=uuid4(),
+        actor_role="APPLICANT",
+        request_id=uuid4(),
         consent_acknowledged=True,
         purpose_code="insurance_verification",
         policy_version="organization-policy-v3",
@@ -141,7 +148,7 @@ async def test_collection_auditor_rolls_back_and_redacts_flush_failure() -> None
     )
 
     with pytest.raises(DomainError) as error:
-        await auditor.persist_atomic_collection(event)
+        await auditor.persist_atomic_collection(event, transaction=session)  # type: ignore[arg-type]
 
     assert session.events == ["add", "flush", "rollback"]
     assert error.value.code == "pii_audit_unavailable"

@@ -44,12 +44,14 @@ class CommittedPiiRevealAuditor:
 class TransactionalPiiCollectionAuditor:
     """Flush collection evidence in the profile's existing transaction."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def persist_atomic_collection(self, event: PiiCollectionAuditEvent) -> None:
+    async def persist_atomic_collection(
+        self,
+        event: PiiCollectionAuditEvent,
+        *,
+        transaction: AsyncSession,
+    ) -> None:
         try:
-            await AuditService(self.session).record(
+            await AuditService(transaction).record(
                 organization_id=event.organization_id,
                 actor_user_id=event.actor_user_id,
                 action="insurance_identity.submitted",
@@ -57,10 +59,12 @@ class TransactionalPiiCollectionAuditor:
                 resource_id=event.application_id,
                 source_channel="liff",
                 after={
+                    "actor_role": event.actor_role,
                     "consent_acknowledged": event.consent_acknowledged,
                     "data_category": "insurance_identity",
                     "purpose_code": event.purpose_code,
                     "policy_version": event.policy_version,
+                    "request_id": event.request_id,
                     "encryption_key_version": event.encryption_key_version,
                     "delete_after": event.delete_after,
                 },
@@ -68,7 +72,7 @@ class TransactionalPiiCollectionAuditor:
             )
         except Exception:
             try:
-                await self.session.rollback()
+                await transaction.rollback()
             except Exception:
                 pass
             raise DomainError("pii_audit_unavailable", "個人資料稽核暫時無法使用", 503) from None

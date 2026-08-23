@@ -54,6 +54,8 @@ class PiiCollectionAuditEvent:
     organization_id: UUID
     application_id: UUID
     actor_user_id: UUID
+    actor_role: str
+    request_id: UUID
     consent_acknowledged: bool
     purpose_code: str
     policy_version: str
@@ -62,4 +64,9 @@ class PiiCollectionAuditEvent:
 
 
 class PiiCollectionAuditPort(Protocol):
-    async def persist_atomic_collection(self, event: PiiCollectionAuditEvent) -> None: ...
+    async def persist_atomic_collection(
+        self,
+        event: PiiCollectionAuditEvent,
+        *,
+        transaction: object,
+    ) -> None: ...
