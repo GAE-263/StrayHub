@@ -80,6 +80,51 @@ describe("care report LIFF page", () => {
     expect(container.textContent).not.toContain("目前步驟：appetite");
   });
 
+  it("clears the draft and invalidates the load when shelter context is lost", async () => {
+    let resolveDraft!: (response: Response) => void;
+    const pendingDraft = new Promise<Response>((resolve) => {
+      resolveDraft = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValueOnce(pendingDraft);
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <VolunteerShelterContext.Provider
+          value={{ organizationId: "org-a", organizationName: "南港收容所" }}
+        >
+          <CareReportPage />
+        </VolunteerShelterContext.Provider>,
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      root?.render(
+        <VolunteerShelterContext.Provider value={null}>
+          <CareReportPage />
+        </VolunteerShelterContext.Provider>,
+      );
+      await Promise.resolve();
+      resolveDraft({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: "draft-a",
+          answers: { appetite: "good" },
+          current_step: "appetite",
+        }),
+      } as Response);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain("目前步驟：appetite");
+    expect(container.textContent).not.toContain("南港收容所");
+  });
+
   it("ignores a pending save response from the previous shelter", async () => {
     let resolveSave!: (response: Response) => void;
     const pendingSave = new Promise<Response>((resolve) => {

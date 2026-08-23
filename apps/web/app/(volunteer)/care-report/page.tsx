@@ -62,7 +62,14 @@ export default function CareReportPage() {
 
   useEffect(() => {
     const organizationId = shelterContext?.organizationId;
-    if (!organizationId) return;
+    if (!organizationId) {
+      contextRequestEpoch.current += 1;
+      loadedContext.current = { initialized: false, organizationId: null };
+      setDraft(null);
+      setOffline(false);
+      setLoading(false);
+      return;
+    }
     if (
       loadedContext.current.initialized &&
       loadedContext.current.organizationId === organizationId
