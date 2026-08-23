@@ -22,15 +22,14 @@
 | P0 | 更新 LIFF／tunnel 開發文件 | 完成 | README、004 quickstart、contract index與controlled-line evidence template清楚記錄兩條HTTPS tunnel、LIFF Endpoint／`openid`、runtime environment、Rich Menu dry-run、Case A–D與credential遮罩規則 |
 | P0 | 更新 004 契約文件 | 完成 | additive與canonical contract、runtime Pydantic及generated type的四狀態與401／403／503分類一致 |
 | P0 | 執行 Alembic migration 實測 | 完成 | 真實PostgreSQL已反覆完成0030→0029→0030 round-trip並執行resolver／RLS tests |
-| P0 | 完整 Python 品質門檻 | 未完成 | `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 全部通過 |
-| P0 | 完整 frontend 品質門檻 | 未完成 | frontend unit tests、typecheck、format check、production build 全部通過 |
-| P0 | Playwright LIFF／onboarding E2E | 未完成 | 覆蓋 login redirect、NEW、submit→PENDING、ACTIVE redirect、SUSPENDED、network failure 與跨機構拒絕 |
-| P0 | 360px、keyboard 與 axe 驗證 | 完成 | 四個 viewport（360×800、768×1024、1024×768、1440×900）無核心水平溢出；responsive／keyboard／Axe suite通過，Axe critical／serious 為 0 |
-| P0 | 真機 LINE／LIFF 驗收 | 未完成，需要外部設定 | 使用真實 LIFF ID、LINE Login Channel、HTTPS tunnel 及測試 LINE 帳號完成 Case A–D |
+| P0 | 完整 Python 品質門檻 | 完成（Task 17） | `verify_local.sh`與正確local PostgreSQL連線的`uv run pytest`均通過；full pytest `553 passed`、Ruff、format、mypy與Docker build通過 |
+| P0 | 完整 frontend 品質門檻 | 完成（Task 17） | frontend unit／mobile／a11y tests、typecheck、format check、production build與P0 browser gates通過 |
+| P0 | Playwright LIFF／onboarding E2E | 完成（local evidence；Task 14／17） | local fixture覆蓋login redirect、NEW、submit→PENDING、ACTIVE redirect、SUSPENDED、network failure、cross-organization與P0 responsive／keyboard matrix |
+| P0 | 真機 LINE／LIFF 驗收 | BLOCKED／UNRUN（Task 18） | preflight：API `8001/healthz`通過；Web `3001`未啟動；`LIFF_ID`、LINE channel與public Web／API origins未設定；尚無真實手機Case A–D evidence |
 | P1 | 志工報名 visual snapshots | 完成 | `/volunteer-entry` NEW及相關志工流程完成四個 viewport reviewer-approved visual baseline；對應 005 T108 |
-| P1 | 實際使用者計時驗收 | 未完成 | 至少 20 位首次志工及 3 位管理員批次操作留下匿名驗收證據；對應 005 T110 |
-| P0 | 同步 Spec Kit task ledger | 部分完成 | 已依證據完成T013–T015；T016及後續frontend／E2E／真機任務仍保持未完成 |
-| P0 | 最終 diff review 與 commit | 未完成 | 修正完整 gate 發現的問題、獨立 review 最終 diff；使用者完成畫面驗收後再建立 commit |
+| P1 | 實際使用者計時驗收 | BLOCKED／UNRUN（Task 20） | 需要至少 20 位首次志工及 3 位管理員批次操作的匿名驗收證據；目前沒有外部受控使用者與裝置資料，不以Playwright timing替代；對應 005 T110 |
+| P0 | 同步 Spec Kit task ledger | 完成（Task 19） | Task 17 full gates與Task 18外部前置阻塞已同步；真機Case A–D保持`BLOCKED／UNRUN`，未以local evidence替代 |
+| P0 | 最終 diff review 與 commit | 未完成 | 需在Task 17–19候選變更完成後重做independent review；依使用者授權再建立narrow commit |
 
 ## 建議下一步順序
 
@@ -44,7 +43,7 @@
 
 ## 目前工作樹狀態
 
-Task 2–7已提交。Task 8已完成LIFF init/login、identity exchange、四狀態、NEW→PENDING、ACTIVE canonical response validation與storage-before-replace、所有非ACTIVE／錯誤結果先清舊auth/context、partial storage keyed cleanup＋clear fallback、stale response isolation、safe retry／errors、legacy token URL scrub＋location fallback與fixed destination；已補Server runtime `LIFF_ID`、移除build-time API rewrite並以`/v1/[...path]` runtime proxy轉送至Cloud Run API URI，proxy具1MiB request／10MiB response cap、stream逐chunk且整體10秒deadline、禁止redirect、HTTPS origin限制、dot-segment拒絕、path encoding及安全502／503；避免loopback與空domain URL；390×844人工確認ERROR主標題層級與按鈕間距符合預期；final staged backend 533、frontend 178、deployment contract、typecheck、Task 8 files Prettier與build通過，雙Reviewer通過。E2E、真機與整體志工報名／LIFF功能仍未完成。
+Task 2–7已提交。Task 8已完成LIFF init/login、identity exchange、四狀態、NEW→PENDING、ACTIVE canonical response validation與storage-before-replace、所有非ACTIVE／錯誤結果先清舊auth/context、partial storage keyed cleanup＋clear fallback、stale response isolation、safe retry／errors、legacy token URL scrub＋location fallback與fixed destination；已補Server runtime `LIFF_ID`、移除build-time API rewrite並以`/v1/[...path]` runtime proxy轉送至Cloud Run API URI，proxy具1MiB request／10MiB response cap、stream逐chunk且整體10秒deadline、禁止redirect、HTTPS origin限制、dot-segment拒絕、path encoding及安全502／503；避免loopback與空domain URL；390×844人工確認ERROR主標題層級與按鈕間距符合預期；final staged backend 533、frontend 178、deployment contract、typecheck、Task 8 files Prettier與build通過，雙Reviewer通過。Local Playwright E2E與本機技術gate已完成；受控真實LINE／LIFF真機驗收、T110人工計時與其他外部志工報名／LIFF驗收仍未完成。
 
 ## 執行任務 Ledger
 
@@ -64,7 +63,10 @@ Task 2–7已提交。Task 8已完成LIFF init/login、identity exchange、四�
 | Task 14：Browser／LIFF route matrix | 完成 | Playwright onboarding與multi-organization route evidence | LIFF route matrix與cross-organization browser scenarios已通過；既有commit `f466ac3` | `f466ac3 fix(web): isolate volunteer recovery epochs` |
 | Task 15：360px／keyboard／Axe／visual | 完成 | P0 responsive、keyboard、Axe及visual baseline；測試fixture改用`/volunteer-entry`主入口 | responsive／keyboard／Axe `61 passed`；visual `77 passed`；typecheck、Task 15 spec Prettier、`git diff --check`通過；使用者已明確接受目前visual baseline | `test(web): validate volunteer entry accessibility visuals` |
 | Task 16：LIFF／tunnel／真機驗收文件 | 完成 | README、004 quickstart、contract index、controlled-line evidence template | 文件commands、paths與env names已對齊current code；`PYTHONPATH=.`修正entry script入口；`git diff --check`與documentation path review通過；尚未宣稱真機Case A–D完成 | `docs: add LIFF tunnel and phone acceptance guide` |
-| Task 17～20：Full gates／controlled LINE／completion／人工計時 | 待執行 | 完整品質gate、真機Case A–D、Spec Kit ledger、005 T110 | 需要後續技術與外部驗收證據 | — |
+| Task 17：Full quality gates | 完成 | 完整Python／frontend／contract／Docker／P0 browser gate | `verify_local.sh`完整通過；full pytest `553 passed`；P0 `96 passed`；browser Axe `16 passed`；visual `83 passed`；Task 17 Dockerfile與StrictMode／fixture／visual timing修正已驗證 | 未commit |
+| Task 18：Controlled LINE／LIFF真機Case A–D | BLOCKED／UNRUN | 真實LIFF ID、LINE Login channel、兩條HTTPS tunnel、受控帳號與手機操作 | preflight僅確認cloudflared／ngrok已安裝、API health通過；Web未啟動且runtime／public origins未設定；沒有外部PASS evidence | — |
+| Task 19：Spec Kit ledger與完成報告同步 | 完成 | 同步Task 17 evidence、Task 18 blocker與後續commit／T110 boundaries | 本ledger已更新；`git diff --check`與documentation path review須於本次變更後fresh rerun | 未commit |
+| Task 20：005 T110人工計時驗收 | BLOCKED／UNRUN | 至少20位首次志工與3位管理員的匿名操作時間證據 | 需外部受控使用者、裝置與匿名計時資料；目前無證據，不以Playwright timing替代 | — |
 
 ## 2026-08-20 Task 1 Reconciliation
 

@@ -171,11 +171,11 @@
 
 **目的**：完成跨 story 的品質、安全、文件與 release gate。
 
-- [ ] T052 [P] 在 `apps/web/e2e/p0-visual.spec.ts`、`apps/web/e2e/p0-visual.spec.ts-snapshots/` 與 `apps/web/e2e/p0-a11y.spec.ts` 完成 360/768/1024/1440 viewport visual、axe 與 reviewer-approved baseline，禁止未審查 snapshot 更新
-- [ ] T053 [P] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/isolation/test_liff_entry_isolation.py` 與 `tests/security/test_unauthenticated_internal_data.py` 完成 server-side authorization、RLS、no partial state、no stale protected content 與 raw secret logging regression
-- [ ] T054 在 `specs/004-volunteer-entry-route-isolation/quickstart.md`、`specs/004-volunteer-entry-route-isolation/contracts/README.md` 與 `specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md` 更新實際 command、controlled evidence location、known limitations 與 release checklist
+- [x] T052 [P] 在 `apps/web/e2e/p0-visual.spec.ts`、`apps/web/e2e/p0-visual.spec.ts-snapshots/` 與 `apps/web/e2e/p0-a11y.spec.ts` 完成 360/768/1024/1440 viewport visual、axe 與 reviewer-approved baseline，禁止未審查 snapshot 更新；visual `83 passed`、browser Axe `16 passed`，P0 responsive／keyboard evidence included in `96 passed`
+- [x] T053 [P] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/isolation/test_liff_entry_isolation.py` 與 `tests/security/test_unauthenticated_internal_data.py` 完成 server-side authorization、RLS、no partial state、no stale protected content 與 raw secret logging regression；local PostgreSQL full pytest `553 passed`
+- [x] T054 在 `specs/004-volunteer-entry-route-isolation/quickstart.md`、`specs/004-volunteer-entry-route-isolation/contracts/README.md` 與 `specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md` 更新實際 command、controlled evidence location、known limitations 與 release checklist；documented CLI help／path review passed
 - [ ] T055 在 `specs/004-volunteer-entry-route-isolation/` 執行 quickstart 全部 validation commands，並在 `specs/004-volunteer-entry-route-isolation/validation/` 保存不含 secret/PII 的結果摘要
-- [ ] T056 在 repository root 執行 `ruff check .`、`ruff format --check .`、`pytest`、`npm --prefix apps/web run quality`、`npm --prefix apps/web run build`、P0 e2e/a11y/visual 與 `./scripts/verify_local.sh`，確認所有 constitution gate 通過後才標記 feature 完成
+- [x] T056 在 repository root 執行 `ruff check .`、`ruff format --check .`、`pytest`、`npm --prefix apps/web run quality`、`npm --prefix apps/web run build`、P0 e2e/a11y/visual 與 `./scripts/verify_local.sh`，確認所有 constitution gate 通過後才標記 feature 完成；`verify_local.sh`、full pytest `553 passed`、P0 `96 passed`、Axe `16 passed`、visual `83 passed`
 
 ## Dependencies & Execution Order
 
