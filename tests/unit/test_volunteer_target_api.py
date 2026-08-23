@@ -429,6 +429,8 @@ async def test_invalid_line_token_is_verified_before_legacy_entry_resolution(
         payload = api.VolunteerApplicationCreateRequest(
             id_token="synthetic-token",
             shelter_entry_reference=VALID_REFERENCE,
+            applicant_name="測試志工",
+            phone_number="0900000000",
             client_request_id=uuid4(),
             consent_acknowledged=True,
         )
@@ -494,6 +496,8 @@ async def test_mutations_validate_response_before_commit(
         payload = api.VolunteerApplicationCreateRequest(
             id_token="synthetic-token",
             shelter_entry_reference=VALID_REFERENCE,
+            applicant_name="測試志工",
+            phone_number="0900000000",
             client_request_id=uuid4(),
             consent_acknowledged=True,
         )

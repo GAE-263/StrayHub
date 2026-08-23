@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
@@ -12,6 +13,7 @@ from services.api.app.application.ports.authentication import LineIdentityVerifi
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
+from services.api.app.application.volunteer_pii_service import VolunteerPiiService
 from services.api.app.domain.volunteer_access import (
     normalize_reason,
     snapshot_policy,
@@ -102,12 +104,14 @@ class VolunteerAccessService:
         *,
         audit: AuditService | None = None,
         notifications: VolunteerNotificationService | None = None,
+        pii_service: VolunteerPiiService | None = None,
     ) -> None:
         self.repository = repository
         self.identities = identities
         self.verifier = verifier
         self.audit = audit
         self.notifications = notifications
+        self.pii_service = pii_service
 
     @classmethod
     async def for_organization(
@@ -119,6 +123,7 @@ class VolunteerAccessService:
         *,
         audit: AuditService | None = None,
         notifications: VolunteerNotificationService | None = None,
+        pii_service: VolunteerPiiService | None = None,
     ) -> VolunteerAccessService:
         """Resolve and validate one organization-scoped volunteer service.
 
@@ -151,6 +156,7 @@ class VolunteerAccessService:
             verifier,
             audit=audit,
             notifications=notifications,
+            pii_service=pii_service,
         )
 
     @classmethod
@@ -163,6 +169,7 @@ class VolunteerAccessService:
         *,
         audit: AuditService | None = None,
         notifications: VolunteerNotificationService | None = None,
+        pii_service: VolunteerPiiService | None = None,
     ) -> VolunteerAccessService:
         """Build an organization-scoped service for status reads only.
 
@@ -186,6 +193,7 @@ class VolunteerAccessService:
             verifier,
             audit=audit,
             notifications=notifications,
+            pii_service=pii_service,
         )
 
     @staticmethod
@@ -253,12 +261,22 @@ class VolunteerAccessService:
         self,
         *,
         id_token: str,
-        entry_reference_id: UUID,
+        entry_reference_id: UUID | None,
         verified_line_user_id: str | None = None,
         client_request_id: UUID,
         consent_acknowledged: bool,
+        organization_id: UUID | None = None,
+        applicant_name: str | None = None,
+        phone_number: str | None = None,
+        basic_profile: dict[str, Any] | None = None,
+        insurance_identity: str | None = None,
+        insurance_consent_acknowledged: bool = False,
         now: datetime | None = None,
     ) -> VolunteerSubmitResult:
+        if (entry_reference_id is None) == (organization_id is None):
+            raise DomainError("volunteer_target_required", "志工申請目標無效", 422)
+        if organization_id is not None and organization_id != self.repository.organization_id:
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
         if not consent_acknowledged:
             raise DomainError("consent_required", "請先確認志工報名同意事項", 422)
         line_user_id = (
@@ -315,6 +333,19 @@ class VolunteerAccessService:
                 )
         previous_application_id = history[0].id if history else None
         submitted_at = now or datetime.now(timezone.utc)
+        policy = None
+        normalized_identity = None
+        if self.pii_service is not None:
+            if not applicant_name or not phone_number:
+                raise DomainError("application_profile_required", "請完整填寫志工資料", 422)
+            policy = await self.repository.policy(for_update=True)
+            normalized_identity = (insurance_identity or "").strip()
+            if policy.insurance_required and not normalized_identity:
+                raise DomainError("insurance_identity_required", "請提供保險身分資料", 422)
+            if normalized_identity and not policy.insurance_required:
+                raise DomainError("insurance_identity_not_allowed", "此申請不需保險身分資料", 422)
+            if normalized_identity and not insurance_consent_acknowledged:
+                raise DomainError("insurance_consent_required", "請先同意保險身分資料用途", 422)
         application = VolunteerApplication(
             organization_id=self.repository.organization_id,
             user_id=user_id,
@@ -331,6 +362,28 @@ class VolunteerAccessService:
         else:
             application, created = await race_safe_add(application)
         if created:
+            if self.pii_service is not None:
+                assert policy is not None
+                await self.pii_service.create_profile(
+                    repository=self.repository,
+                    application_id=application.id,
+                    applicant_name=applicant_name,
+                    phone_number=phone_number,
+                    basic_profile=basic_profile,
+                    insurance_identity=normalized_identity or None,
+                    insurance_consent_acknowledged=insurance_consent_acknowledged,
+                    insurance_collection_mode=(
+                        "strayhub_temporary" if normalized_identity else None
+                    ),
+                    insurance_purpose_code=(
+                        "insurance_verification" if normalized_identity else None
+                    ),
+                    insurance_policy_version=(
+                        f"organization-policy-v{policy.version}" if normalized_identity else None
+                    ),
+                    now=submitted_at,
+                    request_id=client_request_id,
+                )
             await self._record_submission(application, organization, binding.id)
         return VolunteerSubmitResult(
             await self._status_for_user(user_id, organization, now=submitted_at), created

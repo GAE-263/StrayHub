@@ -2611,12 +2611,29 @@ export interface components {
         });
         VolunteerApplicationCreateRequest: {
             id_token: string;
-            shelter_entry_reference: string;
+            /** Format: uuid */
+            organization_id?: string | null;
+            shelter_entry_reference?: string | null;
+            applicant_name: string;
+            phone_number: string;
+            basic_profile?: {
+                [key: string]: unknown;
+            } | null;
+            insurance_identity?: string | null;
+            /** @default false */
+            insurance_consent_acknowledged: boolean;
             /** Format: uuid */
             client_request_id: string;
             /** @constant */
             consent_acknowledged: true;
-        };
+        } & ({
+            /** Format: uuid */
+            organization_id: string;
+            shelter_entry_reference?: null;
+        } | {
+            organization_id?: null;
+            shelter_entry_reference: string;
+        });
         VolunteerApplicationWithdrawRequest: {
             id_token: string;
             shelter_entry_reference: string;
@@ -5328,7 +5345,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["EntryUnavailable"];
             409: components["responses"]["Conflict"];
-            /** @description Validation error; organization targets are not supported by this mutation contract */
+            /** @description Validation error; exactly one target is required and profile or insurance fields must satisfy the organization policy */
             422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
         };

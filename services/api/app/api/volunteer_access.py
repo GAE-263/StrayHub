@@ -5,7 +5,7 @@ import binascii
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
@@ -29,6 +29,7 @@ from services.api.app.application.volunteer_batch_service import VolunteerBatchS
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
+from services.api.app.application.volunteer_pii_service import VolunteerPiiService
 from services.api.app.config.settings import get_settings
 from services.api.app.domain.volunteer_target import (
     EntryTarget,
@@ -38,6 +39,12 @@ from services.api.app.domain.volunteer_target import (
 )
 from services.api.app.infrastructure.line.identity_verification_adapter import (
     configured_line_identity_verifier,
+)
+from services.api.app.infrastructure.security.pii_cipher import (
+    configured_pii_cipher_from_settings,
+)
+from services.api.app.infrastructure.security.pii_reveal_audit import (
+    TransactionalPiiCollectionAuditor,
 )
 from services.api.app.persistence.database.scope import (
     set_organization_scope,
@@ -171,7 +178,12 @@ class VolunteerEntryIdentityRequest(BaseModel):
         return self
 
 
-class VolunteerApplicationCreateRequest(VolunteerEntryIdentityRequest):
+class VolunteerApplicationCreateRequest(VolunteerIdentityRequest):
+    applicant_name: str = Field(min_length=1, max_length=200)
+    phone_number: str = Field(min_length=1, max_length=50)
+    basic_profile: dict[str, Any] | None = None
+    insurance_identity: str | None = Field(default=None, max_length=128)
+    insurance_consent_acknowledged: bool = False
     client_request_id: UUID
     consent_acknowledged: Literal[True]
 
@@ -513,10 +525,18 @@ def get_line_identity_verifier() -> LineIdentityVerifierPort:
     )
 
 
+def get_volunteer_pii_service() -> VolunteerPiiService:
+    return VolunteerPiiService(
+        configured_pii_cipher_from_settings(get_settings()),
+        collection_auditor=TransactionalPiiCollectionAuditor(),
+    )
+
+
 async def _service_for_entry(
     session: AsyncSession,
     raw_reference: str,
     verifier: LineIdentityVerifierPort,
+    pii_service: VolunteerPiiService | None = None,
 ) -> tuple[VolunteerAccessService, UUID]:
     VolunteerAccessService.validate_entry_reference(raw_reference)
     resolved = await VolunteerAccessRepository.resolve_and_scope(session, raw_reference)
@@ -531,6 +551,7 @@ async def _service_for_entry(
             verifier,
             audit=AuditService(session),
             notifications=VolunteerNotificationService(repository),
+            pii_service=pii_service,
         ),
         reference_id,
     )
@@ -541,6 +562,9 @@ async def _service_for_target(
     payload: VolunteerIdentityRequest,
     verifier: LineIdentityVerifierPort,
     verified_line_user_id: str | None = None,
+    *,
+    for_submit: bool = False,
+    pii_service: VolunteerPiiService | None = None,
 ) -> tuple[VolunteerAccessService, UUID | None, str | None]:
     verified_line_user_id = (
         verified_line_user_id
@@ -551,19 +575,40 @@ async def _service_for_target(
     if isinstance(target, OrganizationTarget):
         await set_organization_scope(session, target.organization_id)
         repository = VolunteerAccessRepository(session, target.organization_id)
-        service = await VolunteerAccessService.for_organization_status(
-            target.organization_id,
-            repository,
-            AuthenticationRepository(session),
-            verifier,
-            audit=AuditService(session),
-            notifications=VolunteerNotificationService(repository),
+        service_factory = (
+            VolunteerAccessService.for_organization
+            if for_submit
+            else VolunteerAccessService.for_organization_status
         )
+        if for_submit:
+            service = await service_factory(
+                target.organization_id,
+                repository,
+                AuthenticationRepository(session),
+                verifier,
+                audit=AuditService(session),
+                notifications=VolunteerNotificationService(repository),
+                pii_service=pii_service,
+            )
+        else:
+            service = await service_factory(
+                target.organization_id,
+                repository,
+                AuthenticationRepository(session),
+                verifier,
+                audit=AuditService(session),
+                notifications=VolunteerNotificationService(repository),
+            )
         return service, None, verified_line_user_id
     assert isinstance(target, EntryTarget)
-    service, reference_id = await _service_for_entry(
-        session, target.shelter_entry_reference, verifier
-    )
+    if for_submit and pii_service is not None and hasattr(pii_service, "create_profile"):
+        service, reference_id = await _service_for_entry(
+            session, target.shelter_entry_reference, verifier, pii_service=pii_service
+        )
+    else:
+        service, reference_id = await _service_for_entry(
+            session, target.shelter_entry_reference, verifier
+        )
     return service, reference_id, verified_line_user_id
 
 
@@ -634,17 +679,30 @@ async def submit_volunteer_application(
     response: Response,
     session: AsyncSession = Depends(request_session),  # noqa: B008
     verifier: LineIdentityVerifierPort = Depends(get_line_identity_verifier),  # noqa: B008
+    pii_service: VolunteerPiiService = Depends(get_volunteer_pii_service),  # noqa: B008
 ) -> VolunteerApplicationStatusResponse:
     try:
         verified_line_user_id = await verifier.verify(payload.id_token)
-        entry_reference = _legacy_entry_reference(payload)
-        service, reference_id = await _service_for_entry(session, entry_reference, verifier)
+        service, reference_id, verified_line_user_id = await _service_for_target(
+            session,
+            payload,
+            verifier,
+            verified_line_user_id,
+            for_submit=True,
+            pii_service=pii_service,
+        )
         result = await service.submit(
             id_token=payload.id_token,
             entry_reference_id=reference_id,
+            organization_id=payload.organization_id,
             verified_line_user_id=verified_line_user_id,
             client_request_id=payload.client_request_id,
             consent_acknowledged=payload.consent_acknowledged,
+            applicant_name=payload.applicant_name,
+            phone_number=payload.phone_number,
+            basic_profile=payload.basic_profile,
+            insurance_identity=payload.insurance_identity,
+            insurance_consent_acknowledged=payload.insurance_consent_acknowledged,
         )
         response_body = _response(result.status)
         await session.commit()

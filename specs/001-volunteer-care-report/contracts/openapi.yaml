@@ -1391,7 +1391,7 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
-          description: Validation error; organization targets are not supported by this mutation contract
+          description: Validation error; exactly one target is required and profile or insurance fields must satisfy the organization policy
           $ref: '#/components/responses/ValidationError'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
@@ -3602,23 +3602,60 @@ components:
               pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationCreateRequest:
       type: object
-      required: [id_token, shelter_entry_reference, client_request_id, consent_acknowledged]
+      required: [id_token, applicant_name, phone_number, client_request_id, consent_acknowledged]
       additionalProperties: false
       properties:
         id_token:
           type: string
           minLength: 1
+        organization_id:
+          type: [string, 'null']
+          format: uuid
         shelter_entry_reference:
-          type: string
+          type: [string, 'null']
           minLength: 32
           maxLength: 512
           pattern: '^[A-Za-z0-9._~-]+$'
+        applicant_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        phone_number:
+          type: string
+          minLength: 1
+          maxLength: 50
+        basic_profile:
+          type: [object, 'null']
+          additionalProperties: true
+        insurance_identity:
+          type: [string, 'null']
+          maxLength: 128
+        insurance_consent_acknowledged:
+          type: boolean
+          default: false
         client_request_id:
           type: string
           format: uuid
         consent_acknowledged:
           type: boolean
           const: true
+      oneOf:
+        - required: [organization_id]
+          properties:
+            organization_id:
+              type: string
+              format: uuid
+            shelter_entry_reference:
+              type: 'null'
+        - required: [shelter_entry_reference]
+          properties:
+            organization_id:
+              type: 'null'
+            shelter_entry_reference:
+              type: string
+              minLength: 32
+              maxLength: 512
+              pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationWithdrawRequest:
       type: object
       required: [id_token, shelter_entry_reference, expected_version]

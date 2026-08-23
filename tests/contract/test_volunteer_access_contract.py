@@ -6,6 +6,7 @@ import yaml
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
+from pydantic import ValidationError
 from services.api.app.api.errors import request_validation_error_handler
 from services.api.app.api.volunteer_access import (
     GrantPeriodUpdateRequest,
@@ -36,12 +37,6 @@ def test_application_contract_declares_status_submit_withdraw_and_safe_errors() 
     assert withdraw["security"] == []
     assert {"200", "401", "404", "409", "422", "503"} <= withdraw["responses"].keys()
     assert paths["/v1/public/volunteer-organizations"]["get"]["security"] == []
-    assert paths["/v1/volunteer-applications"]["post"]["responses"]["422"]["description"] == (
-        "Validation error; organization targets are not supported by this mutation contract"
-    )
-    assert paths["/v1/volunteer-applications/{applicationId}/withdraw"]["post"]["responses"]["422"][
-        "description"
-    ] == ("Validation error; organization targets are not supported by this mutation contract")
 
 
 def test_app_normalizes_database_failures_to_dependency_unavailable() -> None:
@@ -107,7 +102,13 @@ def test_application_router_and_payloads_match_canonical_contract() -> None:
     assert VolunteerIdentityRequest.model_fields["shelter_entry_reference"].default is None
     assert set(VolunteerApplicationCreateRequest.model_fields) == {
         "id_token",
+        "organization_id",
         "shelter_entry_reference",
+        "applicant_name",
+        "phone_number",
+        "basic_profile",
+        "insurance_identity",
+        "insurance_consent_acknowledged",
         "client_request_id",
         "consent_acknowledged",
     }
@@ -165,34 +166,55 @@ def test_entry_reference_contract_matches_runtime_target_constraints() -> None:
         assert reference["pattern"] == r"^[A-Za-z0-9._~-]+$"
 
 
-def test_mutation_request_contracts_are_entry_only_until_organization_mutations_exist() -> None:
+def test_submit_request_contract_supports_exactly_one_target_and_profile_fields() -> None:
     document = yaml.safe_load(
         Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
     )
     schemas = document["components"]["schemas"]
-    for schema_name, expected_required in (
-        (
-            "VolunteerApplicationCreateRequest",
-            ["id_token", "shelter_entry_reference", "client_request_id", "consent_acknowledged"],
-        ),
-        (
-            "VolunteerApplicationWithdrawRequest",
-            ["id_token", "shelter_entry_reference", "expected_version"],
-        ),
-    ):
-        schema = schemas[schema_name]
-        assert schema["required"] == expected_required
-        assert "organization_id" not in schema["properties"]
-        assert "oneOf" not in schema
+    schema = schemas["VolunteerApplicationCreateRequest"]
+    assert schema["required"] == [
+        "id_token",
+        "applicant_name",
+        "phone_number",
+        "client_request_id",
+        "consent_acknowledged",
+    ]
+    assert "organization_id" in schema["properties"]
+    assert "shelter_entry_reference" in schema["properties"]
+    assert len(schema["oneOf"]) == 2
+    assert {tuple(branch["required"]) for branch in schema["oneOf"]} == {
+        ("organization_id",),
+        ("shelter_entry_reference",),
+    }
+    assert {
+        "applicant_name",
+        "phone_number",
+        "basic_profile",
+        "insurance_identity",
+        "insurance_consent_acknowledged",
+    } <= set(schema["properties"])
+
+    withdraw_schema = schemas["VolunteerApplicationWithdrawRequest"]
+    assert withdraw_schema["required"] == [
+        "id_token",
+        "shelter_entry_reference",
+        "expected_version",
+    ]
+    assert "organization_id" not in withdraw_schema["properties"]
+    assert "oneOf" not in withdraw_schema
 
 
-def test_runtime_openapi_mutation_schemas_are_entry_only() -> None:
+def test_runtime_openapi_submit_schema_supports_target_and_withdraw_stays_entry_only() -> None:
     schemas = app.openapi()["components"]["schemas"]
-    for schema_name in ("VolunteerApplicationCreateRequest", "VolunteerApplicationWithdrawRequest"):
-        schema = schemas[schema_name]
-        assert "organization_id" not in schema["properties"]
-        assert "shelter_entry_reference" in schema["required"]
-        assert "oneOf" not in schema
+    submit_schema = schemas["VolunteerApplicationCreateRequest"]
+    assert "organization_id" in submit_schema["properties"]
+    assert "applicant_name" in submit_schema["properties"]
+    assert len(submit_schema["oneOf"]) == 2
+
+    withdraw_schema = schemas["VolunteerApplicationWithdrawRequest"]
+    assert "organization_id" not in withdraw_schema["properties"]
+    assert "shelter_entry_reference" in withdraw_schema["required"]
+    assert "oneOf" not in withdraw_schema
 
 
 def test_runtime_openapi_identity_schema_declares_exactly_one_target() -> None:
@@ -202,6 +224,26 @@ def test_runtime_openapi_identity_schema_declares_exactly_one_target() -> None:
         ("organization_id",),
         ("shelter_entry_reference",),
     }
+
+
+def test_submit_model_rejects_missing_or_ambiguous_target() -> None:
+    common = {
+        "id_token": "synthetic-token",
+        "applicant_name": "測試志工",
+        "phone_number": "0900000000",
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "consent_acknowledged": True,
+    }
+    with pytest.raises(ValidationError):
+        VolunteerApplicationCreateRequest.model_validate(common)
+    with pytest.raises(ValidationError):
+        VolunteerApplicationCreateRequest.model_validate(
+            {
+                **common,
+                "organization_id": "00000000-0000-0000-0000-000000000002",
+                "shelter_entry_reference": "A" * 32,
+            }
+        )
 
 
 def test_runtime_openapi_volunteer_error_and_nullable_response_schemas_match_contract() -> None:

@@ -33,13 +33,18 @@ class _IdentityRepository:
 
 
 class _Repository:
-    def __init__(self, *, enabled=True):
+    def __init__(self, *, enabled=True, insurance_required=False):
         self.organization_id = uuid4()
         self.enabled = enabled
+        self.insurance_required = insurance_required
         self.values = []
 
-    async def policy(self):
-        return SimpleNamespace(applications_enabled=self.enabled)
+    async def policy(self, *, for_update=False):
+        return SimpleNamespace(
+            applications_enabled=self.enabled,
+            insurance_required=self.insurance_required,
+            version=3,
+        )
 
     async def pending_application_for_user(self, user_id, *, for_update=False):
         return next(
@@ -62,6 +67,15 @@ class _Repository:
             value.id = uuid4()
         self.values.append(value)
         return value
+
+
+class _PiiService:
+    def __init__(self):
+        self.calls = []
+
+    async def create_profile(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(application_id=kwargs["application_id"])
 
 
 @pytest.mark.asyncio
@@ -165,3 +179,84 @@ async def test_disabled_entry_returns_existing_pending_duplicate() -> None:
 
     assert replay.created is False
     assert replay.status.effective_status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_submit_supports_organization_target_and_persists_profile_input() -> None:
+    repository = _Repository()
+    identities = _IdentityRepository()
+    pii = _PiiService()
+    service = VolunteerAccessService(repository, identities, _Verifier(), pii_service=pii)
+
+    result = await service.submit(
+        id_token="token",
+        entry_reference_id=None,
+        client_request_id=uuid4(),
+        consent_acknowledged=True,
+        organization_id=repository.organization_id,
+        applicant_name="測試志工",
+        phone_number="0900000000",
+        basic_profile={"experience": "短期照護"},
+        insurance_identity=None,
+        insurance_consent_acknowledged=False,
+    )
+
+    assert result.created is True
+    assert result.status.application is not None
+    assert result.status.application.organization_id == repository.organization_id
+    assert len(pii.calls) == 1
+    assert pii.calls[0]["applicant_name"] == "測試志工"
+    assert pii.calls[0]["phone_number"] == "0900000000"
+    assert pii.calls[0]["basic_profile"] == {"experience": "短期照護"}
+    assert pii.calls[0]["insurance_identity"] is None
+    assert not any(
+        value.__class__.__name__ == "OrganizationMembership" for value in identities.users
+    )
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_insurance_identity_when_policy_does_not_require_it() -> None:
+    repository = _Repository(insurance_required=False)
+    identities = _IdentityRepository()
+    pii = _PiiService()
+    service = VolunteerAccessService(repository, identities, _Verifier(), pii_service=pii)
+
+    with pytest.raises(DomainError, match="不需保險身分資料"):
+        await service.submit(
+            id_token="token",
+            entry_reference_id=None,
+            organization_id=repository.organization_id,
+            client_request_id=uuid4(),
+            consent_acknowledged=True,
+            applicant_name="測試志工",
+            phone_number="0900000000",
+            insurance_identity="A123456789",
+            insurance_consent_acknowledged=True,
+        )
+
+    assert repository.values == []
+    assert pii.calls == []
+
+
+@pytest.mark.asyncio
+async def test_submit_requires_insurance_identity_when_policy_requires_it() -> None:
+    repository = _Repository(insurance_required=True)
+    identities = _IdentityRepository()
+    pii = _PiiService()
+    service = VolunteerAccessService(repository, identities, _Verifier(), pii_service=pii)
+
+    with pytest.raises(DomainError, match="提供保險身分資料"):
+        await service.submit(
+            id_token="token",
+            entry_reference_id=None,
+            organization_id=repository.organization_id,
+            client_request_id=uuid4(),
+            consent_acknowledged=True,
+            applicant_name="測試志工",
+            phone_number="0900000000",
+            insurance_identity=None,
+            insurance_consent_acknowledged=False,
+        )
+
+    assert repository.values == []
+    assert pii.calls == []
