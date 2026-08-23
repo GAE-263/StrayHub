@@ -47,3 +47,19 @@ class PiiRevealAuditEvent:
 
 class PiiRevealAuditPort(Protocol):
     async def persist_committed_reveal(self, event: PiiRevealAuditEvent) -> None: ...
+
+
+@dataclass(frozen=True)
+class PiiCollectionAuditEvent:
+    organization_id: UUID
+    application_id: UUID
+    actor_user_id: UUID
+    consent_acknowledged: bool
+    purpose_code: str
+    policy_version: str
+    encryption_key_version: str
+    delete_after: datetime
+
+
+class PiiCollectionAuditPort(Protocol):
+    async def persist_atomic_collection(self, event: PiiCollectionAuditEvent) -> None: ...

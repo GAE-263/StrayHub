@@ -176,5 +176,8 @@ PII reveal必須與audit fail-closed耦合：在任何plaintext離開server boun
 
 Task 5 verification evidence（2026-08-23）：真實PostgreSQL runtime-role測試涵蓋public
 create／reveal、persisted policy／membership locks、ORM ciphertext read-back與durable audit RLS；
-empty-database測試執行0033 upgrade→0032 downgrade→0033 upgrade。最終candidate需維持full
-pytest、Ruff、`git diff --check`及fresh independent P0/P1 review全數通過後才可commit。
+empty-database測試執行0033 upgrade→0032 downgrade→0033 upgrade。Raw insurance identity與
+`insurance_identity.submitted` audit evidence使用同一organization-scoped transaction；audit只記錄
+consent、purpose、persisted policy/key version與absolute deletion deadline，不記plaintext/ciphertext，
+且audit flush／RLS failure會rollback profile與audit。最終candidate需維持full pytest、Ruff、
+`git diff --check`及fresh independent P0/P1 review全數通過後才可commit。

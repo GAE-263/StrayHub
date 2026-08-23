@@ -10,6 +10,8 @@ from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.pii import (
     EncryptedPii,
     PiiCipherPort,
+    PiiCollectionAuditEvent,
+    PiiCollectionAuditPort,
     PiiContext,
     PiiRevealAuditEvent,
     PiiRevealAuditPort,
@@ -39,8 +41,14 @@ class VolunteerPiiService:
     crm_reveal_roles = frozenset({"SHELTER_ADMIN"})
     crm_reveal_purposes = frozenset({"application_review"})
 
-    def __init__(self, cipher: PiiCipherPort) -> None:
+    def __init__(
+        self,
+        cipher: PiiCipherPort,
+        *,
+        collection_auditor: PiiCollectionAuditPort | None = None,
+    ) -> None:
         self.cipher = cipher
+        self.collection_auditor = collection_auditor
 
     async def create_profile(
         self,
@@ -75,7 +83,25 @@ class VolunteerPiiService:
             insurance_policy_version=insurance_policy_version,
             now=now,
         )
-        return await repository.add(profile)
+        if profile.insurance_identity_ciphertext is not None and self.collection_auditor is None:
+            raise DomainError("pii_audit_unavailable", "個人資料稽核暫時無法使用", 503)
+        persisted = await repository.add(profile)
+        if persisted.insurance_identity_ciphertext is not None:
+            assert self.collection_auditor is not None
+            assert persisted.insurance_identity_delete_after is not None
+            await self.collection_auditor.persist_atomic_collection(
+                PiiCollectionAuditEvent(
+                    organization_id=application.organization_id,
+                    application_id=application.id,
+                    actor_user_id=application.user_id,
+                    consent_acknowledged=insurance_consent_acknowledged,
+                    purpose_code="insurance_verification",
+                    policy_version=f"organization-policy-v{policy.version}",
+                    encryption_key_version=persisted.encryption_key_version,
+                    delete_after=persisted.insurance_identity_delete_after,
+                )
+            )
+        return persisted
 
     @staticmethod
     def _require_matching_metadata(reference: EncryptedPii, candidate: EncryptedPii) -> None:
