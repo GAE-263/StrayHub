@@ -11,6 +11,7 @@ export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://strayhub:strayhub@127.
 export STRAYHUB_TEST_DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL:-postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub}"
 export API_HOST="${API_HOST:-127.0.0.1}"
 export API_PORT="${API_PORT:-8001}"
+export API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"
 export WEB_HOST="${WEB_HOST:-127.0.0.1}"
 export WEB_PORT="${WEB_PORT:-3001}"
 

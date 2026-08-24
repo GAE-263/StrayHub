@@ -32,3 +32,4 @@ def test_demo_script_is_executable_and_has_local_mvp_smoke_steps() -> None:
     assert "test_us2_line_bot_report.py" in text
     assert "test_us3_animal_timeline.py" in text
     assert "test_ai_failure_timeline_status.py" in text
+    assert 'API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"' in text
