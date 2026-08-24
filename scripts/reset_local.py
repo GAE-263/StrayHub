@@ -60,11 +60,17 @@ async def reset() -> int:
                 "ai_call_logs",
                 "ai_observations",
                 "ai_processing_jobs",
+                # 索引以 care_report_id 為外鍵，必須排在 care_reports 前面。
+                "observation_option_usages",
                 "care_reports",
                 "care_report_drafts",
                 "media_assets",
                 "daily_reportable_scopes",
                 "animal_qr_codes",
+                # 兩者都有外鍵指向 animals，必須排在它前面，否則刪 animals 會被外鍵擋下。
+                # activity_readings 又參照 devices，所以再排在 devices 前面。
+                "activity_readings",
+                "devices",
                 "animals",
                 "shelter_areas",
                 "audit_records",

@@ -130,23 +130,18 @@ def test_care_answers_distinguish_partial_draft_and_complete_report() -> None:
     draft = schemas["DraftAnswers"]
     complete = schemas["CareReportAnswers"]
     required = {
-        "care_completion",
         "walk_completion",
-        "feeding",
-        "water",
         "activity",
-        "urination",
+        "gait",
         "defecation",
-        "resource_guarding",
-        "human_interaction",
         "animal_interaction",
-        "emotion",
-        "walk_reaction",
         "appearance_special_status",
     }
 
     assert not draft.get("required")
-    assert "answering_completion" in schemas["Draft"]["properties"]["current_step"]["enum"]
+    assert "answering_walk_completion" in schemas["Draft"]["properties"]["current_step"]["enum"]
+    assert "awaiting_stool_media" in schemas["Draft"]["properties"]["current_step"]["enum"]
+    assert "awaiting_story" in schemas["Draft"]["properties"]["current_step"]["enum"]
     assert required <= set(complete["allOf"][1]["required"])
     assert schemas["CareReportCreateRequest"]["properties"]["observations"]["$ref"].endswith(
         "/CareReportAnswers"

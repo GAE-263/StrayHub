@@ -9,11 +9,7 @@ from services.api.app.persistence.models.animal import Animal
 
 def _answers() -> dict[str, str]:
     values = {key: f"{key}.observed" for key in REQUIRED_ANSWER_KEYS}
-    values.update(
-        care_completion="care_completion.completed",
-        walk_completion="walk_completion.completed",
-        walk_reaction="walk.willing",
-    )
+    values["walk_completion"] = "walk_completion.completed"
     return values
 
 
@@ -30,6 +26,7 @@ async def test_duplicate_submit_with_same_idempotency_key_returns_one_report() -
         animal_id=animal_id,
         answers=_answers(),
         note=None,
+        story=None,
         status="active",
         current_step="reviewing",
     )

@@ -431,7 +431,7 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 #### 人工回報與草稿
 
 - **FR-015**：已綁定且有權限的志工 MUST 能建立日常照護回報，內容至少包括動物、動物收容編號快照、回報日期與時間、回報者、來源、照護完成狀態、散步完成狀態、原始建立時間與最後修改時間。照護完成狀態與散步完成狀態 MUST 分開記錄，不得以單一狀態互相取代。
-- **FR-016**：回報 MUST 以 LINE Bot 的結構化選項為主，標準回報 MUST 完成動物確認、照護完成狀態、散步完成狀態、進食、飲水、活動、排尿、排便、護食或資源防衛、對人的互動、對其他動物的互動、情緒、散步反應及外觀／特殊狀態；每個題目都必須有答案。`not_observed`、`uncertain` 及適用的 `not_done` 是有效答案，不等同於略過；照片與心得為選填。Quick Reply 顯示名稱與穩定內部 Code 分離，自由文字與照片作為補充，LIFF 只作為輔助介面。照護完成狀態 MUST 至少能表達 `care_completion.completed`（已完成照護）、`care_completion.partially_completed`（部分完成）、`care_completion.not_provided`（未提供照護）、`care_completion.not_observed`（未觀察）與 `care_completion.uncertain`（無法判斷）；散步完成狀態 MUST 至少能表達 `walk_completion.completed`（已完成散步）、`walk_completion.partially_completed`（部分完成）、`walk_completion.not_done`（未進行散步）、`walk_completion.not_observed`（未觀察）與 `walk_completion.uncertain`（無法判斷）。`walk_completion.not_done` 只表示本次未進行散步，不得被解讀為未觀察或散步正常完成；它與散步反應的 `walk.not_done` 是不同的觀察類別。
+- **FR-016**：回報 MUST 以 LINE Bot 的結構化選項為主，標準回報 MUST 完成動物確認、散步完成狀態、精神體力、走路姿勢、大便、對其他狗及身體外觀／特殊狀態共六題；每個題目都必須有答案，「今天沒觀察到這項」（Bot 層級 sentinel `unobserved`，不是 CRM 選項）是任一題的有效答案，不等同於略過整份回報。這是散步當下志工能直接觀察到的內容，刻意不問餵食、飲水等收容所照護項目，也不問情緒等主觀判讀。大便非「沒排便」時 MUST 額外要求一張便便照片供 AI 判讀，可略過且略過不需交代原因，以避免誘使志工為了免拍照而謊報「沒排便」；狗狗照片、健康／行為心得（臨床用途）與小故事（行銷用途，與心得分開保存）均為選填。Quick Reply 顯示名稱與穩定內部 Code 分離，自由文字與照片作為補充，LIFF 只作為輔助介面。散步完成狀態 MUST 至少能表達 `walk_completion.completed`（已完成散步）、`walk_completion.partially_completed`（部分完成）與 `walk_completion.not_done`（未進行散步）。
 - **FR-017**：進食選項 MUST 至少能表達正常進食、進食較少、幾乎未進食、未提供食物、未觀察與無法判斷；系統不得將未觀察等同於完全未進食。
 - **FR-018**：飲水選項 MUST 至少能表達有觀察到飲水、飲水較平常少、未觀察到飲水、未提供飲水、未觀察與無法判斷；未觀察到飲水不得被解讀為當日完全沒有飲水。
 - **FR-019**：活動選項 MUST 至少能表達與平常相近、活動力較低、活動力較高、不願活動、未觀察與無法判斷。

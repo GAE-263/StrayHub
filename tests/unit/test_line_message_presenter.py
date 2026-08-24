@@ -40,8 +40,11 @@ def test_question_bubble_offers_every_option() -> None:
     bubble = question_bubble(
         options, draft_token="opaque", step="walk", title="散步", position=12, total=13
     )
+    actions = _option_actions(bubble)
 
-    assert len(_option_actions(bubble)) == 12
+    assert sum(1 for action in actions if "action=answer" in action["data"]) == 12
+    # 每題都額外提供一顆「今天沒觀察到這項」，不算在選項清單裡但要存在。
+    assert any("action=skip_question" in action["data"] for action in actions)
 
 
 def test_question_bubble_states_which_question_is_being_asked() -> None:

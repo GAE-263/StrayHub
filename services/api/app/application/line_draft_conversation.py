@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
@@ -12,6 +13,8 @@ from services.api.app.application.observation_option_usage_service import (
 )
 from services.api.app.application.report_submission import ReportSubmissionService
 from services.api.app.domain.line_care_report_state import (
+    NO_STOOL_CODE,
+    UNOBSERVED,
     DraftAnswers,
     DraftState,
     DraftStateMachine,
@@ -108,23 +111,41 @@ class LineDraftConversationService:
         )
         report_id = None
         if action == "confirm_animal":
-            machine.transition(DraftState.ANSWERING_COMPLETION)
+            machine.transition(DraftState.ANSWERING_WALK_COMPLETION)
         elif action == "back":
             machine.back()
         elif action == "answer":
             if value is None:
                 raise DomainError("answer_required", "需要選擇回報答案", 422)
+            key = machine.next_answer_key()
             if self.answer_validator is not None:
-                self.answer_validator(machine.next_answer_key(), value)
+                self.answer_validator(key, value)
             machine.answer_current(value)
+            self._skip_stool_media_if_no_stool(machine, key=key, value=value)
+        elif action == "skip_question":
+            # "未觀察到這項": records that nothing was seen, not what the
+            # answer was — must bypass CRM validation, since UNOBSERVED is a
+            # Bot-level marker that intentionally does not exist as a CRM code.
+            key = machine.next_answer_key()
+            machine.answer_question(key, UNOBSERVED)
+            self._skip_stool_media_if_no_stool(machine, key=key, value=UNOBSERVED)
         elif action == "skip_media":
             machine.transition(DraftState.AWAITING_NOTE)
+        elif action == "skip_stool_media":
+            machine.transition(DraftState.ANSWERING_ANIMAL_INTERACTION)
         elif action == "skip_note":
-            machine.transition(DraftState.REVIEWING)
+            machine.transition(DraftState.AWAITING_STORY)
         elif action == "note":
             if machine.state != DraftState.AWAITING_NOTE or value is None:
                 raise DomainError("invalid_note_step", "目前步驟不接受心得", 409)
             draft.note = value
+            machine.transition(DraftState.AWAITING_STORY)
+        elif action == "skip_story":
+            machine.transition(DraftState.REVIEWING)
+        elif action == "story":
+            if machine.state != DraftState.AWAITING_STORY or value is None:
+                raise DomainError("invalid_story_step", "目前步驟不接受小故事", 409)
+            draft.story = value[:2000]
             machine.transition(DraftState.REVIEWING)
         elif action in {"submit", "submit_current"}:
             machine.transition(DraftState.SUBMITTING)
@@ -161,6 +182,7 @@ class LineDraftConversationService:
                 animal=animal,
                 idempotency_key=event_id,
                 note=draft.note,
+                story=draft.story,
                 media_asset_ids=await self.draft_repository.media_ids(draft.id),
             )
             report_id = report.id
@@ -199,8 +221,45 @@ class LineDraftConversationService:
         if not note.strip():
             raise DomainError("note_required", "心得內容不可為空", 422)
         draft.note = note[:5000]
+        machine.transition(DraftState.AWAITING_STORY)
+        draft.current_step = machine.state.value
+        draft.last_interaction_at = datetime.now(timezone.utc)
+        await self.draft_repository.session.flush()
+        return ConversationResult(state=machine.state)
+
+    async def story_for_current(
+        self,
+        *,
+        volunteer_user_id: UUID,
+        story: str,
+    ) -> ConversationResult:
+        draft = await self.draft_repository.get_active_for_volunteer(volunteer_user_id)
+        if draft is None or draft.current_step != DraftState.AWAITING_STORY.value:
+            raise DomainError("invalid_story_step", "目前沒有可填寫小故事的回報", 409)
+        machine = DraftStateMachine(
+            state=DraftState(draft.current_step),
+            answers=DraftAnswers(dict(draft.answers)),
+            reconfirmation_keys=set(getattr(draft, "reconfirmation_keys", []) or []),
+        )
+        if not story.strip():
+            raise DomainError("story_required", "小故事內容不可為空", 422)
+        draft.story = story[:2000]
         machine.transition(DraftState.REVIEWING)
         draft.current_step = machine.state.value
         draft.last_interaction_at = datetime.now(timezone.utc)
         await self.draft_repository.session.flush()
         return ConversationResult(state=machine.state)
+
+    @staticmethod
+    def _skip_stool_media_if_no_stool(
+        machine: DraftStateMachine, *, key: str, value: Any
+    ) -> None:
+        """A defecation answer of "no stool" (or "didn't observe") has nothing
+        to photograph — advance straight past AWAITING_STOOL_MEDIA rather than
+        prompting for a photo the volunteer cannot take."""
+        if (
+            key == "defecation"
+            and value in {NO_STOOL_CODE, UNOBSERVED}
+            and machine.state == DraftState.AWAITING_STOOL_MEDIA
+        ):
+            machine.transition(DraftState.ANSWERING_ANIMAL_INTERACTION)

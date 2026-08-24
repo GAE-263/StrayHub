@@ -22,19 +22,12 @@ from services.api.app.persistence.repositories.care_report_draft_repository impo
 )
 
 ANSWERS = {
-    "care_completion": "care_completion.completed",
     "walk_completion": "walk_completion.completed",
-    "feeding": "feeding.normal",
-    "water": "water.observed",
     "activity": "activity.usual",
-    "urination": "urination.observed",
-    "defecation": "defecation.formed",
-    "resource_guarding": "resource_guarding.not_observed",
-    "human_interaction": "human_interaction.usual",
-    "animal_interaction": "animal_interaction.usual",
-    "emotion": "emotion.calm",
-    "walk_reaction": "walk.willing",
-    "appearance_special_status": "appearance.not_observed",
+    "gait": "gait.normal",
+    "defecation": "defecation.normal",
+    "animal_interaction": "animal_interaction.friendly",
+    "appearance_special_status": "appearance.none_found",
 }
 
 
@@ -194,10 +187,10 @@ async def test_bot_submission_stores_display_name_snapshots() -> None:
         snapshots = json.loads(raw)
         assert set(snapshots) == set(ANSWERS)
 
-        walk = snapshots["walk_reaction"]
-        assert walk["code"] == "walk.willing"
-        assert walk["category_code"] == "walk"
-        assert walk["display_name"], "顯示名稱不可為空，否則快照沒有意義"
-        assert walk["source"] in {"platform_default", "organization_extension"}
+        gait = snapshots["gait"]
+        assert gait["code"] == "gait.normal"
+        assert gait["category_code"] == "gait"
+        assert gait["display_name"], "顯示名稱不可為空，否則快照沒有意義"
+        assert gait["source"] in {"platform_default", "organization_extension"}
     finally:
         await _cleanup(fixture)

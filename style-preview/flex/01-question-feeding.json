@@ -1,0 +1,341 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#F6D77A",
+    "paddingAll": "18px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🍚",
+            "size": "xxl",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "照護回報 · 第 3 / 13 題",
+                "size": "xs",
+                "color": "#716053",
+                "wrap": true
+              },
+              {
+                "type": "text",
+                "text": "進食",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#716053",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "height": "14px",
+        "backgroundColor": "#E4DACA",
+        "cornerRadius": "999px",
+        "borderWidth": "3px",
+        "borderColor": "#716053",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "width": "23%",
+            "backgroundColor": "#F6D77A",
+            "cornerRadius": "999px",
+            "contents": [
+              {
+                "type": "filler"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FFFCF3",
+    "paddingAll": "16px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "正常",
+          "data": "action=answer&draft_token=sample-draft-token&step=進食&value=feeding.normal",
+          "displayText": "正常"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "🥣",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "正常",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "較少",
+          "data": "action=answer&draft_token=sample-draft-token&step=進食&value=feeding.less",
+          "displayText": "較少"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "🍽️",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "較少",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "幾乎沒吃",
+          "data": "action=answer&draft_token=sample-draft-token&step=進食&value=feeding.almost_none",
+          "displayText": "幾乎沒吃"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "😶",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "幾乎沒吃",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "未提供",
+          "data": "action=answer&draft_token=sample-draft-token&step=進食&value=feeding.not_provided",
+          "displayText": "未提供"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "🚫",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "未提供",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "未觀察到",
+          "data": "action=answer&draft_token=sample-draft-token&step=進食&value=feeding.not_observed",
+          "displayText": "未觀察到"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "👀",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "未觀察到",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "不確定",
+          "data": "action=answer&draft_token=sample-draft-token&step=進食&value=feeding.uncertain",
+          "displayText": "不確定"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "❓",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "不確定",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      }
+    ]
+  },
+  "styles": {
+    "header": {
+      "separator": true,
+      "separatorColor": "#716053"
+    }
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FAF6EE",
+    "paddingAll": "12px",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFCF3",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "上一步",
+          "data": "action=back&draft_token=sample-draft-token",
+          "displayText": "上一步"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "←",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "上一步",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "text": "點錯了也沒關係，可以退回上一題 🍃",
+        "size": "xxs",
+        "color": "#9C8B7D",
+        "align": "center"
+      }
+    ]
+  }
+}

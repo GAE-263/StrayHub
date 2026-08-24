@@ -5,17 +5,13 @@ from uuid import uuid4
 import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.report_submission import ReportSubmissionService
-from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
+from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS, UNOBSERVED
 from services.api.app.persistence.models.animal import Animal
 
 
 def _complete_answers() -> dict[str, str]:
     values = {key: f"{key}.observed" for key in REQUIRED_ANSWER_KEYS}
-    values.update(
-        care_completion="care_completion.completed",
-        walk_completion="walk_completion.completed",
-        walk_reaction="walk.willing",
-    )
+    values["walk_completion"] = "walk_completion.completed"
     return values
 
 
@@ -28,6 +24,7 @@ def _draft(organization_id, volunteer_id, animal_id, answers):
         animal_id=animal_id,
         answers=answers,
         note=None,
+        story=None,
         status="active",
         current_step="reviewing",
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
@@ -73,7 +70,7 @@ async def test_submission_rejects_missing_answer_before_creating_report() -> Non
     volunteer_id = uuid4()
     animal_id = uuid4()
     draft = _draft(organization_id, volunteer_id, animal_id, _complete_answers())
-    draft.answers.pop("emotion")
+    draft.answers.pop("gait")
     with pytest.raises(DomainError, match="缺少必要"):
         await ReportSubmissionService(Drafts(draft), Reports(organization_id)).submit(
             draft_id=draft.id,
@@ -89,22 +86,34 @@ async def test_submission_rejects_missing_answer_before_creating_report() -> Non
 
 
 @pytest.mark.asyncio
-async def test_submission_rejects_walk_completion_as_walk_reaction() -> None:
+async def test_submission_skips_crm_validation_for_unobserved_sentinel() -> None:
+    """UNOBSERVED marks "the volunteer looked and there was nothing to
+    report" — it must reach the saved report, but must never be handed to a
+    validator that only knows real CRM codes."""
     organization_id = uuid4()
     volunteer_id = uuid4()
     animal_id = uuid4()
     answers = _complete_answers()
-    answers["walk_reaction"] = "walk_completion.completed"
+    answers["gait"] = UNOBSERVED
     draft = _draft(organization_id, volunteer_id, animal_id, answers)
-    with pytest.raises(DomainError, match="不可混用"):
-        await ReportSubmissionService(Drafts(draft), Reports(organization_id)).submit(
-            draft_id=draft.id,
-            volunteer_user_id=volunteer_id,
-            animal=Animal(
-                id=animal_id,
-                organization_id=organization_id,
-                name="小黑",
-                status="active",
-            ),
-            idempotency_key="event-2",
-        )
+    seen_fields: list[str] = []
+
+    def validator(field: str, _value: str) -> None:
+        seen_fields.append(field)
+
+    report = await ReportSubmissionService(
+        Drafts(draft), Reports(organization_id), answer_validator=validator
+    ).submit(
+        draft_id=draft.id,
+        volunteer_user_id=volunteer_id,
+        animal=Animal(
+            id=animal_id,
+            organization_id=organization_id,
+            name="小黑",
+            status="active",
+        ),
+        idempotency_key="event-2",
+    )
+
+    assert "gait" not in seen_fields
+    assert report.answers["gait"] == UNOBSERVED

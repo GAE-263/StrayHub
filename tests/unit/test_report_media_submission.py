@@ -65,11 +65,10 @@ def make_draft(*, organization_id, volunteer_user_id, animal_id):
         animal_id=animal_id,
         answers={
             **{key: f"{key}.observed" for key in REQUIRED_ANSWER_KEYS},
-            "care_completion": "care_completion.completed",
             "walk_completion": "walk_completion.completed",
-            "walk_reaction": "walk.willing",
         },
         note=None,
+        story=None,
         status="active",
         current_step="reviewing",
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),

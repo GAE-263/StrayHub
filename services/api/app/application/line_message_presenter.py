@@ -201,6 +201,19 @@ def question_bubble(
             )
             for option in options
         ]
+        body_contents.append(
+            _choice_box(
+                "今天沒觀察到這項",
+                {
+                    "type": "postback",
+                    "label": "沒觀察到這項",
+                    "data": f"action=skip_question&draft_token={draft_token}",
+                    "displayText": "今天沒觀察到這項",
+                },
+                tint=CREAM_DEEP,
+                glyph="👀",
+            )
+        )
     else:
         # An empty vocabulary is a configuration fault; say so instead of
         # presenting a card with nothing to tap.
@@ -410,6 +423,7 @@ def summary_bubble(
     note: str | None,
     choices: list[tuple[str, str, str]],
     animal_name: str = "",
+    story: str | None = None,
 ) -> dict:
     """The pre-submit review card; rows are already display names from the CRM."""
     row_contents: list[dict] = []
@@ -440,6 +454,14 @@ def summary_bubble(
                 {"type": "separator", "color": BORDER, "margin": "md"},
                 {"type": "text", "text": "📝 今天的心得", "size": "sm", "color": INK_SOFT},
                 {"type": "text", "text": note, "size": "sm", "color": INK, "wrap": True},
+            ]
+        )
+    if story:
+        row_contents.extend(
+            [
+                {"type": "separator", "color": BORDER, "margin": "md"},
+                {"type": "text", "text": "✨ 小故事", "size": "sm", "color": INK_SOFT},
+                {"type": "text", "text": story, "size": "sm", "color": INK, "wrap": True},
             ]
         )
     caption = f"{animal_name} · 送出前還可以修改" if animal_name else "送出前還可以修改"

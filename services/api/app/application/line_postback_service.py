@@ -48,25 +48,18 @@ class LinePostbackService:
         if str(draft.volunteer_user_id) != line_user_id:
             raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
         if action == "confirm":
-            draft.machine.transition(DraftState.ANSWERING_COMPLETION)
+            draft.machine.transition(DraftState.ANSWERING_WALK_COMPLETION)
         elif action == "back":
             draft.machine.back()
         elif action == "answer":
             if value is None:
                 raise DomainError("answer_required", "需要選擇回報答案", 422)
             expected = {
-                DraftState.ANSWERING_COMPLETION: ("care_completion", "walk_completion"),
-                DraftState.ANSWERING_FEEDING: ("feeding",),
-                DraftState.ANSWERING_WATER: ("water",),
+                DraftState.ANSWERING_WALK_COMPLETION: ("walk_completion",),
                 DraftState.ANSWERING_ACTIVITY: ("activity",),
-                DraftState.ANSWERING_ELIMINATION: ("urination", "defecation"),
-                DraftState.ANSWERING_BEHAVIOR: (
-                    "resource_guarding",
-                    "human_interaction",
-                    "animal_interaction",
-                    "emotion",
-                    "walk_reaction",
-                ),
+                DraftState.ANSWERING_GAIT: ("gait",),
+                DraftState.ANSWERING_DEFECATION: ("defecation",),
+                DraftState.ANSWERING_ANIMAL_INTERACTION: ("animal_interaction",),
                 DraftState.ANSWERING_SPECIAL_STATUS: ("appearance_special_status",),
             }.get(draft.machine.state)
             if expected is None:

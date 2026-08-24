@@ -16,6 +16,10 @@ class MediaAsset(IdentityMixin, AuditMixin, Base):
     checksum: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(30), default="processed", index=True)
     purpose: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # What the photo shows ("portrait" / "stool"), not which flow produced it —
+    # "purpose" already answers that. Needed so a stool photo can be paired with
+    # the volunteer's own defecation answer instead of guessed from content.
+    subject: Mapped[str | None] = mapped_column(String(20), nullable=True)
     exif_removed: Mapped[bool] = mapped_column(default=True)
 
 
@@ -36,6 +40,9 @@ class CareReport(IdentityMixin, AuditMixin, Base):
     animal_name_snapshot: Mapped[str] = mapped_column(String(200))
     shelter_number_snapshot: Mapped[str | None] = mapped_column(String(120), nullable=True)
     note: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    # Separate from note: clinical observation vs. an anecdote for adoption
+    # marketing. Mixing them would make neither usable for its own purpose.
+    story: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="saved", index=True)
     ai_job_status: Mapped[str] = mapped_column(String(30), default="pending_enqueue")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -10,8 +10,11 @@ from urllib.parse import parse_qs, urlencode
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, Header, Request
 from services.api.app.api.errors import DomainError
+from services.api.app.application.animal_selection import AnimalSelectionService
 from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
@@ -37,6 +40,7 @@ from services.api.app.application.report_job_dispatch import ReportJobDispatchSe
 from services.api.app.config.settings import get_settings
 from services.api.app.domain.line_care_report_state import (
     REQUIRED_ANSWER_KEYS,
+    UNOBSERVED,
     DraftAnswers,
     DraftState,
     DraftStateMachine,
@@ -58,6 +62,7 @@ from services.api.app.persistence.repositories.care_report_draft_repository impo
 from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
 from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
+from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
     ReportableScopeRepository,
 )
@@ -141,6 +146,51 @@ async def _animal_confirmation_messages(session, animal, organization_id: UUID) 
         area_label = result.scalar_one_or_none() or area_label
     messages.append(_text(f"所在籠位／區域：{area_label}"))
     return messages
+
+
+async def _reply_animal_confirmation(
+    session,
+    line: LineMessagingPort,
+    event: dict,
+    animal,
+    organization_id: UUID,
+    *,
+    token: str | None = None,
+) -> None:
+    data = urlencode(
+        {
+            "action": "confirm_animal",
+            "animal_id": str(animal.id),
+            **({"draft_token": token} if token else {}),
+        }
+    )
+    await _reply(
+        line,
+        event,
+        await _animal_confirmation_messages(session, animal, organization_id)
+        + [
+            _text(f"請確認：{animal.name}／{animal.shelter_number or '無收容編號'}"),
+            {
+                "type": "template",
+                "altText": "確認動物",
+                "template": {
+                    "type": "buttons",
+                    "text": "是這隻動物嗎？",
+                    "actions": [_postback_action("確認是這隻", data)],
+                },
+            },
+        ],
+    )
+
+
+def _decode_qr(image_bytes: bytes) -> str | None:
+    """Best-effort QR decode from a chat photo; never raises on bad input."""
+    array = np.frombuffer(image_bytes, dtype=np.uint8)
+    image = cv2.imdecode(array, cv2.IMREAD_COLOR)
+    if image is None:
+        return None
+    data, _points, _straight = cv2.QRCodeDetector().detectAndDecode(image)
+    return data or None
 
 
 # LINE accepts 13 quick replies; the last slot is kept for "more" so a longer
@@ -253,30 +303,22 @@ async def _daily_care_overview(
     ]
 
 
-# The answer key and its CRM category code agree everywhere except walk.
-_ANSWER_CATEGORY_CODES = {"walk_reaction": "walk"}
-
 # Decorative only. The heading text itself still comes from the CRM vocabulary;
-# these just give each question a recognisable face in the chat.
+# these just give each question a recognisable face in the chat. Every answer
+# key now equals its own CRM category code, so no key-to-category remapping
+# table is needed (the one former exception, walk_reaction, no longer exists).
 _CATEGORY_GLYPHS = {
-    "care_completion": "🧺",
     "walk_completion": "🚶",
-    "feeding": "🍚",
-    "water": "💧",
     "activity": "⚡",
-    "urination": "💦",
+    "gait": "🐾",
     "defecation": "💩",
-    "resource_guarding": "🦴",
-    "human_interaction": "🤝",
     "animal_interaction": "🐕",
-    "emotion": "💚",
-    "walk": "🌿",
     "appearance_special_status": "🔍",
 }
 
 
 def _glyph_for(key: str) -> str:
-    return _CATEGORY_GLYPHS.get(_ANSWER_CATEGORY_CODES.get(key, key), "🐾")
+    return _CATEGORY_GLYPHS.get(key, "🐾")
 
 
 def _current_answer_key(state: DraftState, answers: dict, reconfirmation_keys) -> str:
@@ -310,18 +352,11 @@ async def _answer_options(
         include_disabled_history=False
     )
     prefixes = {
-        "care_completion": "care_completion.",
         "walk_completion": "walk_completion.",
-        "feeding": "feeding.",
-        "water": "water.",
         "activity": "activity.",
-        "urination": "urination.",
+        "gait": "gait.",
         "defecation": "defecation.",
-        "resource_guarding": "resource_guarding.",
-        "human_interaction": "human_interaction.",
         "animal_interaction": "animal_interaction.",
-        "emotion": "emotion.",
-        "walk_reaction": "walk.",
         "appearance_special_status": "appearance.",
     }
     prefix = prefixes[key]
@@ -366,8 +401,8 @@ async def _note_validator(session, organization_id: UUID):
 
 def _chit_chat_reply(draft) -> str:
     if draft is None:
-        return "想開始回報的話，請按下方選單的「開始照護回報」🐾"
-    return "這一步請用卡片上的按鈕選擇；要補充文字的話，走到心得那一步再輸入就可以了 🐾"
+        return "想開始回報的話，請按下方選單的「開始散步回報」🐾"
+    return "這一步請用卡片上的按鈕選擇；要補充文字的話，走到心得或小故事那一步再輸入就可以了 🐾"
 
 
 async def _options_requiring_note(session, organization_id: UUID, answers: dict) -> list[str]:
@@ -411,12 +446,11 @@ async def _reply_next_step(
     messages: list[dict] = list(prefix_messages or [])
     state = DraftState(draft.current_step)
     if state in {
-        DraftState.ANSWERING_COMPLETION,
-        DraftState.ANSWERING_FEEDING,
-        DraftState.ANSWERING_WATER,
+        DraftState.ANSWERING_WALK_COMPLETION,
         DraftState.ANSWERING_ACTIVITY,
-        DraftState.ANSWERING_ELIMINATION,
-        DraftState.ANSWERING_BEHAVIOR,
+        DraftState.ANSWERING_GAIT,
+        DraftState.ANSWERING_DEFECATION,
+        DraftState.ANSWERING_ANIMAL_INTERACTION,
         DraftState.ANSWERING_SPECIAL_STATUS,
     }:
         reconfirmation_keys = getattr(draft, "reconfirmation_keys", None)
@@ -430,10 +464,29 @@ async def _reply_next_step(
                 options,
                 draft_token=raw_token,
                 step=state.value,
-                title=titles.get(_ANSWER_CATEGORY_CODES.get(key, key), key),
+                title=titles.get(key, key),
                 position=REQUIRED_ANSWER_KEYS.index(key) + 1,
                 total=len(REQUIRED_ANSWER_KEYS),
                 glyph=_glyph_for(key),
+            )
+        )
+    elif state == DraftState.AWAITING_STOOL_MEDIA:
+        messages.append(
+            prompt_bubble(
+                title="拍一張便便照片",
+                caption="照護回報 · 有拍最好",
+                body_text=(
+                    "點聊天室下面的 📷 相機 或 🖼 相簿 直接傳過來就好。\n"
+                    "旁邊放個東西當比例尺會更準 📏\n\n"
+                    "這張只給照護判讀用，不會出現在對外的貼文 🔒"
+                ),
+                glyph="🔬",
+                start=WOOD,
+                end=WOOD_DEEP,
+                choices=[
+                    ("這次略過", f"action=skip_stool_media&draft_token={raw_token}", "⏭"),
+                    ("上一步", f"action=back&draft_token={raw_token}", "←"),
+                ],
             )
         )
     elif state == DraftState.AWAITING_MEDIA:
@@ -445,6 +498,22 @@ async def _reply_next_step(
                 glyph="📸",
                 choices=[
                     ("略過照片", f"action=skip_media&draft_token={raw_token}", "⏭"),
+                    ("上一步", f"action=back&draft_token={raw_token}", "←"),
+                ],
+            )
+        )
+    elif state == DraftState.AWAITING_STORY:
+        messages.append(
+            prompt_bubble(
+                title="今天有發生什麼有趣的事嗎",
+                caption="照護回報 · 選填",
+                body_text=(
+                    "追蝴蝶、賴在草地上不走、跟誰變成好朋友都算 🐾\n"
+                    "這些會變成之後幫牠找家的小故事。"
+                ),
+                glyph="✨",
+                choices=[
+                    ("今天沒什麼特別的", f"action=skip_story&draft_token={raw_token}", "⏭"),
                     ("上一步", f"action=back&draft_token={raw_token}", "←"),
                 ],
             )
@@ -491,8 +560,8 @@ async def _reply_next_step(
         rows = [
             (
                 _glyph_for(key),
-                titles.get(_ANSWER_CATEGORY_CODES.get(key, key), key),
-                labels.get(value, value),
+                titles.get(key, key),
+                "—　未觀察" if value == UNOBSERVED else labels.get(value, value),
             )
             for key, value in draft.answers.items()
         ]
@@ -501,6 +570,7 @@ async def _reply_next_step(
             summary_bubble(
                 rows,
                 note=draft.note,
+                story=draft.story,
                 animal_name=animal.name if animal is not None else "",
                 choices=[
                     (
@@ -569,6 +639,56 @@ async def _handle_postback(
             ),
         )
         return None
+    if action == "find_dog":
+        await _reply(
+            line,
+            event,
+            [
+                prompt_bubble(
+                    title="要幫哪隻毛孩回報",
+                    caption="散步回報",
+                    body_text="選一種方式找到今天要回報的毛孩 🔎",
+                    glyph="🔎",
+                    choices=[
+                        ("掃描 QR 貼紙", "action=qr_scan", "📷"),
+                        ("輸入編號或名字", "action=search_animal", "🔤"),
+                        ("看今日名單", "action=today_overview", "📋"),
+                    ],
+                )
+            ],
+        )
+        return None
+    if action == "qr_scan":
+        await _reply(
+            line,
+            event,
+            [
+                _text(
+                    "點下面的 📷 相機，對準籠舍上的 QR 貼紙拍下去就好。\n"
+                    "貼紙壞了或找不到，可以改用輸入搜尋。"
+                ),
+                {
+                    "type": "text",
+                    "text": "改用輸入搜尋",
+                    "quickReply": {
+                        "items": [_postback("改用輸入搜尋", "action=search_animal")]
+                    },
+                },
+            ],
+        )
+        return None
+    if action == "search_animal":
+        await _reply(
+            line,
+            event,
+            [
+                _text(
+                    "直接在下面輸入框打幾個字就好，例如「財」或收容編號後幾碼，"
+                    "不用打全名。"
+                )
+            ],
+        )
+        return None
     token = values.get("draft_token", [""])[0]
     if action == "contact_staff":
         await _reply(line, event, [_text("請直接聯繫目前收容所的工作人員協助處理。")])
@@ -606,30 +726,7 @@ async def _handle_postback(
             )
         ):
             raise DomainError("animal_not_found", "動物不存在或無法回報", 404)
-        data = urlencode(
-            {
-                "action": "confirm_animal",
-                "animal_id": str(animal.id),
-                **({"draft_token": token} if token else {}),
-            }
-        )
-        await _reply(
-            line,
-            event,
-            await _animal_confirmation_messages(session, animal, organization_id)
-            + [
-                _text(f"請確認：{animal.name}／{animal.shelter_number or '無收容編號'}"),
-                {
-                    "type": "template",
-                    "altText": "確認動物",
-                    "template": {
-                        "type": "buttons",
-                        "text": "是這隻動物嗎？",
-                        "actions": [_postback_action("確認是這隻", data)],
-                    },
-                },
-            ],
-        )
+        await _reply_animal_confirmation(session, line, event, animal, organization_id, token=token)
         return None
     if action == "confirm_animal":
         animal_id = _uuid_value(values.get("animal_id", [""])[0])
@@ -707,8 +804,12 @@ async def _handle_postback(
     if not token and action not in {
         "answer",
         "back",
+        "skip_question",
         "skip_media",
+        "skip_stool_media",
         "skip_note",
+        "story",
+        "skip_story",
         "submit_current",
         "cancel_current",
     }:
@@ -835,18 +936,24 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                     ):
                         draft_repository = CareReportDraftRepository(session, organization_id)
                         draft = await draft_repository.get_active_for_volunteer(user_id)
-                        if draft is None or draft.current_step != DraftState.AWAITING_NOTE.value:
-                            # 只有心得那一步在等文字。志工其他時候打的字是聊天，
-                            # 不是漏填的欄位，回一句錯誤訊息只會讓人以為壞掉了。
-                            await _reply(line, event, [_text(_chit_chat_reply(draft))])
-                        else:
+                        text_value = event["message"].get("text", "")
+                        text_waiting_states = {
+                            DraftState.AWAITING_NOTE.value,
+                            DraftState.AWAITING_STORY.value,
+                        }
+                        if draft is not None and draft.current_step in text_waiting_states:
+                            text_action = (
+                                "note"
+                                if draft.current_step == DraftState.AWAITING_NOTE.value
+                                else "story"
+                            )
                             text_result = await LineDraftConversationService(
                                 draft_repository
                             ).handle(
                                 token=None,
                                 volunteer_user_id=user_id,
-                                action="note",
-                                value=event["message"].get("text", ""),
+                                action=text_action,
+                                value=text_value,
                                 event_id=event_id,
                             )
                             report_id_to_dispatch = text_result.report_id
@@ -860,6 +967,58 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                     draft=draft,
                                     raw_token="",
                                 )
+                        elif draft is None and text_value.strip():
+                            # 沒有進行中的草稿時，把文字當成「找動物」的搜尋關鍵字；
+                            # 比對不到就照舊回聊天訊息，不引入新的持久化狀態去記
+                            # 「正在等搜尋輸入」。
+                            candidates = await AnimalSelectionService(
+                                AnimalRepository(session, organization_id),
+                                QrCodeRepository(session, organization_id),
+                                ReportableScopeRepository(session, organization_id),
+                            ).list_candidates(
+                                user_id=user_id, role="VOLUNTEER", query=text_value.strip()
+                            )
+                            if not candidates:
+                                await _reply(line, event, [_text(_chit_chat_reply(draft))])
+                            elif len(candidates) == 1:
+                                await _reply_animal_confirmation(
+                                    session,
+                                    line,
+                                    event,
+                                    candidates[0].animal,
+                                    organization_id,
+                                )
+                            else:
+                                items = [
+                                    _postback(
+                                        _animal_label(candidate.animal),
+                                        urlencode(
+                                            {
+                                                "action": "select_animal",
+                                                "animal_id": str(candidate.animal.id),
+                                            }
+                                        ),
+                                    )
+                                    for candidate in candidates[:_SELECTION_PAGE]
+                                ]
+                                await _reply(
+                                    line,
+                                    event,
+                                    [
+                                        {
+                                            "type": "text",
+                                            "text": (
+                                                f"符合「{text_value.strip()}」的有 "
+                                                f"{len(candidates)} 隻，請選一隻："
+                                            ),
+                                            "quickReply": {"items": items},
+                                        }
+                                    ],
+                                )
+                        else:
+                            # 志工其他時候打的字是聊天，不是漏填的欄位，回一句錯誤
+                            # 訊息只會讓人以為壞掉了。
+                            await _reply(line, event, [_text(_chit_chat_reply(draft))])
                     elif (
                         event.get("type") == "message"
                         and event.get("message", {}).get("type") == "image"
@@ -867,58 +1026,115 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         draft = await CareReportDraftRepository(
                             session, organization_id
                         ).get_active_for_volunteer(user_id)
-                        if draft is None or draft.current_step != DraftState.AWAITING_MEDIA.value:
-                            raise DomainError("invalid_draft_step", "目前回報步驟不接受照片", 409)
-                        try:
-                            await LineImageService(line, MinioStorageAdapter()).attach_to_draft(
-                                message_id=event["message"]["id"],
+                        media_waiting_states = {
+                            DraftState.AWAITING_MEDIA.value,
+                            DraftState.AWAITING_STOOL_MEDIA.value,
+                        }
+                        if draft is not None and draft.current_step in media_waiting_states:
+                            subject = (
+                                "stool"
+                                if draft.current_step == DraftState.AWAITING_STOOL_MEDIA.value
+                                else "portrait"
+                            )
+                            try:
+                                await LineImageService(
+                                    line, MinioStorageAdapter()
+                                ).attach_to_draft(
+                                    message_id=event["message"]["id"],
+                                    organization_id=organization_id,
+                                    object_key=f"drafts/{draft.id}/{event_id}.media",
+                                    draft_id=draft.id,
+                                    source_event_id=event_id,
+                                    subject=subject,
+                                    session=session,
+                                )
+                            except Exception as error:
+                                error_code = (
+                                    error.code
+                                    if isinstance(error, DomainError)
+                                    else "media_processing_failed"
+                                )
+                                # The volunteer only ever sees "try again or
+                                # skip", so the cause has to be recorded here
+                                # or it is lost.
+                                logger.exception(
+                                    "draft media attach failed for draft %s: %s",
+                                    draft.id,
+                                    error_code,
+                                )
+                                await identity.complete_event(
+                                    stored_event, status="processed", error_code=error_code
+                                )
+                                await _reply(
+                                    line, event, [_text("照片處理失敗，請重新傳送或略過照片。")]
+                                )
+                                results.append(
+                                    {
+                                        "webhook_event_id": event_id,
+                                        "status": "processed",
+                                        "reason": error_code,
+                                    }
+                                )
+                                continue
+                            next_step = (
+                                DraftState.ANSWERING_ANIMAL_INTERACTION
+                                if subject == "stool"
+                                else DraftState.AWAITING_NOTE
+                            )
+                            draft.current_step = next_step.value
+                            draft.last_interaction_at = datetime.now(timezone.utc)
+                            await session.flush()
+                            # Carry on to the next step in the same reply;
+                            # otherwise the volunteer is left with no control
+                            # to continue.
+                            prefix = (
+                                _text("便便照片已收到，謝謝 🙌")
+                                if subject == "stool"
+                                else _text("照片已附加。")
+                            )
+                            await _reply_next_step(
+                                session,
+                                line,
+                                event,
                                 organization_id=organization_id,
-                                object_key=f"drafts/{draft.id}/{event_id}.media",
-                                draft_id=draft.id,
-                                source_event_id=event_id,
-                                session=session,
+                                draft=draft,
+                                raw_token="",
+                                prefix_messages=[prefix],
                             )
-                        except Exception as error:
-                            error_code = (
-                                error.code
-                                if isinstance(error, DomainError)
-                                else "media_processing_failed"
+                        else:
+                            # 沒有正在等照片的草稿：當成「拍 QR 貼紙找動物」。解不出來
+                            # 就提示改用搜尋，不直接報錯讓志工以為系統壞掉了。
+                            content = await line.get_image_content(
+                                message_id=event["message"]["id"]
                             )
-                            # The volunteer only ever sees "try again or skip",
-                            # so the cause has to be recorded here or it is lost.
-                            logger.exception(
-                                "draft media attach failed for draft %s: %s",
-                                draft.id,
-                                error_code,
-                            )
-                            await identity.complete_event(
-                                stored_event, status="processed", error_code=error_code
-                            )
-                            await _reply(
-                                line, event, [_text("照片處理失敗，請重新傳送或略過照片。")]
-                            )
-                            results.append(
-                                {
-                                    "webhook_event_id": event_id,
-                                    "status": "processed",
-                                    "reason": error_code,
-                                }
-                            )
-                            continue
-                        draft.current_step = DraftState.AWAITING_NOTE.value
-                        draft.last_interaction_at = datetime.now(timezone.utc)
-                        await session.flush()
-                        # Carry on to the note step in the same reply; otherwise
-                        # the volunteer is left with no control to continue.
-                        await _reply_next_step(
-                            session,
-                            line,
-                            event,
-                            organization_id=organization_id,
-                            draft=draft,
-                            raw_token="",
-                            prefix_messages=[_text("照片已附加。")],
-                        )
+                            decoded = _decode_qr(content.content)
+                            candidate = None
+                            if decoded:
+                                try:
+                                    candidate = await AnimalSelectionService(
+                                        AnimalRepository(session, organization_id),
+                                        QrCodeRepository(session, organization_id),
+                                        ReportableScopeRepository(session, organization_id),
+                                    ).resolve_qr(
+                                        raw_token=decoded, user_id=user_id, role="VOLUNTEER"
+                                    )
+                                except DomainError:
+                                    candidate = None
+                            if candidate is None:
+                                await _reply(
+                                    line,
+                                    event,
+                                    [
+                                        _text(
+                                            "掃不到 QR 碼，請確認貼紙清晰，"
+                                            "或改用輸入編號／名字搜尋。"
+                                        )
+                                    ],
+                                )
+                            else:
+                                await _reply_animal_confirmation(
+                                    session, line, event, candidate.animal, organization_id
+                                )
                     await identity.complete_event(stored_event)
                     results.append({"webhook_event_id": event_id, "status": "processed"})
                 except DomainError as error:

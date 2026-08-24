@@ -55,7 +55,7 @@ async def test_reselect_animal_preserves_answers_but_requires_reconfirmation() -
     draft, _ = await service.create(
         volunteer_user_id=uuid4(), membership_id=uuid4(), animal_id=original_animal_id
     )
-    draft.answers = {"feeding": "feeding.normal", "emotion": "emotion.calm"}
+    draft.answers = {"gait": "gait.normal", "appearance_special_status": "appearance.none_found"}
 
     candidate_id = uuid4()
     await service.begin_reselection(draft.id, candidate_animal_id=candidate_id)
@@ -63,5 +63,8 @@ async def test_reselect_animal_preserves_answers_but_requires_reconfirmation() -
 
     assert draft.animal_id == candidate_id
     assert draft.candidate_animal_id is None
-    assert draft.reconfirmation_keys == ["feeding", "emotion"]
-    assert draft.answers == {"feeding": "feeding.normal", "emotion": "emotion.calm"}
+    assert draft.reconfirmation_keys == ["gait", "appearance_special_status"]
+    assert draft.answers == {
+        "gait": "gait.normal",
+        "appearance_special_status": "appearance.none_found",
+    }

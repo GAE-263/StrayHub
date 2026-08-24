@@ -11,15 +11,16 @@ from services.api.app.api.errors import DomainError
 class DraftState(StrEnum):
     SELECTING_ANIMAL = "selecting_animal"
     CONFIRMING_ANIMAL = "confirming_animal"
-    ANSWERING_COMPLETION = "answering_completion"
-    ANSWERING_FEEDING = "answering_feeding"
-    ANSWERING_WATER = "answering_water"
+    ANSWERING_WALK_COMPLETION = "answering_walk_completion"
     ANSWERING_ACTIVITY = "answering_activity"
-    ANSWERING_ELIMINATION = "answering_elimination"
-    ANSWERING_BEHAVIOR = "answering_behavior"
+    ANSWERING_GAIT = "answering_gait"
+    ANSWERING_DEFECATION = "answering_defecation"
+    AWAITING_STOOL_MEDIA = "awaiting_stool_media"
+    ANSWERING_ANIMAL_INTERACTION = "answering_animal_interaction"
     ANSWERING_SPECIAL_STATUS = "answering_special_status"
     AWAITING_MEDIA = "awaiting_media"
     AWAITING_NOTE = "awaiting_note"
+    AWAITING_STORY = "awaiting_story"
     REVIEWING = "reviewing"
     SUBMITTING = "submitting"
     SUBMITTED = "submitted"
@@ -27,93 +28,97 @@ class DraftState(StrEnum):
     EXPIRED = "expired"
 
 
+# A walk report asks what a volunteer can actually observe during one walk —
+# no shelter-side care (feeding/water/care_completion), no subjective emotion
+# reading. See docs/散步回報-題目與收集理由.md for why each of these six exists
+# and why the earlier 13-key set was cut down to this.
 REQUIRED_ANSWER_KEYS = (
-    "care_completion",
     "walk_completion",
-    "feeding",
-    "water",
     "activity",
-    "urination",
+    "gait",
     "defecation",
-    "resource_guarding",
-    "human_interaction",
     "animal_interaction",
-    "emotion",
-    "walk_reaction",
     "appearance_special_status",
 )
 
-CARE_COMPLETION_CODES = {
-    "care_completion.completed",
-    "care_completion.partially_completed",
-    "care_completion.not_provided",
-    "care_completion.not_observed",
-    "care_completion.uncertain",
-}
+# Not a CRM option — a Bot-level marker meaning "the volunteer looked and there
+# was nothing to report," distinct from a real answer. Kept out of the CRM
+# vocabulary so it can never be confused with an actual observation code, and
+# out of _STATE_QUESTIONS's option lists so it never shows up as a fourth
+# choice; callers offer it as a separate action instead.
+UNOBSERVED = "unobserved"
+
+# The one code in the reduced defecation vocabulary that means "nothing to
+# photograph" — walking past this value is how the stool-photo step decides
+# whether to ask at all. Defined here, not guessed from a display label, so a
+# copy change can never silently change who gets asked for a photo.
+NO_STOOL_CODE = "defecation.none"
+
 WALK_COMPLETION_CODES = {
     "walk_completion.completed",
     "walk_completion.partially_completed",
     "walk_completion.not_done",
-    "walk_completion.not_observed",
-    "walk_completion.uncertain",
 }
 
 _NEXT_STATES: dict[DraftState, DraftState] = {
     DraftState.SELECTING_ANIMAL: DraftState.CONFIRMING_ANIMAL,
-    DraftState.CONFIRMING_ANIMAL: DraftState.ANSWERING_COMPLETION,
-    DraftState.ANSWERING_COMPLETION: DraftState.ANSWERING_FEEDING,
-    DraftState.ANSWERING_FEEDING: DraftState.ANSWERING_WATER,
-    DraftState.ANSWERING_WATER: DraftState.ANSWERING_ACTIVITY,
-    DraftState.ANSWERING_ACTIVITY: DraftState.ANSWERING_ELIMINATION,
-    DraftState.ANSWERING_ELIMINATION: DraftState.ANSWERING_BEHAVIOR,
-    DraftState.ANSWERING_BEHAVIOR: DraftState.ANSWERING_SPECIAL_STATUS,
+    DraftState.CONFIRMING_ANIMAL: DraftState.ANSWERING_WALK_COMPLETION,
+    DraftState.ANSWERING_WALK_COMPLETION: DraftState.ANSWERING_ACTIVITY,
+    DraftState.ANSWERING_ACTIVITY: DraftState.ANSWERING_GAIT,
+    DraftState.ANSWERING_GAIT: DraftState.ANSWERING_DEFECATION,
+    # Every defecation answer leads here first; a caller that just recorded
+    # NO_STOOL_CODE transitions once more immediately to skip past it — see
+    # LineDraftConversationService.handle().
+    DraftState.ANSWERING_DEFECATION: DraftState.AWAITING_STOOL_MEDIA,
+    DraftState.AWAITING_STOOL_MEDIA: DraftState.ANSWERING_ANIMAL_INTERACTION,
+    DraftState.ANSWERING_ANIMAL_INTERACTION: DraftState.ANSWERING_SPECIAL_STATUS,
     DraftState.ANSWERING_SPECIAL_STATUS: DraftState.AWAITING_MEDIA,
     DraftState.AWAITING_MEDIA: DraftState.AWAITING_NOTE,
-    DraftState.AWAITING_NOTE: DraftState.REVIEWING,
+    DraftState.AWAITING_NOTE: DraftState.AWAITING_STORY,
+    DraftState.AWAITING_STORY: DraftState.REVIEWING,
     DraftState.REVIEWING: DraftState.SUBMITTING,
     DraftState.SUBMITTING: DraftState.SUBMITTED,
 }
 
 _STATE_QUESTIONS: dict[DraftState, tuple[str, ...]] = {
-    DraftState.ANSWERING_COMPLETION: ("care_completion", "walk_completion"),
-    DraftState.ANSWERING_FEEDING: ("feeding",),
-    DraftState.ANSWERING_WATER: ("water",),
+    DraftState.ANSWERING_WALK_COMPLETION: ("walk_completion",),
     DraftState.ANSWERING_ACTIVITY: ("activity",),
-    DraftState.ANSWERING_ELIMINATION: ("urination", "defecation"),
-    DraftState.ANSWERING_BEHAVIOR: (
-        "resource_guarding",
-        "human_interaction",
-        "animal_interaction",
-        "emotion",
-        "walk_reaction",
-    ),
+    DraftState.ANSWERING_GAIT: ("gait",),
+    DraftState.ANSWERING_DEFECATION: ("defecation",),
+    DraftState.ANSWERING_ANIMAL_INTERACTION: ("animal_interaction",),
     DraftState.ANSWERING_SPECIAL_STATUS: ("appearance_special_status",),
 }
 
 _STATE_ORDER = (
-    DraftState.ANSWERING_COMPLETION,
-    DraftState.ANSWERING_FEEDING,
-    DraftState.ANSWERING_WATER,
+    DraftState.ANSWERING_WALK_COMPLETION,
     DraftState.ANSWERING_ACTIVITY,
-    DraftState.ANSWERING_ELIMINATION,
-    DraftState.ANSWERING_BEHAVIOR,
+    DraftState.ANSWERING_GAIT,
+    DraftState.ANSWERING_DEFECATION,
+    DraftState.AWAITING_STOOL_MEDIA,
+    DraftState.ANSWERING_ANIMAL_INTERACTION,
     DraftState.ANSWERING_SPECIAL_STATUS,
     DraftState.AWAITING_MEDIA,
     DraftState.AWAITING_NOTE,
+    DraftState.AWAITING_STORY,
     DraftState.REVIEWING,
 )
 _PREVIOUS_STATE: dict[DraftState, DraftState] = {
     DraftState.CONFIRMING_ANIMAL: DraftState.SELECTING_ANIMAL,
-    DraftState.ANSWERING_COMPLETION: DraftState.CONFIRMING_ANIMAL,
-    DraftState.ANSWERING_FEEDING: DraftState.ANSWERING_COMPLETION,
-    DraftState.ANSWERING_WATER: DraftState.ANSWERING_FEEDING,
-    DraftState.ANSWERING_ACTIVITY: DraftState.ANSWERING_WATER,
-    DraftState.ANSWERING_ELIMINATION: DraftState.ANSWERING_ACTIVITY,
-    DraftState.ANSWERING_BEHAVIOR: DraftState.ANSWERING_ELIMINATION,
-    DraftState.ANSWERING_SPECIAL_STATUS: DraftState.ANSWERING_BEHAVIOR,
+    DraftState.ANSWERING_WALK_COMPLETION: DraftState.CONFIRMING_ANIMAL,
+    DraftState.ANSWERING_ACTIVITY: DraftState.ANSWERING_WALK_COMPLETION,
+    DraftState.ANSWERING_GAIT: DraftState.ANSWERING_ACTIVITY,
+    DraftState.ANSWERING_DEFECATION: DraftState.ANSWERING_GAIT,
+    DraftState.AWAITING_STOOL_MEDIA: DraftState.ANSWERING_DEFECATION,
+    # Backing up out of animal_interaction always lands on the stool-photo
+    # prompt, even for a volunteer whose "沒排便" answer skipped it going
+    # forward — they can just hit skip again. Simpler than threading the
+    # skip condition through a static previous-state map for one edge case.
+    DraftState.ANSWERING_ANIMAL_INTERACTION: DraftState.AWAITING_STOOL_MEDIA,
+    DraftState.ANSWERING_SPECIAL_STATUS: DraftState.ANSWERING_ANIMAL_INTERACTION,
     DraftState.AWAITING_MEDIA: DraftState.ANSWERING_SPECIAL_STATUS,
     DraftState.AWAITING_NOTE: DraftState.AWAITING_MEDIA,
-    DraftState.REVIEWING: DraftState.AWAITING_NOTE,
+    DraftState.AWAITING_STORY: DraftState.AWAITING_NOTE,
+    DraftState.REVIEWING: DraftState.AWAITING_STORY,
     DraftState.SUBMITTING: DraftState.REVIEWING,
 }
 
@@ -150,14 +155,9 @@ class CareReportAnswers:
 
 
 def _validate_completion_codes(values: dict[str, Any]) -> None:
-    if values["care_completion"] not in CARE_COMPLETION_CODES:
-        raise DomainError("invalid_care_completion", "照護完成狀態代碼無效", 422)
-    if values["walk_completion"] not in WALK_COMPLETION_CODES:
+    walk_completion = values["walk_completion"]
+    if walk_completion != UNOBSERVED and walk_completion not in WALK_COMPLETION_CODES:
         raise DomainError("invalid_walk_completion", "散步完成狀態代碼無效", 422)
-    if isinstance(values["walk_reaction"], str) and values["walk_reaction"].startswith(
-        "walk_completion."
-    ):
-        raise DomainError("mixed_walk_code", "散步完成與散步反應代碼不可混用", 422)
 
 
 @dataclass
@@ -178,7 +178,7 @@ class DraftStateMachine:
         if _NEXT_STATES.get(self.state) != target:
             raise DomainError("invalid_state_transition", "不允許的草稿狀態轉移", 409)
         if target in {DraftState.REVIEWING, DraftState.SUBMITTING} and not self.answers.complete():
-            raise DomainError("incomplete_answers", "完成 13 個標準答案後才能進入確認或送出", 422)
+            raise DomainError("incomplete_answers", "完成 6 個標準答案後才能進入確認或送出", 422)
         self.state = target
         self.last_interaction_at = datetime.now(timezone.utc)
 

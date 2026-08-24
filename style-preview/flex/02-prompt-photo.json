@@ -1,0 +1,139 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#A9C9DB",
+    "paddingAll": "18px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📸",
+            "size": "xxl",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "照護回報 · 選填",
+                "size": "xs",
+                "color": "#716053",
+                "wrap": true
+              },
+              {
+                "type": "text",
+                "text": "拍一張今天的牠",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#716053",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FFFCF3",
+    "paddingAll": "16px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "text",
+        "text": "直接在聊天室傳照片就可以了，想傳幾張都行。沒拍到也沒關係。",
+        "color": "#9C8B7D",
+        "size": "sm",
+        "wrap": true
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "略過照片",
+          "data": "action=skip_media&draft_token=sample-draft-token",
+          "displayText": "略過照片"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "⏭",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "略過照片",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FAF6EE",
+        "cornerRadius": "16px",
+        "borderWidth": "4px",
+        "borderColor": "#716053",
+        "paddingAll": "14px",
+        "action": {
+          "type": "postback",
+          "label": "上一步",
+          "data": "action=back&draft_token=sample-draft-token",
+          "displayText": "上一步"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "←",
+            "size": "md",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "text",
+            "text": "上一步",
+            "color": "#716053",
+            "size": "md",
+            "weight": "bold",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      }
+    ]
+  },
+  "styles": {
+    "header": {
+      "separator": true,
+      "separatorColor": "#716053"
+    }
+  }
+}

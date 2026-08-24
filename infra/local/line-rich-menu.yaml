@@ -1,18 +1,20 @@
-version: 1
+version: 2
 name: local-volunteer-care
+# 上面一大格（開始散步回報），下面兩小格（繼續回報／聯絡工作人員）。
+# layout 是 [x, y, w, h] 佔整張圖的分數座標，取代舊的 columns 均分格線。
+# QR 掃描已改成「開始散步回報」內的聊天室拍照解碼，不再需要獨立的
+# LIFF 進入按鈕（${LIFF_QR_ENTRY_URL} 從未被展開過，是已知會讓 LINE API
+# 直接回 400 的舊 bug）。
 actions:
-  - label: 開始照護回報
+  - label: 開始散步回報
     type: postback
-    data: action=start_care_report
-  - label: 掃描 QR Code
-    type: uri
-    uri: ${LIFF_QR_ENTRY_URL}
-  - label: 今日照護毛孩
-    type: postback
-    data: action=list_reportable_animals
-  - label: 繼續未完成回報
+    data: action=find_dog
+    layout: [0, 0, 1, 0.6]
+  - label: 繼續回報
     type: postback
     data: action=resume_draft
+    layout: [0, 0.6, 0.5, 0.4]
   - label: 聯絡工作人員
     type: postback
     data: action=contact_staff
+    layout: [0.5, 0.6, 0.5, 0.4]

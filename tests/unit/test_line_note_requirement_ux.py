@@ -105,7 +105,7 @@ async def test_unknown_code_is_ignored_rather_than_crashing(patched_repository: 
 
 def test_chit_chat_points_at_the_menu_when_nothing_is_in_progress() -> None:
     reply = _chit_chat_reply(None)
-    assert "開始照護回報" in reply
+    assert "開始散步回報" in reply
     # 志工隨口打字不是錯誤，回覆不該像錯誤訊息。
     assert "錯誤" not in reply and "不接受" not in reply
 

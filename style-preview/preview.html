@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>浪浪森友會 · 積木貼紙風格預覽</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#FAF6EE;
+    --surface:#FFFCF3;
+    --ink:#716053;
+    --ink-soft:#9C8B7D;
+    --leaf:#A8C69F;
+    --peach:#F2B8A2;
+    --butter:#F6D77A;
+    --sky:#A9C9DB;
+    --lilac:#C9B6D9;
+    --radius:24px;
+    --radius-sm:16px;
+    --border:4px;
+    --pop:4px 4px 0 0 var(--ink);
+    --pop-lg:6px 6px 0 0 var(--ink);
+    --font:'Fredoka','Noto Sans TC',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--cream);
+    color:var(--ink);
+    font-family:var(--font);
+    font-weight:500;
+    line-height:1.7;
+    padding:32px 20px 96px;
+    overflow-x:hidden;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+
+  /* ---------- shared block ---------- */
+  .block{
+    background:var(--surface);
+    border:var(--border) solid var(--ink);
+    border-radius:var(--radius);
+    box-shadow:var(--pop);
+    padding:28px;
+    min-width:0;
+  }
+  .tag{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--butter);
+    border:3px solid var(--ink);
+    border-radius:999px;
+    box-shadow:3px 3px 0 0 var(--ink);
+    padding:6px 16px;
+    font-size:14px;font-weight:700;
+    white-space:nowrap;
+  }
+  h1,h2,h3{font-weight:700;margin:0;line-height:1.35;overflow-wrap:anywhere;}
+  h1{font-size:clamp(30px,5vw,52px);}
+  h2{font-size:clamp(22px,3vw,30px);}
+  h3{font-size:clamp(17px,2vw,21px);}
+  p{margin:10px 0 0;overflow-wrap:anywhere;}
+  .muted{color:var(--ink-soft);}
+  .small{font-size:14px;}
+
+  section{margin-top:56px;}
+  .section-head{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:20px;}
+
+  /* ---------- cover ---------- */
+  .cover{
+    background:var(--leaf);
+    border:6px solid var(--ink);
+    border-radius:32px;
+    box-shadow:var(--pop-lg);
+    padding:clamp(28px,5vw,56px);
+    position:relative;
+    overflow:hidden;
+  }
+  .cover .blob{
+    position:absolute;border:4px solid var(--ink);border-radius:50%;
+    background:var(--butter);opacity:.65;
+  }
+  .cover .b1{width:150px;height:150px;right:-40px;top:-40px;}
+  .cover .b2{width:90px;height:90px;right:80px;bottom:-30px;background:var(--peach);}
+  .cover-inner{position:relative;z-index:1;max-width:760px;}
+  .cover p{font-size:clamp(15px,2vw,18px);}
+
+  /* ---------- grids ---------- */
+  .grid{display:grid;gap:22px;}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr));}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}
+
+  /* ---------- swatches ---------- */
+  .swatch{
+    border:3px solid var(--ink);border-radius:var(--radius-sm);
+    box-shadow:3px 3px 0 0 var(--ink);
+    padding:14px;font-size:13px;font-weight:700;
+  }
+  .swatch code{display:block;font-size:12px;font-weight:500;opacity:.8;}
+
+  /* ---------- list ---------- */
+  ul.pretty{list-style:none;margin:14px 0 0;padding:0;}
+  ul.pretty li{
+    display:flex;gap:10px;align-items:flex-start;
+    padding:9px 0;border-bottom:2px dashed #E4DACA;
+  }
+  ul.pretty li:last-child{border-bottom:0;}
+  ul.pretty .ic{flex:0 0 auto;font-size:18px;line-height:1.5;}
+
+  /* ---------- phone / bot card ---------- */
+  .phone{
+    background:#EFE7D8;
+    border:var(--border) solid var(--ink);
+    border-radius:28px;
+    box-shadow:var(--pop);
+    padding:18px;
+    min-width:0;
+  }
+  .bubble{
+    background:var(--surface);
+    border:var(--border) solid var(--ink);
+    border-radius:var(--radius);
+    box-shadow:var(--pop);
+    overflow:hidden;
+    min-width:0;
+  }
+  .bubble .head{
+    border-bottom:var(--border) solid var(--ink);
+    padding:16px 18px;
+    display:flex;gap:12px;align-items:center;
+  }
+  .bubble .head .g{font-size:30px;flex:0 0 auto;}
+  .bubble .head .t{min-width:0;}
+  .bubble .head .cap{font-size:12px;font-weight:600;opacity:.75;}
+  .bubble .head .ttl{font-size:20px;font-weight:700;overflow-wrap:anywhere;}
+  .bubble .body{padding:16px 18px;display:flex;flex-direction:column;gap:10px;}
+  .bubble .foot{
+    border-top:3px dashed #E4DACA;padding:12px 18px;text-align:center;
+    font-size:12px;color:var(--ink-soft);
+  }
+  .opt{
+    background:var(--cream);
+    border:3px solid var(--ink);
+    border-radius:16px;
+    box-shadow:3px 3px 0 0 var(--ink);
+    padding:12px 14px;
+    font-weight:700;font-size:15px;
+    display:flex;gap:9px;align-items:center;
+    overflow-wrap:anywhere;
+  }
+  .opt.pick{background:var(--butter);}
+  .bar{
+    height:14px;background:#E4DACA;border:3px solid var(--ink);
+    border-radius:999px;overflow:hidden;margin-top:10px;
+  }
+  .bar span{display:block;height:100%;background:var(--butter);border-right:3px solid var(--ink);}
+
+  /* ---------- summary rows ---------- */
+  .row{
+    display:flex;gap:10px;align-items:baseline;
+    padding:8px 0;border-bottom:2px dashed #E4DACA;font-size:15px;
+  }
+  .row:last-child{border-bottom:0;}
+  .row .k{color:var(--ink-soft);flex:0 0 46%;min-width:0;overflow-wrap:anywhere;}
+  .row .v{font-weight:700;min-width:0;overflow-wrap:anywhere;}
+
+  /* ---------- compare ---------- */
+  .yes{background:#E7F0E2;}
+  .no{background:#F7E3DC;}
+  .verdict{font-size:13px;font-weight:700;padding:3px 10px;border:2px solid var(--ink);border-radius:999px;white-space:nowrap;}
+
+  /* ---------- chart ---------- */
+  .chart{display:flex;align-items:flex-end;gap:14px;height:210px;padding-top:10px;}
+  .chart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;min-width:0;}
+  .chart .stick{
+    width:100%;border:3px solid var(--ink);border-radius:12px 12px 0 0;
+    box-shadow:3px 3px 0 0 var(--ink);
+  }
+  .chart .lbl{font-size:12px;font-weight:700;text-align:center;overflow-wrap:anywhere;}
+
+  /* ---------- timeline ---------- */
+  .tl{position:relative;padding-left:40px;}
+  .tl::before{
+    content:"";position:absolute;left:13px;top:6px;bottom:6px;
+    width:4px;background:var(--ink);border-radius:2px;
+  }
+  .tl .item{position:relative;margin-bottom:18px;}
+  .tl .item:last-child{margin-bottom:0;}
+  .tl .dot{
+    position:absolute;left:-40px;top:14px;width:26px;height:26px;
+    background:var(--peach);border:3px solid var(--ink);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:13px;
+  }
+  /* ---------- Flex-accurate variant: strip what Flex cannot render ---------- */
+  .flexish,
+  .flexish *{
+    box-shadow:none !important;
+    font-family:system-ui,-apple-system,'Microsoft JhengHei','PingFang TC',sans-serif !important;
+  }
+  .flexish .foot{border-top:3px solid #E4DACA;}
+
+  footer{margin-top:64px;text-align:center;font-size:13px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ 封面頁 ============ -->
+  <div class="cover">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="cover-inner">
+      <span class="tag">🎈 風格提案 · 尚未套用</span>
+      <h1 style="margin-top:18px;">積木貼紙風<br>浪浪森友會志工回報</h1>
+      <p>奶霜底色搭暖巧克力棕描邊，厚邊框、大圓角、無模糊的偏移陰影，
+         整體像一疊可以撕下來貼的貼紙。這份預覽只是給眼睛看的，
+         現有程式碼一行都沒有更動。</p>
+    </div>
+  </div>
+
+  <!-- ============ 設計 token ============ -->
+  <section>
+    <div class="section-head"><span class="tag">🌟 設計語彙</span><h2>色彩與樣式</h2></div>
+    <div class="grid g3">
+      <div class="swatch" style="background:#FAF6EE;">奶霜底色<code>#FAF6EE</code></div>
+      <div class="swatch" style="background:#FFFCF3;">卡片表面<code>#FFFCF3</code></div>
+      <div class="swatch" style="background:#716053;color:#FAF6EE;">巧克力棕<code>#716053</code></div>
+      <div class="swatch" style="background:#A8C69F;">草綠<code>#A8C69F</code></div>
+      <div class="swatch" style="background:#F6D77A;">奶油黃<code>#F6D77A</code></div>
+      <div class="swatch" style="background:#F2B8A2;">蜜桃<code>#F2B8A2</code></div>
+      <div class="swatch" style="background:#A9C9DB;">天空藍<code>#A9C9DB</code></div>
+      <div class="swatch" style="background:#C9B6D9;">薰衣草<code>#C9B6D9</code></div>
+    </div>
+    <div class="block" style="margin-top:22px;">
+      <h3>🐾 三個不可妥協的細節</h3>
+      <ul class="pretty">
+        <li><span class="ic">🧱</span><span><strong>邊框 3–6px 實線</strong>，一律 <code>#716053</code>，不用灰階。</span></li>
+        <li><span class="ic">🎯</span><span><strong>陰影完全不模糊</strong>：<code>4px 4px 0 0 #716053</code>，這是貼紙感的來源。</span></li>
+        <li><span class="ic">🫧</span><span><strong>圓角 24px</strong>，小元件 16px，膠囊用 999px。</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 兩欄式對比頁 ============ -->
+  <section>
+    <div class="section-head"><span class="tag">⚖️ 現實檢查</span><h2>這份設計，LINE 做得到多少</h2></div>
+    <div class="grid g2">
+      <div class="block yes">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+          <h3>Flex 做得到</h3><span class="verdict">可實作</span>
+        </div>
+        <ul class="pretty">
+          <li><span class="ic">✅</span><span>奶霜底色與巧克力棕文字</span></li>
+          <li><span class="ic">✅</span><span>3–6px 實線邊框（<code>borderWidth</code>）</span></li>
+          <li><span class="ic">✅</span><span>24px 大圓角（<code>cornerRadius</code>）</span></li>
+          <li><span class="ic">✅</span><span>emoji 點綴、進度條、卡片式選項</span></li>
+        </ul>
+      </div>
+      <div class="block no">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+          <h3>Flex 做不到</h3><span class="verdict">需取捨</span>
+        </div>
+        <ul class="pretty">
+          <li><span class="ic">❌</span><span><strong>偏移陰影</strong>：Flex 沒有 <code>box-shadow</code>，一種都沒有</span></li>
+          <li><span class="ic">❌</span><span><strong>Fredoka 字型</strong>：訊息一律用使用者的系統字</span></li>
+          <li><span class="ic">❌</span><span>虛線分隔、任意背景圖樣</span></li>
+          <li><span class="ic">💡</span><span>替代作法：用<strong>厚邊框＋高彩度色塊</strong>補回份量感</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 落差對照 ============ -->
+  <section>
+    <div class="section-head"><span class="tag">🔍 落差對照</span><h2>設計提案 vs LINE 真正畫得出來的</h2></div>
+    <p class="small muted" style="margin:0 0 18px;">
+      同一張卡片畫兩次。左邊是這份預覽其他地方用的樣子；右邊拿掉了 Flex 不支援的東西 ——
+      沒有陰影、沒有 Fredoka、沒有虛線。右邊仍是<strong>近似</strong>，唯一準確的渲染器是
+      LINE Flex Simulator 或真實手機。
+    </p>
+    <div class="grid g2">
+
+      <div>
+        <div style="margin-bottom:10px;"><span class="tag">🎨 設計提案（HTML）</span></div>
+        <div class="bubble">
+          <div class="head" style="background:var(--butter);">
+            <div class="g">🍚</div>
+            <div class="t"><div class="cap">照護回報 · 第 3 / 13 題</div><div class="ttl">進食</div></div>
+          </div>
+          <div class="body">
+            <div class="opt">🥣 正常</div>
+            <div class="opt">🍽️ 較少</div>
+            <div class="opt">😶 幾乎沒吃</div>
+            <div class="bar"><span style="width:23%"></span></div>
+          </div>
+          <div class="foot">點錯了也沒關係，可以退回上一題 🍃</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="margin-bottom:10px;"><span class="tag" style="background:var(--peach);">📱 Flex 實際（近似）</span></div>
+        <div class="bubble flexish">
+          <div class="head" style="background:var(--butter);">
+            <div class="g">🍚</div>
+            <div class="t"><div class="cap">照護回報 · 第 3 / 13 題</div><div class="ttl">進食</div></div>
+          </div>
+          <div class="body">
+            <div class="opt">🥣 正常</div>
+            <div class="opt">🍽️ 較少</div>
+            <div class="opt">😶 幾乎沒吃</div>
+            <div class="bar"><span style="width:23%"></span></div>
+          </div>
+          <div class="foot">點錯了也沒關係，可以退回上一題 🍃</div>
+        </div>
+        <ul class="pretty small" style="margin-top:14px;">
+          <li><span class="ic">➖</span><span>陰影全部消失，卡片變平</span></li>
+          <li><span class="ic">➖</span><span>圓體大標變成系統字，可愛感下降最多</span></li>
+          <li><span class="ic">➖</span><span>虛線分隔改為實線</span></li>
+          <li><span class="ic">➕</span><span>厚邊框與色塊仍在，識別度保留</span></li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 多圖卡並排頁 ============ -->
+  <section>
+    <div class="section-head"><span class="tag">🐾 Bot 卡片</span><h2>志工在 LINE 裡會看到的樣子</h2></div>
+    <div class="grid g3">
+
+      <div class="phone">
+        <div class="bubble">
+          <div class="head" style="background:var(--butter);">
+            <div class="g">🍚</div>
+            <div class="t"><div class="cap">照護回報 · 第 3 / 13 題</div><div class="ttl">進食</div></div>
+          </div>
+          <div class="body">
+            <div class="opt">🥣 正常</div>
+            <div class="opt">🍽️ 較少</div>
+            <div class="opt">😶 幾乎沒吃</div>
+            <div class="opt">🚫 未提供</div>
+            <div class="opt">👀 未觀察到</div>
+            <div class="bar"><span style="width:23%"></span></div>
+          </div>
+          <div class="foot">點錯了也沒關係，可以退回上一題 🍃</div>
+        </div>
+      </div>
+
+      <div class="phone">
+        <div class="bubble">
+          <div class="head" style="background:var(--sky);">
+            <div class="g">📸</div>
+            <div class="t"><div class="cap">照護回報 · 選填</div><div class="ttl">拍一張今天的牠</div></div>
+          </div>
+          <div class="body">
+            <p class="small muted" style="margin:0;">直接在聊天室傳照片就可以了，想傳幾張都行。沒拍到也沒關係。</p>
+            <div class="opt">⏭ 略過照片</div>
+            <div class="opt">← 上一步</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phone">
+        <div class="bubble">
+          <div class="head" style="background:var(--leaf);">
+            <div class="g">🎉</div>
+            <div class="t"><div class="cap">辛苦了，謝謝你</div><div class="ttl">回報完成</div></div>
+          </div>
+          <div class="body">
+            <p style="margin:0;font-weight:700;text-align:center;">陪小黑的紀錄<br>已經收好了 🌟</p>
+            <p class="small muted" style="text-align:center;margin:4px 0 0;">AI 分析會在背景進行，不影響這筆紀錄。</p>
+          </div>
+          <div class="foot">下次要回報，再按一次選單就好 🐾</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 摘要卡（長內容不跑版驗證） ============ -->
+  <section>
+    <div class="section-head"><span class="tag">📋 長內容測試</span><h2>13 個欄位也不擠、不重疊</h2></div>
+    <div class="grid g2">
+      <div class="bubble">
+        <div class="head" style="background:var(--peach);">
+          <div class="g">📋</div>
+          <div class="t"><div class="cap">小黑 · 送出前還可以修改</div><div class="ttl">回報摘要</div></div>
+        </div>
+        <div class="body" style="gap:0;">
+          <div class="row"><span class="k">🧺 照護完成</span><span class="v">已完成</span></div>
+          <div class="row"><span class="k">🚶 散步完成</span><span class="v">已完成</span></div>
+          <div class="row"><span class="k">🍚 進食</span><span class="v">正常</span></div>
+          <div class="row"><span class="k">💧 飲水</span><span class="v">有喝水</span></div>
+          <div class="row"><span class="k">⚡ 活動</span><span class="v">較高</span></div>
+          <div class="row"><span class="k">💩 排便</span><span class="v">形狀不同、顏色偏深</span></div>
+          <div class="row"><span class="k">🦴 護食</span><span class="v">未觀察到</span></div>
+          <div class="row"><span class="k">🔍 外觀／特殊狀態</span><span class="v">局部搔抓、毛量偏少</span></div>
+        </div>
+        <div class="body" style="border-top:3px dashed #E4DACA;">
+          <div class="opt pick">✅ 送出回報</div>
+          <div class="opt">✏️ 再改一下</div>
+        </div>
+      </div>
+
+      <!-- ============ 圖表頁 ============ -->
+      <div class="block">
+        <h3>📊 本週回報筆數</h3>
+        <p class="small muted" style="margin-top:4px;">柱狀圖同樣套用厚邊框與偏移陰影。</p>
+        <div class="chart">
+          <div class="col"><div class="stick" style="height:45%;background:var(--leaf);"></div><div class="lbl">一</div></div>
+          <div class="col"><div class="stick" style="height:70%;background:var(--butter);"></div><div class="lbl">二</div></div>
+          <div class="col"><div class="stick" style="height:35%;background:var(--peach);"></div><div class="lbl">三</div></div>
+          <div class="col"><div class="stick" style="height:90%;background:var(--sky);"></div><div class="lbl">四</div></div>
+          <div class="col"><div class="stick" style="height:60%;background:var(--lilac);"></div><div class="lbl">五</div></div>
+          <div class="col"><div class="stick" style="height:25%;background:var(--leaf);"></div><div class="lbl">六</div></div>
+          <div class="col"><div class="stick" style="height:50%;background:var(--butter);"></div><div class="lbl">日</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 時間軸頁 ============ -->
+  <section>
+    <div class="section-head"><span class="tag">🕰️ 時間軸</span><h2>小黑的近期歷程</h2></div>
+    <div class="block">
+      <div class="tl">
+        <div class="item"><div class="dot">🐾</div>
+          <div class="block" style="box-shadow:3px 3px 0 0 var(--ink);padding:16px;background:var(--cream);">
+            <h3>8 / 21 · 散步回報</h3>
+            <p class="small">精神很好，一直想往草叢跑。便便有點軟，明天再觀察一次。</p>
+          </div>
+        </div>
+        <div class="item"><div class="dot">💉</div>
+          <div class="block" style="box-shadow:3px 3px 0 0 var(--ink);padding:16px;background:var(--cream);">
+            <h3>8 / 19 · 醫療紀錄</h3>
+            <p class="small">例行疫苗接種，體重 12.4 公斤。</p>
+          </div>
+        </div>
+        <div class="item"><div class="dot">🌟</div>
+          <div class="block" style="box-shadow:3px 3px 0 0 var(--ink);padding:16px;background:var(--cream);">
+            <h3>8 / 15 · 入所</h3>
+            <p class="small">由民眾通報後帶回，狀況穩定。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>此頁僅為風格預覽 · 未套用至 <code>line_message_presenter.py</code></footer>
+</div>
+</body>
+</html>

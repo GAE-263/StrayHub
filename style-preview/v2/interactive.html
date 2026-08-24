@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>散步回報 · 互動預覽</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#FAF6EE; --surface:#FFFCF3; --ink:#716053; --ink-soft:#9C8B7D;
+    --leaf:#A8C69F; --butter:#F6D77A; --peach:#F2B8A2; --sky:#A9C9DB; --lilac:#C9B6D9;
+    --track:#E4DACA;
+    --radius:24px; --radius-sm:16px;
+    --pop:4px 4px 0 0 var(--ink);
+    --font:'Fredoka','Noto Sans TC',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:var(--cream);color:var(--ink);
+    font-family:var(--font);font-weight:500;line-height:1.7;
+    padding:28px 16px 60px;
+  }
+  .page{max-width:1020px;margin:0 auto;display:grid;gap:26px;
+        grid-template-columns:minmax(320px,420px) 1fr;align-items:start;}
+  @media(max-width:840px){.page{grid-template-columns:1fr;}}
+
+  h1{font-size:30px;font-weight:700;margin:0 0 6px;}
+  .lede{color:var(--ink-soft);font-size:15px;margin:0 0 20px;max-width:60ch;}
+
+  /* ---------- phone ---------- */
+  .phone{
+    background:#EFE7D8;border:4px solid var(--ink);border-radius:30px;
+    box-shadow:var(--pop);padding:14px;display:flex;flex-direction:column;
+  }
+  .bar{
+    display:flex;align-items:center;gap:9px;padding:0 4px 10px;
+    border-bottom:3px solid var(--ink);margin-bottom:12px;
+  }
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--leaf);
+          border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .bar b{font-size:15px;}
+  .bar .who{font-size:11px;color:var(--ink-soft);}
+  /* The chat grows with its content and the page does the scrolling. An inner
+     scroller was clipping the buttons at the bottom of every card. */
+  .log{display:flex;flex-direction:column;gap:12px;padding:4px 2px 12px;}
+  .log::-webkit-scrollbar{width:8px;}
+  .log::-webkit-scrollbar-thumb{background:var(--track);border-radius:4px;}
+
+  .me{align-self:flex-end;max-width:78%;background:var(--butter);
+      border:3px solid var(--ink);border-radius:18px 18px 4px 18px;
+      padding:8px 13px;font-size:14px;font-weight:700;box-shadow:3px 3px 0 0 var(--ink);}
+  .sys{align-self:center;font-size:11px;color:var(--ink-soft);}
+
+  /* ---------- flex bubble ---------- */
+  .bubble{
+    align-self:flex-start;width:94%;background:var(--surface);
+    border:4px solid var(--ink);border-radius:var(--radius);
+    box-shadow:var(--pop);overflow:hidden;
+    animation:pop .18s ease-out;
+  }
+  @keyframes pop{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  @media(prefers-reduced-motion:reduce){.bubble{animation:none;}}
+  .bhead{border-bottom:4px solid var(--ink);padding:13px 15px;display:flex;gap:11px;align-items:center;}
+  .bhead .g{font-size:26px;flex:0 0 auto;}
+  .bhead .t{min-width:0;}
+  .bhead .cap{font-size:11px;font-weight:600;color:var(--ink-soft);}
+  .bhead .ttl{font-size:18px;font-weight:700;overflow-wrap:anywhere;}
+  .bbody{padding:13px 15px;display:flex;flex-direction:column;gap:8px;}
+  .bfoot{border-top:3px solid var(--track);padding:9px 15px;text-align:center;font-size:11px;color:var(--ink-soft);}
+  .prog{height:12px;background:var(--track);border:3px solid var(--ink);border-radius:999px;overflow:hidden;margin-top:9px;}
+  .prog span{display:block;height:100%;background:var(--butter);border-right:3px solid var(--ink);transition:width .25s;}
+
+  .opt{
+    background:var(--cream);border:3px solid var(--ink);border-radius:var(--radius-sm);
+    box-shadow:3px 3px 0 0 var(--ink);padding:10px 12px;
+    font-family:inherit;font-weight:700;font-size:14px;color:var(--ink);
+    display:flex;gap:8px;align-items:center;text-align:left;
+    cursor:pointer;width:100%;transition:transform .08s;
+  }
+  .opt:hover{background:#F4EEE0;}
+  .opt:active{transform:translate(3px,3px);box-shadow:0 0 0 0 var(--ink);}
+  .opt:focus-visible{outline:3px solid var(--sky);outline-offset:2px;}
+  .opt.pick{background:var(--butter);}
+  .opt.ghost{
+    box-shadow:none;background:transparent;border-style:dashed;
+    color:var(--ink-soft);font-weight:500;
+  }
+  .opt.ghost:hover{background:#F4EEE0;}
+
+  /* Navigation, not an answer: no card, smaller, quieter, centred. */
+  .opt.nav{
+    border:0;background:transparent;box-shadow:none;
+    color:var(--ink-soft);font-size:12px;font-weight:600;
+    padding:4px 6px;justify-content:center;gap:5px;
+    text-decoration:underline;text-underline-offset:3px;
+    text-decoration-color:var(--track);
+  }
+  .opt.nav:hover{background:transparent;color:var(--ink);text-decoration-color:var(--ink-soft);}
+  .opt.nav:active{transform:none;}
+
+  .row{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-bottom:2px solid var(--track);font-size:13px;}
+  .row:last-of-type{border-bottom:0;}
+  .row .k{color:var(--ink-soft);flex:0 0 44%;}
+  .row .v{font-weight:700;min-width:0;overflow-wrap:anywhere;}
+  .note{font-size:13px;color:var(--ink);}
+
+
+  /* ---------- composer ---------- */
+  /* LINE's own message bar. A Flex card cannot send a photo, so the flow has
+     to point the volunteer down here. */
+  .composer{
+    position:sticky;bottom:0;z-index:6;
+    display:flex;align-items:center;gap:8px;
+    background:var(--surface);border:3px solid var(--ink);border-radius:999px;
+    padding:6px 8px;margin-top:4px;
+  }
+  .composer button{
+    width:36px;height:36px;flex:0 0 auto;border-radius:50%;
+    border:3px solid var(--ink);background:var(--cream);
+    font-size:16px;cursor:pointer;line-height:1;
+  }
+  .composer button:active{transform:translate(2px,2px);}
+  .composer button:focus-visible{outline:3px solid var(--sky);outline-offset:2px;}
+  .composer .field{
+    flex:1;min-width:0;color:var(--ink-soft);font-size:13px;padding-left:4px;
+  }
+  .composer.armed button#cam,.composer.armed button#alb{
+    background:var(--butter);
+    animation:nudge 1.1s ease-in-out infinite;
+  }
+  @keyframes nudge{0%,100%{transform:none;}50%{transform:translateY(-3px);}}
+  @media(prefers-reduced-motion:reduce){.composer.armed button{animation:none;}}
+
+  /* Text-search mode: a real input replaces the placeholder field, cam/album
+     step aside so it is unambiguous which affordance is live. */
+  .composer-input{
+    display:none;flex:1;min-width:0;border:0;background:transparent;
+    font:inherit;font-size:13px;color:var(--ink);padding-left:4px;outline:none;
+  }
+  .composer-input::placeholder{color:var(--ink-soft);}
+  .composer-send{
+    display:none;width:36px;height:36px;flex:0 0 auto;border-radius:50%;
+    border:3px solid var(--ink);background:var(--butter);
+    font-size:15px;cursor:pointer;line-height:1;align-items:center;justify-content:center;
+  }
+  .composer-send:active{transform:translate(2px,2px);}
+  .composer.texting #cam,.composer.texting #alb{display:none;}
+  .composer.texting .field{display:none;}
+  .composer.texting .composer-input,.composer.texting .composer-send{display:flex;}
+
+  /* ---------- rich menu ---------- */
+  /* Sticky so the entry points stay reachable however long the chat gets.
+     One hero across the top, two half-width cells beneath — the same shape as
+     the Rich Menu artwork. */
+  .menu{
+    position:sticky;bottom:0;z-index:5;
+    margin-top:12px;display:grid;gap:8px;
+    grid-template-columns:1fr 1fr;
+    background:#EFE7D8;padding-top:10px;
+    border-top:3px solid var(--ink);
+  }
+  .menu button:first-child{grid-column:1 / -1;}
+  .menu button:not(:first-child){flex-direction:column;text-align:center;gap:6px;}
+  .menu button{
+    display:flex;align-items:center;gap:12px;
+    background:var(--surface);border:4px solid var(--ink);border-radius:18px;
+    box-shadow:var(--pop);padding:9px 13px;cursor:pointer;
+    font-family:inherit;font-weight:700;font-size:14px;color:var(--ink);
+    transition:transform .08s;
+  }
+  .menu button:active{transform:translate(3px,3px);box-shadow:0 0 0 0 var(--ink);}
+  .menu button:focus-visible{outline:3px solid var(--sky);outline-offset:2px;}
+  .menu .badge{
+    width:38px;height:38px;border-radius:11px;border:3px solid var(--ink);
+    display:flex;align-items:center;justify-content:center;font-size:17px;flex:0 0 auto;
+  }
+  .menu .sub{font-size:10px;color:var(--ink-soft);letter-spacing:.08em;}
+
+  /* ---------- side panel ---------- */
+  .panel{background:var(--surface);border:4px solid var(--ink);border-radius:var(--radius);
+         box-shadow:var(--pop);padding:20px;}
+  .panel + .panel{margin-top:18px;}
+  .panel h2{font-size:19px;font-weight:700;margin:0 0 4px;}
+  .panel p{font-size:14px;color:var(--ink-soft);margin:0 0 14px;}
+  .stat{display:flex;gap:12px;flex-wrap:wrap;}
+  .stat div{
+    flex:1 1 96px;background:var(--cream);border:3px solid var(--ink);border-radius:14px;
+    padding:10px 12px;
+  }
+  .stat b{display:block;font-size:26px;line-height:1.2;}
+  .stat span{font-size:11px;color:var(--ink-soft);}
+  ul.notes{list-style:none;margin:0;padding:0;display:grid;gap:9px;}
+  ul.notes li{display:flex;gap:9px;font-size:13.5px;color:var(--ink-soft);}
+  ul.notes b{color:var(--ink);}
+  .reset{
+    margin-top:14px;background:var(--peach);border:3px solid var(--ink);border-radius:999px;
+    box-shadow:3px 3px 0 0 var(--ink);padding:7px 16px;font-family:inherit;font-weight:700;
+    font-size:13px;color:var(--ink);cursor:pointer;
+  }
+  .reset:active{transform:translate(3px,3px);box-shadow:0 0 0 0 var(--ink);}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div>
+    <div class="phone">
+      <div class="bar">
+        <div class="avatar">🐾</div>
+        <div><b>浪浪森友會-志工回報</b><div class="who">@323gtxuu</div></div>
+      </div>
+      <div class="log" id="log"></div>
+      <div class="composer" id="composer">
+        <button id="cam" title="相機">📷</button>
+        <button id="alb" title="相簿">🖼</button>
+        <div class="field" id="composerField">輸入訊息…</div>
+        <input class="composer-input" id="composerInput" autocomplete="off">
+        <button id="send" class="composer-send" title="送出">➤</button>
+      </div>
+      <div class="menu" id="menu"></div>
+    </div>
+  </div>
+
+  <div>
+    <h1>散步回報 · 互動預覽</h1>
+    <p class="lede">
+      按下方選單走一遍完整流程。這是設計稿，不會連到伺服器，也還沒套用到程式碼。
+    </p>
+
+    <div class="panel">
+      <h2>操作成本</h2>
+      <p>這次改版把 13 題縮成 7 題。實際點幾下，這裡會即時算給你看。</p>
+      <div class="stat">
+        <div><b id="taps">0</b><span>總點擊次數</span></div>
+        <div><b id="step">—</b><span>目前步驟</span></div>
+        <div><b id="answered">0 / 7</b><span>已回答</span></div>
+      </div>
+      <button class="reset" id="reset">重新開始</button>
+    </div>
+
+    <div class="panel">
+      <h2>這版改了什麼</h2>
+      <ul class="notes">
+        <li><span>🔀</span><span><b>兩顆合併成一顆</b>　「開始照護回報」與「今日照護毛孩」併為<b>開始散步回報</b>，保留今日進度卡，因為它本來就能點狗開始。</span></li>
+        <li><span>✂️</span><span><b>13 題減為 7 題</b>　拿掉照護完成、進食、飲水、護食四項籠舍照護題目，以及與「散步完成」重複的散步反應。</span></li>
+        <li><span>🗣</span><span><b>口徑改為散步</b>　卡片標頭與文案全部從「照護回報」改成「散步回報」。</span></li>
+        <li><span>✂️</span><span><b>選項砍到 3～4 個</b>　原本情緒有 9 個、排便 7 個，現在每題最多 4 個，用口語而非臨床用語（「軟軟的」而不是「軟便」）。</span></li>
+        <li><span>🧱</span><span><b>積木貼紙風</b>　厚棕色描邊、無模糊偏移陰影、24px 大圓角。</span></li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>兩個實作提醒</h2>
+      <ul class="notes">
+        <li><span>⚠️</span><span><b>陰影在 LINE 上不存在</b>　Flex 沒有 box-shadow，真機會是扁的。這裡的立體感只有 Rich Menu 做得到。</span></li>
+        <li><span>⚠️</span><span><b>減題目要動狀態機</b>　13 題寫死在 <code>REQUIRED_ANSWER_KEYS</code> 與四張順序表裡，不是設定值。</span></li>
+        <li><span>📷</span><span><b>便便照片可略過但會留紀錄</b>　略過本身是一筆資料，後台看得到合規率。刻意不逼志工交代原因，否則他們會改成謊報「沒排」來閃避，反而毀掉更重要的欄位。</span></li>
+        <li><span>⚠️</span><span><b>這些選項文字目前不存在</b>　真實選項來自資料庫的 86 筆平台預設詞彙，而那些「不能」透過任何介面修改。要照這版上線，得改種子腳本或直接改資料。</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="copy.js"></script>
+<script>
+const COPY = window.COPY;
+if(!COPY){ document.body.innerHTML = '<p style="padding:40px">找不到 copy.js，請先執行 <code>python build_preview.py</code></p>'; throw new Error('copy.js missing'); }
+
+const DOGS = COPY.demo_dogs;
+const G = COPY.glyphs;
+const S = COPY.steps;
+const tone = (name) => `var(--${COPY.tones[name]})`;
+
+const Q = COPY.questions;
+const TOTAL = Q.length;
+const fill = (s, vars) => String(s ?? '').replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+const nl = (s) => String(s ?? '').split('\n').join('<br>');
+
+const log = document.getElementById('log');
+let taps = 0, dog = null, answers = [];
+
+const bump = (label) => {
+  taps++;
+  document.getElementById('taps').textContent = taps;
+  document.getElementById('step').textContent = label;
+  document.getElementById('answered').textContent = `${answers.length} / ${TOTAL}`;
+};
+// The page scrolls, not an inner box. Wait a frame so the new card has been
+// measured, then bring its whole height into view above the sticky menu.
+const scroll = () => {
+  requestAnimationFrame(() => {
+    const last = log.lastElementChild;
+    if (last) last.scrollIntoView({block: 'end', behavior: 'smooth'});
+  });
+};
+const el = (html) => { const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; };
+
+function say(text){ log.appendChild(el(`<div class="me">${text}</div>`)); scroll(); }
+function note(text){ log.appendChild(el(`<div class="sys">${text}</div>`)); scroll(); }
+
+function bubble({glyph, cap, title, fill:bg, bodyHTML, foot, progress}){
+  const node = el(`
+    <div class="bubble">
+      <div class="bhead" style="background:${bg}">
+        <div class="g">${glyph ?? ''}</div>
+        <div class="t"><div class="cap">${cap ?? ''}</div><div class="ttl">${title ?? ''}</div>
+        ${progress!=null?`<div class="prog"><span style="width:${progress}%"></span></div>`:''}</div>
+      </div>
+      <div class="bbody"></div>
+      ${foot?`<div class="bfoot">${foot}</div>`:''}
+    </div>`);
+  node.querySelector('.bbody').innerHTML = bodyHTML;
+  log.appendChild(node); scroll();
+  return node;
+}
+
+function optionButtons(list, extraClass=''){
+  // A third element on an option is an extra class, so one list can hold both
+  // answers and navigation without needing separate renders.
+  return list.map((o,i)=>`<button class="opt ${extraClass} ${o[2]||''}" data-i="${i}">${o[1]?`<span>${o[1]}</span>`:''}<span>${o[0]}</span></button>`).join('');
+}
+
+function wire(node, list, onPick){
+  node.querySelectorAll('.opt').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      node.querySelectorAll('.opt').forEach(x=>x.disabled=true);
+      onPick(list[+b.dataset.i], +b.dataset.i);
+    });
+  });
+}
+
+/* ---------- composer ---------- */
+// Mirrors LINE's own message bar in two ways a Flex card cannot: sending a
+// photo (camera/album) and free text (search). Only one mode is armed at a
+// time; arming one always clears the other first.
+const composer = document.getElementById('composer');
+const composerField = document.getElementById('composerField');
+const composerInput = document.getElementById('composerInput');
+const sendBtn = document.getElementById('send');
+let onPhoto = null, onText = null;
+
+function disarmComposer(){
+  onPhoto = null; onText = null;
+  composer.classList.remove('armed','texting');
+  composerField.textContent = '輸入訊息…';
+  composerInput.value = '';
+}
+function armComposer(kind, handler){
+  disarmComposer();
+  onPhoto = handler;
+  composer.classList.add('armed');
+  composerField.textContent = `等你傳${kind}…`;
+}
+function armTextComposer(placeholder, handler){
+  disarmComposer();
+  onText = handler;
+  composer.classList.add('texting');
+  composerInput.placeholder = placeholder;
+  composerInput.focus();
+}
+function ack(text){
+  log.appendChild(el(`<div class="me">🖼 照片</div>`));
+  note(text); scroll();
+}
+['cam','alb'].forEach(id=>{
+  document.getElementById(id).addEventListener('click', ()=>{
+    if(!onPhoto) return;
+    const run = onPhoto; disarmComposer(); bump(S.send_photo); run();
+  });
+});
+function submitComposerText(){
+  if(!onText) return;
+  const value = composerInput.value.trim();
+  if(!value) return;
+  const run = onText;
+  say(value); disarmComposer(); bump('傳送文字'); run(value);
+}
+sendBtn.addEventListener('click', submitComposerText);
+composerInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submitComposerText(); });
+
+/* ---------- flow ---------- */
+function askFindDog(){
+  const c = COPY.find_dog;
+  const rows = [[c.qr,'📷'],[c.search,'🔤'],[c.list,'📋']];
+  const node = bubble({glyph:c.glyph, cap:c.caption, title:c.title, fill:tone('find_dog'), bodyHTML:optionButtons(rows)});
+  wire(node, rows, (_, i)=>{
+    say(rows[i][0]);
+    if(i===0){ bump(S.qr_scan); askQrScan(); }
+    else if(i===1){ bump(S.search); askSearch(); }
+    else { bump(S.pick_animal); showOverview(); }
+  });
+}
+
+function askQrScan(){
+  const c = COPY.qr_scan;
+  const rows = [[c.switch_to_search,'🔤']];
+  const node = bubble({
+    glyph:c.glyph, cap:c.caption, title:c.title,
+    fill:tone('qr_scan'), bodyHTML:`<div class="note">${nl(c.body)}</div>`+optionButtons(rows)
+  });
+  // A real scan resolves whichever tag was pointed at; the demo always
+  // resolves to the first dog not yet walked so the happy path is visible.
+  armComposer(c.waiting, ()=>{
+    dog = DOGS.find(d=>!d.done) || DOGS[0];
+    ack(fill(c.found,{dog:dog.name}));
+    showConfirm();
+  });
+  wire(node, rows, ()=>{ disarmComposer(); bump(S.search); askSearch(); });
+}
+
+function askSearch(){
+  const c = COPY.search;
+  const node = bubble({
+    glyph:c.glyph, cap:c.caption, title:c.title,
+    fill:tone('search'), bodyHTML:`<div class="note">${nl(c.body)}</div>`
+  });
+  armTextComposer(c.placeholder, (query)=>{ runSearch(query); });
+}
+
+function runSearch(query){
+  const c = COPY.search;
+  const matches = DOGS.filter(d => d.name.includes(query) || d.shelter_no.includes(query));
+  if(matches.length===0){
+    note(fill(c.no_result,{query}));
+    askSearch();
+    return;
+  }
+  if(matches.length===1){ dog = matches[0]; bump(S.pick_animal); showConfirm(); return; }
+  const rows = matches.map(d=>[`${d.name}　${d.shelter_no}`, d.done ? G.dog_done : G.dog_pending]);
+  const node = bubble({
+    glyph:'🔎', cap:fill(c.multi_result,{count:matches.length, query}), title:c.title,
+    fill:tone('search'), bodyHTML:optionButtons(rows)
+  });
+  wire(node, rows, (_, i)=>{ say(rows[i][0]); dog = matches[i]; bump(S.pick_animal); showConfirm(); });
+}
+
+function showOverview(){
+  const c = COPY.overview;
+  const done = DOGS.filter(d=>d.done).length;
+  const rows = DOGS.map(d=>[
+    `${d.name}　${d.done ? fill(c.status_done,{time:d.done}) : c.status_pending}`,
+    d.done ? G.dog_done : G.dog_pending
+  ]);
+  const node = bubble({
+    glyph:c.glyph, cap:fill(c.caption,{done, total:DOGS.length}), title:c.title,
+    fill:tone('overview'), bodyHTML:optionButtons(rows), foot:c.footer
+  });
+  wire(node, rows, (_, i)=>{ dog = DOGS[i]; say(DOGS[i].name); bump(S.pick_animal); showConfirm(); });
+}
+
+function showConfirm(){
+  const c = COPY.confirm;
+  const rows = [[c.accept,G.confirm],[c.reject,G.switch]];
+  const node = bubble({
+    glyph:c.glyph, cap:fill(c.caption,{shelter_no:dog.shelter_no,dog:dog.name}), title:fill(c.title,{dog:dog.name}),
+    fill:tone('confirm'), bodyHTML:optionButtons(rows)
+  });
+  wire(node, rows, (_, i)=>{
+    say(rows[i][0]); bump(S.confirm_animal);
+    if(i===1){ askFindDog(); return; }
+    note(c.after); ask(0);
+  });
+}
+
+function ask(n){
+  if(n>=TOTAL){ askPhoto(); return; }
+  const q = Q[n];
+  const node = bubble({
+    glyph:q.icon, cap:fill(COPY.questions_caption,{n:n+1, all:TOTAL}), title:q.title,
+    fill:tone('question'),
+    bodyHTML:optionButtons(q.options),
+    foot:COPY.questions_footer, progress:Math.round((n+1)/TOTAL*100)
+  });
+  const extras = document.createElement('div');
+  extras.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  node.querySelector('.bbody').appendChild(extras);
+
+  const skip = el(`<button class="opt ghost">${COPY.skip_glyph||''}<span>${COPY.skip_label}</span></button>`);
+  extras.appendChild(skip);
+  skip.addEventListener('click', ()=>{
+    node.querySelectorAll('.opt').forEach(x=>x.disabled=true);
+    say(COPY.skip_label); answers[n]=[q.icon,q.title,COPY.summary.unobserved];
+    bump(fill(S.question,{n:n+1})); ask(n+1);
+  });
+
+  // Going back must forget the answers after this point, or the counter and
+  // the summary would still show what was undone.
+  const back = el(`<button class="opt nav">${G.back}<span>${COPY.questions_back}</span></button>`);
+  extras.appendChild(back);
+  back.addEventListener('click', ()=>{
+    node.querySelectorAll('.opt').forEach(x=>x.disabled=true);
+    say(COPY.questions_back); answers.length = Math.max(0, n);
+    bump(COPY.questions_back);
+    if(n===0) showConfirm(); else ask(n-1);
+  });
+  wire(node, q.options, (o)=>{
+    say(o[0]); answers[n]=[q.icon,q.title,o[0]];
+    bump(fill(S.question,{n:n+1}));
+    // Declared in copy.yaml and checked at build time, so renaming the label
+    // cannot silently change who gets asked for a photo.
+    if(q.stool_photo_unless && o[0]!==q.stool_photo_unless) askStool(n, o[0]);
+    else ask(n+1);
+  });
+}
+
+function askStool(n, verdict){
+  const c = COPY.stool_photo;
+  const rows = [[c.skip,G.skip],[COPY.questions_back,G.back,'nav']];
+  const node = bubble({
+    glyph:c.glyph, cap:fill(c.caption,{value:verdict}), title:c.title,
+    fill:tone('stool_photo'), bodyHTML:`<div class="note">${nl(c.body)}</div>`+optionButtons(rows),
+    foot:c.footer
+  });
+  armComposer(c.waiting, ()=>{ ack(c.received); ask(n+1); });
+  wire(node, rows, (_, i)=>{
+    disarmComposer();
+    if(i===1){ say(COPY.questions_back); answers.length = Math.max(0, n); bump(COPY.questions_back); ask(n); return; }
+    say(c.skip); bump(S.stool_skipped); ask(n+1);
+  });
+}
+
+function askPhoto(){
+  const c = COPY.portrait_photo;
+  const rows = [[c.skip,G.skip],[c.back,G.back,'nav']];
+  const node = bubble({
+    glyph:c.glyph, cap:c.caption, title:c.title,
+    fill:tone('portrait_photo'), bodyHTML:`<div class="note">${nl(c.body)}</div>`+optionButtons(rows)
+  });
+  armComposer(c.waiting, ()=>{ ack(c.received); askNote(); });
+  wire(node, rows, (_, i)=>{ say(rows[i][0]); disarmComposer(); bump(S.portrait); i===1?ask(TOTAL-1):askNote(); });
+}
+
+function askNote(){
+  const c = COPY.note;
+  const rows = [[c.skip,G.skip],[c.back,G.back,'nav']];
+  const node = bubble({
+    glyph:c.glyph, cap:c.caption, title:c.title,
+    fill:tone('note'), bodyHTML:`<div class="note">${nl(c.body)}</div>`+optionButtons(rows)
+  });
+  wire(node, rows, (_, i)=>{ say(rows[i][0]); bump(S.note); i===1?askPhoto():askStory(); });
+}
+
+function askStory(){
+  const c = COPY.story;
+  const rows = [[c.skip,G.skip],[c.back,G.back,'nav']];
+  const node = bubble({
+    glyph:c.glyph, cap:c.caption, title:c.title,
+    fill:tone('story'), bodyHTML:`<div class="note">${nl(c.body)}</div>`+optionButtons(rows)
+  });
+  wire(node, rows, (_, i)=>{ say(rows[i][0]); bump(S.story); i===1?askNote():showSummary(); });
+}
+
+function showSummary(){
+  const c = COPY.summary;
+  const rowsHTML = answers.map(a=>`<div class="row"><span class="k">${a[0]} ${a[1]}</span><span class="v">${a[2]}</span></div>`).join('');
+  const acts = [[c.submit,G.confirm],[c.edit,G.edit],[c.switch,G.switch]];
+  const node = bubble({
+    glyph:c.glyph, cap:fill(c.caption,{dog:dog.name}), title:c.title,
+    fill:tone('summary'), bodyHTML:rowsHTML+optionButtons(acts)
+  });
+  node.querySelectorAll('.opt')[0].classList.add('pick');
+  wire(node, acts, (_, i)=>{
+    say(acts[i][0]); bump(S.summary);
+    if(i===0) celebrate(); else if(i===1) ask(TOTAL-1); else { answers=[]; askFindDog(); }
+  });
+}
+
+function celebrate(){
+  const c = COPY.done;
+  bubble({
+    glyph:c.glyph, cap:c.caption, title:c.title, fill:tone('done'),
+    bodyHTML:`<div class="note" style="text-align:center;font-weight:700">${fill(c.body,{dog:dog.name})}</div>
+              <div class="note" style="text-align:center;color:var(--ink-soft);font-size:12px">${c.sub}</div>`,
+    foot:c.footer
+  });
+  document.getElementById('step').textContent = S.done;
+}
+
+/* ---------- menu ---------- */
+const MENU = [
+  {...COPY.menu.start,   act:'start'},
+  {...COPY.menu.resume,  act:'resume'},
+  {...COPY.menu.contact, act:'contact'},
+];
+
+document.getElementById('menu').innerHTML = MENU.map((m,i)=>`
+  <button data-i="${i}">
+    <span class="badge" style="background:${tone(m.act==='start'?'confirm':m.act==='resume'?'stool_photo':'portrait_photo')}">${m.glyph}</span>
+    <span>${m.label}<div class="sub">${m.sub}</div></span>
+  </button>`).join('');
+
+document.querySelectorAll('#menu button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    const m = MENU[+b.dataset.i];
+    say(m.label); bump(m.label);
+    if(m.act==='start'){ answers=[]; askFindDog(); return; }
+    const c = m.act==='resume' ? COPY.resume_empty : COPY.contact;
+    bubble({glyph:c.glyph, cap:c.caption, title:c.title,
+      fill: tone(m.act==='resume' ? 'resume_empty' : 'contact'),
+      bodyHTML:`<div class="note">${nl(c.body)}</div>`});
+  });
+});
+
+document.getElementById('reset').addEventListener('click', ()=>{
+  log.innerHTML=''; taps=0; answers=[]; dog=null; disarmComposer();
+  document.getElementById('taps').textContent='0';
+  document.getElementById('step').textContent='—';
+  document.getElementById('answered').textContent='0 / 7';
+  note('請按下方選單開始');
+});
+
+note('請按下方選單開始');
+</script>
+</body>
+</html>

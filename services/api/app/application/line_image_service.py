@@ -27,6 +27,7 @@ class LineImageService:
         draft_accepts_media: bool = True,
         draft_id: UUID | None = None,
         source_event_id: str | None = None,
+        subject: str = "portrait",
         session=None,
     ) -> StoredObject:
         if not draft_accepts_media:
@@ -46,6 +47,7 @@ class LineImageService:
                 checksum=stored.metadata.checksum,
                 status="temporary",
                 purpose="care_report_draft",
+                subject=subject,
                 exif_removed=True,
             )
             session.add(asset)

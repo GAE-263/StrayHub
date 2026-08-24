@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
-from services.api.app.domain.line_care_report_state import CareReportAnswers
+from services.api.app.domain.line_care_report_state import UNOBSERVED, CareReportAnswers
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.care_report_draft_repository import (
@@ -44,6 +44,7 @@ class ReportSubmissionService:
         animal: Animal,
         idempotency_key: str,
         note: str | None = None,
+        story: str | None = None,
         media_asset_ids: list[UUID] | None = None,
     ) -> CareReport:
         existing = await self.reports.get_idempotent(
@@ -76,6 +77,10 @@ class ReportSubmissionService:
             for field, value in draft.answers.items():
                 if not isinstance(value, str):
                     raise DomainError("invalid_option", "回報選項格式無效", 422)
+                # UNOBSERVED is a Bot-level marker, not a CRM code — the
+                # validator only knows real vocabulary, so it must not see it.
+                if value == UNOBSERVED:
+                    continue
                 self.answer_validator(field, value)
         if animal.status != "active":
             raise DomainError("animal_not_reportable", "動物目前不可回報", 409)
@@ -93,6 +98,7 @@ class ReportSubmissionService:
                 animal_name_snapshot=animal.name,
                 shelter_number_snapshot=animal.shelter_number,
                 note=note if note is not None else draft.note,
+                story=story if story is not None else draft.story,
                 status="saved",
                 ai_job_status="pending_enqueue",
                 submitted_at=datetime.now(timezone.utc),

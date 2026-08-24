@@ -35,38 +35,75 @@ def load_definition(path: Path) -> dict:
     return document
 
 
+def _line_action(action: dict) -> dict:
+    line_action = {"type": action["type"]}
+    if action["type"] == "postback":
+        line_action["data"] = action["data"]
+        line_action["displayText"] = action["label"]
+    else:
+        line_action["uri"] = action["uri"]
+    return line_action
+
+
+def _layout_bounds(layout: object) -> dict:
+    """``layout`` is [x, y, w, h] as fractions of the menu image (0~1)."""
+    if not (isinstance(layout, list) and len(layout) == 4):
+        raise ValueError("layout 必須是 [x, y, w, h] 四個分數座標")
+    x, y, w, h = layout
+    if not all(isinstance(value, (int, float)) for value in (x, y, w, h)):
+        raise ValueError("layout 座標必須是數字")
+    if not (0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1 and 0 < h <= 1):
+        raise ValueError(f"layout 座標超出範圍：{layout}")
+    if x + w > 1 + 1e-9 or y + h > 1 + 1e-9:
+        raise ValueError(f"layout 範圍超出圖片邊界：{layout}")
+    return {
+        "x": round(x * WIDTH),
+        "y": round(y * HEIGHT),
+        "width": round(w * WIDTH),
+        "height": round(h * HEIGHT),
+    }
+
+
 def to_line_rich_menu(document: dict) -> dict:
     actions = document["actions"]
-    # ``columns`` lets a definition lay actions out as a grid; omitting it keeps
-    # the original behaviour of one full-height row.
-    columns = int(document.get("columns") or len(actions))
-    if columns < 1:
-        raise ValueError("columns 必須大於 0")
-    rows = -(-len(actions) // columns)
-    cell_width = WIDTH // columns
-    cell_height = HEIGHT // rows
-    areas = []
-    for index, action in enumerate(actions):
-        line_action = {"type": action["type"]}
-        if action["type"] == "postback":
-            line_action["data"] = action["data"]
-            line_action["displayText"] = action["label"]
-        else:
-            line_action["uri"] = action["uri"]
-        column, row = index % columns, index // columns
-        # The last cell in each direction absorbs the rounding remainder so the
-        # areas tile the image exactly.
-        areas.append(
-            {
-                "bounds": {
-                    "x": column * cell_width,
-                    "y": row * cell_height,
-                    "width": (cell_width if column < columns - 1 else WIDTH - column * cell_width),
-                    "height": cell_height if row < rows - 1 else HEIGHT - row * cell_height,
-                },
-                "action": line_action,
-            }
-        )
+    if any("layout" in action for action in actions):
+        # Explicit per-action bounds for a non-uniform layout (e.g. one big
+        # hero cell plus smaller cells below it) — takes over from `columns`
+        # entirely when any action uses it, so a definition cannot mix the
+        # two schemes by accident.
+        if not all("layout" in action for action in actions):
+            raise ValueError("layout 若使用，每個 action 都必須提供")
+        areas = [
+            {"bounds": _layout_bounds(action["layout"]), "action": _line_action(action)}
+            for action in actions
+        ]
+    else:
+        # ``columns`` lets a definition lay actions out as a grid; omitting it
+        # keeps the original behaviour of one full-height row.
+        columns = int(document.get("columns") or len(actions))
+        if columns < 1:
+            raise ValueError("columns 必須大於 0")
+        rows = -(-len(actions) // columns)
+        cell_width = WIDTH // columns
+        cell_height = HEIGHT // rows
+        areas = []
+        for index, action in enumerate(actions):
+            column, row = index % columns, index // columns
+            # The last cell in each direction absorbs the rounding remainder
+            # so the areas tile the image exactly.
+            areas.append(
+                {
+                    "bounds": {
+                        "x": column * cell_width,
+                        "y": row * cell_height,
+                        "width": (
+                            cell_width if column < columns - 1 else WIDTH - column * cell_width
+                        ),
+                        "height": cell_height if row < rows - 1 else HEIGHT - row * cell_height,
+                    },
+                    "action": _line_action(action),
+                }
+            )
     return {
         "name": document.get("name", "strayhub-volunteer-care"),
         "chatBarText": "志工照護回報",

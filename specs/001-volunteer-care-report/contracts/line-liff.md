@@ -29,13 +29,13 @@ Webhook Session 不得由 QR Code、Postback、裝置、GPS、IP 或時間重疊
 
 ## Rich Menu 與 Bot 回報
 
-Rich Menu 至少提供開始照護回報、掃描 QR Code、今日照護毛孩、繼續未完成回報與聯絡工作人員。Rich Menu 只提供流程入口，不承載完整照護問卷。
+Rich Menu 至少提供開始散步回報（進入找動物中繼站：QR 貼紙拍照解碼、輸入編號／名字搜尋、看今日名單三選一）、繼續回報與聯絡工作人員。Rich Menu 只提供流程入口，不承載完整照護問卷。
 
-Bot 每次原則上只詢問一個問題；Quick Reply 通常提供 3 至 6 個選項，適用時包含未觀察、無法判斷、略過或其他。Postback 使用穩定內部 Code，顯示名稱可變更但不得取代 Code。Bot 選項必須由 CRM 有效 Observation Vocabulary 產生或映射，不得硬編碼第二套業務選項。
+Bot 每次原則上只詢問一個問題；Quick Reply 通常提供 3 至 4 個選項，另有獨立的「今天沒觀察到這項」按鈕（記錄 Bot 層級 sentinel，不是 CRM 選項）。Postback 使用穩定內部 Code，顯示名稱可變更但不得取代 Code。Bot 選項必須由 CRM 有效 Observation Vocabulary 產生或映射，不得硬編碼第二套業務選項。
 
-Bot 使用 Server-side Draft 與受控狀態機；主要狀態依序為 `selecting_animal`、`confirming_animal`、`answering_completion`、`answering_feeding`、`answering_water`、`answering_activity`、`answering_elimination`、`answering_behavior`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`reviewing`、`submitting`、`submitted`、`cancelled` 與 `expired`。`answering_completion` 依序詢問照護完成狀態與散步完成狀態；`answering_behavior` 依序詢問護食或資源防衛、對人的互動、對其他動物的互動、情緒與散步反應；`answering_special_status` 詢問外觀／特殊狀態。最終摘要確認前不得建立正式 Care Report；尚有任何標準回報必要答案未完成時，不得進入 `reviewing` 或 `submitting`。每名志工在單一 Organization 同時間只保留一筆 active Draft，重新進入時提供繼續、放棄或建立新回報。
+Bot 使用 Server-side Draft 與受控狀態機；主要狀態依序為 `selecting_animal`、`confirming_animal`、`answering_walk_completion`、`answering_activity`、`answering_gait`、`answering_defecation`、`awaiting_stool_media`、`answering_animal_interaction`、`answering_special_status`、`awaiting_media`、`awaiting_note`、`awaiting_story`、`reviewing`、`submitting`、`submitted`、`cancelled` 與 `expired`。這是一份「這次散步觀察到什麼」的回報，不是收容所照護紀錄，因此不問餵食、飲水、護食等志工不會第一手觀察到的項目，也不問情緒等主觀判讀。`answering_defecation` 答案為「沒排便」時，`awaiting_stool_media` 由呼叫端直接跳過（狀態機本身的 `_NEXT_STATES` 是固定 1:1 映射，不依答案值分支）；其餘答案一律先進入 `awaiting_stool_media`，可略過但略過不需要交代原因。`awaiting_note` 是臨床用途的健康／行為補充；`awaiting_story` 是行銷用途的小故事，兩者分開儲存、缺一不可各自略過。最終摘要確認前不得建立正式 Care Report；尚有任何標準回報必要答案未完成時，不得進入 `reviewing` 或 `submitting`。每名志工在單一 Organization 同時間只保留一筆 active Draft，重新進入時提供繼續、放棄或建立新回報。
 
-標準回報必要答案包含 `care_completion`、`walk_completion`、`feeding`、`water`、`activity`、`urination`、`defecation`、`resource_guarding`、`human_interaction`、`animal_interaction`、`emotion`、`walk_reaction` 與 `appearance_special_status`。`care_completion.*` 與 `walk_completion.*` 的完成狀態，以及 CRM 有效 Observation Vocabulary 的其他穩定 Code，均視為答案；`not_observed`、`uncertain` 與 `walk_completion.not_done` 是有效答案，不是略過。照片與心得不屬於必要答案。
+標準回報必要答案包含 `walk_completion`、`activity`、`gait`、`defecation`、`animal_interaction` 與 `appearance_special_status`。`walk_completion.*` 的完成狀態，以及 CRM 有效 Observation Vocabulary 的其他穩定 Code，均視為答案；Bot 層級 sentinel `unobserved`（志工當次散步沒觀察到這項）也是有效答案，但不是 CRM Code，驗證與摘要顯示都必須特判，不得混入正式 Observation Vocabulary。照片、心得與小故事都不屬於必要答案。
 
 ## 圖片訊息
 
