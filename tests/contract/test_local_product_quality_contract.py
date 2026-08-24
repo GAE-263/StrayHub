@@ -33,3 +33,22 @@ def test_demo_script_is_executable_and_has_local_mvp_smoke_steps() -> None:
     assert "test_us3_animal_timeline.py" in text
     assert "test_ai_failure_timeline_status.py" in text
     assert 'API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"' in text
+
+
+def test_line_demo_script_declares_two_tunnel_startup_contract() -> None:
+    script = ROOT / "scripts/demo-line.sh"
+    assert script.exists()
+    assert os.access(script, os.X_OK)
+    text = script.read_text(encoding="utf-8")
+    for required in (
+        "TUNNEL_PROVIDER",
+        "LIFF_ID",
+        "SHELTER_ENTRY_REFERENCE",
+        "API_BASE_URL",
+        "cloudflared",
+        "ngrok",
+        "volunteer-entry?entry=",
+        "trap cleanup EXIT INT TERM",
+        "API tunnel health check",
+    ):
+        assert required in text

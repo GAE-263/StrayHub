@@ -92,6 +92,30 @@ uv run python -m scripts.reset_local --yes
 ./scripts/demo.sh check
 ```
 
+### 一鍵 LINE／LIFF 手機 Demo
+
+`scripts/demo-line.sh` 會依序啟動 FastAPI、API tunnel、Next.js、Web tunnel，
+並輸出 LIFF Endpoint 與手機入口。請先在 `.env` 填入真實受控測試值：
+
+```dotenv
+TUNNEL_PROVIDER=cloudflared
+LIFF_ID=<LINE_LOGIN_CHANNEL_LIFF_ID>
+SHELTER_ENTRY_REFERENCE=<SHELTER_ENTRY_REFERENCE>
+START_WORKER=1
+```
+
+再執行：
+
+```bash
+./scripts/demo-line.sh
+```
+
+腳本預設使用 `cloudflared`；也可設定 `TUNNEL_PROVIDER=ngrok`。Web tunnel 與
+API tunnel 會動態產生，Next.js 會在啟動前自動使用 API tunnel 作為
+`API_BASE_URL`。腳本不會替你修改 LINE Developers Console；請將輸出的
+`LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
+按 `Ctrl-C` 會停止本腳本啟動的程序。
+
 展示流程會驗證收容所／帳號隔離、動物／QR 選擇、LINE Bot Draft／Report、Timeline 與 AI 服務中斷時人工回報仍可保存。`DEMO_SKIP_DOCKER=1` 可在服務已由其他 Compose project 啟動時略過 `docker compose up`。
 
 ## 品質命令
