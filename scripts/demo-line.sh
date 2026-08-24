@@ -85,6 +85,20 @@ extract_tunnel_url() {
   esac
 }
 
+wait_for_tunnel_http() {
+  local label="$1"
+  local url="$2"
+  local path="$3"
+  for _ in $(seq 1 45); do
+    if curl --max-time 5 -fsS "${url}${path}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Could not reach tunnel ${label}: ${url}${path}" >&2
+  return 1
+}
+
 start_tunnel() {
   local label="$1"
   local port="$2"
@@ -113,7 +127,7 @@ start_tunnel() {
     sed -n '1,80p' "$log_file" >&2 || true
     exit 1
   fi
-  printf '%s\n' "$url"
+  TUNNEL_URL="$url"
 }
 
 require_value LIFF_ID
@@ -157,11 +171,10 @@ curl --max-time 5 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null || {
 }
 
 echo "[Line Demo] Starting API tunnel (${TUNNEL_PROVIDER})"
-API_TUNNEL_URL="$(start_tunnel "API" "$API_PORT" "$log_dir/api.log")"
-curl --max-time 10 -fsS "${API_TUNNEL_URL}/healthz" >/dev/null || {
-  echo "API tunnel health check failed: ${API_TUNNEL_URL}/healthz" >&2
-  exit 1
-}
+start_tunnel "API" "$API_PORT" "$log_dir/api.log"
+API_TUNNEL_URL="$TUNNEL_URL"
+echo "[Line Demo] API tunnel health check"
+wait_for_tunnel_http "API" "$API_TUNNEL_URL" "/healthz"
 
 # API_BASE_URL is a Next.js server-runtime value. It must be set before Next.js starts.
 echo "[Line Demo] Starting Next.js with API_BASE_URL=${API_TUNNEL_URL}"
@@ -181,11 +194,10 @@ curl --max-time 5 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/nu
 }
 
 echo "[Line Demo] Starting Web tunnel (${TUNNEL_PROVIDER})"
-WEB_TUNNEL_URL="$(start_tunnel "Web" "$WEB_PORT" "$log_dir/web.log")"
-curl --max-time 10 -fsS "${WEB_TUNNEL_URL}/volunteer-entry" >/dev/null || {
-  echo "Web tunnel check failed: ${WEB_TUNNEL_URL}/volunteer-entry" >&2
-  exit 1
-}
+start_tunnel "Web" "$WEB_PORT" "$log_dir/web.log"
+WEB_TUNNEL_URL="$TUNNEL_URL"
+echo "[Line Demo] Web tunnel health check"
+wait_for_tunnel_http "Web" "$WEB_TUNNEL_URL" "/volunteer-entry"
 
 if [[ "$START_WORKER" == "1" ]]; then
   echo "[Line Demo] Starting worker"
