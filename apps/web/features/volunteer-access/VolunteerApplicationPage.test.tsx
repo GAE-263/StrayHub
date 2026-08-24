@@ -3,6 +3,8 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
@@ -62,10 +64,10 @@ describe("VolunteerApplicationPage", () => {
       setter?.call(input, value);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     };
-    const applicantName = container.querySelector<HTMLInputElement>(
-      "#applicant-name",
-    );
-    const phoneNumber = container.querySelector<HTMLInputElement>("#phone-number");
+    const applicantName =
+      container.querySelector<HTMLInputElement>("#applicant-name");
+    const phoneNumber =
+      container.querySelector<HTMLInputElement>("#phone-number");
     expect(applicantName).not.toBeNull();
     expect(phoneNumber).not.toBeNull();
 
@@ -201,6 +203,40 @@ describe("VolunteerApplicationPage", () => {
     expect(html).toContain("ui-checkbox");
     expect(html).toContain("ui-button ui-button-default");
     expect(html).not.toMatch(/(?:emerald|slate|red)-/);
+  });
+
+  it("renders visible inputs and touch-sized date tiles on mobile", () => {
+    const html = renderToStaticMarkup(
+      <VolunteerApplicationPage
+        initialStatus={{
+          organization: {
+            id: "org-a",
+            name: "收容所 A",
+            applications_enabled: true,
+            insurance_required: false,
+          },
+          application: null,
+          grant: null,
+          effective_status: "none",
+          next_actions: ["apply"],
+        }}
+        idToken="id-token"
+        shelterEntryReference="entry"
+      />,
+    );
+    const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+
+    expect(html.match(/class="ui-input/g) ?? []).toHaveLength(2);
+    expect(html).toContain("volunteer-service-date-option");
+    expect(html).toContain("volunteer-service-date-weekday");
+    expect(html).toContain("volunteer-service-date-value");
+    expect(css).toContain("grid-auto-flow: column");
+    expect(css).toContain("overflow-x: auto");
+    expect(css).toContain("scroll-snap-type: x mandatory");
+    expect(css).toContain(
+      '.volunteer-service-date-option[data-selected="true"]',
+    );
+    expect(css).toContain("min-height: 64px");
   });
 
   it.each([

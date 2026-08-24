@@ -119,9 +119,37 @@ test("unknown LINE identity reaches NEW then PENDING without protected requests"
   });
   await page.getByRole("button", { name: "進入志工報名" }).click();
   await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
+  await expect(page.locator("#applicant-name")).toHaveCSS(
+    "border-style",
+    "solid",
+  );
+  await expect(page.locator("#phone-number")).toHaveCSS(
+    "border-style",
+    "solid",
+  );
+  const serviceDateGrid = page.locator(".volunteer-service-date-grid");
+  expect(
+    await serviceDateGrid.evaluate(
+      (element) => element.scrollWidth > element.clientWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("volunteer-application-form-empty-360-after.png"),
+    fullPage: true,
+  });
   await page.locator("#applicant-name").fill("王小明");
   await page.locator("#phone-number").fill("0912345678");
-  await page.getByRole("checkbox").check();
+  await page.getByRole("checkbox", { name: /我確認送出志工報名/ }).check();
+  const firstServiceDate = page
+    .locator(".volunteer-service-date-option")
+    .first();
+  await firstServiceDate.click();
+  await expect(firstServiceDate.getByRole("checkbox")).toBeChecked();
+  await expect(firstServiceDate).toHaveAttribute("data-selected", "true");
+  await page.screenshot({
+    path: testInfo.outputPath("volunteer-application-form-360-after.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "立即報名" }).dblclick();
   await expect(page.getByText("等待收容所審核")).toBeVisible();
   expect(submitCount).toBe(1);
