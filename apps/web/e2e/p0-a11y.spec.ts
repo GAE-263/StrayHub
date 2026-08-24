@@ -48,6 +48,9 @@ const routes = [
 test("所有已登入 P0 route 在四個 viewport 沒有 critical 或 serious axe violations", async ({
   page,
 }) => {
+  // This covers 32 cold route/viewport axe scans; allow the Next server to
+  // compile the route set without weakening any axe assertion.
+  test.setTimeout(60_000);
   await page.addInitScript(() =>
     sessionStorage.setItem("access_token", "test-access"),
   );
