@@ -87,6 +87,27 @@ def test_masked_detail_and_explicit_pii_reveal_contracts_are_separate() -> None:
     }
     assert VolunteerApplicationDetailResponse.model_config["extra"] == "forbid"
 
+    runtime_schemas = app.openapi()["components"]["schemas"]
+    assert runtime_schemas["VolunteerApplicationDetailResponse"]["required"] == [
+        "id",
+        "organization_id",
+        "display_name",
+        "status",
+        "submitted_at",
+        "version",
+        "service_dates",
+    ]
+    assert runtime_schemas["VolunteerApplicationServiceDate"]["required"] == [
+        "service_date",
+        "status",
+        "version",
+    ]
+    assert runtime_schemas["VolunteerPiiRevealResponse"]["required"] == [
+        "applicant_name",
+        "phone_number",
+        "basic_profile",
+    ]
+
     routes = {
         (route.path, method)
         for route in router.routes

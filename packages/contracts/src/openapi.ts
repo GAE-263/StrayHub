@@ -2737,8 +2737,8 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "approved" | "rejected" | "withdrawn";
             /** Format: date-time */
-            decided_at: string | null;
-            decision_reason: string | null;
+            decided_at?: string | null;
+            decision_reason?: string | null;
             version: number;
         };
         VolunteerApplicationDetailResponse: {
@@ -2752,8 +2752,8 @@ export interface components {
             /** Format: date-time */
             submitted_at: string;
             /** Format: date-time */
-            decided_at: string | null;
-            decision_reason: string | null;
+            decided_at?: string | null;
+            decision_reason?: string | null;
             version: number;
             service_dates: components["schemas"]["VolunteerApplicationServiceDate"][];
         };
@@ -5502,7 +5502,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["ScopedNotFound"];
             409: components["responses"]["Conflict"];
-            /** @description Validation error; organization targets are not supported by this mutation contract */
             422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
         };
@@ -5566,7 +5565,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
-            422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -5634,6 +5632,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

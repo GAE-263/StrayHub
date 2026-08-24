@@ -261,7 +261,7 @@ class VolunteerServiceDateAvailabilityResponse(BaseModel):
     pending_count: int = Field(ge=1)
 
 
-class VolunteerApplicationServiceDateResponse(BaseModel):
+class VolunteerApplicationServiceDate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     service_date: date
@@ -289,7 +289,7 @@ class VolunteerApplicationDetailResponse(BaseModel):
     decided_at: datetime | None = None
     decision_reason: str | None = None
     version: int = Field(ge=1)
-    service_dates: list[VolunteerApplicationServiceDateResponse]
+    service_dates: list[VolunteerApplicationServiceDate]
 
 
 class VolunteerPiiRevealRequest(BaseModel):
@@ -303,7 +303,7 @@ class VolunteerPiiRevealResponse(BaseModel):
 
     applicant_name: str
     phone_number: str
-    basic_profile: dict[str, str] | None = None
+    basic_profile: dict[str, str] | None
 
 
 class VolunteerAccessGrant(BaseModel):

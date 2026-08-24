@@ -1420,11 +1420,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/ScopedNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
         '409':
           $ref: '#/components/responses/Conflict'
-        '422':
-          description: Validation error; organization targets are not supported by this mutation contract
-          $ref: '#/components/responses/ValidationError'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /v1/organizations/{organizationId}/volunteer-access-policy:
@@ -1477,8 +1476,6 @@ paths:
           $ref: '#/components/responses/ManagementDenied'
         '404':
           $ref: '#/components/responses/ScopedNotFound'
-        '422':
-          $ref: '#/components/responses/ValidationError'
   /v1/organizations/{organizationId}/volunteer-applications:
     parameters:
       - $ref: '#/components/parameters/OrganizationId'
@@ -1566,6 +1563,8 @@ paths:
           $ref: '#/components/responses/ManagementDenied'
         '404':
           $ref: '#/components/responses/ScopedNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/organizations/{organizationId}/volunteer-applications/{applicationId}/pii-reveal:
     parameters:
       - $ref: '#/components/parameters/OrganizationId'
@@ -3854,7 +3853,7 @@ components:
             $ref: '#/components/schemas/VolunteerServiceDateAvailability'
     VolunteerApplicationServiceDate:
       type: object
-      required: [service_date, status, decided_at, decision_reason, version]
+      required: [service_date, status, version]
       additionalProperties: false
       properties:
         service_date:
@@ -3873,7 +3872,7 @@ components:
           minimum: 1
     VolunteerApplicationDetailResponse:
       type: object
-      required: [id, organization_id, display_name, status, submitted_at, decided_at, decision_reason, version, service_dates]
+      required: [id, organization_id, display_name, status, submitted_at, version, service_dates]
       additionalProperties: false
       properties:
         id:
