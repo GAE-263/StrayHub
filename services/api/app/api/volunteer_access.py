@@ -31,6 +31,10 @@ from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
+from services.api.app.application.volunteer_service_summary import (
+    VolunteerServiceSummaryService,
+    encode_summary_cursor,
+)
 from services.api.app.config.settings import get_settings
 from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import validate_service_date_selection
@@ -63,6 +67,9 @@ from services.api.app.persistence.repositories.organization_repository import (
 )
 from services.api.app.persistence.repositories.volunteer_access_repository import (
     VolunteerAccessRepository,
+)
+from services.api.app.persistence.repositories.volunteer_service_summary_repository import (
+    VolunteerServiceSummaryRepository,
 )
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -298,6 +305,24 @@ class VolunteerApplicationDetailResponse(BaseModel):
     decision_reason: str | None = None
     version: int = Field(ge=1)
     service_dates: list[VolunteerApplicationServiceDate]
+
+
+class VolunteerServiceSummaryItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: UUID
+    organization_name: str
+    service_date: date
+    service_status: Literal["recorded", "archived"]
+    record_count: int = Field(ge=1)
+    source: Literal["care_report"]
+
+
+class VolunteerServiceSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[VolunteerServiceSummaryItemResponse]
+    next_cursor: str | None
 
 
 class VolunteerPiiRevealRequest(BaseModel):
@@ -1163,6 +1188,83 @@ async def get_volunteer_application_detail(
         )
     await session.commit()
     return VolunteerApplicationDetailResponse.model_validate(_application_detail_dict(detail))
+
+
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}/service-summary",
+    operation_id="getVolunteerApplicationServiceSummary",
+    response_model=VolunteerServiceSummaryResponse,
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
+async def get_volunteer_application_service_summary(
+    organizationId: UUID,  # noqa: N803
+    applicationId: UUID,  # noqa: N803
+    purpose_code: Literal["volunteer_service_history_review"] = Query(...),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+    support_reason: str | None = Header(default=None, alias="X-Platform-Support-Reason"),
+) -> VolunteerServiceSummaryResponse:
+    async with volunteer_management_scope(
+        session=session,
+        context=context,
+        organization_id=organizationId,
+        support_reason=support_reason,
+        resource_type="volunteer_application_service_summary",
+    ):
+        access_repository = VolunteerAccessRepository(session, organizationId)
+        summary_repository = VolunteerServiceSummaryRepository(session, organizationId)
+        page = await VolunteerServiceSummaryService(
+            access_repository,
+            summary_repository,
+            audit=AuditService(session),
+        ).for_application(
+            applicationId,
+            tenant_context=_tenant_context(context),
+            purpose_code=purpose_code,
+            cursor=cursor,
+            cursor_secret=get_settings().animal_confirmation_secret,
+            limit=limit,
+        )
+    try:
+        await session.commit()
+    except SQLAlchemyError as exc:
+        await session.rollback()
+        await set_organization_scope(session, organizationId)
+        raise DomainError("service_summary_audit_unavailable", "服務紀錄暫時無法使用", 503) from exc
+    last_item = page.items[-1] if page.has_more else None
+    next_cursor = (
+        encode_summary_cursor(
+            get_settings().animal_confirmation_secret,
+            application_id=applicationId,
+            subject_user_id=page.subject_user_id,
+            service_date=last_item.service_date,
+            organization_id=last_item.organization_id,
+        )
+        if last_item is not None
+        else None
+    )
+    return VolunteerServiceSummaryResponse(
+        items=[
+            VolunteerServiceSummaryItemResponse(
+                organization_id=item.organization_id,
+                organization_name=item.organization_name,
+                service_date=item.service_date,
+                service_status=item.service_status,
+                record_count=item.record_count,
+                source=item.source,
+            )
+            for item in page.items
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 @router.post(

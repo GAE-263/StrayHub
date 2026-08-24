@@ -1,3 +1,4 @@
+from datetime import date
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -6,6 +7,8 @@ from services.api.app.api.errors import DomainError
 from services.api.app.application.volunteer_service_summary import (
     SUMMARY_PURPOSE,
     VolunteerServiceSummaryService,
+    decode_summary_cursor,
+    encode_summary_cursor,
 )
 from services.api.app.domain.tenant_context import TenantContext
 
@@ -159,3 +162,30 @@ async def test_summary_denies_wrong_tenant_inactive_membership_wrong_purpose_and
             limit=50,
         )
     assert error.value.status_code == 503
+
+
+def test_summary_cursor_is_opaque_signed_and_bound_to_application_subject() -> None:
+    application_id = uuid4()
+    subject_user_id = uuid4()
+    organization_id = uuid4()
+    cursor = encode_summary_cursor(
+        "test-secret",
+        application_id=application_id,
+        subject_user_id=subject_user_id,
+        service_date=date(2026, 5, 20),
+        organization_id=organization_id,
+    )
+    assert str(subject_user_id) not in cursor
+    assert decode_summary_cursor(
+        "test-secret",
+        cursor,
+        application_id=application_id,
+        subject_user_id=subject_user_id,
+    )[1] == organization_id
+    with pytest.raises(DomainError):
+        decode_summary_cursor(
+            "test-secret",
+            cursor,
+            application_id=uuid4(),
+            subject_user_id=subject_user_id,
+        )

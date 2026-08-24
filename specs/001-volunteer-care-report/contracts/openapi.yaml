@@ -1565,6 +1565,54 @@ paths:
           $ref: '#/components/responses/ScopedNotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/organizations/{organizationId}/volunteer-applications/{applicationId}/service-summary:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/ApplicationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: getVolunteerApplicationServiceSummary
+      summary: 查詢志工跨收容所服務紀錄摘要
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: purpose_code
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [volunteer_service_history_review]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: 僅回傳跨收容所服務證據摘要，不包含個資或照護回報內容
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerServiceSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /v1/organizations/{organizationId}/volunteer-applications/{applicationId}/pii-reveal:
     parameters:
       - $ref: '#/components/parameters/OrganizationId'
@@ -3949,6 +3997,39 @@ components:
         pending_count:
           type: integer
           minimum: 1
+    VolunteerServiceSummaryItemResponse:
+      type: object
+      required: [organization_id, organization_name, service_date, service_status, record_count, source]
+      additionalProperties: false
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        organization_name:
+          type: string
+        service_date:
+          type: string
+          format: date
+        service_status:
+          type: string
+          enum: [recorded, archived]
+        record_count:
+          type: integer
+          minimum: 1
+        source:
+          type: string
+          enum: [care_report]
+    VolunteerServiceSummaryResponse:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerServiceSummaryItemResponse'
+        next_cursor:
+          type: [string, 'null']
     VolunteerAccessPolicy:
       type: object
       required: [organization_id, applications_enabled, default_grant_duration_hours, daily_application_limit, version]

@@ -1194,6 +1194,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}/service-summary": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        /** 查詢志工跨收容所服務紀錄摘要 */
+        get: operations["getVolunteerApplicationServiceSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}/pii-reveal": {
         parameters: {
             query?: never;
@@ -2779,6 +2802,22 @@ export interface components {
             /** Format: date */
             service_date: string;
             pending_count: number;
+        };
+        VolunteerServiceSummaryItemResponse: {
+            /** Format: uuid */
+            organization_id: string;
+            organization_name: string;
+            /** Format: date */
+            service_date: string;
+            /** @enum {string} */
+            service_status: "recorded" | "archived";
+            record_count: number;
+            /** @enum {string} */
+            source: "care_report";
+        };
+        VolunteerServiceSummaryResponse: {
+            items: components["schemas"]["VolunteerServiceSummaryItemResponse"][];
+            next_cursor: string | null;
         };
         VolunteerAccessPolicy: {
             /** Format: uuid */
@@ -5634,6 +5673,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VolunteerApplicationDetailResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            422: components["responses"]["ValidationError"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getVolunteerApplicationServiceSummary: {
+        parameters: {
+            query: {
+                purpose_code: "volunteer_service_history_review";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 僅回傳跨收容所服務證據摘要，不包含個資或照護回報內容 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerServiceSummaryResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
