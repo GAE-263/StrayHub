@@ -6,6 +6,10 @@ import { authFetch } from "../../../../lib/auth";
 import { ApplicationBatchWorkbench } from "../../../../features/volunteer-access/ApplicationBatchWorkbench";
 import { VolunteerApplicantDetail } from "../../../../features/volunteer-access/VolunteerApplicantDetail";
 import {
+  VolunteerReviewCalendar,
+  type ReviewCalendarDate,
+} from "../../../../features/volunteer-access/VolunteerReviewCalendar";
+import {
   selectInitialServiceDate,
   type ServiceDateAvailability,
 } from "./review-date";
@@ -34,6 +38,9 @@ function todayLocalDate(): string {
 export default function VolunteerApplicationsPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [applications, setApplications] = useState<Application[]>([]);
+  const [reviewCalendar, setReviewCalendar] = useState<ReviewCalendarDate[]>(
+    [],
+  );
   const [matchingCount, setMatchingCount] = useState(0);
   const [serviceDate, setServiceDate] = useState(todayLocalDate);
   const [unassigned, setUnassigned] = useState(false);
@@ -51,6 +58,7 @@ export default function VolunteerApplicationsPage() {
     from = submittedFrom,
     to = submittedTo,
     selectedServiceDate = serviceDate,
+    selectedUnassigned = unassigned,
   ) {
     const generation = ++loadGeneration.current;
     setLoading(true);
@@ -58,7 +66,7 @@ export default function VolunteerApplicationsPage() {
     setMatchingCount(0);
     try {
       const query = new URLSearchParams({ status: "pending", limit: "100" });
-      if (unassigned) query.set("unassigned", "true");
+      if (selectedUnassigned) query.set("unassigned", "true");
       else if (selectedServiceDate)
         query.set("service_date", selectedServiceDate);
       if (from) query.set("submitted_from", new Date(from).toISOString());
@@ -71,10 +79,14 @@ export default function VolunteerApplicationsPage() {
         items?: Application[];
         matching_count?: number;
         available_service_dates?: ServiceDateAvailability[];
+        review_calendar?: ReviewCalendarDate[];
       };
       if (generation !== loadGeneration.current) return null;
       setApplications(value.items ?? []);
       setMatchingCount(value.matching_count ?? 0);
+      setReviewCalendar(
+        value.review_calendar ?? value.available_service_dates ?? [],
+      );
       setLoadError("");
       return value;
     } catch (error) {
@@ -155,8 +167,22 @@ export default function VolunteerApplicationsPage() {
     loadGeneration.current += 1;
     setApplications([]);
     setMatchingCount(0);
+    setDetailApplicationId(null);
     setLoading(false);
     setLoadError("");
+  }
+
+  function selectReviewDate(selectedDate: string) {
+    invalidateLoadedApplications();
+    setUnassigned(false);
+    setServiceDate(selectedDate);
+    void loadApplications(
+      organizationId,
+      submittedFrom,
+      submittedTo,
+      selectedDate,
+      false,
+    );
   }
 
   return (
@@ -168,6 +194,13 @@ export default function VolunteerApplicationsPage() {
           <p>明確選取，或鎖定目前篩選結果的完整快照後批次核准／拒絕。</p>
         </div>
       </div>
+      <VolunteerReviewCalendar
+        dates={reviewCalendar}
+        selectedDate={unassigned ? "" : serviceDate}
+        loading={loading && applications.length === 0}
+        error={loadError}
+        onSelectDate={selectReviewDate}
+      />
       <form
         className="ui-card ui-card-padded mb-4 flex flex-wrap items-end gap-4"
         onSubmit={(event) => {

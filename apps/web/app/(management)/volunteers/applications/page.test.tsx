@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import VolunteerApplicationsPage from "./page";
 import { selectInitialServiceDate } from "./review-date";
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 function response(body: unknown): Response {
   return {
@@ -60,6 +62,52 @@ describe("volunteer application review date", () => {
     ).toBe("2026-08-24");
   });
 
+  it("loads the selected calendar date and keeps decisions date-scoped", async () => {
+    const today = localDate(new Date());
+    const selectedDate = "2099-08-25";
+    const requestedDates: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "http://localhost");
+      requestedDates.push(url.searchParams.get("service_date") ?? "");
+      return response({
+        items: [],
+        matching_count: 0,
+        next_cursor: null,
+        review_calendar: [
+          { service_date: today, pending_count: 1 },
+          { service_date: selectedDate, pending_count: 2 },
+        ],
+        available_service_dates: [],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("React", React);
+    window.sessionStorage.setItem("access_token", "local-token");
+    window.sessionStorage.setItem("active_organization_id", "org-a");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<VolunteerApplicationsPage />);
+      await flush();
+    });
+    const dateButton = container.querySelector(
+      `button[aria-label^="${selectedDate}"]`,
+    ) as HTMLButtonElement;
+    expect(dateButton).toBeTruthy();
+
+    await act(async () => {
+      dateButton.click();
+      await flush();
+    });
+
+    expect(requestedDates).toEqual([today, selectedDate]);
+    expect(
+      (container.querySelector('input[type="date"]') as HTMLInputElement).value,
+    ).toBe(selectedDate);
+  });
+
   it("reloads the list for the nearest pending date", async () => {
     const today = localDate(new Date());
     const nextDateValue = new Date();
@@ -90,9 +138,7 @@ describe("volunteer application review date", () => {
         items: [],
         matching_count: 0,
         next_cursor: null,
-        available_service_dates: [
-          { service_date: nextDate, pending_count: 1 },
-        ],
+        available_service_dates: [{ service_date: nextDate, pending_count: 1 }],
       });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -125,7 +171,14 @@ describe("volunteer application review date", () => {
       const url = new URL(String(input), "http://localhost");
       if (url.searchParams.get("service_date") === today) return todayResponse;
       return response({
-        items: [{ id: "new", display_name: "較新申請", status: "pending", version: 1 }],
+        items: [
+          {
+            id: "new",
+            display_name: "較新申請",
+            status: "pending",
+            version: 1,
+          },
+        ],
         matching_count: 1,
         next_cursor: null,
         available_service_dates: [],
@@ -140,23 +193,29 @@ describe("volunteer application review date", () => {
     root = createRoot(container);
 
     await act(async () => root?.render(<VolunteerApplicationsPage />));
-    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    const input = container.querySelector(
+      'input[type="date"]',
+    ) as HTMLInputElement;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-        input,
-        "2026-08-26",
-      );
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input, "2026-08-26");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector("form")?.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
+      container
+        ?.querySelector("form")
+        ?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
       await flush();
     });
     resolveToday?.(
       response({
-        items: [{ id: "old", display_name: "舊申請", status: "pending", version: 1 }],
+        items: [
+          { id: "old", display_name: "舊申請", status: "pending", version: 1 },
+        ],
         matching_count: 1,
         next_cursor: null,
         available_service_dates: [],
@@ -178,9 +237,17 @@ describe("volunteer application review date", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(String(input), "http://localhost");
-        if (url.searchParams.get("service_date") === today) return todayResponse;
+        if (url.searchParams.get("service_date") === today)
+          return todayResponse;
         return response({
-          items: [{ id: "new", display_name: "較新申請", status: "pending", version: 1 }],
+          items: [
+            {
+              id: "new",
+              display_name: "較新申請",
+              status: "pending",
+              version: 1,
+            },
+          ],
           matching_count: 1,
           next_cursor: null,
           available_service_dates: [],
@@ -194,18 +261,22 @@ describe("volunteer application review date", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     await act(async () => root?.render(<VolunteerApplicationsPage />));
-    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    const input = container.querySelector(
+      'input[type="date"]',
+    ) as HTMLInputElement;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-        input,
-        "2026-08-26",
-      );
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input, "2026-08-26");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector("form")?.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
+      container
+        ?.querySelector("form")
+        ?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
       await flush();
     });
     rejectToday?.(new Error("stale failure"));
@@ -221,7 +292,14 @@ describe("volunteer application review date", () => {
       const url = new URL(String(input), "http://localhost");
       if (url.searchParams.get("service_date") === today) {
         return response({
-          items: [{ id: "old", display_name: "舊日期申請", status: "pending", version: 1 }],
+          items: [
+            {
+              id: "old",
+              display_name: "舊日期申請",
+              status: "pending",
+              version: 1,
+            },
+          ],
           matching_count: 1,
           next_cursor: null,
           available_service_dates: [],
@@ -241,18 +319,22 @@ describe("volunteer application review date", () => {
       await flush();
     });
     expect(container.textContent).toContain("舊日期申請");
-    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    const input = container.querySelector(
+      'input[type="date"]',
+    ) as HTMLInputElement;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-        input,
-        "2026-08-26",
-      );
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input, "2026-08-26");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector("form")?.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
+      container
+        ?.querySelector("form")
+        ?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
       await flush();
     });
 
@@ -266,7 +348,14 @@ describe("volunteer application review date", () => {
       "fetch",
       vi.fn(async () =>
         response({
-          items: [{ id: "old", display_name: "舊日期申請", status: "pending", version: 1 }],
+          items: [
+            {
+              id: "old",
+              display_name: "舊日期申請",
+              status: "pending",
+              version: 1,
+            },
+          ],
           matching_count: 1,
           next_cursor: null,
           available_service_dates: [{ service_date: today, pending_count: 1 }],
@@ -285,12 +374,14 @@ describe("volunteer application review date", () => {
     });
     expect(container.textContent).toContain("舊日期申請");
 
-    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    const input = container.querySelector(
+      'input[type="date"]',
+    ) as HTMLInputElement;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-        input,
-        "2026-08-26",
-      );
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input, "2026-08-26");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
