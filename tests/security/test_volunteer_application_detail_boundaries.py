@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from services.api.app.api import volunteer_access as api
 from services.api.app.api.volunteer_access import VolunteerDecisionItemResponse
 
-
 SENTINEL_NAME = "synthetic-applicant-name"
 SENTINEL_PHONE = "synthetic-applicant-phone"
 SENTINEL_CIPHERTEXT = "synthetic-ciphertext"
