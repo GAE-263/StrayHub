@@ -50,5 +50,10 @@ def test_line_demo_script_declares_two_tunnel_startup_contract() -> None:
         "volunteer-entry?entry=",
         "trap cleanup EXIT INT TERM",
         "API tunnel health check",
+        "read_dotenv_value",
+        "source .env" not in text,
     ):
-        assert required in text
+        if isinstance(required, bool):
+            assert required
+        else:
+            assert required in text

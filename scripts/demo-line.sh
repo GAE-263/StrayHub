@@ -4,13 +4,41 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# Load local operator configuration without printing it.
-if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
-fi
+read_dotenv_value() {
+  local name="$1"
+  [[ -f .env ]] || return 0
+  python - "$name" <<'PY'
+from pathlib import Path
+import ast
+import sys
+
+name = sys.argv[1]
+prefix = f"{name}="
+for raw_line in Path(".env").read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#") or not line.startswith(prefix):
+        continue
+    value = line[len(prefix):].strip()
+    if value[:1] in {"'", '"'}:
+        try:
+            value = str(ast.literal_eval(value))
+        except (SyntaxError, ValueError):
+            pass
+    print(value)
+    break
+PY
+}
+
+load_dotenv_value() {
+  local name="$1"
+  if [[ -z "${!name:-}" ]]; then
+    printf -v "$name" '%s' "$(read_dotenv_value "$name")"
+  fi
+}
+
+for dotenv_name in TUNNEL_PROVIDER API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID SHELTER_ENTRY_REFERENCE; do
+  load_dotenv_value "$dotenv_name"
+done
 
 TUNNEL_PROVIDER="${TUNNEL_PROVIDER:-cloudflared}"
 API_HOST="${API_HOST:-127.0.0.1}"
