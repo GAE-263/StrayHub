@@ -14,6 +14,7 @@ async def set_organization_scope(session: AsyncSession, organization_id: UUID) -
         {"organization_id": str(organization_id)},
     )
     await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
+    await session.execute(text("SELECT set_config('app.platform_support', 'false', true)"))
     await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
     await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
     await session.execute(
@@ -26,6 +27,7 @@ async def set_platform_scope(session: AsyncSession, enabled: bool = True) -> Non
         raise DomainError("platform_scope_denied", "不得關閉受控平台範圍", 403)
     await session.execute(text("SELECT set_config('app.current_org_id', '', true)"))
     await session.execute(text("SELECT set_config('app.platform_scope', 'true', true)"))
+    await session.execute(text("SELECT set_config('app.platform_support', 'false', true)"))
     await session.execute(text("SELECT set_config('app.auth_user_id', '', true)"))
     await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
     await session.execute(
@@ -67,6 +69,7 @@ async def set_authentication_user_scope(session: AsyncSession, user_id: UUID) ->
     await session.execute(text("SELECT set_config('app.current_org_id', '', true)"))
     await session.execute(text("SELECT set_config('app.auth_exact_org_id', '', true)"))
     await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
+    await session.execute(text("SELECT set_config('app.platform_support', 'false', true)"))
     await session.execute(
         text("SELECT set_config('app.public_volunteer_directory', 'false', true)")
     )
@@ -88,6 +91,7 @@ async def set_authentication_user_organization_scope(
     )
     await session.execute(text("SELECT set_config('app.current_org_id', '', true)"))
     await session.execute(text("SELECT set_config('app.platform_scope', 'false', true)"))
+    await session.execute(text("SELECT set_config('app.platform_support', 'false', true)"))
     await session.execute(
         text("SELECT set_config('app.public_volunteer_directory', 'false', true)")
     )
