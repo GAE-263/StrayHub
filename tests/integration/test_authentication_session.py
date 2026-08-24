@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.authentication.session_service import SessionService
+from services.api.app.application.ports.authentication import ActiveVolunteerEntryReference
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.persistence.models.identity import (
@@ -13,6 +15,7 @@ from services.api.app.persistence.models.identity import (
     SessionRecord,
     User,
 )
+from services.api.app.persistence.models.volunteer_access import VolunteerAccessGrant
 
 
 class FakeAuthRepository:
@@ -31,6 +34,7 @@ class FakeAuthRepository:
             role="VOLUNTEER",
             status="active",
         )
+        self.grants: list[VolunteerAccessGrant] = []
         self.binding = LineUserBinding(
             id=uuid4(), line_user_id="line-user", user_id=user.id, status="active"
         )
@@ -39,6 +43,9 @@ class FakeAuthRepository:
         return self.user if username == self.user.username else None
 
     async def set_authentication_user_scope(self, _user_id):
+        return None
+
+    async def set_authentication_context_scope(self, _user_id, _organization_id):
         return None
 
     async def add(self, value):
@@ -60,16 +67,52 @@ class FakeAuthRepository:
     async def get_user(self, user_id):
         return self.user if user_id == self.user.id else None
 
+    async def lock_user(self, user_id):
+        return self.user if user_id == self.user.id else None
+
     async def memberships(self, user_id, active_only=False):
         if user_id != self.user.id or (active_only and self.membership.status != "active"):
             return []
         return [self.membership]
 
+    async def access_grants_for_memberships(self, user_id, membership_ids):
+        return [
+            grant
+            for grant in self.grants
+            if grant.user_id == user_id and grant.membership_id in membership_ids
+        ]
+
     async def get_line_binding(self, line_user_id):
         return self.binding if line_user_id == self.binding.line_user_id else None
 
+    async def lock_line_binding(self, line_user_id):
+        return await self.get_line_binding(line_user_id)
+
     async def get_organization(self, organization_id):
         return self.organization if organization_id == self.organization.id else None
+
+    async def lock_effective_volunteer_access(self, user_id, organization_id):
+        if (
+            self.membership is not None
+            and self.membership.user_id == user_id
+            and self.membership.organization_id == organization_id
+            and self.membership.role == "VOLUNTEER"
+            and self.membership.status == "active"
+        ):
+            return self.membership, object()
+        return None
+
+    async def get_membership(self, user_id, organization_id):
+        if (
+            self.membership is not None
+            and self.membership.user_id == user_id
+            and self.membership.organization_id == organization_id
+        ):
+            return self.membership
+        return None
+
+    async def latest_volunteer_application(self, user_id, organization_id):
+        return None
 
     async def organizations(self, *, active_only=False):
         return (
@@ -108,6 +151,89 @@ def token_adapter() -> JwtAccessTokenAdapter:
 class FakeLineVerifier:
     async def verify(self, token: str) -> str:
         return "line-user" if token == "valid-id-token" else "unknown-line-user"
+
+
+class FakeEntryResolver:
+    def __init__(self, organization_id):
+        self.organization_id = organization_id
+
+    async def resolve(self, raw_reference):
+        if raw_reference != "valid-entry":
+            return None
+        return ActiveVolunteerEntryReference(uuid4(), self.organization_id, "SHELTER", "Shelter")
+
+
+@pytest.mark.asyncio
+async def test_current_user_exposes_membership_and_matching_grant_validity() -> None:
+    user = User(id=uuid4(), username="volunteer", display_name="Volunteer", status="active")
+    repository = FakeAuthRepository(user)
+    now = datetime.now(timezone.utc)
+    repository.membership.valid_from = now - timedelta(hours=1)
+    repository.membership.expires_at = now + timedelta(hours=1)
+    repository.grants.append(
+        VolunteerAccessGrant(
+            id=uuid4(),
+            organization_id=repository.organization.id,
+            user_id=user.id,
+            membership_id=repository.membership.id,
+            application_id=uuid4(),
+            status="active",
+            valid_from=now - timedelta(hours=1),
+            expires_at=now + timedelta(hours=1),
+        )
+    )
+    session = SessionRecord(
+        id=uuid4(),
+        user_id=user.id,
+        status="active",
+        expires_at=now + timedelta(hours=1),
+    )
+    repository.sessions[session.id] = session
+    service = SessionService(
+        repository, password_hasher=Argon2PasswordHasher(), access_token=token_adapter()
+    )
+
+    result = await service.current_user(session_id=session.id)
+
+    membership = result["memberships"][0]
+    assert membership["valid_from"] == repository.membership.valid_from
+    assert membership["expires_at"] == repository.membership.expires_at
+    assert membership["access_grant"]["membership_id"] == repository.membership.id
+    assert membership["access_grant"]["organization_id"] == repository.organization.id
+    assert membership["access_grant"]["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_current_user_does_not_attach_grant_from_another_organization() -> None:
+    user = User(id=uuid4(), username="volunteer", display_name="Volunteer", status="active")
+    repository = FakeAuthRepository(user)
+    now = datetime.now(timezone.utc)
+    repository.grants.append(
+        VolunteerAccessGrant(
+            id=uuid4(),
+            organization_id=uuid4(),
+            user_id=user.id,
+            membership_id=repository.membership.id,
+            application_id=uuid4(),
+            status="active",
+            valid_from=now - timedelta(hours=1),
+            expires_at=now + timedelta(hours=1),
+        )
+    )
+    session = SessionRecord(
+        id=uuid4(),
+        user_id=user.id,
+        status="active",
+        expires_at=now + timedelta(hours=1),
+    )
+    repository.sessions[session.id] = session
+    service = SessionService(
+        repository, password_hasher=Argon2PasswordHasher(), access_token=token_adapter()
+    )
+
+    result = await service.current_user(session_id=session.id)
+
+    assert result["memberships"][0]["access_grant"] is None
 
 
 @pytest.mark.asyncio
@@ -209,7 +335,7 @@ async def test_login_rejects_disabled_membership_or_suspended_shelter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_liff_exchange_requires_valid_binding_and_unique_active_context() -> None:
+async def test_liff_exchange_requires_valid_binding_and_entry_context() -> None:
     hasher = Argon2PasswordHasher()
     user = User(
         id=uuid4(),
@@ -223,12 +349,18 @@ async def test_liff_exchange_requires_valid_binding_and_unique_active_context() 
         password_hasher=hasher,
         access_token=token_adapter(),
         line_verifier=FakeLineVerifier(),
+        entry_resolver=FakeEntryResolver(repository.organization.id),
     )
 
-    issued = await service.exchange_line_identity(id_token="valid-id-token")
+    issued = await service.exchange_line_identity(
+        id_token="valid-id-token", shelter_entry_reference="valid-entry"
+    )
+    assert issued["state"] == "ACTIVE"
     assert issued["user_id"] == user.id
     sessions = [value for value in repository.values if isinstance(value, SessionRecord)]
     assert sessions[-1].active_organization_id == repository.organization.id
 
-    with pytest.raises(DomainError, match="請先完成 LINE 身分綁定"):
-        await service.exchange_line_identity(id_token="invalid")
+    result = await service.exchange_line_identity(
+        id_token="invalid", shelter_entry_reference="valid-entry"
+    )
+    assert result["state"] == "NEW"

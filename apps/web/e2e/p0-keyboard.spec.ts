@@ -1,6 +1,30 @@
 import { test, expect } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
-import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
+import {
+  mockLiffBrowser,
+  mockVolunteerAccessApi,
+} from "./volunteer-access-fixtures";
+
+async function mockVolunteerEntryNew(
+  page: Parameters<typeof mockLiffBrowser>[0],
+) {
+  await page.route("**/v1/auth/liff/exchange", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "NEW",
+        organization: {
+          id: "org-a",
+          code: "ORG-A",
+          name: "收容所 A",
+        },
+        user: { role: "VOLUNTEER" },
+      }),
+    });
+  });
+  await mockLiffBrowser(page);
+}
 
 test("登入核心操作可用鍵盤完成", async ({ page }) => {
   await page.goto("/login");
@@ -8,6 +32,32 @@ test("登入核心操作可用鍵盤完成", async ({ page }) => {
   await expect(page.getByLabel("帳號")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("密碼")).toBeFocused();
+});
+
+test("志工入口 NEW 狀態可用鍵盤進入報名", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await mockVolunteerEntryNew(page);
+  await page.goto(
+    "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
+  );
+  await expect(
+    page.getByRole("heading", { name: "尚未完成志工報名" }),
+  ).toBeVisible();
+
+  const enterApplication = page.getByRole("button", {
+    name: "進入志工報名",
+  });
+  await enterApplication.focus();
+  await expect(enterApplication).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
+
+  const consent = page.getByRole("checkbox", {
+    name: "我確認送出志工報名，並同意由此收容所審核。",
+  });
+  await consent.focus();
+  await page.keyboard.press("Space");
+  await expect(consent).toBeChecked();
 });
 
 test("管理手機導覽可用鍵盤開關並恢復 focus", async ({ page }) => {
@@ -29,6 +79,9 @@ test("管理手機導覽可用鍵盤開關並恢復 focus", async ({ page }) => 
 
 test("志工搜尋與照護表單可用鍵盤操作", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
+  await page.addInitScript(() =>
+    sessionStorage.setItem("access_token", "test-access"),
+  );
   await mockManagementApi(page);
   await page.goto("/animal-confirmation");
   const query = page.getByLabel("完整或部分收容編號");

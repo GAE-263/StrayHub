@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { authFetch } from "../../../../lib/auth";
 import { ApplicationBatchWorkbench } from "../../../../features/volunteer-access/ApplicationBatchWorkbench";
+import { VolunteerApplicantDetail } from "../../../../features/volunteer-access/VolunteerApplicantDetail";
+import {
+  VolunteerReviewCalendar,
+  type ReviewCalendarDate,
+} from "../../../../features/volunteer-access/VolunteerReviewCalendar";
+import {
+  selectInitialServiceDate,
+  type ServiceDateAvailability,
+} from "./review-date";
 
 type Application = {
   id: string;
@@ -13,46 +22,115 @@ type Application = {
 };
 
 type BatchItem = {
-  id: string;
   application_id: string;
   expected_version: number;
   result: string;
   error_code?: string | null;
 };
 
+function todayLocalDate(): string {
+  const value = new Date();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${value.getFullYear()}-${month}-${day}`;
+}
+
 export default function VolunteerApplicationsPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [applications, setApplications] = useState<Application[]>([]);
+  const [reviewCalendar, setReviewCalendar] = useState<ReviewCalendarDate[]>(
+    [],
+  );
   const [matchingCount, setMatchingCount] = useState(0);
+  const [serviceDate, setServiceDate] = useState(todayLocalDate);
+  const [unassigned, setUnassigned] = useState(false);
   const [submittedFrom, setSubmittedFrom] = useState("");
   const [submittedTo, setSubmittedTo] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [detailApplicationId, setDetailApplicationId] = useState<string | null>(
+    null,
+  );
+  const loadGeneration = useRef(0);
 
   async function loadApplications(
     id: string,
     from = submittedFrom,
     to = submittedTo,
+    selectedServiceDate = serviceDate,
+    selectedUnassigned = unassigned,
   ) {
-    const query = new URLSearchParams({ status: "pending", limit: "100" });
-    if (from) query.set("submitted_from", new Date(from).toISOString());
-    if (to) query.set("submitted_to", new Date(to).toISOString());
-    const response = await authFetch(
-      `/v1/organizations/${id}/volunteer-applications?${query.toString()}`,
-    );
-    if (!response.ok) throw new Error("無法載入志工報名名單");
-    const value = await response.json();
-    setApplications(value.items ?? []);
-    setMatchingCount(value.matching_count ?? 0);
-    setLoadError("");
+    const generation = ++loadGeneration.current;
+    setLoading(true);
+    setApplications([]);
+    setMatchingCount(0);
+    try {
+      const query = new URLSearchParams({ status: "pending", limit: "100" });
+      if (selectedUnassigned) query.set("unassigned", "true");
+      else if (selectedServiceDate)
+        query.set("service_date", selectedServiceDate);
+      if (from) query.set("submitted_from", new Date(from).toISOString());
+      if (to) query.set("submitted_to", new Date(to).toISOString());
+      const response = await authFetch(
+        `/v1/organizations/${id}/volunteer-applications?${query.toString()}`,
+      );
+      if (!response.ok) {
+        if (response.status === 403) {
+          let code = "";
+          try {
+            code = ((await response.json()) as { code?: string }).code ?? "";
+          } catch {
+            // Preserve the safe permission fallback when the error body is absent.
+          }
+          if (code === "volunteer_management_denied" || !code) {
+            throw new Error("需收容所管理員權限才能審核志工申請");
+          }
+        }
+        throw new Error("無法載入志工報名名單");
+      }
+      const value = (await response.json()) as {
+        items?: Application[];
+        matching_count?: number;
+        available_service_dates?: ServiceDateAvailability[];
+        review_calendar?: ReviewCalendarDate[];
+      };
+      if (generation !== loadGeneration.current) return null;
+      setApplications(value.items ?? []);
+      setMatchingCount(value.matching_count ?? 0);
+      setReviewCalendar(
+        value.review_calendar ?? value.available_service_dates ?? [],
+      );
+      setLoadError("");
+      return value;
+    } catch (error) {
+      if (generation === loadGeneration.current) {
+        setLoadError(error instanceof Error ? error.message : "載入失敗");
+      }
+      return null;
+    } finally {
+      if (generation === loadGeneration.current) setLoading(false);
+    }
   }
 
   useEffect(() => {
     const id = window.sessionStorage.getItem("active_organization_id") ?? "";
     setOrganizationId(id);
     if (!id) return;
-    void loadApplications(id, "", "").catch((error) =>
-      setLoadError(error instanceof Error ? error.message : "載入失敗"),
-    );
+    const today = todayLocalDate();
+    void loadApplications(id, "", "", today)
+      .then((value) => {
+        if (!value) return;
+        const selectedDate = selectInitialServiceDate(
+          today,
+          value.available_service_dates ?? [],
+        );
+        if (selectedDate === today) return;
+        setServiceDate(selectedDate);
+        return loadApplications(id, "", "", selectedDate);
+      })
+      .catch((error) =>
+        setLoadError(error instanceof Error ? error.message : "載入失敗"),
+      );
     // Initial load intentionally ignores local date-filter state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -98,6 +176,28 @@ export default function VolunteerApplicationsPage() {
     return response.json();
   }
 
+  function invalidateLoadedApplications() {
+    loadGeneration.current += 1;
+    setApplications([]);
+    setMatchingCount(0);
+    setDetailApplicationId(null);
+    setLoading(false);
+    setLoadError("");
+  }
+
+  function selectReviewDate(selectedDate: string) {
+    invalidateLoadedApplications();
+    setUnassigned(false);
+    setServiceDate(selectedDate);
+    void loadApplications(
+      organizationId,
+      submittedFrom,
+      submittedTo,
+      selectedDate,
+      false,
+    );
+  }
+
   return (
     <div>
       <div className="page-heading">
@@ -107,6 +207,13 @@ export default function VolunteerApplicationsPage() {
           <p>明確選取，或鎖定目前篩選結果的完整快照後批次核准／拒絕。</p>
         </div>
       </div>
+      <VolunteerReviewCalendar
+        dates={reviewCalendar}
+        selectedDate={unassigned ? "" : serviceDate}
+        loading={loading && applications.length === 0}
+        error={loadError}
+        onSelectDate={selectReviewDate}
+      />
       <form
         className="ui-card ui-card-padded mb-4 flex flex-wrap items-end gap-4"
         onSubmit={(event) => {
@@ -117,11 +224,38 @@ export default function VolunteerApplicationsPage() {
         }}
       >
         <label>
+          審核服務日期
+          <input
+            type="date"
+            value={serviceDate}
+            onChange={(event) => {
+              invalidateLoadedApplications();
+              setServiceDate(event.target.value);
+            }}
+            disabled={unassigned}
+            required={!unassigned}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={unassigned}
+            onChange={(event) => {
+              invalidateLoadedApplications();
+              setUnassigned(event.target.checked);
+            }}
+          />
+          未指定日期（既有歷史申請）
+        </label>
+        <label>
           送出時間起
           <input
             type="datetime-local"
             value={submittedFrom}
-            onChange={(event) => setSubmittedFrom(event.target.value)}
+            onChange={(event) => {
+              invalidateLoadedApplications();
+              setSubmittedFrom(event.target.value);
+            }}
           />
         </label>
         <label>
@@ -129,19 +263,29 @@ export default function VolunteerApplicationsPage() {
           <input
             type="datetime-local"
             value={submittedTo}
-            onChange={(event) => setSubmittedTo(event.target.value)}
+            onChange={(event) => {
+              invalidateLoadedApplications();
+              setSubmittedTo(event.target.value);
+            }}
           />
         </label>
         <button type="submit">套用篩選</button>
         <p role="status" aria-live="polite">
-          {loadError}
+          {loadError ||
+            (!unassigned && serviceDate
+              ? `目前顯示 ${serviceDate} 的待審核申請`
+              : "")}
         </p>
       </form>
       <ApplicationBatchWorkbench
-        applications={applications}
-        matchingCount={matchingCount}
+        key={`${serviceDate}:${unassigned}:${submittedFrom}:${submittedTo}`}
+        applications={loading ? [] : applications}
+        matchingCount={loading ? 0 : matchingCount}
         filter={{
           status: "pending",
+          ...(unassigned
+            ? { unassigned: true }
+            : { service_date: serviceDate }),
           ...(submittedFrom
             ? { submitted_from: new Date(submittedFrom).toISOString() }
             : {}),
@@ -152,6 +296,22 @@ export default function VolunteerApplicationsPage() {
         onSubmit={createBatch}
         onLoadItems={loadItems}
         onLoadBatch={loadBatch}
+        onBatchTerminalSuccess={() => {
+          void loadApplications(
+            organizationId,
+            submittedFrom,
+            submittedTo,
+            serviceDate,
+            unassigned,
+          );
+        }}
+        onViewApplicant={setDetailApplicationId}
+      />
+      <VolunteerApplicantDetail
+        organizationId={organizationId}
+        applicationId={detailApplicationId}
+        open={detailApplicationId !== null}
+        onClose={() => setDetailApplicationId(null)}
       />
     </div>
   );

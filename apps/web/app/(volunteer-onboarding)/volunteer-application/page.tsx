@@ -1,17 +1,17 @@
-import { VolunteerApplicationPage } from "../../../features/volunteer-access/VolunteerApplicationPage";
+import { redirect } from "next/navigation";
 
 type Props = {
-  searchParams: Promise<{ entry?: string; id_token?: string }>;
+  searchParams: Promise<{ entry?: string }>;
 };
 
 export default async function VolunteerApplicationRoute({
   searchParams,
 }: Props) {
   const params = await searchParams;
-  return (
-    <VolunteerApplicationPage
-      idToken={params.id_token ?? ""}
-      shelterEntryReference={params.entry ?? ""}
-    />
+  const entry = params.entry?.trim();
+  redirect(
+    entry
+      ? `/volunteer-entry?entry=${encodeURIComponent(entry)}`
+      : "/volunteer-entry",
   );
 }

@@ -19,8 +19,9 @@ https://<LIFF host>/volunteer-entry?entry=<opaque-shelter-entry-reference>
 3. 外部瀏覽器若未登入，使用 LIFF login flow；返回後重新初始化。
 4. 以 `liff.getIDToken()` 取得 raw token；不得把 decoded profile 送 server。
 5. `POST /v1/auth/liff/exchange`，body 只含 `id_token + shelter_entry_reference`。
-6. 成功後保存既有 auth tokens、Session id 與 transient LIFF recovery hint。
-7. 重新取得後端 Active Context／scoped organization label，`replace('/animal-confirmation')`。
+6. NEW銜接既有志工報名；PENDING停止自動retry；SUSPENDED顯示聯絡工作人員；三者都不保存Session。
+7. 只有ACTIVE保存既有auth tokens、Session id與transient LIFF recovery hint。
+8. ACTIVE重新取得後端Active Context／scoped organization label，`replace('/animal-confirmation')`。
 
 缺少 entry、LIFF 設定錯誤、初始化失敗、使用者取消登入或無 raw token 時，顯示繁中安全錯誤與「重新進入」「回到 LINE」，不得呼叫 protected API。
 
@@ -28,14 +29,15 @@ https://<LIFF host>/volunteer-entry?entry=<opaque-shelter-entry-reference>
 
 後端固定順序：
 
-1. digest raw entry，以 005 fixed-purpose resolver 取得候選 organization，立即設定該 organization RLS scope。
-2. 驗證 raw LINE id token，取得 line user id。
-3. 驗證 active LineUserBinding、active User 與 active Organization。
-4. 只查候選 organization 的 exact Membership；必須是 `VOLUNTEER`、active、已開始、未到期，且有同 organization／Membership 的 active Grant。
-5. 鎖定 Membership/Grant，以 database time 重做 effective predicate。
-6. 建立 `SessionRecord(user_id, active_organization_id=候選 organization)`。
-7. 建立 Refresh Token record 並簽發 access token。
-8. 同一 transaction commit 後才回既有 AuthResponse。
+1. 驗證raw LINE id token，取得line user id；invalid identity固定先回safe 401，不解析entry。
+2. digest raw entry，以005 fixed-purpose resolver取得候選organization；resolver不設定ambient organization scope。
+3. 解析LINE Binding與User；缺少Binding時回NEW，不自動建立Binding或Membership。
+4. 鎖定active LINE Binding，使用其User ID設定exact user＋organization authentication scope後鎖定並驗證User；只查候選organization的Application／Membership／Grant。
+5. 沒有申請或membership回NEW；pending application回PENDING；既有但不可用的volunteer access回SUSPENDED。
+6. ACTIVE必須是`VOLUNTEER`、active、已開始、未到期，且有同organization／Membership的active Grant。
+7. 全域固定鎖序為Entry→Organization→Binding→User→Grant→Membership；以database time重做effective predicate與user／organization／membership關聯，管理撤銷與expiration worker的重疊rows使用相同Grant→Membership順序。
+8. 只有ACTIVE建立`SessionRecord(user_id, active_organization_id=候選 organization)`、Refresh Token並簽發access token。
+9. 先以state discriminator驗證完整LiffExchangeResponse，再於同一transaction commit；response validation或commit失敗皆rollback並回safe 503。
 
 ### 失敗矩陣
 
@@ -43,16 +45,16 @@ https://<LIFF host>/volunteer-entry?entry=<opaque-shelter-entry-reference>
 | --- | --- | --- |
 | entry 無效／撤銷／purpose 不符 | 安全 403 | 不揭露 organization 是否存在 |
 | LINE token 無效／過期／audience 不符 | 安全 401 | 不查 Membership、不建立 Binding |
-| Binding 缺少／停用 | 安全 403 + 綁定／報名下一步 | 不自動建立 Binding |
-| User 或 Organization 停用 | 安全 403 | 不建立 Session/context |
-| 沒有申請／pending／rejected | 安全 403 + 等待／報名下一步 | 不建立 Membership |
-| future Membership/Grant | 安全 403 + 尚未開始 | 不提早建立 context |
-| expired／revoked／disabled／缺 Grant | 安全 403 + 重新報名／聯絡管理者 | 不延長或重新啟用 |
-| ORG-A entry + ORG-B-only access | 安全 403 | ORG-A/ORG-B Session/context 都為 0 |
+| Binding缺少／沒有申請或membership | 200 NEW + 報名下一步 | 不自動建立Binding／Membership／Session |
+| pending application | 200 PENDING | 不自動retry、不建立Session/context |
+| User停用或既有access不可用 | 200 SUSPENDED | 不建立Session/context、不洩漏內部原因 |
+| Organization停用 | entry safe 403 | resolver不回傳organization，不建立Session/context |
+| future／expired／revoked／disabled／缺Grant | 200 SUSPENDED | 不延長或重新啟用，不建立Session/context |
+| ORG-A entry + ORG-B-only access | NEW或SUSPENDED，但不得ACTIVE | ORG-A/ORG-B Session/context 都為0 |
 | database/dependency failure | 503 + 重試 | 不留下 partial row |
-| active-unexpired exact access | 200 | Session/context 不得分兩次 commit |
+| active-unexpired exact access | 200 ACTIVE | Session/context不得分兩次commit；credential欄位必須完整 |
 
-每個非 200 案例都必須 assert 新增 SessionRecord=0、RefreshTokenRecord=0、Active Context=0，且 Application/Membership/Grant mutation=0。
+每個非ACTIVE案例都必須assert新增SessionRecord=0、RefreshTokenRecord=0、Active Context=0，且Application/Membership/Grant mutation=0。
 
 ## 3. 既有介面依賴
 

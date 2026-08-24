@@ -30,12 +30,21 @@ type Batch = {
 };
 
 type BatchItem = {
-  id: string;
   application_id: string;
   expected_version: number;
   result: string;
   error_code?: string | null;
 };
+
+function isTerminalBatch(batch: Batch): boolean {
+  return (
+    batch.status === "completed" || batch.status === "completed_with_errors"
+  );
+}
+
+function shouldReloadAfterTerminalBatch(batch: Batch): boolean {
+  return batch.status === "completed" || batch.succeeded_count > 0;
+}
 
 function utcValue(localValue: string): string | null {
   if (!localValue) return null;
@@ -46,21 +55,35 @@ function utcValue(localValue: string): string | null {
 export function ApplicationBatchWorkbench({
   applications,
   matchingCount,
-  filter = { status: "pending" },
+  filter,
   onSubmit,
   onLoadItems,
   onLoadBatch,
+  onBatchTerminalSuccess,
+  onViewApplicant,
 }: {
   applications: Application[];
   matchingCount: number;
-  filter?: {
-    status: "pending";
-    submitted_from?: string;
-    submitted_to?: string;
-  };
+  filter:
+    | {
+        status: "pending";
+        service_date: string;
+        unassigned?: false;
+        submitted_from?: string;
+        submitted_to?: string;
+      }
+    | {
+        status: "pending";
+        service_date?: never;
+        unassigned: true;
+        submitted_from?: string;
+        submitted_to?: string;
+      };
   onSubmit?: (payload: object) => Promise<Batch | void> | Batch | void;
   onLoadItems?: (batchId: string) => Promise<BatchItem[]>;
   onLoadBatch?: (batchId: string) => Promise<Batch>;
+  onBatchTerminalSuccess?: (batch: Batch) => void | Promise<void>;
+  onViewApplicant?: (applicationId: string) => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [allFiltered, setAllFiltered] = useState(false);
@@ -76,6 +99,7 @@ export function ApplicationBatchWorkbench({
   const [results, setResults] = useState<BatchItem[]>([]);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const operationId = useRef<string | null>(null);
+  const terminalNotifiedBatch = useRef<string | null>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   function decisionItems(ids: Set<string>) {
@@ -102,6 +126,7 @@ export function ApplicationBatchWorkbench({
         ...defaultPeriod,
         selection: {
           mode: "explicit_items",
+          service_date: filter.service_date ?? null,
           items: retryItems.map((item) => ({
             application_id: item.application_id,
             expected_version: item.expected_version,
@@ -123,7 +148,11 @@ export function ApplicationBatchWorkbench({
               ? { overrides: selectedOverrides }
               : {}),
           }
-        : { mode: "explicit_items", items: selectedOverrides },
+        : {
+            mode: "explicit_items",
+            service_date: filter.service_date ?? null,
+            items: selectedOverrides,
+          },
     };
   }
 
@@ -151,6 +180,46 @@ export function ApplicationBatchWorkbench({
     }
   }
 
+  async function loadBatchState(batchId: string) {
+    const [latest, latestItems] = await Promise.all([
+      onLoadBatch?.(batchId) ?? Promise.resolve(batch),
+      onLoadItems?.(batchId) ?? Promise.resolve(results),
+    ]);
+    if (!latest) return;
+    setBatch(latest);
+    setResults(latestItems);
+    if (
+      isTerminalBatch(latest) &&
+      shouldReloadAfterTerminalBatch(latest) &&
+      terminalNotifiedBatch.current !== latest.id
+    ) {
+      terminalNotifiedBatch.current = latest.id;
+      await onBatchTerminalSuccess?.(latest);
+    }
+    return latest;
+  }
+
+  React.useEffect(() => {
+    if (!batch || isTerminalBatch(batch) || !onLoadBatch) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const latest = await loadBatchState(batch.id);
+        if (!cancelled && latest && !isTerminalBatch(latest)) {
+          timer = setTimeout(() => void poll(), 1000);
+        }
+      } catch {
+        if (!cancelled) timer = setTimeout(() => void poll(), 1500);
+      }
+    };
+    timer = setTimeout(() => void poll(), 500);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [batch, onLoadBatch]);
+
   async function submit() {
     if (!allFiltered && selected.length === 0) {
       setMessage("請至少選擇一筆申請");
@@ -171,12 +240,7 @@ export function ApplicationBatchWorkbench({
   async function refresh() {
     if (!batch) return;
     try {
-      const [latest, latestItems] = await Promise.all([
-        onLoadBatch?.(batch.id) ?? Promise.resolve(batch),
-        onLoadItems?.(batch.id) ?? Promise.resolve(results),
-      ]);
-      setBatch(latest);
-      setResults(latestItems);
+      await loadBatchState(batch.id);
       setMessage("已更新批次進度與逐筆結果。");
     } catch {
       setMessage("無法更新批次進度，請稍後再試。");
@@ -259,6 +323,7 @@ export function ApplicationBatchWorkbench({
             <th className="ui-table-head">志工</th>
             <th className="ui-table-head">狀態</th>
             <th className="ui-table-head">個別期限</th>
+            {onViewApplicant ? <th className="ui-table-head">資料</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -278,6 +343,17 @@ export function ApplicationBatchWorkbench({
                   }}
                 />
               </td>
+              {onViewApplicant ? (
+                <td className="ui-table-cell">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => onViewApplicant(application.id)}
+                  >
+                    查看申請人
+                  </Button>
+                </td>
+              ) : null}
               <td className="ui-table-cell">{application.display_name}</td>
               <td className="ui-table-cell">{application.status}</td>
               <td className="ui-table-cell">
@@ -340,7 +416,7 @@ export function ApplicationBatchWorkbench({
       {results.length ? (
         <ul>
           {results.map((item) => (
-            <li key={item.id}>
+            <li key={item.application_id}>
               {item.application_id}：
               <Badge className={`batch-result batch-result-${item.result}`}>
                 {item.result}

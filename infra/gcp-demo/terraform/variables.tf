@@ -186,3 +186,18 @@ variable "animal_confirmation_secret_name" {
   type        = string
   default     = "animal-confirmation-secret"
 }
+
+variable "pii_kms_key_name" {
+  description = "Existing Cloud KMS CryptoKey resource for volunteer PII; key material remains in KMS."
+  type        = string
+
+  validation {
+    condition = can(
+      regex(
+        "^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$",
+        var.pii_kms_key_name,
+      )
+    )
+    error_message = "pii_kms_key_name 必須是完整 Cloud KMS CryptoKey resource name。"
+  }
+}

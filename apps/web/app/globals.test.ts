@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(new URL("./globals.css", import.meta.url), "utf8");
+const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
 
 function ruleBody(selector: string) {
   const match = css.match(
@@ -216,5 +217,19 @@ describe("legacy and primitive cascade contracts", () => {
     expect(css).toContain(".ui-table-wrap");
     expect(css).toContain(".ui-table-head");
     expect(css).toContain(".ui-table-cell");
+  });
+});
+
+describe("volunteer entry visual hierarchy", () => {
+  it("separates card actions and emphasizes the error heading", () => {
+    const content = ruleBody(".volunteer-entry-content");
+    expect(content).toContain("display: grid");
+    expect(content).toContain("gap: 16px");
+
+    const errorHeading = ruleBody(
+      ".volunteer-entry-error .volunteer-page-heading h1",
+    );
+    expect(errorHeading).toContain("color: var(--danger)");
+    expect(errorHeading).toContain("font-weight: 800");
   });
 });

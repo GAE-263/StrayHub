@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     line_channel_id: str = "fake-line-channel-id"
     line_channel_secret: str = "fake-line-channel-secret"
     line_channel_access_token: str = "fake-line-access-token"
+    line_login_channel_id: str = ""
+    line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
     animal_confirmation_secret: str = "local-animal-confirmation-secret"
     auth_jwt_issuer: str = "strayhub-local"
@@ -30,6 +32,11 @@ class Settings(BaseSettings):
     auth_jwt_active_private_key: str | None = None
     auth_jwt_active_public_key: str | None = None
     auth_jwt_previous_public_key: str | None = None
+    pii_encryption_provider: str = "local-aes-gcm"
+    pii_allow_local_provider: bool = False
+    pii_active_key_version: str = "local-v1"
+    pii_local_key_base64: SecretStr | None = None
+    pii_kms_key_name: str | None = None
     session_access_token_ttl_seconds: int = Field(default=900, ge=1)
     session_refresh_token_ttl_seconds: int = Field(default=604800, ge=1)
     draft_ttl_seconds: int = Field(default=86400, ge=1)

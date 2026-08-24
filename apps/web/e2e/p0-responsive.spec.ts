@@ -1,6 +1,30 @@
 import { test, expect } from "@playwright/test";
 import { mockManagementApi } from "./fixtures";
-import { mockVolunteerAccessApi } from "./volunteer-access-fixtures";
+import {
+  mockLiffBrowser,
+  mockVolunteerAccessApi,
+} from "./volunteer-access-fixtures";
+
+async function mockVolunteerEntryNew(
+  page: Parameters<typeof mockLiffBrowser>[0],
+) {
+  await page.route("**/v1/auth/liff/exchange", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "NEW",
+        organization: {
+          id: "org-a",
+          code: "ORG-A",
+          name: "收容所 A",
+        },
+        user: { role: "VOLUNTEER" },
+      }),
+    });
+  });
+  await mockLiffBrowser(page);
+}
 
 const viewports = [
   { width: 360, height: 800 },
@@ -66,7 +90,7 @@ test("P0 routes respect reduced-motion preference", async ({ page }) => {
 });
 
 for (const route of [
-  "/volunteer-application?entry=entry&id_token=id-token",
+  "/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
   "/volunteers/applications",
   "/volunteers/access",
   "/volunteers/notifications",
@@ -75,7 +99,11 @@ for (const route of [
   test(`${route} volunteer access UI remains usable at required viewports`, async ({
     page,
   }) => {
-    await mockVolunteerAccessApi(page);
+    if (route.startsWith("/volunteer-entry")) {
+      await mockVolunteerEntryNew(page);
+    } else {
+      await mockVolunteerAccessApi(page);
+    }
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto(route);

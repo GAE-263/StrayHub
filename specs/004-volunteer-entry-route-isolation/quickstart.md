@@ -223,15 +223,66 @@ npm --prefix apps/web run test:visual:update
 
 1. 一個受控 LINE Official Account、Messaging API channel、Webhook、LIFF App；記錄其非敏感識別與配置版本。
 2. LIFF App `openid` scope、Endpoint URL 與允許的 redirect URL 正確。
-3. 受控 ORG-A／ORG-B active organizations，各自發行 entry reference：
+3. 受控 ORG-A／ORG-B active organizations，各自發行 entry reference。script是repository-root import，需保留`PYTHONPATH=.`；raw reference只在stdout顯示一次：
 
 ```bash
-env UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/issue_volunteer_entry_reference.py <organization-uuid>
+PYTHONPATH=. $HOME/.local/bin/uv run python \
+  scripts/issue_volunteer_entry_reference.py \
+  <organization-uuid> --actor-reference TASK16_CONTROLLED_LINE
 ```
 
 raw reference 只顯示一次；立刻放入受控 URL/QR 管理流程，不寫入 evidence。
 
 4. 至少準備：ORG-A-only active volunteer、ORG-B-only active volunteer、跨兩 org volunteer，以及 pending/expired/revoked 對照 identity。
+
+### 11.1 兩條 HTTPS tunnel 與 LIFF Console
+
+正式手機驗收需要兩個不同的HTTPS origin：
+
+| Origin | Forward target | Runtime／Console用途 |
+| --- | --- | --- |
+| `PUBLIC_WEB_ORIGIN` | `http://127.0.0.1:3001` | LIFF Endpoint：`${PUBLIC_WEB_ORIGIN}/volunteer-entry` |
+| `PUBLIC_API_ORIGIN` | `http://127.0.0.1:8001` | Next.js server runtime `API_BASE_URL`、`/healthz`與API proxy |
+
+以cloudflared為例：
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3001
+cloudflared tunnel --url http://127.0.0.1:8001
+```
+
+也可在受控環境用兩個獨立process執行`ngrok http 3001`與`ngrok http 8001`。不可把同一個tunnel同時指向兩個port，也不可把localhost或HTTP URL填入LIFF Console。
+
+Next.js啟動前設定server runtime：
+
+```bash
+API_BASE_URL="<PUBLIC_API_ORIGIN>" \
+LIFF_ID="<LIFF_ID_FROM_CONSOLE>" \
+npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
+```
+
+LIFF Console檢查：
+
+1. Endpoint URL為`${PUBLIC_WEB_ORIGIN}/volunteer-entry`。
+2. LIFF App與後端`LINE_LOGIN_CHANNEL_ID`屬同一LINE Login channel。
+3. 啟用`openid` scope。
+4. Endpoint為HTTPS且沒有fake ID、localhost或placeholder。
+
+Rich Menu只使用canonical `LIFF_BASE_URL=https://liff.line.me/<LIFF_ID>`；它不是Web tunnel origin。dry-run不呼叫LINE外部API：
+
+```bash
+LIFF_BASE_URL="https://liff.line.me/<LIFF_ID_FROM_CONSOLE>" \
+SHELTER_ENTRY_REFERENCE="<RAW_REFERENCE_ONLY_IN_CONTROLLED_SHELL>" \
+API_BASE_URL="<PUBLIC_API_ORIGIN>" \
+$HOME/.local/bin/uv run python scripts/sync_line_rich_menu.py \
+  --config infra/gcp-demo/line-rich-menu.yaml
+```
+
+預期輸出為`Rich Menu 設定有效：strayhub-gcp-demo-volunteer-care`。未取得額外外部副作用授權前不得使用`--apply`。
+
+### 11.2 Case A–D與證據
+
+Case A（首次identity→NEW→PENDING）、Case B（管理員核准→exact Membership/Grant）、Case C（第二次進入→ACTIVE→`/animal-confirmation`）及Case D（ORG-A／ORG-B隔離）之逐步操作、session失效附加檢查與遮罩後證據表，統一見[`validation/controlled-line-evidence.md`](validation/controlled-line-evidence.md)。本quickstart只記錄流程入口，不把尚未執行的外部測試標記為PASS。
 
 ### 實機 matrix
 

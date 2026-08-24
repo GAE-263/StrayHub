@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 from typing import TypeVar
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, select, text, tuple_
+from sqlalchemy import Select, String, and_, cast, func, select, text, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,11 +17,13 @@ from services.api.app.domain.volunteer_access import (
     digest_entry_reference,
 )
 from services.api.app.persistence.database.scope import set_organization_scope
-from services.api.app.persistence.models.identity import Organization, User
+from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
     VolunteerAccessGrant,
     VolunteerApplication,
+    VolunteerApplicationProfile,
+    VolunteerApplicationServiceDate,
     VolunteerDecisionBatch,
     VolunteerDecisionBatchItem,
     VolunteerNotificationDelivery,
@@ -45,21 +47,30 @@ class VolunteerAccessRepository:
         *,
         token_digest: str,
         purpose: str,
-    ) -> tuple[UUID, UUID] | None:
+    ) -> tuple[UUID, UUID, str, str] | None:
         result = await session.execute(
             text(
-                """SELECT reference_id, organization_id
+                """SELECT reference_id, organization_id, organization_code, organization_name
                 FROM resolve_volunteer_entry_reference(:token_digest, :purpose)"""
             ),
             {"token_digest": token_digest, "purpose": purpose},
         )
         row = result.one_or_none()
-        return None if row is None else (row.reference_id, row.organization_id)
+        return (
+            None
+            if row is None
+            else (
+                row.reference_id,
+                row.organization_id,
+                row.organization_code,
+                row.organization_name,
+            )
+        )
 
     @classmethod
     async def resolve_and_scope(
         cls, session: AsyncSession, raw_reference: str
-    ) -> tuple[UUID, UUID] | None:
+    ) -> tuple[UUID, UUID, str, str] | None:
         resolved = await cls.resolve_entry_reference(
             session,
             token_digest=digest_entry_reference(raw_reference),
@@ -67,7 +78,7 @@ class VolunteerAccessRepository:
         )
         if resolved is None:
             return None
-        _, organization_id = resolved
+        _, organization_id, _, _ = resolved
         await set_organization_scope(session, organization_id)
         return resolved
 
@@ -100,6 +111,48 @@ class VolunteerAccessRepository:
         self, application_id: UUID, *, for_update: bool = False
     ) -> VolunteerApplication | None:
         statement = self._application_scope().where(VolunteerApplication.id == application_id)
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def application_detail(
+        self, application_id: UUID, *, for_update: bool = False
+    ) -> tuple[VolunteerApplication, list[VolunteerApplicationServiceDate]] | None:
+        application = await self.application(application_id, for_update=for_update)
+        if application is None:
+            return None
+        date_statement = select(VolunteerApplicationServiceDate).where(
+            VolunteerApplicationServiceDate.organization_id == self.organization_id,
+            VolunteerApplicationServiceDate.application_id == application_id,
+        )
+        if for_update:
+            date_statement = date_statement.with_for_update()
+        date_result = await self.session.execute(
+            date_statement.order_by(VolunteerApplicationServiceDate.service_date)
+        )
+        return application, list(date_result.scalars())
+
+    async def application_profile(
+        self, application_id: UUID, *, for_update: bool = False
+    ) -> VolunteerApplicationProfile | None:
+        statement = select(VolunteerApplicationProfile).where(
+            VolunteerApplicationProfile.organization_id == self.organization_id,
+            VolunteerApplicationProfile.application_id == application_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def active_membership(
+        self, user_id: UUID, *, for_update: bool = False
+    ) -> OrganizationMembership | None:
+        statement = select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == self.organization_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.status == "active",
+        )
         if for_update:
             statement = statement.with_for_update()
         result = await self.session.execute(statement)
@@ -146,6 +199,74 @@ class VolunteerAccessRepository:
                 raise
             return existing, False
 
+    async def add_service_dates_with_capacity(
+        self,
+        application_id: UUID,
+        service_dates: Sequence[date],
+        *,
+        daily_limit: int,
+    ) -> list[VolunteerApplicationServiceDate]:
+        if daily_limit < 1:
+            raise DomainError("invalid_daily_application_limit", "每日申請上限必須大於 0", 422)
+        created: list[VolunteerApplicationServiceDate] = []
+        for service_date in service_dates:
+            await self.session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:capacity_key, 0))"),
+                {"capacity_key": f"volunteer-capacity:{self.organization_id}:{service_date}"},
+            )
+            booked = await self.session.scalar(
+                select(func.count(VolunteerApplicationServiceDate.id)).where(
+                    VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                    VolunteerApplicationServiceDate.service_date == service_date,
+                    VolunteerApplicationServiceDate.status.in_(("pending", "approved")),
+                )
+            )
+            if int(booked or 0) >= daily_limit:
+                raise DomainError(
+                    "service_date_full",
+                    f"{service_date.isoformat()} 報名人數已滿",
+                    409,
+                )
+            item = VolunteerApplicationServiceDate(
+                organization_id=self.organization_id,
+                application_id=application_id,
+                service_date=service_date,
+                status="pending",
+            )
+            self.session.add(item)
+            created.append(item)
+        await self.session.flush()
+        return created
+
+    async def service_date_for_application(
+        self,
+        application_id: UUID,
+        service_date: date,
+        *,
+        for_update: bool = False,
+    ) -> VolunteerApplicationServiceDate | None:
+        statement = select(VolunteerApplicationServiceDate).where(
+            VolunteerApplicationServiceDate.organization_id == self.organization_id,
+            VolunteerApplicationServiceDate.application_id == application_id,
+            VolunteerApplicationServiceDate.service_date == service_date,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def pending_service_date_count(self, application_id: UUID) -> int:
+        return int(
+            await self.session.scalar(
+                select(func.count(VolunteerApplicationServiceDate.id)).where(
+                    VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                    VolunteerApplicationServiceDate.application_id == application_id,
+                    VolunteerApplicationServiceDate.status == "pending",
+                )
+            )
+            or 0
+        )
+
     async def applications_for_user(
         self, user_id: UUID, *, limit: int = 50
     ) -> list[VolunteerApplication]:
@@ -164,6 +285,8 @@ class VolunteerAccessRepository:
         status: str | None = None,
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        service_date: date | None = None,
+        unassigned: bool = False,
         cursor: tuple[datetime, UUID] | None = None,
         limit: int = 100,
     ) -> list[VolunteerApplication]:
@@ -174,6 +297,24 @@ class VolunteerAccessRepository:
             statement = statement.where(VolunteerApplication.submitted_at >= submitted_from)
         if submitted_to is not None:
             statement = statement.where(VolunteerApplication.submitted_at < submitted_to)
+        if service_date is not None:
+            statement = statement.where(
+                VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                        VolunteerApplicationServiceDate.service_date == service_date,
+                        VolunteerApplicationServiceDate.status == "pending",
+                    )
+                )
+            )
+        elif unassigned:
+            statement = statement.where(
+                ~VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id
+                    )
+                )
+            )
         if cursor is not None:
             submitted_at, application_id = cursor
             statement = statement.where(
@@ -192,6 +333,8 @@ class VolunteerAccessRepository:
         status: str | None = None,
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        service_date: date | None = None,
+        unassigned: bool = False,
     ) -> int:
         statement = select(func.count(VolunteerApplication.id)).where(
             VolunteerApplication.organization_id == self.organization_id
@@ -202,7 +345,54 @@ class VolunteerAccessRepository:
             statement = statement.where(VolunteerApplication.submitted_at >= submitted_from)
         if submitted_to is not None:
             statement = statement.where(VolunteerApplication.submitted_at < submitted_to)
+        if service_date is not None:
+            statement = statement.where(
+                VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                        VolunteerApplicationServiceDate.service_date == service_date,
+                        VolunteerApplicationServiceDate.status == "pending",
+                    )
+                )
+            )
+        elif unassigned:
+            statement = statement.where(
+                ~VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id
+                    )
+                )
+            )
         return int((await self.session.execute(statement)).scalar_one())
+
+    async def review_calendar_overview(self) -> list[tuple[date, int]]:
+        statement = (
+            select(
+                VolunteerApplicationServiceDate.service_date,
+                func.count(VolunteerApplicationServiceDate.application_id),
+            )
+            .join(
+                VolunteerApplication,
+                and_(
+                    VolunteerApplication.id == VolunteerApplicationServiceDate.application_id,
+                    VolunteerApplication.organization_id
+                    == VolunteerApplicationServiceDate.organization_id,
+                ),
+            )
+            .where(
+                VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                VolunteerApplicationServiceDate.status == "pending",
+                VolunteerApplication.status == "pending",
+            )
+            .group_by(VolunteerApplicationServiceDate.service_date)
+            .order_by(VolunteerApplicationServiceDate.service_date)
+        )
+        result = await self.session.execute(statement)
+        return [(service_date, int(count)) for service_date, count in result.all()]
+
+    async def pending_service_date_counts(self) -> list[tuple[date, int]]:
+        """Backward-compatible alias for the review calendar aggregation."""
+        return await self.review_calendar_overview()
 
     async def pending_snapshot(
         self,
@@ -211,6 +401,8 @@ class VolunteerAccessRepository:
         status: str = "pending",
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        service_date: date | None = None,
+        unassigned: bool = False,
     ) -> list[VolunteerApplication]:
         if status != "pending":
             raise DomainError("invalid_batch_filter", "全選快照只接受 pending 狀態", 422)
@@ -222,10 +414,61 @@ class VolunteerAccessRepository:
             statement = statement.where(VolunteerApplication.submitted_at >= submitted_from)
         if submitted_to is not None:
             statement = statement.where(VolunteerApplication.submitted_at < submitted_to)
+        if service_date is not None:
+            statement = statement.where(
+                VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                        VolunteerApplicationServiceDate.service_date == service_date,
+                        VolunteerApplicationServiceDate.status == "pending",
+                    )
+                )
+            )
+        elif unassigned:
+            statement = statement.where(
+                ~VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id
+                    )
+                )
+            )
         result = await self.session.execute(
             statement.order_by(VolunteerApplication.submitted_at, VolunteerApplication.id)
         )
         return list(result.scalars())
+
+    async def validate_explicit_service_date_targets(
+        self,
+        application_ids: Sequence[UUID],
+        *,
+        service_date: date | None,
+    ) -> None:
+        requested = set(application_ids)
+        application_result = await self.session.execute(
+            select(VolunteerApplication.id).where(
+                VolunteerApplication.organization_id == self.organization_id,
+                VolunteerApplication.id.in_(requested),
+                VolunteerApplication.status == "pending",
+            )
+        )
+        if set(application_result.scalars()) != requested:
+            raise DomainError("invalid_batch_target", "批次包含無效申請", 409)
+
+        date_statement = select(VolunteerApplicationServiceDate.application_id).where(
+            VolunteerApplicationServiceDate.organization_id == self.organization_id,
+            VolunteerApplicationServiceDate.application_id.in_(requested),
+        )
+        if service_date is not None:
+            date_statement = date_statement.where(
+                VolunteerApplicationServiceDate.service_date == service_date,
+                VolunteerApplicationServiceDate.status == "pending",
+            )
+        date_result = await self.session.execute(date_statement)
+        matched = set(date_result.scalars())
+        if (service_date is None and matched) or (
+            service_date is not None and matched != requested
+        ):
+            raise DomainError("invalid_batch_service_date", "批次審核日期與申請不符", 409)
 
     async def applications_by_ids(
         self, application_ids: Sequence[UUID]
@@ -329,7 +572,7 @@ class VolunteerAccessRepository:
                 ),
             )
             .order_by(VolunteerAccessGrant.expires_at, VolunteerAccessGrant.id)
-            .with_for_update(skip_locked=True)
+            .with_for_update(of=VolunteerAccessGrant, skip_locked=True)
             .limit(min(max(limit, 1), 500))
         )
         return list(result.scalars())
@@ -371,7 +614,7 @@ class VolunteerAccessRepository:
     async def batch_items_after(
         self,
         batch_id: UUID,
-        cursor: UUID | None,
+        cursor: str | None,
         *,
         result: str | None = None,
         limit: int = 100,
@@ -381,13 +624,16 @@ class VolunteerAccessRepository:
             VolunteerDecisionBatchItem.batch_id == batch_id,
         )
         if cursor is not None:
-            statement = statement.where(VolunteerDecisionBatchItem.id > cursor)
+            cursor_column = cast(VolunteerDecisionBatchItem.id, String)
+            statement = statement.where(cursor_column > cursor)
         if result is not None:
             if result not in {"pending", "succeeded", "conflict", "failed"}:
                 raise DomainError("invalid_batch_item_result", "逐筆結果篩選無效", 422)
             statement = statement.where(VolunteerDecisionBatchItem.result == result)
         query_result = await self.session.execute(
-            statement.order_by(VolunteerDecisionBatchItem.id).limit(min(max(limit, 1), 500))
+            statement.order_by(cast(VolunteerDecisionBatchItem.id, String)).limit(
+                min(max(limit, 1), 500)
+            )
         )
         return list(query_result.scalars())
 

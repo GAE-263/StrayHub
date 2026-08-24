@@ -10,8 +10,13 @@ from services.api.app.application.ports.authentication import (
     AccessTokenPort,
     LineIdentityVerifierPort,
     PasswordHasherPort,
+    VolunteerEntryResolverPort,
 )
-from services.api.app.persistence.models.identity import RefreshTokenRecord, SessionRecord
+from services.api.app.persistence.models.identity import (
+    OrganizationMembership,
+    RefreshTokenRecord,
+    SessionRecord,
+)
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
@@ -29,6 +34,7 @@ class SessionService:
         password_hasher: PasswordHasherPort,
         access_token: AccessTokenPort,
         line_verifier: LineIdentityVerifierPort | None = None,
+        entry_resolver: VolunteerEntryResolverPort | None = None,
         refresh_ttl_seconds: int = 604800,
         access_ttl_seconds: int = 900,
     ) -> None:
@@ -36,6 +42,7 @@ class SessionService:
         self.password_hasher = password_hasher
         self.access_token = access_token
         self.line_verifier = line_verifier
+        self.entry_resolver = entry_resolver
         self.refresh_ttl_seconds = refresh_ttl_seconds
         self.access_ttl_seconds = access_ttl_seconds
 
@@ -140,6 +147,50 @@ class SessionService:
         user = await self.repository.get_user(session.user_id)
         if user is None or user.status != "active":
             raise DomainError("invalid_session", "使用者無效", 401)
+        memberships = await self.repository.memberships(user.id)
+        grants = await self.repository.access_grants_for_memberships(
+            user.id, [membership.id for membership in memberships]
+        )
+        grant_by_membership_id = {grant.membership_id: grant for grant in grants}
+
+        def serialize_membership(membership: OrganizationMembership) -> dict:
+            grant = grant_by_membership_id.get(membership.id)
+            matching_grant = (
+                grant
+                if grant is not None and grant.organization_id == membership.organization_id
+                else None
+            )
+            return {
+                "id": membership.id,
+                "organization_id": membership.organization_id,
+                "user_id": membership.user_id,
+                "role": membership.role,
+                "status": membership.status,
+                "valid_from": membership.valid_from,
+                "expires_at": membership.expires_at,
+                "access_grant": (
+                    {
+                        "membership_id": matching_grant.membership_id,
+                        "organization_id": matching_grant.organization_id,
+                        "status": matching_grant.status,
+                        "valid_from": matching_grant.valid_from,
+                        "expires_at": matching_grant.expires_at,
+                    }
+                    if matching_grant is not None
+                    else None
+                ),
+                "medical_care_access": membership.medical_care_access,
+                "capabilities": {
+                    "can_view_medical_care": membership.status == "active"
+                    and (
+                        membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"}
+                        or (membership.role == "STAFF" and membership.medical_care_access)
+                    ),
+                    "can_manage_series": membership.status == "active"
+                    and membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"},
+                },
+            }
+
         return {
             "user": {
                 "id": user.id,
@@ -148,28 +199,11 @@ class SessionService:
                 "platform_role": user.platform_role,
                 "status": user.status,
             },
-            "memberships": [
-                {
-                    "id": membership.id,
-                    "organization_id": membership.organization_id,
-                    "role": membership.role,
-                    "status": membership.status,
-                    "medical_care_access": membership.medical_care_access,
-                    "capabilities": {
-                        "can_view_medical_care": membership.status == "active"
-                        and (
-                            membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"}
-                            or (membership.role == "STAFF" and membership.medical_care_access)
-                        ),
-                        "can_manage_series": membership.status == "active"
-                        and membership.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"},
-                    },
-                }
-                for membership in await self.repository.memberships(user.id)
-            ],
+            "memberships": [serialize_membership(membership) for membership in memberships],
         }
 
-    async def exchange_line_identity(self, *, id_token: str) -> dict:
+    async def bind_line_identity(self, *, id_token: str) -> dict:
+        """Preserve the existing LINE binding endpoint independently of LIFF entry exchange."""
         if self.line_verifier is None:
             raise DomainError("line_not_configured", "LINE 身分驗證尚未設定", 503)
         line_user_id = await self.line_verifier.verify(id_token)
@@ -194,6 +228,86 @@ class SessionService:
         )
         await self.repository.add(session)
         return await self._issue_session(user.id, session)
+
+    async def exchange_line_identity(self, *, id_token: str, shelter_entry_reference: str) -> dict:
+        if self.line_verifier is None or self.entry_resolver is None:
+            raise DomainError("line_not_configured", "LINE 身分驗證尚未設定", 503)
+        try:
+            line_user_id = await self.line_verifier.verify(id_token)
+        except DomainError:
+            raise
+        except Exception as exc:
+            raise DomainError("invalid_line_id_token", "無法確認 LINE 身分", 401) from exc
+        try:
+            entry = await self.entry_resolver.resolve(shelter_entry_reference)
+        except Exception as exc:
+            raise DomainError("liff_exchange_unavailable", "志工入口暫時無法使用", 503) from exc
+        if entry is None:
+            raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
+        public_context = {
+            "organization": {
+                "id": entry.organization_id,
+                "code": entry.organization_code,
+                "name": entry.organization_name,
+            }
+        }
+        try:
+            return await self._exchange_verified_line_identity(
+                line_user_id=line_user_id,
+                organization_id=entry.organization_id,
+                public_context=public_context,
+            )
+        except DomainError:
+            raise
+        except Exception as exc:
+            raise DomainError("liff_exchange_unavailable", "志工入口暫時無法使用", 503) from exc
+
+    async def _exchange_verified_line_identity(
+        self, *, line_user_id: str, organization_id: UUID, public_context: dict
+    ) -> dict:
+        binding = await self.repository.lock_line_binding(line_user_id)
+        if binding is None:
+            return {
+                "state": "NEW",
+                "next_path": "/volunteer-application",
+                **public_context,
+            }
+        await self.repository.set_authentication_context_scope(binding.user_id, organization_id)
+        user = await self.repository.lock_user(binding.user_id)
+        if user is None or user.status != "active":
+            return {"state": "SUSPENDED", **public_context}
+        effective_access = await self.repository.lock_effective_volunteer_access(
+            user.id, organization_id
+        )
+        if effective_access is None:
+            raw_membership = await self.repository.get_membership(user.id, organization_id)
+            if raw_membership is not None and raw_membership.role == "VOLUNTEER":
+                return {"state": "SUSPENDED", **public_context}
+            application = await self.repository.latest_volunteer_application(
+                user.id, organization_id
+            )
+            if application is not None and application.status == "pending":
+                return {"state": "PENDING", **public_context}
+            return {
+                "state": "NEW",
+                "next_path": "/volunteer-application",
+                **public_context,
+            }
+        session = SessionRecord(
+            user_id=user.id,
+            active_organization_id=organization_id,
+            status="active",
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+        )
+        await self.repository.add(session)
+        issued = await self._issue_session(user.id, session)
+        return {
+            "state": "ACTIVE",
+            **issued,
+            "user": {"role": "VOLUNTEER"},
+            **public_context,
+            "next_path": "/animal-confirmation",
+        }
 
     async def _issue_session(
         self, user_id: UUID, session: SessionRecord, *, family_id: UUID | None = None

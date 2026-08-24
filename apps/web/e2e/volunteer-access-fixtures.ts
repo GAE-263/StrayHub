@@ -1,36 +1,129 @@
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 
-export async function mockVolunteerAccessApi(page: Page) {
-  await page.addInitScript(() => {
+type VolunteerAccessOrganization = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+type VolunteerAccessFixtureOptions = {
+  organizations?: VolunteerAccessOrganization[];
+  activeOrganizationId?: string;
+  memberships?: Array<{
+    id: string;
+    organization_id: string;
+    role: string;
+    status: string;
+  }>;
+};
+
+export async function mockLiffBrowser(
+  page: Page,
+  liffId = "fake-liff-id",
+  idToken = "local-id-token",
+) {
+  await page.addInitScript(
+    ({ configuredLiffId, configuredIdToken }) => {
+      localStorage.setItem(
+        `LIFF_STORE:${configuredLiffId}:accessToken`,
+        JSON.stringify("local-liff-access-token"),
+      );
+      localStorage.setItem(
+        `LIFF_STORE:${configuredLiffId}:IDToken`,
+        JSON.stringify(configuredIdToken),
+      );
+      localStorage.setItem(
+        `LIFF_STORE:${configuredLiffId}:expires`,
+        JSON.stringify(Date.now() + 60 * 60 * 1000),
+      );
+      document.cookie = `LIFF_STORE:expires:${configuredLiffId}=${Date.now() + 60 * 60 * 1000}; path=/`;
+    },
+    { configuredLiffId: liffId, configuredIdToken: idToken },
+  );
+  await page.route(
+    "https://api.line.me/liff/v2/apps/**/contextToken",
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ token: "local-context-token" }),
+      });
+    },
+  );
+}
+
+export async function mockVolunteerAccessApi(
+  page: Page,
+  options: VolunteerAccessFixtureOptions = {},
+) {
+  const organizations = options.organizations ?? [
+    { id: "org-a", code: "ORG-A", name: "收容所 A" },
+  ];
+  let activeOrganizationId =
+    options.activeOrganizationId ?? organizations[0]?.id ?? "org-a";
+  const memberships =
+    options.memberships ??
+    organizations.map((item) => ({
+      id: `membership-${item.id}`,
+      organization_id: item.id,
+      role: "SHELTER_ADMIN",
+      status: "active",
+    }));
+  await page.addInitScript((organizationId) => {
     sessionStorage.setItem("access_token", "test-access");
-    sessionStorage.setItem("active_organization_id", "org-a");
-    sessionStorage.setItem("active_organization_code", "ORG-A");
-  });
+    if (!sessionStorage.getItem("active_organization_id")) {
+      sessionStorage.setItem("active_organization_id", organizationId);
+      sessionStorage.setItem(
+        "active_organization_code",
+        organizationId.toUpperCase(),
+      );
+    }
+  }, activeOrganizationId);
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
+    let responseStatus = 200;
     if (path.endsWith("/auth/me")) {
       body = {
         user: { id: "admin-a", display_name: "管理員", status: "active" },
-        memberships: [
-          {
-            id: "membership-a",
-            organization_id: "org-a",
-            role: "SHELTER_ADMIN",
-            status: "active",
-          },
-        ],
+        memberships,
       };
     } else if (path.endsWith("/auth/active-shelter-context")) {
-      body = { organization_id: "org-a" };
+      if (route.request().method() === "PUT") {
+        const payload = route.request().postDataJSON() as {
+          organization_id?: string;
+        };
+        const requestedOrganizationId = payload.organization_id;
+        const canSwitch =
+          typeof requestedOrganizationId === "string" &&
+          organizations.some((item) => item.id === requestedOrganizationId) &&
+          memberships.some(
+            (membership) =>
+              membership.organization_id === requestedOrganizationId &&
+              membership.status === "active",
+          );
+        if (canSwitch && requestedOrganizationId) {
+          activeOrganizationId = requestedOrganizationId;
+        } else {
+          responseStatus = 403;
+        }
+      }
+      const activeOrganization =
+        organizations.find((item) => item.id === activeOrganizationId) ??
+        organizations[0];
+      body = {
+        organization_id: activeOrganization?.id ?? "org-a",
+        organization_name: activeOrganization?.name ?? "收容所 A",
+      };
     } else if (path === "/v1/organizations") {
-      body = { items: [{ id: "org-a", code: "ORG-A", name: "收容所 A" }] };
+      body = { items: organizations };
     } else if (path.endsWith("/volunteer-applications/status")) {
       body = {
         organization: {
           id: "org-a",
           name: "收容所 A",
           applications_enabled: true,
+          insurance_required: false,
         },
         application: null,
         grant: null,
@@ -137,7 +230,7 @@ export async function mockVolunteerAccessApi(page: Page) {
       body = { requeued_count: 1, conflict_count: 0 };
     }
     await route.fulfill({
-      status: 200,
+      status: responseStatus,
       contentType: "application/json",
       body: JSON.stringify(body),
     });

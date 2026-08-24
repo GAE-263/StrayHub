@@ -9,7 +9,12 @@ export type EffectiveStatus =
   | "withdrawn";
 
 export type VolunteerStatus = {
-  organization: { id: string; name: string; applications_enabled: boolean };
+  organization: {
+    id: string;
+    name: string;
+    applications_enabled: boolean;
+    insurance_required: boolean;
+  };
   application: {
     id: string;
     status: string;

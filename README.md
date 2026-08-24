@@ -44,7 +44,7 @@ uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --p
 npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
 
 # Worker
-uv run python services/worker/worker.py
+uv run python -m services.worker.worker
 ```
 
 - API health check：<http://127.0.0.1:8001/healthz>
@@ -64,6 +64,24 @@ uv run python -m scripts.reset_local --yes
 
 登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8001/v1/*`，再依登入帳號的 Membership 或平台管理員授權設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
 
+## LIFF HTTPS tunnel 與手機驗收
+
+正式 LIFF／手機測試不可使用 `localhost`、fake LIFF ID 或單一 tunnel 同時承載 Web 與 API。完整流程與遮罩後證據格式見 [`specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md`](specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md)。
+
+1. 先在本機啟動 FastAPI `127.0.0.1:8001` 與 Next.js `127.0.0.1:3001`。
+2. 建立兩條獨立的HTTPS tunnel：Web→`3001`、API→`8001`。可使用：
+
+   ```bash
+   cloudflared tunnel --url http://127.0.0.1:3001
+   cloudflared tunnel --url http://127.0.0.1:8001
+   ```
+
+   或在受控環境使用兩個獨立的`ngrok http 3001`／`ngrok http 8001` process。
+
+3. 將API tunnel origin設定為Next.js server runtime的`API_BASE_URL`，將LIFF Console取得的LIFF ID設定為`LIFF_ID`，再重新啟動Next.js；兩者不是`NEXT_PUBLIC_*` client fallback。
+4. 在同一LINE Login channel的LIFF Console設定HTTPS Web tunnel `/volunteer-entry` Endpoint並啟用`openid` scope。Rich Menu則使用`https://liff.line.me/<LIFF_ID>/volunteer-entry?entry=<opaque-reference>`，由`sync_line_rich_menu.py` dry-run驗證。
+5. 使用受控LINE帳號執行controlled evidence中的Case A–D；raw ID token、raw entry reference、LINE user ID、Secret與protected data不得寫入Git、issue、terminal transcript或截圖。
+
 ## 一鍵本機展示
 
 ```bash
@@ -73,6 +91,35 @@ uv run python -m scripts.reset_local --yes
 # 只執行展示前驗證，不啟動長駐服務
 ./scripts/demo.sh check
 ```
+
+### 一鍵 LINE／LIFF 手機 Demo
+
+`scripts/demo-line.sh` 會依序啟動 FastAPI、Next.js、Web tunnel，
+並輸出 LIFF Endpoint 與手機入口。請先在 `.env` 填入真實受控測試值：
+
+```dotenv
+TUNNEL_PROVIDER=cloudflared
+LIFF_ID=<LINE_LOGIN_CHANNEL_LIFF_ID>
+LINE_LOGIN_CHANNEL_ID=<LINE_LOGIN_CHANNEL_ID>
+SHELTER_ENTRY_REFERENCE=<SHELTER_ENTRY_REFERENCE>
+START_WORKER=1
+```
+
+再執行：
+
+```bash
+./scripts/demo-line.sh
+```
+
+腳本預設使用 `cloudflared`；也可設定 `TUNNEL_PROVIDER=ngrok`。腳本只會公開
+Web tunnel；Next.js 的 `/v1` server-side proxy 會使用本機 FastAPI 作為
+`API_BASE_URL`，因此 API 不會直接公開到 Internet。腳本不會替你修改 LINE Developers Console；請將輸出的
+`LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
+按 `Ctrl-C` 會停止本腳本啟動的程序。
+
+目前單一收容所 Demo 會把 `entry` query 放在 `LIFF Endpoint`，手機入口只使用
+`https://liff.line.me/<LIFF_ID>`。不要再把 `/volunteer-entry?entry=...` 加到手機
+入口，否則 LINE 會將它與 Endpoint path 串接成重複路徑。
 
 展示流程會驗證收容所／帳號隔離、動物／QR 選擇、LINE Bot Draft／Report、Timeline 與 AI 服務中斷時人工回報仍可保存。`DEMO_SKIP_DOCKER=1` 可在服務已由其他 Compose project 啟動時略過 `docker compose up`。
 

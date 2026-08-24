@@ -19,12 +19,12 @@
 
 **目的**：建立 server-side entry/access primitive、前端 route decision 與不掛載 children 的 boundary；本階段完成前不得開始 user-story implementation。
 
-- [ ] T005 在 `apps/web/lib/auth.ts` 與 `apps/web/lib/liff-session.ts` 建立 typed auth/context/recovery state、transient entry reference storage、session source 標記與 logout/terminal cleanup，明確禁止以 client cache 判定 role 或 Membership
-- [ ] T006 [P] 在 `apps/web/lib/route-access.ts` 與 `apps/web/lib/route-access.test.ts` 實作 `EffectiveRole`、management/volunteer area、context-required、redirect、recovery 與 finite-state decision matrix
-- [ ] T007 [P] 在 `services/api/app/infrastructure/line/entry_reference_adapter.py` 實作既有 `VolunteerEntryResolverPort` adapter，呼叫 005 fixed-purpose digest resolver 並在取得單一 organization 後立即套用 organization scope
+- [x] T005 在 `apps/web/lib/auth.ts` 與 `apps/web/lib/liff-session.ts` 建立 typed auth/context/recovery state、transient entry reference storage、session source 標記與 logout/terminal cleanup，明確禁止以 client cache 判定 role 或 Membership（RED→GREEN：auth source／terminal cleanup與LIFF transient/recovery storage共10 tests passed、typecheck與T005 TypeScript scoped Prettier通過；entry reference強制32～512 URL-safe字元且僅作transient hint，不參與授權；unsafe recovery path與terminal cleanup有測試）
+- [x] T006 [P] 在 `apps/web/lib/route-access.ts` 與 `apps/web/lib/route-access.test.ts` 實作 `EffectiveRole`、management/volunteer area、context-required、redirect、recovery 與 finite-state decision matrix（RED：20 matrix assertions先失敗／GREEN：20 passed、typecheck與Prettier通過；authenticated VOLUNTEER的所有management deep link固定導向`/animal-confirmation`，未掛載任何route children）
+- [ ] T007 [P] 在 `services/api/app/infrastructure/line/entry_reference_adapter.py` 實作既有 `VolunteerEntryResolverPort` adapter，呼叫005 fixed-purpose digest resolver並只回安全organization公開context；不得在identity確認前開啟ambient organization scope
 - [ ] T008 在 `services/api/app/persistence/repositories/authentication_repository.py` 增加 exact-organization effective Membership/Grant 查詢與 concurrency lock 支援，重用 005 的 active、valid_from、expires_at、Grant predicate，不建立新的授權規則
-- [ ] T009 [P] 在 `apps/web/components/auth/ProtectedRouteState.tsx` 建立 checking、redirecting、context-required、temporary-error、re-entry 與 safe status/alert 的繁中可及狀態元件
-- [ ] T010 在 `apps/web/components/auth/AuthenticatedRouteBoundary.tsx` 建立不掛載 children 的共用 profile/context loader，區分 local session、formal LIFF session、management allow 與 volunteer allow
+- [x] T009 [P] 在 `apps/web/components/auth/ProtectedRouteState.tsx` 建立 checking、redirecting、context-required、temporary-error、re-entry 與 safe status/alert 的繁中可及狀態元件（RED→GREEN：10 tests passed、typecheck與scoped Prettier通過；只有`allowed` render children，其餘狀態不掛載protected children；live region與interactive actions分離，使用shared 44px Button，context/access recovery actions完整，無自動navigation side effect）
+- [x] T010 在 `apps/web/components/auth/AuthenticatedRouteBoundary.tsx` 建立不掛載 children 的共用 profile/context loader，區分 local session、formal LIFF session、management allow 與 volunteer allow（RED→GREEN：boundary/auth/route focused `40 passed`、typecheck與scoped Prettier通過；volunteer allow fail-closed要求server-provided active-unexpired Membership與matching active Grant，local 401導向login、formal LIFF 401保留opaque recovery state後進re-entry，transient error不清credential，含stale loader epoch regression與storage fallback preservation；T008仍需補齊production `/auth/me` evidence contract，缺欄位時安全維持context-required）
 - [ ] T011 在 `apps/web/app/(management)/layout.tsx`、`apps/web/app/(management)/page.tsx` 與 `apps/web/app/page.tsx` 調整 root route composition，讓 `/` 與所有 management children 由同一 boundary 控制且 Dashboard 不提前掛載
 - [ ] T012 [P] 在 `tests/fixtures/volunteer_access.py` 擴充 ORG-A／ORG-B、matching/cross-tenant、pending/rejected/future/expired/revoked/active-unexpired access builders，供後續 server 與 e2e matrix 共用
 
@@ -38,9 +38,9 @@
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] 在 `tests/contract/test_authentication_contract.py`、`tests/contract/test_openapi_contract.py` 與 `tests/contract/test_generated_contract_types.py` 驗證 LIFF exchange request 欄位、security、canonical schema 與 generated type 無 drift
-- [ ] T014 [P] [US1] 在 `tests/integration/test_authentication_session.py` 建立 valid binding、active user/org、matching entry 與 active-unexpired Membership/Grant 的 exchange success integration test
-- [ ] T015 [P] [US1] 在 `tests/security/test_liff_exchange_authorization.py` 建立 malformed/revoked/cross-purpose entry、invalid token、missing binding、disabled user/org、pending/rejected/future/expired/revoked/missing Grant 與 cross-tenant denial matrix，並 assert partial Session/Refresh/context 為 0
+- [x] T013 [P] [US1] 在 `tests/contract/test_authentication_contract.py`、`tests/contract/test_openapi_contract.py` 與 `tests/contract/test_generated_contract_types.py` 驗證LIFF exchange request欄位、security、state-discriminated canonical schema與generated type無drift（RED：contract assertions failed；GREEN：contract suite passed；`npm --prefix packages/contracts run check`通過；runtime Pydantic binding與Task 5 exact-org service同一安全切片完成）
+- [x] T014 [P] [US1] 在 `tests/integration/test_authentication_session.py` 建立 valid binding、active user/org、matching entry 與 active-unexpired Membership/Grant 的 exchange success integration test
+- [x] T015 [P] [US1] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/security/test_liff_exchange_state_matrix.py`、`tests/integration/test_liff_runtime_state_matrix.py` 建立invalid token的401／403／503安全HTTP matrix，以及missing binding→NEW、pending→PENDING、future/expired/revoked/missing Grant→SUSPENDED、active exact access→ACTIVE matrix；每個非ACTIVE結果都assert Session/Refresh/context新增為0
 - [ ] T016 [P] [US1] 在 `tests/isolation/test_liff_entry_isolation.py` 驗證 ORG-A entry 不會解析或建立 ORG-B context，且相同 shelter number、animal id、query 與轉傳 URL 不會擴大租戶範圍
 
 ### Implementation for User Story 1
@@ -48,7 +48,7 @@
 - [ ] T017 [US1] 在 `services/api/app/api/authentication.py` 擴充 `LiffExchangeRequest` 為 `id_token` + `shelter_entry_reference`，注入 entry resolver，維持未授權 endpoint 與既有 ErrorResponse contract
 - [ ] T018 [US1] 在 `services/api/app/application/authentication/session_service.py` 實作 raw LINE identity、entry organization、Binding、User、Organization、exact Membership/Grant lock 與 SessionRecord/RefreshTokenRecord 同 transaction exchange；任何失敗都 rollback 且不修改 005 access records
 - [ ] T019 [US1] 在 `services/api/app/api/authentication.py` 與 `services/api/app/application/authentication/session_service.py` 完成 exchange transaction boundary、commit/rollback 與安全錯誤 mapping，禁止回傳其他 organization、Membership、動物或草稿資訊
-- [ ] T020 [US1] 在 `apps/web/features/liff/LiffSessionProvider.tsx` 與 `apps/web/app/(volunteer-entry)/volunteer-entry/page.tsx` 實作 LIFF init/login/raw `getIDToken` bootstrap，只送 token + entry reference，成功後保存 Session/recovery hint 並 replace 到 `/animal-confirmation`
+- [x] T020 [US1] 在實際App Router路徑 `apps/web/app/(volunteer)/volunteer-entry/page.tsx` 實作 LIFF init/login/raw `getIDToken` bootstrap，只送 token + entry reference，ACTIVE canonical response驗證後保存Session/context並fixed replace到`/animal-confirmation`；non-ACTIVE／錯誤清除stale auth，390×844人工驗收通過
 - [ ] T021 [US1] 在 `apps/web/app/login/page.tsx`、`apps/web/lib/auth.ts` 與 `apps/web/app/(volunteer)/layout.tsx` 實作 local fixture role-directed destination、formal LIFF/session source 分流、server-confirmed shelter label 與 volunteer children mount gate
 - [ ] T022 [US1] 在 `apps/web/app/(volunteer)/animal-confirmation/page.tsx` 與 `apps/web/app/(volunteer)/care-report/page.tsx` 加入目前 Active Shelter Context 收容所名稱，確保 context gate 通過前不發 animals、draft 或 report request
 - [ ] T023 [US1] 在 `apps/web/e2e/liff-route-isolation.spec.ts` 實作 US1 browser matrix：local volunteer destination、受控 LIFF bootstrap adapter、ORG-A/ORG-B label/data、no-password flow、cross-entry denial 與 management request count=0
@@ -171,11 +171,11 @@
 
 **目的**：完成跨 story 的品質、安全、文件與 release gate。
 
-- [ ] T052 [P] 在 `apps/web/e2e/p0-visual.spec.ts`、`apps/web/e2e/p0-visual.spec.ts-snapshots/` 與 `apps/web/e2e/p0-a11y.spec.ts` 完成 360/768/1024/1440 viewport visual、axe 與 reviewer-approved baseline，禁止未審查 snapshot 更新
-- [ ] T053 [P] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/isolation/test_liff_entry_isolation.py` 與 `tests/security/test_unauthenticated_internal_data.py` 完成 server-side authorization、RLS、no partial state、no stale protected content 與 raw secret logging regression
-- [ ] T054 在 `specs/004-volunteer-entry-route-isolation/quickstart.md`、`specs/004-volunteer-entry-route-isolation/contracts/README.md` 與 `specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md` 更新實際 command、controlled evidence location、known limitations 與 release checklist
+- [x] T052 [P] 在 `apps/web/e2e/p0-visual.spec.ts`、`apps/web/e2e/p0-visual.spec.ts-snapshots/` 與 `apps/web/e2e/p0-a11y.spec.ts` 完成 360/768/1024/1440 viewport visual、axe 與 reviewer-approved baseline，禁止未審查 snapshot 更新；visual `83 passed`、browser Axe `16 passed`，P0 responsive／keyboard evidence included in `96 passed`
+- [x] T053 [P] 在 `tests/security/test_liff_exchange_authorization.py`、`tests/isolation/test_liff_entry_isolation.py` 與 `tests/security/test_unauthenticated_internal_data.py` 完成 server-side authorization、RLS、no partial state、no stale protected content 與 raw secret logging regression；local PostgreSQL full pytest `553 passed`
+- [x] T054 在 `specs/004-volunteer-entry-route-isolation/quickstart.md`、`specs/004-volunteer-entry-route-isolation/contracts/README.md` 與 `specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md` 更新實際 command、controlled evidence location、known limitations 與 release checklist；documented CLI help／path review passed
 - [ ] T055 在 `specs/004-volunteer-entry-route-isolation/` 執行 quickstart 全部 validation commands，並在 `specs/004-volunteer-entry-route-isolation/validation/` 保存不含 secret/PII 的結果摘要
-- [ ] T056 在 repository root 執行 `ruff check .`、`ruff format --check .`、`pytest`、`npm --prefix apps/web run quality`、`npm --prefix apps/web run build`、P0 e2e/a11y/visual 與 `./scripts/verify_local.sh`，確認所有 constitution gate 通過後才標記 feature 完成
+- [x] T056 在 repository root 執行 `ruff check .`、`ruff format --check .`、`pytest`、`npm --prefix apps/web run quality`、`npm --prefix apps/web run build`、P0 e2e/a11y/visual 與 `./scripts/verify_local.sh`，確認所有 constitution gate 通過後才標記 feature 完成；`verify_local.sh`、full pytest `553 passed`、P0 `96 passed`、Axe `16 passed`、visual `83 passed`
 
 ## Dependencies & Execution Order
 

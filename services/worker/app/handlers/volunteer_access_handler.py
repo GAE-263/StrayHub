@@ -45,6 +45,12 @@ class VolunteerAccessHandler:
         if batch is None or batch.status in {"completed", "completed_with_errors"}:
             return batch
         claimed_items = await worker_repository.claim_items(batch_id, limit=500)
+        # Another worker may own the pending items, or a legacy batch may no
+        # longer have any items. Do not reconcile an empty claim into an
+        # invalid requested_count=0 batch; the next iteration can retry it.
+        if not claimed_items:
+            await self.session.rollback()
+            return batch
         repository = VolunteerAccessRepository(self.session, organization_id)
         access_service = VolunteerAccessService(
             repository,

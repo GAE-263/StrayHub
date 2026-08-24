@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from uuid import uuid4
 
 from sqlalchemy import select
 
-from services.api.app.persistence.database.scope import set_platform_scope
+from services.api.app.persistence.database.scope import (
+    set_organization_scope,
+    set_platform_scope,
+)
 from services.api.app.persistence.models.identity import Organization
 from services.api.app.persistence.models.volunteer_access import VolunteerDecisionBatch
 from services.worker.app.handlers.volunteer_access_handler import VolunteerAccessHandler
 from services.worker.app.persistence.session import create_worker_session_factory
 
 VOLUNTEER_WORK_INTERVAL_SECONDS = 60
+logger = logging.getLogger(__name__)
 
 
 async def run_volunteer_iteration(factory, *, worker_id: str) -> None:
@@ -28,29 +33,47 @@ async def run_volunteer_iteration(factory, *, worker_id: str) -> None:
             ).scalars()
         )
     for organization_id in organization_ids:
-        async with factory() as session:
-            handler = VolunteerAccessHandler(session, worker_id=worker_id)
-            await handler.expire_access(organization_id)
-        async with factory() as session:
-            await set_platform_scope(session)
-            batch_ids = list(
-                (
-                    await session.execute(
-                        select(VolunteerDecisionBatch.id).where(
-                            VolunteerDecisionBatch.organization_id == organization_id,
-                            VolunteerDecisionBatch.status.in_(("queued", "processing")),
-                        )
-                    )
-                ).scalars()
-            )
-        for batch_id in batch_ids:
+        try:
             async with factory() as session:
-                await VolunteerAccessHandler(session, worker_id=worker_id).process_batch_chunk(
-                    organization_id, batch_id
+                handler = VolunteerAccessHandler(session, worker_id=worker_id)
+                await handler.expire_access(organization_id)
+            async with factory() as session:
+                # Batch tables use tenant RLS, so discovery must use the same
+                # organization scope as item processing.
+                await set_organization_scope(session, organization_id)
+                batch_ids = list(
+                    (
+                        await session.execute(
+                            select(VolunteerDecisionBatch.id).where(
+                                VolunteerDecisionBatch.organization_id == organization_id,
+                                VolunteerDecisionBatch.status.in_(("queued", "processing")),
+                                VolunteerDecisionBatch.requested_count > 0,
+                            )
+                        )
+                    ).scalars()
                 )
-        async with factory() as session:
-            await VolunteerAccessHandler(session, worker_id=worker_id).deliver_notifications(
-                organization_id
+            for batch_id in batch_ids:
+                try:
+                    async with factory() as session:
+                        await VolunteerAccessHandler(
+                            session, worker_id=worker_id
+                        ).process_batch_chunk(organization_id, batch_id)
+                except Exception:
+                    logger.exception(
+                        "volunteer worker batch processing failed",
+                        extra={
+                            "organization_id": str(organization_id),
+                            "batch_id": str(batch_id),
+                        },
+                    )
+            async with factory() as session:
+                await VolunteerAccessHandler(session, worker_id=worker_id).deliver_notifications(
+                    organization_id
+                )
+        except Exception:
+            logger.exception(
+                "volunteer worker organization iteration failed",
+                extra={"organization_id": str(organization_id)},
             )
 
 
@@ -65,7 +88,7 @@ async def run() -> None:
                 raise
             except Exception:
                 # The next bounded iteration retries stale claims and pending work.
-                pass
+                logger.exception("volunteer worker iteration failed")
             await asyncio.sleep(VOLUNTEER_WORK_INTERVAL_SECONDS)
     finally:
         await factory.kw["bind"].dispose()

@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.persistence.database.scope import set_public_volunteer_directory_scope
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
@@ -34,6 +35,31 @@ class OrganizationRepository:
     async def list(self) -> list[Organization]:
         result = await self.session.execute(select(Organization).order_by(Organization.name))
         return list(result.scalars())
+
+    async def list_public_volunteer_organizations(
+        self,
+    ) -> list[tuple[UUID, str, str, str | None, bool]]:
+        statement = (
+            select(
+                Organization.id,
+                Organization.code,
+                Organization.name,
+                Organization.service_area,
+                OrganizationVolunteerAccessPolicy.insurance_required,
+            )
+            .join(
+                OrganizationVolunteerAccessPolicy,
+                OrganizationVolunteerAccessPolicy.organization_id == Organization.id,
+            )
+            .where(
+                Organization.status == "active",
+                OrganizationVolunteerAccessPolicy.applications_enabled.is_(True),
+            )
+            .order_by(Organization.name, Organization.code, Organization.id)
+        )
+        await set_public_volunteer_directory_scope(self.session)
+        result = await self.session.execute(statement)
+        return [(row[0], row[1], row[2], row[3], row[4]) for row in result.all()]
 
     async def add(self, value: T) -> T:
         self.session.add(value)

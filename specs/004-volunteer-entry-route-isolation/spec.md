@@ -22,9 +22,10 @@ StrayHub 的正式志工日常回報主要透過一個平台共用的 LINE Offic
 
 - Q: 平台管理員切換 Active Shelter Context 失敗時，應如何處理仍有效的舊 context？ → A: 保留舊 context 與舊資料，顯示錯誤並允許重試。
 - Q: 是否確認 P0 採用「共用 LINE Official Account／LIFF，加上收容所專屬入口 URL」？ → A: 確認採用共用 LINE／LIFF；正式志工由 LINE 無感驗證，收容所專屬入口建立經後端驗證的 Active Shelter Context。
-- Q: 志工報名、管理員批次核准與預設 7 天限時授權，應納入目前入口隔離規格，還是拆成先完成的獨立 P0 功能？ → A: 拆成獨立且先完成的 P0 規格；本功能只消費已核准且尚未到期的 Membership。
+- Q: 志工報名、管理員批次核准與預設 7 天限時授權，應納入目前入口隔離規格，還是拆成先完成的獨立 P0 功能？ → A: Membership lifecycle拆成獨立且先完成的P0規格；本功能只讀取其Application／Membership／Grant狀態，不在exchange中建立或變更授權。
 - Q: 本入口規格是否允許小幅擴充 LIFF exchange contract，讓前端同時提交收容所 entry reference，由後端驗證限時 Membership 後原子建立 Session 與 Active Shelter Context？ → A: 允許擴充；entry reference 不授權，後端必須原子驗證並建立 Session/context。
 - Q: 正式志工在 LIFF 操作中 Session 失效，但 LINE 身分仍可重新驗證時，系統應如何恢復？ → A: 每次失效事件自動重新執行一次 LIFF exchange；失敗後停止自動重試，顯示重新進入與回到 LINE 操作。
+- Q: LIFF exchange 如何表達尚未報名、審核中與既有權限不可用？ → A: LINE token與entry均驗證成功後，以200回NEW／PENDING／ACTIVE／SUSPENDED；只有ACTIVE建立並回傳internal Session credential。無效token維持401，無效／撤銷／過期entry維持safe 403。
 
 ## 角色與入口邊界
 
@@ -41,7 +42,7 @@ StrayHub 的正式志工日常回報主要透過一個平台共用的 LINE Offic
 
 1. 平台 MUST 共用一個 LINE Official Account、Messaging API channel、Webhook 與 LIFF App；每個收容所提供專屬 LIFF URL／QR Code，不為一般收容所建立獨立 LINE 基礎設施。
 2. 志工報名、管理員批次核准／拒絕、預設 7 天且可調整的授權期限、到期／撤銷與 Audit Log 由獨立且先完成的 P0「志工報名與限時授權」規格負責；本功能不建立、核准、延長或撤銷 Membership。
-3. 正式志工從收容所專屬入口進入後，由擴充後的 LIFF exchange 接收 LINE id token 與收容所 entry reference；後端 MUST 在同一交易中驗證 LINE Binding、Membership 已核准、status 為 active、尚未到期與收容所狀態，成功後才一起建立 Session 與 Active Shelter Context。任一驗證失敗時不得留下部分 Session/context，志工也不輸入 StrayHub 帳號密碼。
+3. 正式志工從收容所專屬入口進入後，由擴充後的 LIFF exchange 接收 LINE id token 與收容所 entry reference；後端 MUST 區分 NEW、PENDING、ACTIVE、SUSPENDED。只有 exact organization 的 Membership 已核准、status 為 active、尚未到期且 Grant／收容所狀態有效時，才在同一交易建立 Session 與 Active Shelter Context；其餘 state 不得留下部分 Session/context，志工也不輸入 StrayHub 帳號密碼。
 4. 收容所專屬入口指定的 organization 只是請求的目標 context，不授予權限；驗證通過後，頁面 MUST 清楚顯示目前協助的收容所，並只載入該 context 今日可回報的狗狗、草稿與回報資料。
 5. 志工在有效 context 下的預設入口為 `/animal-confirmation`，直接選擇今日照顧過的狗狗，不進入管理首頁，也不先執行管理 Dashboard 查詢。LINE Bot 在 context 已由專屬入口或既有對話狀態確認時，也先提供該收容所可回報狗狗的選擇。
 6. 若 context 驗證完成後存在一筆可恢復的 active draft，志工先在志工入口看到恢復選擇；選擇繼續後進入 `/care-report`，選擇稍後處理則留在 `/animal-confirmation`。沒有可恢復草稿時直接使用動物確認流程。
@@ -207,8 +208,8 @@ P1 可在 P0 完成後獨立加入，但不得成為 P0 的必要依賴：
 - **FR-018**：所有一般收容所 MUST 共用同一個 LINE Official Account、Messaging API channel、Webhook 與 LIFF App；每個收容所 MUST 可取得自己的 LIFF URL／QR Code，且 P0 MUST NOT 要求為每個收容所建立獨立 LINE 基礎設施。
 - **FR-019**：`/animal-confirmation` 與 `/care-report` MUST 清楚顯示目前 Active Shelter Context 的收容所名稱；動物、草稿、回報與保存操作 MUST 只使用後端確認的目前 context，切換或重新進入時不得顯示前一個收容所的 stale data。
 - **FR-020**：LINE Bot 在 Active Shelter Context 已由收容所專屬入口或既有對話狀態確認時，MUST 先提供該收容所可回報狗狗的選擇；context 尚未確認時 MUST 先完成收容所驗證，不得以狗狗名稱、收容編號或 client state 推測租戶。
-- **FR-021**：本功能 MUST 只消費獨立 P0「志工報名與限時授權」功能提供的已核准、active 且尚未到期 Membership；MUST NOT 在 LIFF exchange、route boundary 或前端狀態中建立、核准、延長、撤銷或繞過 Membership。
-- **FR-022**：LIFF exchange request MUST 接收 LINE id token 與收容所 entry reference；後端 MUST 由 entry reference 解析候選 organization，並在單一交易中驗證 LINE Binding、使用者狀態、收容所狀態及該 organization 的已核准、active、尚未到期 Membership。只有全部通過時才能建立 Session 與 Active Shelter Context；任一失敗 MUST 回滾且不得建立部分狀態。
+- **FR-021**：本功能 MUST 只讀取獨立 P0「志工報名與限時授權」功能提供的Application／Membership／Grant；MUST NOT 在 LIFF exchange、route boundary 或前端狀態中建立、核准、延長、撤銷或繞過 Membership。只有已核准、active且尚未到期的exact Membership／Grant可進入ACTIVE。
+- **FR-022**：LIFF exchange request MUST 接收 LINE id token 與收容所 entry reference；後端 MUST 由 entry reference 解析候選 organization，並在單一交易中驗證 LINE identity、使用者、收容所及該 organization 的Application／Membership／Grant。有效identity與entry依狀態回NEW／PENDING／ACTIVE／SUSPENDED；只有ACTIVE能建立 Session 與 Active Shelter Context，其他state或任一失敗MUST不得留下部分狀態。
 
 ### Key Entities
 

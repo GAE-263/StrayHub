@@ -335,7 +335,7 @@ failed ──admin retry──> retry_wait
 
 ## User 與 LineUserBinding（既有 entity 使用方式）
 
-- 首次 application 可建立 `User(username=null, password_hash=null, display_name=<LINE 最小可用顯示名>, status=active)`。
+- 首次 application 可建立 `User(username=null, password_hash=null, display_name="LINE 志工", status=active)`；不得把 LINE provider display name 或申請人姓名複製到 plaintext `users.display_name`。正式申請姓名只存在 encrypted application profile。
 - `LineUserBinding.line_user_id` 既有 global unique constraint 保證一個 LINE identity 對應唯一 User。
 - 已有 binding 時必須重用 User；不得因跨 organization 報名建立第二個 User。
 - 未知 LINE identity 的 status lookup 不建立 User、LineUserBinding、SessionRecord、WebhookSession 或 OrganizationMembership；只有 submit 可原子建立／重用 User + Binding + pending Application。
@@ -395,7 +395,8 @@ failed ──admin retry──> retry_wait
 
 ## 保存與個資最小化
 
-- Application/Grant/Batch/Audit 是授權責任歷史，依 CRM 稽核保存政策保留，不因 user revoke 或 notification failure 刪除。
+- [志工申請個人資料政策](pii-policy.md) 是姓名、手機、條件式保險身分資料的蒐集、加密、揭露、稽核、保存、刪除與 KMS rotation 依據。
+- Application/Grant/Batch/Audit 的狀態、internal UUID、policy snapshot 與時間是授權責任歷史；可識別 PII 必須拆到一對一 encrypted application profile，並依 lifecycle deadline 刪除或匿名化。不得用歷史稽核需求推導 PII 無限期保存。
 - Notification payload 只保存收容所顯示名、申請／授權狀態、期限與下一步；不保存動物、草稿、回報內容。
 - LINE provider raw response、id token、channel secret、access token 不進資料庫或 Audit。
-- 管理列表只回傳 display name、申請時間、狀態、期限與審核必要識別；不回傳 LINE user id。
+- 管理列表只回傳 masked display fields、申請時間、狀態、期限與審核必要識別；不回傳 LINE user id、完整手機、身分證字號或任何 ciphertext。完整 PII 只可由同 organization 的用途／角色受控 detail/reveal boundary 取得並寫入 PII access audit。

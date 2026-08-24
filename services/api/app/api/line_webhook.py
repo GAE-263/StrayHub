@@ -547,7 +547,7 @@ def _uuid_value(value: str) -> UUID | None:
         return None
 
 
-@router.post("/webhook")
+@router.post("/webhook", openapi_extra={"security": []})
 async def webhook(request: Request, x_line_signature: str | None = Header(default=None)) -> dict:
     raw_body = await request.body()
     settings = get_settings()

@@ -16,6 +16,7 @@ const policy = {
   organization_id: "org-a",
   applications_enabled: true,
   default_grant_duration_hours: 168,
+  daily_application_limit: 20,
   version: 1,
 };
 

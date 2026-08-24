@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { iconMap, type IconName } from "./icon-map";
 import { Sidebar } from "../ui/sidebar";
+import { canReviewVolunteerApplications } from "../../lib/management-capabilities";
 
 type Item = { href: string; label: string; roles?: string[]; icon?: IconName };
 
@@ -93,7 +94,13 @@ export function NavigationLinks({
         <div className="nav-group" key={group.heading}>
           <span className="nav-heading">{group.heading}</span>
           {group.links
-            .filter((link) => !link.roles || link.roles.includes(role))
+            .filter(
+              (link) =>
+                !link.roles ||
+                (link.href === "/volunteers/applications"
+                  ? canReviewVolunteerApplications(role)
+                  : link.roles.includes(role)),
+            )
             .map((link) => (
               <Link
                 className={
