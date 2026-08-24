@@ -2730,6 +2730,8 @@ export interface components {
             next_cursor: string | null;
             /** @description 此收容所仍有待審核申請的服務日期與筆數，依日期升冪排序 */
             available_service_dates: components["schemas"]["VolunteerServiceDateAvailability"][];
+            /** @description 志工報名審核專用日期總覽；只包含 tenant-scoped 待審核筆數，依日期升冪排序 */
+            review_calendar?: components["schemas"]["VolunteerReviewCalendarDate"][];
         };
         VolunteerApplicationServiceDate: {
             /** Format: date */
@@ -2769,6 +2771,11 @@ export interface components {
             } | null;
         };
         VolunteerServiceDateAvailability: {
+            /** Format: date */
+            service_date: string;
+            pending_count: number;
+        };
+        VolunteerReviewCalendarDate: {
             /** Format: date */
             service_date: string;
             pending_count: number;

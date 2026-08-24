@@ -261,6 +261,13 @@ class VolunteerServiceDateAvailabilityResponse(BaseModel):
     pending_count: int = Field(ge=1)
 
 
+class VolunteerReviewCalendarDate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    service_date: date
+    pending_count: int = Field(ge=1)
+
+
 class VolunteerApplicationServiceDate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -276,6 +283,7 @@ class VolunteerApplicationListResponse(BaseModel):
     matching_count: int = Field(ge=0)
     next_cursor: str | None
     available_service_dates: list[VolunteerServiceDateAvailabilityResponse]
+    review_calendar: list[VolunteerReviewCalendarDate]
 
 
 class VolunteerApplicationDetailResponse(BaseModel):
@@ -1109,7 +1117,7 @@ async def list_volunteer_applications(
             submitted_from=submitted_from,
             submitted_to=submitted_to,
         )
-        available_service_dates = await repository.pending_service_date_counts()
+        review_calendar = await repository.pending_service_date_counts()
     await session.commit()
     has_more = len(items) > limit
     page_items = items[:limit]
@@ -1119,7 +1127,11 @@ async def list_volunteer_applications(
         "next_cursor": _encode_application_cursor(page_items[-1]) if has_more else None,
         "available_service_dates": [
             {"service_date": value, "pending_count": count}
-            for value, count in available_service_dates
+            for value, count in review_calendar
+        ],
+        "review_calendar": [
+            {"service_date": value, "pending_count": count}
+            for value, count in review_calendar
         ],
     }
 

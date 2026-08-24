@@ -467,6 +467,17 @@ def test_runtime_openapi_volunteer_error_and_nullable_response_schemas_match_con
     )
 
 
+def test_review_calendar_overview_is_explicit_and_strict() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    calendar = schemas["VolunteerReviewCalendarDate"]
+    assert calendar["additionalProperties"] is False
+    assert calendar["required"] == ["service_date", "pending_count"]
+    assert schemas["VolunteerApplicationListResponse"]["properties"][
+        "review_calendar"
+    ]["items"]["$ref"].endswith("/VolunteerReviewCalendarDate")
+    assert "review_calendar" in schemas["VolunteerApplicationListResponse"]["required"]
+
+
 def test_runtime_openapi_management_volunteer_routes_declare_canonical_responses() -> None:
     paths = app.openapi()["paths"]
     expected = {

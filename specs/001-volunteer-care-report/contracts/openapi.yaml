@@ -3851,6 +3851,11 @@ components:
           description: 此收容所仍有待審核申請的服務日期與筆數，依日期升冪排序
           items:
             $ref: '#/components/schemas/VolunteerServiceDateAvailability'
+        review_calendar:
+          type: array
+          description: 志工報名審核專用日期總覽；只包含 tenant-scoped 待審核筆數，依日期升冪排序
+          items:
+            $ref: '#/components/schemas/VolunteerReviewCalendarDate'
     VolunteerApplicationServiceDate:
       type: object
       required: [service_date, status, version]
@@ -3923,6 +3928,17 @@ components:
           additionalProperties:
             type: string
     VolunteerServiceDateAvailability:
+      type: object
+      required: [service_date, pending_count]
+      additionalProperties: false
+      properties:
+        service_date:
+          type: string
+          format: date
+        pending_count:
+          type: integer
+          minimum: 1
+    VolunteerReviewCalendarDate:
       type: object
       required: [service_date, pending_count]
       additionalProperties: false
