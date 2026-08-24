@@ -351,6 +351,32 @@ class VolunteerAccessRepository:
             )
         return int((await self.session.execute(statement)).scalar_one())
 
+    async def pending_service_date_counts(self) -> list[tuple[date, int]]:
+        statement = (
+            select(
+                VolunteerApplicationServiceDate.service_date,
+                func.count(VolunteerApplicationServiceDate.application_id),
+            )
+            .join(
+                VolunteerApplication,
+                and_(
+                    VolunteerApplication.id
+                    == VolunteerApplicationServiceDate.application_id,
+                    VolunteerApplication.organization_id
+                    == VolunteerApplicationServiceDate.organization_id,
+                ),
+            )
+            .where(
+                VolunteerApplicationServiceDate.organization_id == self.organization_id,
+                VolunteerApplicationServiceDate.status == "pending",
+                VolunteerApplication.status == "pending",
+            )
+            .group_by(VolunteerApplicationServiceDate.service_date)
+            .order_by(VolunteerApplicationServiceDate.service_date)
+        )
+        result = await self.session.execute(statement)
+        return [(service_date, int(count)) for service_date, count in result.all()]
+
     async def pending_snapshot(
         self,
         *,
@@ -359,6 +385,7 @@ class VolunteerAccessRepository:
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
         service_date: date | None = None,
+        unassigned: bool = False,
     ) -> list[VolunteerApplication]:
         if status != "pending":
             raise DomainError("invalid_batch_filter", "全選快照只接受 pending 狀態", 422)
@@ -380,10 +407,51 @@ class VolunteerAccessRepository:
                     )
                 )
             )
+        elif unassigned:
+            statement = statement.where(
+                ~VolunteerApplication.id.in_(
+                    select(VolunteerApplicationServiceDate.application_id).where(
+                        VolunteerApplicationServiceDate.organization_id == self.organization_id
+                    )
+                )
+            )
         result = await self.session.execute(
             statement.order_by(VolunteerApplication.submitted_at, VolunteerApplication.id)
         )
         return list(result.scalars())
+
+    async def validate_explicit_service_date_targets(
+        self,
+        application_ids: Sequence[UUID],
+        *,
+        service_date: date | None,
+    ) -> None:
+        requested = set(application_ids)
+        application_result = await self.session.execute(
+            select(VolunteerApplication.id).where(
+                VolunteerApplication.organization_id == self.organization_id,
+                VolunteerApplication.id.in_(requested),
+                VolunteerApplication.status == "pending",
+            )
+        )
+        if set(application_result.scalars()) != requested:
+            raise DomainError("invalid_batch_target", "批次包含無效申請", 409)
+
+        date_statement = select(VolunteerApplicationServiceDate.application_id).where(
+            VolunteerApplicationServiceDate.organization_id == self.organization_id,
+            VolunteerApplicationServiceDate.application_id.in_(requested),
+        )
+        if service_date is not None:
+            date_statement = date_statement.where(
+                VolunteerApplicationServiceDate.service_date == service_date,
+                VolunteerApplicationServiceDate.status == "pending",
+            )
+        date_result = await self.session.execute(date_statement)
+        matched = set(date_result.scalars())
+        if (service_date is None and matched) or (
+            service_date is not None and matched != requested
+        ):
+            raise DomainError("invalid_batch_service_date", "批次審核日期與申請不符", 409)
 
     async def applications_by_ids(
         self, application_ids: Sequence[UUID]

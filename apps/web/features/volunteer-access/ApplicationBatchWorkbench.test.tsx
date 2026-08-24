@@ -22,6 +22,7 @@ describe("ApplicationBatchWorkbench", () => {
           version: 1,
         }))}
         matchingCount={1200}
+        filter={{ status: "pending", unassigned: true }}
       />,
     );
     expect(html).toContain("目前篩選結果全部 1,200 筆");
@@ -78,6 +79,7 @@ describe("ApplicationBatchWorkbench", () => {
             },
           ]}
           matchingCount={1}
+          filter={{ status: "pending", unassigned: true }}
           onSubmit={onSubmit}
           onLoadItems={onLoadItems}
         />,
@@ -107,6 +109,26 @@ describe("ApplicationBatchWorkbench", () => {
         ),
       ),
     ).toBe(false);
+
+    await act(async () =>
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("重試失敗"))
+        ?.click(),
+    );
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selection: expect.objectContaining({
+          mode: "explicit_items",
+          service_date: null,
+          items: [
+            {
+              application_id: "app-b",
+              expected_version: 1,
+            },
+          ],
+        }),
+      }),
+    );
     consoleError.mockRestore();
     await act(async () => root.unmount());
   });

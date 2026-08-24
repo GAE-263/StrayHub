@@ -564,6 +564,9 @@ class VolunteerAccessService:
             raise DomainError("application_not_found", "找不到此志工申請", 404)
         if application.status != "pending" or application.version != expected_version:
             raise DomainError("application_version_conflict", "申請狀態已更新", 409)
+        if decision not in {"approve", "reject"}:
+            raise DomainError("invalid_batch_decision", "決策無效", 422)
+        service_date_status = "approved" if decision == "approve" else "rejected"
         service_date_item = None
         if service_date is not None:
             getter = getattr(self.repository, "service_date_for_application", None)
@@ -574,7 +577,7 @@ class VolunteerAccessService:
                 raise DomainError("service_date_version_conflict", "服務日期已更新", 409)
             existing_grant = await self.repository.grant_for_application(application.id)
             if existing_grant is not None:
-                service_date_item.status = decision
+                service_date_item.status = service_date_status
                 service_date_item.decided_at = clock
                 service_date_item.decided_by_user_id = actor_user_id
                 service_date_item.decision_reason = normalize_reason(
@@ -648,13 +651,11 @@ class VolunteerAccessService:
             )
             application.status = "approved"
             application.decision_reason = normalize_reason(reason)
-        else:
-            raise DomainError("invalid_batch_decision", "決策無效", 422)
         application.decided_at = clock
         application.decided_by_user_id = actor_user_id
         application.version += 1
         if service_date_item is not None:
-            service_date_item.status = decision
+            service_date_item.status = service_date_status
             service_date_item.decided_at = clock
             service_date_item.decided_by_user_id = actor_user_id
             service_date_item.decision_reason = normalize_reason(reason)

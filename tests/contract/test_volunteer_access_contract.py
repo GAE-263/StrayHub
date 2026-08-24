@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -9,11 +10,13 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from services.api.app.api.errors import request_validation_error_handler
 from services.api.app.api.volunteer_access import (
+    ExplicitVolunteerDecisionSelection,
     GrantPeriodUpdateRequest,
     GrantRevokeRequest,
-    VolunteerApplicationCreateRequest,
     VolunteerApplicationBatchFilter,
+    VolunteerApplicationCreateRequest,
     VolunteerApplicationWithdrawRequest,
+    VolunteerDecisionItemResponse,
     VolunteerIdentityRequest,
     VolunteerNotificationRetryRequest,
     router,
@@ -38,6 +41,58 @@ def test_application_contract_declares_status_submit_withdraw_and_safe_errors() 
     assert withdraw["security"] == []
     assert {"200", "401", "404", "409", "422", "503"} <= withdraw["responses"].keys()
     assert paths["/v1/public/volunteer-organizations"]["get"]["security"] == []
+
+
+def test_date_scoped_management_contract_requires_explicit_review_date() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    schemas = document["components"]["schemas"]
+
+    assert "available_service_dates" in schemas["VolunteerApplicationListResponse"]["required"]
+    assert "service_date" in schemas["ExplicitVolunteerDecisionSelection"]["required"]
+    assert schemas["VolunteerApplicationBatchFilter"]["properties"]["unassigned"] == {
+        "type": "boolean"
+    }
+    assert len(schemas["VolunteerApplicationBatchFilter"]["oneOf"]) == 2
+    assert len(VolunteerApplicationBatchFilter.model_json_schema()["oneOf"]) == 2
+    assert "expected_version" in schemas["VolunteerDecisionItemResponse"]["required"]
+    response_item = VolunteerDecisionItemResponse.model_validate(
+        {
+            "application_id": "00000000-0000-0000-0000-000000000001",
+            "expected_version": 2,
+            "result": "failed",
+        }
+    )
+    assert response_item.model_dump()["expected_version"] == 2
+    review_filter = VolunteerApplicationBatchFilter(
+        status="pending",
+        service_date=date(2026, 8, 25),
+        submitted_from=datetime(2026, 8, 24, tzinfo=timezone.utc),
+    )
+    repository_filters = review_filter.to_repository_filters()
+    assert repository_filters["service_date"] == date(2026, 8, 25)
+    assert repository_filters["submitted_from"] == datetime(
+        2026, 8, 24, tzinfo=timezone.utc
+    )
+    for invalid_filter in (
+        {"status": "pending"},
+        {"status": "pending", "service_date": "2026-08-25", "unassigned": True},
+    ):
+        with pytest.raises(ValidationError):
+            VolunteerApplicationBatchFilter.model_validate(invalid_filter)
+    with pytest.raises(ValidationError):
+        ExplicitVolunteerDecisionSelection.model_validate(
+            {
+                "mode": "explicit_items",
+                "items": [
+                    {
+                        "application_id": "00000000-0000-0000-0000-000000000001",
+                        "expected_version": 1,
+                    }
+                ],
+            }
+        )
 
 
 def test_app_normalizes_database_failures_to_dependency_unavailable() -> None:

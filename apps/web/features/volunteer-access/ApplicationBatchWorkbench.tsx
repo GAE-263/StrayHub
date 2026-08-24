@@ -45,19 +45,28 @@ function utcValue(localValue: string): string | null {
 export function ApplicationBatchWorkbench({
   applications,
   matchingCount,
-  filter = { status: "pending" },
+  filter,
   onSubmit,
   onLoadItems,
   onLoadBatch,
 }: {
   applications: Application[];
   matchingCount: number;
-  filter?: {
-    status: "pending";
-    service_date?: string;
-    submitted_from?: string;
-    submitted_to?: string;
-  };
+  filter:
+    | {
+        status: "pending";
+        service_date: string;
+        unassigned?: false;
+        submitted_from?: string;
+        submitted_to?: string;
+      }
+    | {
+        status: "pending";
+        service_date?: never;
+        unassigned: true;
+        submitted_from?: string;
+        submitted_to?: string;
+      };
   onSubmit?: (payload: object) => Promise<Batch | void> | Batch | void;
   onLoadItems?: (batchId: string) => Promise<BatchItem[]>;
   onLoadBatch?: (batchId: string) => Promise<Batch>;
@@ -102,6 +111,7 @@ export function ApplicationBatchWorkbench({
         ...defaultPeriod,
         selection: {
           mode: "explicit_items",
+          service_date: filter.service_date ?? null,
           items: retryItems.map((item) => ({
             application_id: item.application_id,
             expected_version: item.expected_version,
@@ -123,7 +133,11 @@ export function ApplicationBatchWorkbench({
               ? { overrides: selectedOverrides }
               : {}),
           }
-        : { mode: "explicit_items", items: selectedOverrides },
+        : {
+            mode: "explicit_items",
+            service_date: filter.service_date ?? null,
+            items: selectedOverrides,
+          },
     };
   }
 

@@ -2682,6 +2682,13 @@ export interface components {
             /** @description 目前 filter 的 tenant-scoped 計數；最後 target 仍以 Batch snapshot 為準 */
             matching_count: number;
             next_cursor: string | null;
+            /** @description 此收容所仍有待審核申請的服務日期與筆數，依日期升冪排序 */
+            available_service_dates: components["schemas"]["VolunteerServiceDateAvailability"][];
+        };
+        VolunteerServiceDateAvailability: {
+            /** Format: date */
+            service_date: string;
+            pending_count: number;
         };
         VolunteerAccessPolicy: {
             /** Format: uuid */
@@ -2724,6 +2731,11 @@ export interface components {
              * @enum {string}
              */
             mode: "explicit_items";
+            /**
+             * Format: date
+             * @description 日期化申請的審核日期；null 僅供未指定日期的既有歷史申請
+             */
+            service_date: string | null;
             items: components["schemas"]["VolunteerDecisionItemRequest"][];
         };
         AllFilteredVolunteerDecisionSelection: {
@@ -2740,11 +2752,21 @@ export interface components {
             status: "pending";
             /** Format: date */
             service_date?: string | null;
+            unassigned?: boolean;
             /** Format: date-time */
             submitted_from?: string | null;
             /** Format: date-time */
             submitted_to?: string | null;
-        };
+        } & ({
+            /** Format: date */
+            service_date: string;
+            /** @constant */
+            unassigned?: false;
+        } | {
+            service_date?: null;
+            /** @constant */
+            unassigned: true;
+        });
         VolunteerDecisionItemRequest: {
             /** Format: uuid */
             application_id: string;
@@ -2789,6 +2811,7 @@ export interface components {
         VolunteerDecisionItemResponse: {
             /** Format: uuid */
             application_id: string;
+            expected_version: number;
             result: components["schemas"]["BatchItemResult"];
             error_code?: string | null;
             resulting_application_version?: number | null;

@@ -252,10 +252,16 @@ class VolunteerApplicationStatusResponse(BaseModel):
     next_actions: list[NextAction]
 
 
+class VolunteerServiceDateAvailabilityResponse(BaseModel):
+    service_date: date
+    pending_count: int = Field(ge=1)
+
+
 class VolunteerApplicationListResponse(BaseModel):
     items: list[VolunteerApplicationResponse]
     matching_count: int = Field(ge=0)
     next_cursor: str | None
+    available_service_dates: list[VolunteerServiceDateAvailabilityResponse]
 
 
 class VolunteerAccessGrant(BaseModel):
@@ -308,6 +314,7 @@ class VolunteerDecisionBatchResponse(BaseModel):
 
 class VolunteerDecisionItemResponse(BaseModel):
     application_id: UUID
+    expected_version: int = Field(ge=1)
     result: BatchItemResult
     error_code: str | None = None
     resulting_application_version: int | None = Field(default=None, ge=1)
@@ -414,6 +421,7 @@ class ExplicitVolunteerDecisionSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["explicit_items"]
+    service_date: date | None
     items: list[VolunteerDecisionItemRequest] = Field(
         min_length=1, max_length=500, json_schema_extra={"uniqueItems": True}
     )
@@ -426,12 +434,42 @@ class ExplicitVolunteerDecisionSelection(BaseModel):
 
 
 class VolunteerApplicationBatchFilter(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "required": ["service_date"],
+                    "properties": {
+                        "service_date": {"type": "string", "format": "date"},
+                        "unassigned": {"const": False},
+                    },
+                },
+                {
+                    "required": ["unassigned"],
+                    "properties": {
+                        "service_date": {"type": "null"},
+                        "unassigned": {"const": True},
+                    },
+                },
+            ]
+        },
+    )
 
     status: Literal["pending"]
     service_date: date | None = None
+    unassigned: bool = False
     submitted_from: datetime | None = None
     submitted_to: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_date_scope(self) -> VolunteerApplicationBatchFilter:
+        if (self.service_date is None) == (not self.unassigned):
+            raise ValueError("exactly one review date scope is required")
+        return self
+
+    def to_repository_filters(self) -> dict:
+        return self.model_dump(exclude_none=True)
 
 
 class AllFilteredVolunteerDecisionSelection(BaseModel):
@@ -1003,6 +1041,7 @@ async def list_volunteer_applications(
             submitted_from=submitted_from,
             submitted_to=submitted_to,
         )
+        available_service_dates = await repository.pending_service_date_counts()
     await session.commit()
     has_more = len(items) > limit
     page_items = items[:limit]
@@ -1010,6 +1049,10 @@ async def list_volunteer_applications(
         "items": [_application_dict(item) for item in page_items],
         "matching_count": matching_count,
         "next_cursor": _encode_application_cursor(page_items[-1]) if has_more else None,
+        "available_service_dates": [
+            {"service_date": value, "pending_count": count}
+            for value, count in available_service_dates
+        ],
     }
 
 
@@ -1262,11 +1305,11 @@ async def create_volunteer_decision_batch(
             explicit_items = [
                 (item.application_id, item.expected_version) for item in payload.selection.items
             ]
-            filters = None
+            filters = {"service_date": payload.selection.service_date}
             overrides = payload.selection.items
         else:
             explicit_items = None
-            filters = payload.selection.filter.model_dump(exclude_none=True)
+            filters = payload.selection.filter.to_repository_filters()
             overrides = payload.selection.overrides
         batch, items = await VolunteerBatchService(repository).create_snapshot(
             actor_user_id=context.user_id,

@@ -3767,7 +3767,7 @@ components:
           minimum: 1
     VolunteerApplicationListResponse:
       type: object
-      required: [items, matching_count, next_cursor]
+      required: [items, matching_count, next_cursor, available_service_dates]
       properties:
         items:
           type: array
@@ -3779,6 +3779,22 @@ components:
           description: 目前 filter 的 tenant-scoped 計數；最後 target 仍以 Batch snapshot 為準
         next_cursor:
           type: [string, 'null']
+        available_service_dates:
+          type: array
+          description: 此收容所仍有待審核申請的服務日期與筆數，依日期升冪排序
+          items:
+            $ref: '#/components/schemas/VolunteerServiceDateAvailability'
+    VolunteerServiceDateAvailability:
+      type: object
+      required: [service_date, pending_count]
+      additionalProperties: false
+      properties:
+        service_date:
+          type: string
+          format: date
+        pending_count:
+          type: integer
+          minimum: 1
     VolunteerAccessPolicy:
       type: object
       required: [organization_id, applications_enabled, default_grant_duration_hours, daily_application_limit, version]
@@ -3851,12 +3867,16 @@ components:
               all_filtered: '#/components/schemas/AllFilteredVolunteerDecisionSelection'
     ExplicitVolunteerDecisionSelection:
       type: object
-      required: [mode, items]
+      required: [mode, service_date, items]
       additionalProperties: false
       properties:
         mode:
           type: string
           const: explicit_items
+        service_date:
+          type: [string, 'null']
+          format: date
+          description: 日期化申請的審核日期；null 僅供未指定日期的既有歷史申請
         items:
           type: array
           minItems: 1
@@ -3884,6 +3904,15 @@ components:
       type: object
       required: [status]
       additionalProperties: false
+      oneOf:
+        - required: [service_date]
+          properties:
+            service_date: { type: string, format: date }
+            unassigned: { const: false }
+        - required: [unassigned]
+          properties:
+            service_date: { type: 'null' }
+            unassigned: { const: true }
       properties:
         status:
           type: string
@@ -3891,6 +3920,8 @@ components:
         service_date:
           type: [string, 'null']
           format: date
+        unassigned:
+          type: boolean
         submitted_from:
           type: [string, 'null']
           format: date-time
@@ -3980,11 +4011,14 @@ components:
           type: [string, 'null']
     VolunteerDecisionItemResponse:
       type: object
-      required: [application_id, result]
+      required: [application_id, expected_version, result]
       properties:
         application_id:
           type: string
           format: uuid
+        expected_version:
+          type: integer
+          minimum: 1
         result:
           $ref: '#/components/schemas/BatchItemResult'
         error_code:
