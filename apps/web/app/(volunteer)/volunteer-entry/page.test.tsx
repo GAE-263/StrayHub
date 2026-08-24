@@ -789,10 +789,19 @@ describe("volunteer entry LIFF bootstrap", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     };
     await act(async () => {
-      setValue(view.querySelector<HTMLInputElement>("#applicant-name")!, "王小明");
-      setValue(view.querySelector<HTMLInputElement>("#phone-number")!, "0912345678");
+      setValue(
+        view.querySelector<HTMLInputElement>("#applicant-name")!,
+        "王小明",
+      );
+      setValue(
+        view.querySelector<HTMLInputElement>("#phone-number")!,
+        "0912345678",
+      );
       view
         .querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      view
+        .querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await act(async () => {

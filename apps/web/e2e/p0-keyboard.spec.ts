@@ -52,7 +52,9 @@ test("志工入口 NEW 狀態可用鍵盤進入報名", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
 
-  const consent = page.getByRole("checkbox");
+  const consent = page.getByRole("checkbox", {
+    name: "我確認送出志工報名，並同意由此收容所審核。",
+  });
   await consent.focus();
   await page.keyboard.press("Space");
   await expect(consent).toBeChecked();

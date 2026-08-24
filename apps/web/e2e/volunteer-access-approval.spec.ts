@@ -229,9 +229,12 @@ test("all-filtered selection preserves the full 1,200 target snapshot", async ({
   await page.getByRole("button", { name: "確認並建立批次" }).click();
   await page.getByRole("button", { name: "送出完整快照" }).click();
   await expect(page.getByText("批次已建立")).toBeVisible();
+  const expectedServiceDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+  }).format(new Date());
   expect(submittedSelection).toEqual({
     mode: "all_filtered",
-    filter: { status: "pending" },
+    filter: { status: "pending", service_date: expectedServiceDate },
   });
 });
 
