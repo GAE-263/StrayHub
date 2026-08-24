@@ -1540,6 +1540,68 @@ paths:
           $ref: '#/components/responses/ManagementDenied'
         '404':
           $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-applications/{applicationId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/ApplicationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    get:
+      tags: [Volunteer Access Management]
+      operationId: getVolunteerApplicationDetail
+      summary: 查詢單筆志工申請的遮罩審核資料
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 不包含申請人個人資料明文或密文
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerApplicationDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+  /v1/organizations/{organizationId}/volunteer-applications/{applicationId}/pii-reveal:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/ApplicationId'
+      - $ref: '#/components/parameters/PlatformSupportReason'
+    post:
+      tags: [Volunteer Access Management]
+      operationId: revealVolunteerApplicationPii
+      summary: 以明確用途揭露志工申請人資料
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolunteerPiiRevealRequest'
+      responses:
+        '200':
+          description: 僅回傳申請審核核准的個人資料欄位
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolunteerPiiRevealResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ManagementDenied'
+        '404':
+          $ref: '#/components/responses/ScopedNotFound'
+        '410':
+          $ref: '#/components/responses/PiiLifecycleExpired'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /v1/organizations/{organizationId}/volunteer-decision-batches:
     parameters:
       - $ref: '#/components/parameters/OrganizationId'
@@ -2280,6 +2342,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     ScopedNotFound:
       description: 在已授權 organization scope 內找不到資源，或不得揭露其存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PiiLifecycleExpired:
+      description: 個人資料已依保存政策刪除或超過保存期限；申請歷史仍保留
       content:
         application/json:
           schema:
@@ -3784,6 +3852,77 @@ components:
           description: 此收容所仍有待審核申請的服務日期與筆數，依日期升冪排序
           items:
             $ref: '#/components/schemas/VolunteerServiceDateAvailability'
+    VolunteerApplicationServiceDate:
+      type: object
+      required: [service_date, status, decided_at, decision_reason, version]
+      additionalProperties: false
+      properties:
+        service_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [pending, approved, rejected, withdrawn]
+        decided_at:
+          type: [string, 'null']
+          format: date-time
+        decision_reason:
+          type: [string, 'null']
+        version:
+          type: integer
+          minimum: 1
+    VolunteerApplicationDetailResponse:
+      type: object
+      required: [id, organization_id, display_name, status, submitted_at, decided_at, decision_reason, version, service_dates]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          description: 遮罩或泛化的審核身份，不是申請人姓名
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        submitted_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: [string, 'null']
+          format: date-time
+        decision_reason:
+          type: [string, 'null']
+        version:
+          type: integer
+          minimum: 1
+        service_dates:
+          type: array
+          items:
+            $ref: '#/components/schemas/VolunteerApplicationServiceDate'
+    VolunteerPiiRevealRequest:
+      type: object
+      required: [purpose_code]
+      additionalProperties: false
+      properties:
+        purpose_code:
+          type: string
+          const: application_review
+    VolunteerPiiRevealResponse:
+      type: object
+      required: [applicant_name, phone_number, basic_profile]
+      additionalProperties: false
+      properties:
+        applicant_name:
+          type: string
+        phone_number:
+          type: string
+        basic_profile:
+          type: [object, 'null']
+          additionalProperties:
+            type: string
     VolunteerServiceDateAvailability:
       type: object
       required: [service_date, pending_count]

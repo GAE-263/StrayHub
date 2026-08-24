@@ -15,10 +15,13 @@ from services.api.app.api.volunteer_access import (
     GrantRevokeRequest,
     VolunteerApplicationBatchFilter,
     VolunteerApplicationCreateRequest,
+    VolunteerApplicationDetailResponse,
     VolunteerApplicationWithdrawRequest,
     VolunteerDecisionItemResponse,
     VolunteerIdentityRequest,
     VolunteerNotificationRetryRequest,
+    VolunteerPiiRevealRequest,
+    VolunteerPiiRevealResponse,
     router,
 )
 from services.api.app.main import app
@@ -41,6 +44,57 @@ def test_application_contract_declares_status_submit_withdraw_and_safe_errors() 
     assert withdraw["security"] == []
     assert {"200", "401", "404", "409", "422", "503"} <= withdraw["responses"].keys()
     assert paths["/v1/public/volunteer-organizations"]["get"]["security"] == []
+
+
+def test_masked_detail_and_explicit_pii_reveal_contracts_are_separate() -> None:
+    document = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    paths = document["paths"]
+    detail_path = "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}"
+    reveal_path = f"{detail_path}/pii-reveal"
+
+    assert paths[detail_path]["get"]["operationId"] == "getVolunteerApplicationDetail"
+    assert paths[reveal_path]["post"]["operationId"] == "revealVolunteerApplicationPii"
+    assert {"401", "403", "404", "503"} <= paths[detail_path]["get"]["responses"].keys()
+    assert {"401", "403", "404", "410", "422", "503"} <= paths[reveal_path]["post"][
+        "responses"
+    ].keys()
+
+    schemas = document["components"]["schemas"]
+    detail = schemas["VolunteerApplicationDetailResponse"]
+    reveal_request = schemas["VolunteerPiiRevealRequest"]
+    reveal_response = schemas["VolunteerPiiRevealResponse"]
+    assert detail["additionalProperties"] is False
+    assert reveal_request["additionalProperties"] is False
+    assert reveal_response["additionalProperties"] is False
+    assert reveal_request["required"] == ["purpose_code"]
+    assert reveal_request["properties"]["purpose_code"]["const"] == "application_review"
+    assert {"applicant_name", "phone_number", "basic_profile"} <= set(
+        reveal_response["properties"]
+    )
+    assert not {"applicant_name", "phone_number", "basic_profile"} & set(detail["properties"])
+
+    assert VolunteerPiiRevealRequest.model_validate(
+        {"purpose_code": "application_review"}
+    ).purpose_code == "application_review"
+    with pytest.raises(ValidationError):
+        VolunteerPiiRevealRequest.model_validate({"purpose_code": "other"})
+    assert set(VolunteerPiiRevealResponse.model_fields) == {
+        "applicant_name",
+        "phone_number",
+        "basic_profile",
+    }
+    assert VolunteerApplicationDetailResponse.model_config["extra"] == "forbid"
+
+    routes = {
+        (route.path, method)
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods or set()
+    }
+    assert (detail_path, "GET") in routes
+    assert (reveal_path, "POST") in routes
 
 
 def test_date_scoped_management_contract_requires_explicit_review_date() -> None:

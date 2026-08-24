@@ -14,6 +14,7 @@ from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
+from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import (
     normalize_reason,
     snapshot_policy,
@@ -30,6 +31,7 @@ from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
     VolunteerAccessGrant,
     VolunteerApplication,
+    VolunteerApplicationServiceDate,
 )
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -60,6 +62,12 @@ class VolunteerStatusResult:
 class VolunteerSubmitResult:
     status: VolunteerStatusResult
     created: bool
+
+
+@dataclass(frozen=True)
+class VolunteerApplicationDetailResult:
+    application: VolunteerApplication
+    service_dates: list[VolunteerApplicationServiceDate]
 
 
 def effective_application_status(
@@ -114,6 +122,24 @@ class VolunteerAccessService:
         self.audit = audit
         self.notifications = notifications
         self.pii_service = pii_service
+
+    async def application_detail(
+        self,
+        application_id: UUID,
+        *,
+        tenant_context: TenantContext,
+    ) -> VolunteerApplicationDetailResult:
+        organization_id = self.repository.organization_id
+        if tenant_context.platform_scope or tenant_context.organization_id != organization_id:
+            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        membership = await self.repository.active_membership(tenant_context.user_id)
+        if membership is None:
+            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        detail = await self.repository.application_detail(application_id)
+        if detail is None:
+            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        application, service_dates = detail
+        return VolunteerApplicationDetailResult(application, service_dates)
 
     @classmethod
     async def for_organization(

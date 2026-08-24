@@ -1171,6 +1171,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        /** 查詢單筆志工申請的遮罩審核資料 */
+        get: operations["getVolunteerApplicationDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}/pii-reveal": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 以明確用途揭露志工申請人資料 */
+        post: operations["revealVolunteerApplicationPii"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/{organizationId}/volunteer-decision-batches": {
         parameters: {
             query?: never;
@@ -2685,6 +2731,43 @@ export interface components {
             /** @description 此收容所仍有待審核申請的服務日期與筆數，依日期升冪排序 */
             available_service_dates: components["schemas"]["VolunteerServiceDateAvailability"][];
         };
+        VolunteerApplicationServiceDate: {
+            /** Format: date */
+            service_date: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "withdrawn";
+            /** Format: date-time */
+            decided_at: string | null;
+            decision_reason: string | null;
+            version: number;
+        };
+        VolunteerApplicationDetailResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** @description 遮罩或泛化的審核身份，不是申請人姓名 */
+            display_name: string;
+            status: components["schemas"]["ApplicationStatus"];
+            /** Format: date-time */
+            submitted_at: string;
+            /** Format: date-time */
+            decided_at: string | null;
+            decision_reason: string | null;
+            version: number;
+            service_dates: components["schemas"]["VolunteerApplicationServiceDate"][];
+        };
+        VolunteerPiiRevealRequest: {
+            /** @constant */
+            purpose_code: "application_review";
+        };
+        VolunteerPiiRevealResponse: {
+            applicant_name: string;
+            phone_number: string;
+            basic_profile: {
+                [key: string]: string;
+            } | null;
+        };
         VolunteerServiceDateAvailability: {
             /** Format: date */
             service_date: string;
@@ -3290,6 +3373,15 @@ export interface components {
         };
         /** @description 在已授權 organization scope 內找不到資源，或不得揭露其存在 */
         ScopedNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description 個人資料已依保存政策刪除或超過保存期限；申請歷史仍保留 */
+        PiiLifecycleExpired: {
             headers: {
                 [name: string]: unknown;
             };
@@ -5512,6 +5604,72 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["ManagementDenied"];
             404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getVolunteerApplicationDetail: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 不包含申請人個人資料明文或密文 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerApplicationDetailResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    revealVolunteerApplicationPii: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
+                "X-Platform-Support-Reason"?: components["parameters"]["PlatformSupportReason"];
+            };
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerPiiRevealRequest"];
+            };
+        };
+        responses: {
+            /** @description 僅回傳申請審核核准的個人資料欄位 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerPiiRevealResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            410: components["responses"]["PiiLifecycleExpired"];
+            422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

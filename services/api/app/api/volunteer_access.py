@@ -4,9 +4,9 @@ import base64
 import binascii
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated, Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,6 +23,7 @@ from services.api.app.application.audit_service import AuditService
 from services.api.app.application.ports.authentication import LineIdentityVerifierPort
 from services.api.app.application.volunteer_access_service import (
     VolunteerAccessService,
+    VolunteerApplicationDetailResult,
     VolunteerStatusResult,
 )
 from services.api.app.application.volunteer_batch_service import VolunteerBatchService
@@ -31,6 +32,7 @@ from services.api.app.application.volunteer_notification_service import (
 )
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
 from services.api.app.config.settings import get_settings
+from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import validate_service_date_selection
 from services.api.app.domain.volunteer_target import (
     EntryTarget,
@@ -45,8 +47,10 @@ from services.api.app.infrastructure.security.pii_cipher import (
     configured_pii_cipher_from_settings,
 )
 from services.api.app.infrastructure.security.pii_reveal_audit import (
+    CommittedPiiRevealAuditor,
     TransactionalPiiCollectionAuditor,
 )
+from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import (
     set_organization_scope,
     set_platform_support_scope,
@@ -257,11 +261,49 @@ class VolunteerServiceDateAvailabilityResponse(BaseModel):
     pending_count: int = Field(ge=1)
 
 
+class VolunteerApplicationServiceDateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    service_date: date
+    status: Literal["pending", "approved", "rejected", "withdrawn"]
+    decided_at: datetime | None = None
+    decision_reason: str | None = None
+    version: int = Field(ge=1)
+
+
 class VolunteerApplicationListResponse(BaseModel):
     items: list[VolunteerApplicationResponse]
     matching_count: int = Field(ge=0)
     next_cursor: str | None
     available_service_dates: list[VolunteerServiceDateAvailabilityResponse]
+
+
+class VolunteerApplicationDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    organization_id: UUID
+    display_name: str
+    status: ApplicationStatus
+    submitted_at: datetime
+    decided_at: datetime | None = None
+    decision_reason: str | None = None
+    version: int = Field(ge=1)
+    service_dates: list[VolunteerApplicationServiceDateResponse]
+
+
+class VolunteerPiiRevealRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    purpose_code: Literal["application_review"]
+
+
+class VolunteerPiiRevealResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    applicant_name: str
+    phone_number: str
+    basic_profile: dict[str, str] | None = None
 
 
 class VolunteerAccessGrant(BaseModel):
@@ -860,6 +902,32 @@ def _application_dict(application) -> dict:
     }
 
 
+def _application_detail_dict(detail: VolunteerApplicationDetailResult) -> dict:
+    application = detail.application
+    return {
+        **_application_dict(application),
+        "service_dates": [
+            {
+                "service_date": item.service_date,
+                "status": item.status,
+                "decided_at": item.decided_at,
+                "decision_reason": item.decision_reason,
+                "version": item.version,
+            }
+            for item in detail.service_dates
+        ],
+    }
+
+
+def _tenant_context(context: RequestContext) -> TenantContext:
+    return TenantContext(
+        user_id=context.user_id,
+        organization_id=context.organization_id,
+        role=context.role,
+        platform_scope=context.platform_scope,
+    )
+
+
 def _encode_application_cursor(application) -> str:
     raw = f"{application.submitted_at.isoformat()}|{application.id}".encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -1054,6 +1122,83 @@ async def list_volunteer_applications(
             for value, count in available_service_dates
         ],
     }
+
+
+@router.get(
+    "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}",
+    response_model=VolunteerApplicationDetailResponse,
+    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
+async def get_volunteer_application_detail(
+    organizationId: UUID,  # noqa: N803
+    applicationId: UUID,  # noqa: N803
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+    support_reason: str | None = Header(default=None, alias="X-Platform-Support-Reason"),
+) -> VolunteerApplicationDetailResponse:
+    async with volunteer_management_scope(
+        session=session,
+        context=context,
+        organization_id=organizationId,
+        support_reason=support_reason,
+        resource_type="volunteer_application_detail",
+    ):
+        repository = VolunteerAccessRepository(session, organizationId)
+        detail = await _management_service(session, repository).application_detail(
+            applicationId,
+            tenant_context=_tenant_context(context),
+        )
+    await session.commit()
+    return VolunteerApplicationDetailResponse.model_validate(_application_detail_dict(detail))
+
+
+@router.post(
+    "/v1/organizations/{organizationId}/volunteer-applications/{applicationId}/pii-reveal",
+    response_model=VolunteerPiiRevealResponse,
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        410: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": [{"bearerAuth": []}]},
+)
+async def reveal_volunteer_application_pii(
+    organizationId: UUID,  # noqa: N803
+    applicationId: UUID,  # noqa: N803
+    payload: VolunteerPiiRevealRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+    pii_service: VolunteerPiiService = Depends(get_volunteer_pii_service),  # noqa: B008
+    support_reason: str | None = Header(default=None, alias="X-Platform-Support-Reason"),
+) -> VolunteerPiiRevealResponse:
+    async with volunteer_management_scope(
+        session=session,
+        context=context,
+        organization_id=organizationId,
+        support_reason=support_reason,
+        resource_type="volunteer_application_pii_reveal",
+    ):
+        repository = VolunteerAccessRepository(session, organizationId)
+        policy = await repository.policy()
+        revealed = await pii_service.reveal_profile(
+            repository=repository,
+            application_id=applicationId,
+            tenant_context=_tenant_context(context),
+            purpose_code=payload.purpose_code,
+            request_id=uuid4(),
+            policy_version=f"organization-policy-v{policy.version}",
+            now=datetime.now(timezone.utc),
+            audit=CommittedPiiRevealAuditor(session_factory),
+        )
+    await session.commit()
+    return VolunteerPiiRevealResponse(
+        applicant_name=revealed.applicant_name,
+        phone_number=revealed.phone_number,
+        basic_profile=revealed.basic_profile,
+    )
 
 
 @router.get(

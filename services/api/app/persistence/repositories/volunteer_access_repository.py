@@ -116,6 +116,23 @@ class VolunteerAccessRepository:
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def application_detail(
+        self, application_id: UUID, *, for_update: bool = False
+    ) -> tuple[VolunteerApplication, list[VolunteerApplicationServiceDate]] | None:
+        application = await self.application(application_id, for_update=for_update)
+        if application is None:
+            return None
+        date_statement = select(VolunteerApplicationServiceDate).where(
+            VolunteerApplicationServiceDate.organization_id == self.organization_id,
+            VolunteerApplicationServiceDate.application_id == application_id,
+        )
+        if for_update:
+            date_statement = date_statement.with_for_update()
+        date_result = await self.session.execute(
+            date_statement.order_by(VolunteerApplicationServiceDate.service_date)
+        )
+        return application, list(date_result.scalars())
+
     async def application_profile(
         self, application_id: UUID, *, for_update: bool = False
     ) -> VolunteerApplicationProfile | None:
