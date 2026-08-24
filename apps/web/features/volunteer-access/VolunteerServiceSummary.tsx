@@ -43,6 +43,11 @@ export function VolunteerServiceSummary({
         </Button>
       ) : null}
       {error ? <Alert role="alert">{error}</Alert> : null}
+      {loaded && error ? (
+        <Button type="button" onClick={onLoad} disabled={loading}>
+          重試服務紀錄
+        </Button>
+      ) : null}
       {loaded && !loading && !error && items.length === 0 ? (
         <p role="status">目前沒有可顯示的服務紀錄。</p>
       ) : null}
@@ -59,6 +64,7 @@ export function VolunteerServiceSummary({
                 {item.service_status === "archived" ? "已封存" : "已記錄"}
               </span>
               <span className="ml-2">{item.record_count} 筆紀錄</span>
+              <span className="ml-2">來源：照護回報</span>
             </li>
           ))}
         </ul>

@@ -71,6 +71,7 @@ describe("VolunteerServiceSummary", () => {
     expect(container?.textContent).toContain("收容所 B");
     expect(container?.textContent).toContain("2026-05-20");
     expect(container?.textContent).toContain("2 筆紀錄");
+    expect(container?.textContent).toContain("來源：照護回報");
     expect(container?.textContent).not.toContain("姓名");
     expect(container?.textContent).not.toContain("電話");
   });
@@ -102,5 +103,6 @@ describe("VolunteerServiceSummary", () => {
     });
     expect(container?.textContent).toContain("服務紀錄失敗");
     expect(container?.textContent).not.toContain("目前沒有可顯示");
+    expect(container?.textContent).toContain("重試服務紀錄");
   });
 });
