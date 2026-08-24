@@ -36,7 +36,7 @@ load_dotenv_value() {
   fi
 }
 
-for dotenv_name in TUNNEL_PROVIDER API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE; do
+for dotenv_name in TUNNEL_PROVIDER API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE PII_LOCAL_KEY_BASE64; do
   load_dotenv_value "$dotenv_name"
 done
 
@@ -172,6 +172,12 @@ if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:
   export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(<"$key_dir/private.pem")"
   export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(<"$key_dir/public.pem")"
   rm -rf "$key_dir"
+fi
+
+export PII_ALLOW_LOCAL_PROVIDER=true
+if [[ -z "${PII_LOCAL_KEY_BASE64:-}" ]]; then
+  require_command openssl
+  export PII_LOCAL_KEY_BASE64="$(openssl rand -base64 32)"
 fi
 
 pids=()

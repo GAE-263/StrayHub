@@ -54,6 +54,12 @@ if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:
   rm -rf "$key_dir"
 fi
 
+export PII_ALLOW_LOCAL_PROVIDER=true
+if [[ -z "${PII_LOCAL_KEY_BASE64:-}" ]]; then
+  require_command openssl
+  export PII_LOCAL_KEY_BASE64="$(openssl rand -base64 32)"
+fi
+
 if [[ "${DEMO_SKIP_DOCKER:-0}" != "1" ]]; then
   require_command docker
   docker compose -f infra/local/docker-compose.yml up -d postgres minio

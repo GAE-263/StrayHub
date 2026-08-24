@@ -91,6 +91,18 @@ def test_line_demo_provides_session_keys_before_starting_api() -> None:
     assert script.index("openssl genpkey") < script.index("uv run python -m uvicorn")
 
 
+def test_local_demo_scripts_provide_ephemeral_pii_key_before_starting_api() -> None:
+    for relative_path in ("scripts/demo.sh", "scripts/demo-line.sh"):
+        script = (ROOT / relative_path).read_text(encoding="utf-8")
+
+        assert "PII_ALLOW_LOCAL_PROVIDER" in script
+        assert "PII_LOCAL_KEY_BASE64" in script
+        assert "openssl rand -base64 32" in script
+        assert script.index("openssl rand -base64 32") < script.index(
+            "uv run python -m uvicorn"
+        )
+
+
 def test_line_demo_requires_login_channel_for_real_liff() -> None:
     script = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
 
