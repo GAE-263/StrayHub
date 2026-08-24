@@ -48,6 +48,27 @@ test("review page opens the nearest pending service date and preserves it in exp
         phone_number: "0900000000",
         basic_profile: { experience: "synthetic" },
       };
+    } else if (
+      url.pathname.endsWith(
+        "/volunteer-applications/application-a/service-summary",
+      )
+    ) {
+      expect(url.searchParams.get("purpose_code")).toBe(
+        "volunteer_service_history_review",
+      );
+      body = {
+        items: [
+          {
+            organization_id: "org-b",
+            organization_name: "收容所 B",
+            service_date: "2026-05-20",
+            service_status: "recorded",
+            record_count: 2,
+            source: "care_report",
+          },
+        ],
+        next_cursor: null,
+      };
     } else if (url.pathname.endsWith("/volunteer-applications/application-a")) {
       body = {
         id: "application-a",
@@ -122,12 +143,15 @@ test("review page opens the nearest pending service date and preserves it in exp
   await page.getByRole("button", { name: "查看申請人" }).click();
   await expect(page.getByRole("dialog")).toContainText("LINE 志工");
   await expect(page.getByRole("dialog")).not.toContainText("核准顯示名");
+  await page.getByRole("button", { name: "載入服務紀錄" }).click();
+  await expect(page.getByRole("dialog")).toContainText("收容所 B");
   await page.getByRole("button", { name: "申請審核用途揭露" }).click();
   await expect(page.getByRole("dialog")).toContainText("核准顯示名");
   await expect(page.getByRole("dialog")).toContainText("0900000000");
   await page.getByRole("button", { name: "關閉申請人資料" }).click();
   await expect(page.getByText("核准顯示名", { exact: true })).toHaveCount(0);
   await expect(page.getByText("0900000000", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("收容所 B", { exact: true })).toHaveCount(0);
 
   await page.getByRole("checkbox", { name: "選取 LINE 志工" }).check();
   await page.getByRole("button", { name: "確認並建立批次" }).click();
