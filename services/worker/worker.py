@@ -46,9 +46,7 @@ async def run_volunteer_iteration(factory, *, worker_id: str) -> None:
                         await session.execute(
                             select(VolunteerDecisionBatch.id).where(
                                 VolunteerDecisionBatch.organization_id == organization_id,
-                                VolunteerDecisionBatch.status.in_(
-                                    ("queued", "processing")
-                                ),
+                                VolunteerDecisionBatch.status.in_(("queued", "processing")),
                                 VolunteerDecisionBatch.requested_count > 0,
                             )
                         )
@@ -69,9 +67,9 @@ async def run_volunteer_iteration(factory, *, worker_id: str) -> None:
                         },
                     )
             async with factory() as session:
-                await VolunteerAccessHandler(
-                    session, worker_id=worker_id
-                ).deliver_notifications(organization_id)
+                await VolunteerAccessHandler(session, worker_id=worker_id).deliver_notifications(
+                    organization_id
+                )
         except Exception:
             logger.exception(
                 "volunteer worker organization iteration failed",
