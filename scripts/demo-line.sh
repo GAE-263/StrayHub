@@ -181,10 +181,16 @@ curl --max-time 5 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null || {
   exit 1
 }
 
+echo "[Line Demo] Starting Web tunnel (${TUNNEL_PROVIDER})"
+start_tunnel "Web" "$WEB_PORT" "$log_dir/web.log"
+WEB_TUNNEL_URL="$TUNNEL_URL"
+WEB_TUNNEL_HOST="${WEB_TUNNEL_URL#https://}"
+
 # Next.js proxies /v1 server-side, so FastAPI stays private on the same host.
 API_BASE_URL="http://${API_HOST}:${API_PORT}"
 echo "[Line Demo] Starting Next.js with local API proxy"
 API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
+  LINE_DEMO_WEB_ORIGIN_HOST="$WEB_TUNNEL_HOST" \
   npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
 pids+=("$!")
 
@@ -199,9 +205,6 @@ curl --max-time 5 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/nu
   exit 1
 }
 
-echo "[Line Demo] Starting Web tunnel (${TUNNEL_PROVIDER})"
-start_tunnel "Web" "$WEB_PORT" "$log_dir/web.log"
-WEB_TUNNEL_URL="$TUNNEL_URL"
 echo "[Line Demo] Web tunnel health check"
 wait_for_tunnel_http "Web" "$WEB_TUNNEL_URL" "/volunteer-entry"
 
@@ -211,17 +214,18 @@ if [[ "$START_WORKER" == "1" ]]; then
   pids+=("$!")
 fi
 
-LIFF_URL="https://liff.line.me/${LIFF_ID}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}"
+LIFF_ENDPOINT_URL="${WEB_TUNNEL_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}"
+LIFF_URL="https://liff.line.me/${LIFF_ID}"
 
 echo
 echo "[Line Demo] PASS"
 echo "Local API:        ${API_BASE_URL}"
 echo "Web tunnel:       ${WEB_TUNNEL_URL}"
-echo "LIFF Endpoint:    ${WEB_TUNNEL_URL}/volunteer-entry"
+echo "LIFF Endpoint:    ${LIFF_ENDPOINT_URL}"
 echo "手機 LINE 入口:   ${LIFF_URL}"
 echo
 echo "請在 LINE Developers Console 設定 LIFF Endpoint URL："
-echo "  ${WEB_TUNNEL_URL}/volunteer-entry"
+echo "  ${LIFF_ENDPOINT_URL}"
 echo "按 Ctrl-C 會停止本腳本啟動的 API、Web、tunnel 與 worker。"
 
 wait "${pids[0]}"

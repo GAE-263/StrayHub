@@ -116,6 +116,10 @@ Web tunnel；Next.js 的 `/v1` server-side proxy 會使用本機 FastAPI 作為
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 
+目前單一收容所 Demo 會把 `entry` query 放在 `LIFF Endpoint`，手機入口只使用
+`https://liff.line.me/<LIFF_ID>`。不要再把 `/volunteer-entry?entry=...` 加到手機
+入口，否則 LINE 會將它與 Endpoint path 串接成重複路徑。
+
 展示流程會驗證收容所／帳號隔離、動物／QR 選擇、LINE Bot Draft／Report、Timeline 與 AI 服務中斷時人工回報仍可保存。`DEMO_SKIP_DOCKER=1` 可在服務已由其他 Compose project 啟動時略過 `docker compose up`。
 
 ## 品質命令

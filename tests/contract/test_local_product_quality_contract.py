@@ -65,3 +65,18 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
             assert required in text
     assert 'start_tunnel "API"' not in text
     assert "API tunnel:" not in text
+    assert 'LIFF_URL="https://liff.line.me/${LIFF_ID}"' in text
+    assert (
+        'LIFF_ENDPOINT_URL="${WEB_TUNNEL_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}"'
+        in text
+    )
+    assert '/${LIFF_ID}/volunteer-entry?entry=' not in text
+
+
+def test_line_demo_allows_the_generated_web_tunnel_dev_origin() -> None:
+    script = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+    next_config = (ROOT / "apps/web/next.config.ts").read_text(encoding="utf-8")
+
+    assert "LINE_DEMO_WEB_ORIGIN_HOST" in script
+    assert "LINE_DEMO_WEB_ORIGIN_HOST" in next_config
+    assert script.index('start_tunnel "Web"') < script.index("npm --prefix apps/web run dev")
