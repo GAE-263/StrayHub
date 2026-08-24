@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -15,6 +16,7 @@ from services.api.app.application.volunteer_access_service import (
     VolunteerStatusResult,
     VolunteerSubmitResult,
 )
+from services.api.app.api.dependencies import RequestContext
 from services.api.app.domain.volunteer_target import EntryTarget, OrganizationTarget
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -558,3 +560,65 @@ async def test_public_directory_maps_repository_sqlalchemy_error_to_stable_503(
 
     assert error.value.code == "dependency_unavailable"
     assert error.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_pii_reveal_api_requires_explicit_purpose_and_returns_allowlisted_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = uuid4()
+    captured: dict = {}
+
+    class _Session:
+        async def commit(self) -> None:
+            return None
+
+    class _Repository:
+        def __init__(self, _session, scoped_organization_id: UUID) -> None:
+            assert scoped_organization_id == organization_id
+            self.organization_id = scoped_organization_id
+
+        async def policy(self):
+            return SimpleNamespace(version=7)
+
+    class _Pii:
+        async def reveal_profile(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                applicant_name="核准顯示名",
+                phone_number="0900000000",
+                basic_profile={"experience": "safe"},
+                insurance_identity="must-not-return",
+            )
+
+    class _Audit:
+        def __init__(self, factory) -> None:
+            captured["audit_factory"] = factory
+
+    @asynccontextmanager
+    async def _scope(**_kwargs):
+        yield None
+
+    monkeypatch.setattr(api, "VolunteerAccessRepository", _Repository)
+    monkeypatch.setattr(api, "CommittedPiiRevealAuditor", _Audit)
+    monkeypatch.setattr(api, "volunteer_management_scope", _scope)
+
+    response = await api.reveal_volunteer_application_pii(
+        organization_id,
+        uuid4(),
+        api.VolunteerPiiRevealRequest(purpose_code="application_review"),
+        RequestContext(uuid4(), organization_id, uuid4(), "SHELTER_ADMIN"),
+        _Session(),
+        _Pii(),
+    )
+
+    assert response.model_dump() == {
+        "applicant_name": "核准顯示名",
+        "phone_number": "0900000000",
+        "basic_profile": {"experience": "safe"},
+    }
+    assert captured["purpose_code"] == "application_review"
+    assert captured["policy_version"] == "organization-policy-v7"
+    assert isinstance(captured["request_id"], UUID)
+    assert captured["tenant_context"].organization_id == organization_id
+    assert captured["tenant_context"].platform_scope is False
