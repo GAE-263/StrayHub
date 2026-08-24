@@ -6,6 +6,10 @@ import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Dialog } from "../../components/ui/dialog";
 import { authFetch } from "../../lib/auth";
+import {
+  VolunteerServiceSummary,
+  type ServiceSummaryItem,
+} from "./VolunteerServiceSummary";
 
 type ServiceDate = {
   service_date: string;
@@ -50,6 +54,11 @@ export function VolunteerApplicantDetail({
   const [revealing, setRevealing] = useState(false);
   const [error, setError] = useState("");
   const [revealError, setRevealError] = useState("");
+  const [summaryLoaded, setSummaryLoaded] = useState(false);
+  const [summaryItems, setSummaryItems] = useState<ServiceSummaryItem[]>([]);
+  const [summaryCursor, setSummaryCursor] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
   const requestGeneration = useRef(0);
 
   useEffect(() => {
@@ -59,6 +68,11 @@ export function VolunteerApplicantDetail({
     setRevealed(null);
     setError("");
     setRevealError("");
+    setSummaryLoaded(false);
+    setSummaryItems([]);
+    setSummaryCursor(null);
+    setSummaryError("");
+    setSummaryLoading(false);
     setLoading(true);
     void (async () => {
       try {
@@ -84,6 +98,11 @@ export function VolunteerApplicantDetail({
     setRevealed(null);
     setError("");
     setRevealError("");
+    setSummaryLoaded(false);
+    setSummaryItems([]);
+    setSummaryCursor(null);
+    setSummaryError("");
+    setSummaryLoading(false);
     setLoading(false);
     setRevealing(false);
     onClose();
@@ -111,6 +130,44 @@ export function VolunteerApplicantDetail({
       );
     } finally {
       setRevealing(false);
+    }
+  }
+
+  async function loadSummary(cursor: string | null = null) {
+    if (!applicationId || !organizationId) return;
+    const generation = requestGeneration.current;
+    setSummaryLoaded(true);
+    setSummaryError("");
+    setSummaryLoading(true);
+    try {
+      const query = new URLSearchParams({
+        purpose_code: "volunteer_service_history_review",
+        limit: "50",
+      });
+      if (cursor) query.set("cursor", cursor);
+      const response = await authFetch(
+        `/v1/organizations/${organizationId}/volunteer-applications/${applicationId}/service-summary?${query.toString()}`,
+      );
+      if (!response.ok) throw new Error("目前無法載入跨收容所服務紀錄");
+      const value = (await response.json()) as {
+        items: ServiceSummaryItem[];
+        next_cursor: string | null;
+      };
+      if (generation !== requestGeneration.current) return;
+      setSummaryItems((current) =>
+        cursor ? [...current, ...value.items] : value.items,
+      );
+      setSummaryCursor(value.next_cursor);
+    } catch (summaryFailure) {
+      if (generation === requestGeneration.current) {
+        setSummaryError(
+          summaryFailure instanceof Error
+            ? summaryFailure.message
+            : "服務紀錄載入失敗",
+        );
+      }
+    } finally {
+      if (generation === requestGeneration.current) setSummaryLoading(false);
     }
   }
 
@@ -164,6 +221,15 @@ export function VolunteerApplicantDetail({
               ) : null}
             </div>
           ) : null}
+          <VolunteerServiceSummary
+            loaded={summaryLoaded}
+            items={summaryItems}
+            nextCursor={summaryCursor}
+            loading={summaryLoading}
+            error={summaryError}
+            onLoad={() => void loadSummary()}
+            onLoadMore={() => void loadSummary(summaryCursor)}
+          />
         </div>
       ) : null}
     </Dialog>

@@ -160,4 +160,134 @@ describe("VolunteerApplicantDetail", () => {
     expect(container?.textContent).not.toContain("核准顯示名");
     expect(container?.textContent).not.toContain("0900000000");
   });
+
+  it("loads summary separately from PII reveal and clears it on close", async () => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    const onClose = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("service-summary")) {
+        expect(url).toContain("purpose_code=volunteer_service_history_review");
+        return response({
+          items: [
+            {
+              organization_id: "org-b",
+              organization_name: "收容所 B",
+              service_date: "2026-05-20",
+              service_status: "recorded",
+              record_count: 2,
+              source: "care_report",
+            },
+          ],
+          next_cursor: null,
+        });
+      }
+      return response({
+        id: "application-a",
+        organization_id: "org-a",
+        display_name: "LINE 志工",
+        status: "pending",
+        submitted_at: "2026-08-24T00:00:00Z",
+        decided_at: null,
+        decision_reason: null,
+        version: 1,
+        service_dates: [],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderDetail(onClose);
+    await act(async () => flush());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container?.textContent).not.toContain("收容所 B");
+
+    await act(async () => {
+      Array.from(container?.querySelectorAll("button") ?? [])
+        .find((button) => button.textContent?.includes("載入服務紀錄"))
+        ?.click();
+      await flush();
+    });
+    expect(container?.textContent).toContain("收容所 B");
+
+    await act(async () => {
+      container
+        ?.querySelector<HTMLButtonElement>(
+          'button[aria-label="關閉申請人資料"]',
+        )
+        ?.click();
+    });
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(container?.textContent).not.toContain("收容所 B");
+  });
+
+  it("rejects a stale summary response after switching applicants", async () => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    let resolveSummary: ((value: Response) => void) | undefined;
+    const delayedSummary = new Promise<Response>((resolve) => {
+      resolveSummary = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("service-summary")) return delayedSummary;
+      return response({
+        id: String(input).includes("application-b")
+          ? "application-b"
+          : "application-a",
+        organization_id: "org-a",
+        display_name: "LINE 志工",
+        status: "pending",
+        submitted_at: "2026-08-24T00:00:00Z",
+        decided_at: null,
+        decision_reason: null,
+        version: 1,
+        service_dates: [],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await renderDetail();
+    await act(async () => flush());
+    await act(async () => {
+      Array.from(container?.querySelectorAll("button") ?? [])
+        .find((button) => button.textContent?.includes("載入服務紀錄"))
+        ?.click();
+    });
+
+    await act(async () => {
+      root?.render(
+        <VolunteerApplicantDetail
+          organizationId="org-a"
+          applicationId="application-b"
+          open
+          onClose={vi.fn()}
+        />,
+      );
+      await flush();
+    });
+    resolveSummary?.(
+      response({
+        items: [
+          {
+            organization_id: "org-old",
+            organization_name: "舊申請收容所",
+            service_date: "2026-05-20",
+            service_status: "recorded",
+            record_count: 1,
+            source: "care_report",
+          },
+        ],
+        next_cursor: null,
+      }),
+    );
+    await act(async () => flush());
+    expect(container?.textContent).not.toContain("舊申請收容所");
+  });
 });
