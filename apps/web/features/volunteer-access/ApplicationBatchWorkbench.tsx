@@ -49,6 +49,7 @@ export function ApplicationBatchWorkbench({
   onSubmit,
   onLoadItems,
   onLoadBatch,
+  onViewApplicant,
 }: {
   applications: Application[];
   matchingCount: number;
@@ -70,6 +71,7 @@ export function ApplicationBatchWorkbench({
   onSubmit?: (payload: object) => Promise<Batch | void> | Batch | void;
   onLoadItems?: (batchId: string) => Promise<BatchItem[]>;
   onLoadBatch?: (batchId: string) => Promise<Batch>;
+  onViewApplicant?: (applicationId: string) => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [allFiltered, setAllFiltered] = useState(false);
@@ -273,6 +275,7 @@ export function ApplicationBatchWorkbench({
             <th className="ui-table-head">志工</th>
             <th className="ui-table-head">狀態</th>
             <th className="ui-table-head">個別期限</th>
+            {onViewApplicant ? <th className="ui-table-head">資料</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -292,6 +295,17 @@ export function ApplicationBatchWorkbench({
                   }}
                 />
               </td>
+              {onViewApplicant ? (
+                <td className="ui-table-cell">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => onViewApplicant(application.id)}
+                  >
+                    查看申請人
+                  </Button>
+                </td>
+              ) : null}
               <td className="ui-table-cell">{application.display_name}</td>
               <td className="ui-table-cell">{application.status}</td>
               <td className="ui-table-cell">

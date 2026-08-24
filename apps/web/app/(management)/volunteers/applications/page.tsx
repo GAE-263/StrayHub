@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { authFetch } from "../../../../lib/auth";
 import { ApplicationBatchWorkbench } from "../../../../features/volunteer-access/ApplicationBatchWorkbench";
+import { VolunteerApplicantDetail } from "../../../../features/volunteer-access/VolunteerApplicantDetail";
 import {
   selectInitialServiceDate,
   type ServiceDateAvailability,
@@ -40,6 +41,9 @@ export default function VolunteerApplicationsPage() {
   const [submittedTo, setSubmittedTo] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [detailApplicationId, setDetailApplicationId] = useState<string | null>(
+    null,
+  );
   const loadGeneration = useRef(0);
 
   async function loadApplications(
@@ -55,7 +59,8 @@ export default function VolunteerApplicationsPage() {
     try {
       const query = new URLSearchParams({ status: "pending", limit: "100" });
       if (unassigned) query.set("unassigned", "true");
-      else if (selectedServiceDate) query.set("service_date", selectedServiceDate);
+      else if (selectedServiceDate)
+        query.set("service_date", selectedServiceDate);
       if (from) query.set("submitted_from", new Date(from).toISOString());
       if (to) query.set("submitted_to", new Date(to).toISOString());
       const response = await authFetch(
@@ -245,6 +250,13 @@ export default function VolunteerApplicationsPage() {
         onSubmit={createBatch}
         onLoadItems={loadItems}
         onLoadBatch={loadBatch}
+        onViewApplicant={setDetailApplicationId}
+      />
+      <VolunteerApplicantDetail
+        organizationId={organizationId}
+        applicationId={detailApplicationId}
+        open={detailApplicationId !== null}
+        onClose={() => setDetailApplicationId(null)}
       />
     </div>
   );

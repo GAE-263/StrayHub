@@ -40,6 +40,34 @@ test("review page opens the nearest pending service date and preserves it in exp
       body = { organization_id: "org-a" };
     } else if (url.pathname === "/v1/organizations") {
       body = { items: [{ id: "org-a", code: "ORG-A", name: "收容所 A" }] };
+    } else if (
+      url.pathname.endsWith("/volunteer-applications/application-a/pii-reveal")
+    ) {
+      body = {
+        applicant_name: "核准顯示名",
+        phone_number: "0900000000",
+        basic_profile: { experience: "synthetic" },
+      };
+    } else if (url.pathname.endsWith("/volunteer-applications/application-a")) {
+      body = {
+        id: "application-a",
+        organization_id: "org-a",
+        display_name: "LINE 志工",
+        status: "pending",
+        submitted_at: "2026-08-24T00:00:00Z",
+        decided_at: null,
+        decision_reason: null,
+        version: 1,
+        service_dates: [
+          {
+            service_date: nextDate,
+            status: "pending",
+            decided_at: null,
+            decision_reason: null,
+            version: 1,
+          },
+        ],
+      };
     } else if (url.pathname.endsWith("/volunteer-applications")) {
       const serviceDate = url.searchParams.get("service_date");
       body = {
@@ -56,9 +84,7 @@ test("review page opens the nearest pending service date and preserves it in exp
             : [],
         matching_count: serviceDate === nextDate ? 1 : 0,
         next_cursor: null,
-        available_service_dates: [
-          { service_date: nextDate, pending_count: 1 },
-        ],
+        available_service_dates: [{ service_date: nextDate, pending_count: 1 }],
       };
     } else if (url.pathname.endsWith("/volunteer-decision-batches")) {
       submittedSelection = JSON.parse(
@@ -92,6 +118,16 @@ test("review page opens the nearest pending service date and preserves it in exp
     page.getByText(`目前顯示 ${nextDate} 的待審核申請`, { exact: true }),
   ).toBeVisible();
   expect(today).not.toBe(nextDate);
+
+  await page.getByRole("button", { name: "查看申請人" }).click();
+  await expect(page.getByRole("dialog")).toContainText("LINE 志工");
+  await expect(page.getByRole("dialog")).not.toContainText("核准顯示名");
+  await page.getByRole("button", { name: "申請審核用途揭露" }).click();
+  await expect(page.getByRole("dialog")).toContainText("核准顯示名");
+  await expect(page.getByRole("dialog")).toContainText("0900000000");
+  await page.getByRole("button", { name: "關閉申請人資料" }).click();
+  await expect(page.getByText("核准顯示名", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("0900000000", { exact: true })).toHaveCount(0);
 
   await page.getByRole("checkbox", { name: "選取 LINE 志工" }).check();
   await page.getByRole("button", { name: "確認並建立批次" }).click();

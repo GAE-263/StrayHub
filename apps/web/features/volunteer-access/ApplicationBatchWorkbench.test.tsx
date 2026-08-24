@@ -23,6 +23,7 @@ describe("ApplicationBatchWorkbench", () => {
         }))}
         matchingCount={1200}
         filter={{ status: "pending", unassigned: true }}
+        onViewApplicant={() => undefined}
       />,
     );
     expect(html).toContain("目前篩選結果全部 1,200 筆");
@@ -32,6 +33,7 @@ describe("ApplicationBatchWorkbench", () => {
     expect(html).toContain("ui-input");
     expect(html).toContain("ui-table batch-table");
     expect(html).toContain("ui-button ui-button-default");
+    expect(html).toContain("查看申請人");
     expect(html).not.toContain("bg-emerald");
   });
 
@@ -59,7 +61,9 @@ describe("ApplicationBatchWorkbench", () => {
         result: "failed",
       },
     ]);
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     HTMLDialogElement.prototype.showModal = function showModal() {
       this.open = true;
     };
@@ -105,7 +109,9 @@ describe("ApplicationBatchWorkbench", () => {
     expect(
       consoleError.mock.calls.some((args) =>
         args.some((argument) =>
-          String(argument).includes("Each child in a list should have a unique"),
+          String(argument).includes(
+            "Each child in a list should have a unique",
+          ),
         ),
       ),
     ).toBe(false);
