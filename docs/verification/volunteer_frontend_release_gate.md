@@ -3,7 +3,7 @@
 Verification timestamp: 2026-08-24 22:52 CST  
 Branch: `dev/volunteer_entry`  
 Starting HEAD: `926ca6c`  
-Final HEAD: `19d1ec4`
+Final HEAD: release evidence commit; exact SHA is reported in the final handoff
 
 ## Repository State
 
