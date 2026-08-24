@@ -80,3 +80,19 @@ def test_line_demo_allows_the_generated_web_tunnel_dev_origin() -> None:
     assert "LINE_DEMO_WEB_ORIGIN_HOST" in script
     assert "LINE_DEMO_WEB_ORIGIN_HOST" in next_config
     assert script.index('start_tunnel "Web"') < script.index("npm --prefix apps/web run dev")
+
+
+def test_line_demo_provides_session_keys_before_starting_api() -> None:
+    script = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+
+    assert "AUTH_JWT_ACTIVE_PRIVATE_KEY" in script
+    assert "AUTH_JWT_ACTIVE_PUBLIC_KEY" in script
+    assert "openssl genpkey" in script
+    assert script.index("openssl genpkey") < script.index("uv run python -m uvicorn")
+
+
+def test_line_demo_requires_login_channel_for_real_liff() -> None:
+    script = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+
+    assert "LINE_LOGIN_CHANNEL_ID" in script
+    assert "真實 LIFF_ID 必須搭配 LINE_LOGIN_CHANNEL_ID" in script

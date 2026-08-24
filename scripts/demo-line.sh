@@ -36,7 +36,7 @@ load_dotenv_value() {
   fi
 }
 
-for dotenv_name in TUNNEL_PROVIDER API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID SHELTER_ENTRY_REFERENCE; do
+for dotenv_name in TUNNEL_PROVIDER API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE; do
   load_dotenv_value "$dotenv_name"
 done
 
@@ -47,6 +47,7 @@ WEB_HOST="${WEB_HOST:-127.0.0.1}"
 WEB_PORT="${WEB_PORT:-3001}"
 START_WORKER="${START_WORKER:-1}"
 LIFF_ID="${LIFF_ID:-}"
+LINE_LOGIN_CHANNEL_ID="${LINE_LOGIN_CHANNEL_ID:-}"
 SHELTER_ENTRY_REFERENCE="${SHELTER_ENTRY_REFERENCE:-}"
 
 require_command() {
@@ -146,6 +147,13 @@ require_value SHELTER_ENTRY_REFERENCE
 require_command uv
 require_command npm
 require_command curl
+if [[ "$LIFF_ID" != fake-* ]] && {
+  [[ -z "$LINE_LOGIN_CHANNEL_ID" ]] || [[ "$LINE_LOGIN_CHANNEL_ID" == fake-* ]];
+}; then
+  echo "真實 LIFF_ID 必須搭配 LINE_LOGIN_CHANNEL_ID（LINE Login Channel 的 Channel ID）" >&2
+  exit 2
+fi
+export LINE_LOGIN_CHANNEL_ID
 case "$TUNNEL_PROVIDER" in
   cloudflared) require_command cloudflared ;;
   ngrok) require_command ngrok ;;
@@ -153,6 +161,18 @@ case "$TUNNEL_PROVIDER" in
 esac
 require_port_available "API" "$API_PORT"
 require_port_available "Web" "$WEB_PORT"
+
+if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:-}" ]]; then
+  require_command openssl
+  key_dir="$(mktemp -d "${TMPDIR:-/tmp}/strayhub-line-keys.XXXXXX")"
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+    -out "$key_dir/private.pem" >/dev/null 2>&1
+  openssl pkey -in "$key_dir/private.pem" -pubout \
+    -out "$key_dir/public.pem" >/dev/null 2>&1
+  export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(<"$key_dir/private.pem")"
+  export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(<"$key_dir/public.pem")"
+  rm -rf "$key_dir"
+fi
 
 pids=()
 log_dir="$(mktemp -d "${TMPDIR:-/tmp}/strayhub-line.XXXXXX")"
