@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     pii_allow_local_provider: bool = False
     pii_active_key_version: str = "local-v1"
     pii_local_key_base64: SecretStr | None = None
+    pii_kms_key_name: str | None = None
     session_access_token_ttl_seconds: int = Field(default=900, ge=1)
     session_refresh_token_ttl_seconds: int = Field(default=604800, ge=1)
     draft_ttl_seconds: int = Field(default=86400, ge=1)
