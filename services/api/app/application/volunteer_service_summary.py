@@ -52,9 +52,13 @@ def encode_summary_cursor(
         "organization_id": str(organization_id),
         "version": 1,
     }
-    encoded = base64.urlsafe_b64encode(
-        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
-    ).decode().rstrip("=")
+    encoded = (
+        base64.urlsafe_b64encode(
+            json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
     signature = hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).digest()
     signature_encoded = base64.urlsafe_b64encode(signature).decode().rstrip("=")
     return f"{encoded}.{signature_encoded}"
@@ -73,9 +77,7 @@ def decode_summary_cursor(
         actual = base64.urlsafe_b64decode(signature_encoded + "=" * (-len(signature_encoded) % 4))
         if not hmac.compare_digest(expected, actual):
             raise ValueError
-        payload = json.loads(
-            base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode()
-        )
+        payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode())
         if (
             payload.get("version") != 1
             or payload.get("application") != _digest(application_id)

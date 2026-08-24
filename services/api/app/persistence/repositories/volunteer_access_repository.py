@@ -211,10 +211,7 @@ class VolunteerAccessRepository:
         created: list[VolunteerApplicationServiceDate] = []
         for service_date in service_dates:
             await self.session.execute(
-                text(
-                    "SELECT pg_advisory_xact_lock("
-                    "hashtextextended(:capacity_key, 0))"
-                ),
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:capacity_key, 0))"),
                 {"capacity_key": f"volunteer-capacity:{self.organization_id}:{service_date}"},
             )
             booked = await self.session.scalar(
@@ -377,8 +374,7 @@ class VolunteerAccessRepository:
             .join(
                 VolunteerApplication,
                 and_(
-                    VolunteerApplication.id
-                    == VolunteerApplicationServiceDate.application_id,
+                    VolunteerApplication.id == VolunteerApplicationServiceDate.application_id,
                     VolunteerApplication.organization_id
                     == VolunteerApplicationServiceDate.organization_id,
                 ),

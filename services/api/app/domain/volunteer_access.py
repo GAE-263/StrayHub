@@ -69,9 +69,7 @@ def validate_grant_period(
     return valid_from, expires_at
 
 
-def validate_service_date_selection(
-    service_dates: list[date], *, today: date
-) -> list[date]:
+def validate_service_date_selection(service_dates: list[date], *, today: date) -> list[date]:
     """Validate a volunteer's selectable dates in the next 14-day window."""
 
     if not service_dates:

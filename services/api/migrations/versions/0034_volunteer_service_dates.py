@@ -76,6 +76,5 @@ def downgrade() -> None:
         "DROP CONSTRAINT ck_volunteer_access_policy_daily_limit"
     )
     op.execute(
-        "ALTER TABLE organization_volunteer_access_policies "
-        "DROP COLUMN daily_application_limit"
+        "ALTER TABLE organization_volunteer_access_policies DROP COLUMN daily_application_limit"
     )

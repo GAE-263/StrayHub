@@ -293,7 +293,8 @@ async def test_real_postgres_cross_shelter_summary_and_restoration() -> None:
                 }
                 assert fixture.organization_c not in {item.organization_id for item in page.items}
                 assert all(
-                    set(item.__dict__) == {
+                    set(item.__dict__)
+                    == {
                         "organization_id",
                         "organization_name",
                         "service_date",
@@ -309,10 +310,7 @@ async def test_real_postgres_cross_shelter_summary_and_restoration() -> None:
                 assert await access_repository.application(fixture.application_x) is not None
                 assert (
                     await session.scalar(
-                        text(
-                            "SELECT count(*) FROM organizations "
-                            "WHERE id = :organization_id"
-                        ),
+                        text("SELECT count(*) FROM organizations WHERE id = :organization_id"),
                         {"organization_id": fixture.organization_b},
                     )
                     == 0
@@ -323,9 +321,10 @@ async def test_real_postgres_cross_shelter_summary_and_restoration() -> None:
                 await set_organization_scope(session, fixture.organization_a)
                 await set_platform_scope(session)
                 await set_organization_scope(session, fixture.organization_a)
-                assert await session.scalar(
-                    text("SELECT current_setting('app.platform_scope', true)")
-                ) == "false"
+                assert (
+                    await session.scalar(text("SELECT current_setting('app.platform_scope', true)"))
+                    == "false"
+                )
                 assert await session.scalar(
                     text("SELECT current_setting('app.current_org_id', true)")
                 ) == str(fixture.organization_a)
@@ -366,9 +365,10 @@ async def test_real_postgres_summary_restores_scope_after_exception() -> None:
                     await repository.list_for_subject(fixture.volunteer_x)
                 session.execute = original_execute  # type: ignore[method-assign]
 
-                assert await session.scalar(
-                    text("SELECT current_setting('app.platform_scope', true)")
-                ) == "false"
+                assert (
+                    await session.scalar(text("SELECT current_setting('app.platform_scope', true)"))
+                    == "false"
+                )
                 access_repository = VolunteerAccessRepository(session, fixture.organization_a)
                 assert await access_repository.application(fixture.application_x) is not None
                 assert await access_repository.application(UUID(int=0)) is None
@@ -392,14 +392,30 @@ async def test_real_postgres_pool_reuse_does_not_inherit_privileged_scope() -> N
                 "SELECT set_config('app.current_org_id', $1, true)",
                 str(fixture.organization_a),
             )
-            assert await connection.fetchval(
-                "SELECT count(*) FROM organizations WHERE id = $1", fixture.organization_a
-            ) == 1
-            assert await connection.fetchval(
-                "SELECT count(*) FROM organizations WHERE id = $1", fixture.organization_b
-            ) == 0
+            assert (
+                await connection.fetchval(
+                    "SELECT count(*) FROM organizations WHERE id = $1", fixture.organization_a
+                )
+                == 1
+            )
+            assert (
+                await connection.fetchval(
+                    "SELECT count(*) FROM organizations WHERE id = $1", fixture.organization_b
+                )
+                == 0
+            )
             await connection.execute("SELECT set_config('app.platform_scope', 'true', true)")
-            assert await connection.fetchval("SELECT count(*) FROM care_reports") == 3
+            assert (
+                await connection.fetchval(
+                    "SELECT count(*) FROM care_reports WHERE organization_id = ANY($1::uuid[])",
+                    [
+                        fixture.organization_a,
+                        fixture.organization_b,
+                        fixture.organization_c,
+                    ],
+                )
+                == 3
+            )
             await connection.execute("COMMIT")
 
         async with pool.acquire() as connection:
@@ -440,9 +456,12 @@ async def test_real_postgres_scope_helpers_clear_platform_support_flag() -> None
             async with session.begin():
                 await session.execute(text("SET LOCAL ROLE strayhub_runtime"))
                 await set_platform_support_scope(session, organization_id)
-                assert await session.scalar(
-                    text("SELECT current_setting('app.platform_support', true)")
-                ) == "true"
+                assert (
+                    await session.scalar(
+                        text("SELECT current_setting('app.platform_support', true)")
+                    )
+                    == "true"
+                )
                 await set_organization_scope(session, organization_id)
                 flags = await session.execute(
                     text(

@@ -70,7 +70,7 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
         'LIFF_ENDPOINT_URL="${WEB_TUNNEL_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}"'
         in text
     )
-    assert '/${LIFF_ID}/volunteer-entry?entry=' not in text
+    assert "/${LIFF_ID}/volunteer-entry?entry=" not in text
 
 
 def test_line_demo_allows_the_generated_web_tunnel_dev_origin() -> None:
@@ -98,9 +98,7 @@ def test_local_demo_scripts_provide_ephemeral_pii_key_before_starting_api() -> N
         assert "PII_ALLOW_LOCAL_PROVIDER" in script
         assert "PII_LOCAL_KEY_BASE64" in script
         assert "openssl rand -base64 32" in script
-        assert script.index("openssl rand -base64 32") < script.index(
-            "uv run python -m uvicorn"
-        )
+        assert script.index("openssl rand -base64 32") < script.index("uv run python -m uvicorn")
 
 
 def test_line_demo_requires_login_channel_for_real_liff() -> None:

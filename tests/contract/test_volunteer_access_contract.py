@@ -70,14 +70,15 @@ def test_masked_detail_and_explicit_pii_reveal_contracts_are_separate() -> None:
     assert reveal_response["additionalProperties"] is False
     assert reveal_request["required"] == ["purpose_code"]
     assert reveal_request["properties"]["purpose_code"]["const"] == "application_review"
-    assert {"applicant_name", "phone_number", "basic_profile"} <= set(
-        reveal_response["properties"]
-    )
+    assert {"applicant_name", "phone_number", "basic_profile"} <= set(reveal_response["properties"])
     assert not {"applicant_name", "phone_number", "basic_profile"} & set(detail["properties"])
 
-    assert VolunteerPiiRevealRequest.model_validate(
-        {"purpose_code": "application_review"}
-    ).purpose_code == "application_review"
+    assert (
+        VolunteerPiiRevealRequest.model_validate(
+            {"purpose_code": "application_review"}
+        ).purpose_code
+        == "application_review"
+    )
     with pytest.raises(ValidationError):
         VolunteerPiiRevealRequest.model_validate({"purpose_code": "other"})
     assert set(VolunteerPiiRevealResponse.model_fields) == {
@@ -147,9 +148,7 @@ def test_date_scoped_management_contract_requires_explicit_review_date() -> None
     )
     repository_filters = review_filter.to_repository_filters()
     assert repository_filters["service_date"] == date(2026, 8, 25)
-    assert repository_filters["submitted_from"] == datetime(
-        2026, 8, 24, tzinfo=timezone.utc
-    )
+    assert repository_filters["submitted_from"] == datetime(2026, 8, 24, tzinfo=timezone.utc)
     for invalid_filter in (
         {"status": "pending"},
         {"status": "pending", "service_date": "2026-08-25", "unassigned": True},
@@ -472,9 +471,9 @@ def test_review_calendar_overview_is_explicit_and_strict() -> None:
     calendar = schemas["VolunteerReviewCalendarDate"]
     assert calendar["additionalProperties"] is False
     assert calendar["required"] == ["service_date", "pending_count"]
-    assert schemas["VolunteerApplicationListResponse"]["properties"][
-        "review_calendar"
-    ]["items"]["$ref"].endswith("/VolunteerReviewCalendarDate")
+    assert schemas["VolunteerApplicationListResponse"]["properties"]["review_calendar"]["items"][
+        "$ref"
+    ].endswith("/VolunteerReviewCalendarDate")
     assert "review_calendar" in schemas["VolunteerApplicationListResponse"]["required"]
 
 

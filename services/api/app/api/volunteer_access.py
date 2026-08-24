@@ -474,11 +474,14 @@ class VolunteerAccessPolicyUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_update_fields(self) -> VolunteerAccessPolicyUpdateRequest:
-        if not {
-            "applications_enabled",
-            "default_grant_duration_hours",
-            "daily_application_limit",
-        } & self.model_fields_set:
+        if (
+            not {
+                "applications_enabled",
+                "default_grant_duration_hours",
+                "daily_application_limit",
+            }
+            & self.model_fields_set
+        ):
             raise ValueError("at least one policy field is required")
         return self
 
@@ -1151,12 +1154,10 @@ async def list_volunteer_applications(
         "matching_count": matching_count,
         "next_cursor": _encode_application_cursor(page_items[-1]) if has_more else None,
         "available_service_dates": [
-            {"service_date": value, "pending_count": count}
-            for value, count in review_calendar
+            {"service_date": value, "pending_count": count} for value, count in review_calendar
         ],
         "review_calendar": [
-            {"service_date": value, "pending_count": count}
-            for value, count in review_calendar
+            {"service_date": value, "pending_count": count} for value, count in review_calendar
         ],
     }
 

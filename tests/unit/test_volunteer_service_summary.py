@@ -108,8 +108,7 @@ async def test_summary_denies_non_admin_and_platform_scope(role, platform_scope)
 
 
 @pytest.mark.asyncio
-async def test_summary_denies_wrong_tenant_inactive_membership_wrong_purpose_and_audit_failure(
-) -> None:
+async def test_summary_denies_invalid_access_and_audit_failure() -> None:
     organization_id = uuid4()
     application = _application(organization_id)
     cases = [
@@ -176,12 +175,15 @@ def test_summary_cursor_is_opaque_signed_and_bound_to_application_subject() -> N
         organization_id=organization_id,
     )
     assert str(subject_user_id) not in cursor
-    assert decode_summary_cursor(
-        "test-secret",
-        cursor,
-        application_id=application_id,
-        subject_user_id=subject_user_id,
-    )[1] == organization_id
+    assert (
+        decode_summary_cursor(
+            "test-secret",
+            cursor,
+            application_id=application_id,
+            subject_user_id=subject_user_id,
+        )[1]
+        == organization_id
+    )
     with pytest.raises(DomainError):
         decode_summary_cursor(
             "test-secret",
