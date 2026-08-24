@@ -42,6 +42,8 @@ resource "google_cloud_run_v2_service" "api" {
   deletion_protection = false
   labels              = local.labels
 
+  depends_on = [google_kms_crypto_key_iam_member.api_volunteer_pii]
+
   template {
     service_account = google_service_account.runtime["api"].email
 
@@ -60,6 +62,16 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "APP_ENV"
         value = "gcp-demo"
+      }
+
+      env {
+        name  = "PII_ENCRYPTION_PROVIDER"
+        value = "gcp-kms"
+      }
+
+      env {
+        name  = "PII_KMS_KEY_NAME"
+        value = var.pii_kms_key_name
       }
 
       env {
