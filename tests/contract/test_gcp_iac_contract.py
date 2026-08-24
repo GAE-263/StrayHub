@@ -105,6 +105,38 @@ def test_web_liff_config_is_injected_from_cloud_run_at_request_time() -> None:
     assert "NEXT_PUBLIC_API_BASE_URL" not in dockerfile
 
 
+def test_api_runtime_uses_a_key_scoped_cloud_kms_pii_provider() -> None:
+    main = (TERRAFORM_ROOT / "main.tf").read_text(encoding="utf-8")
+    iam = (TERRAFORM_ROOT / "iam.tf").read_text(encoding="utf-8")
+    cloud_run = (TERRAFORM_ROOT / "cloud-run.tf").read_text(encoding="utf-8")
+    variables = (TERRAFORM_ROOT / "variables.tf").read_text(encoding="utf-8")
+
+    assert '"cloudkms.googleapis.com"' in main
+    assert 'variable "pii_kms_key_name"' in variables
+    assert "google_kms_crypto_key_iam_member" in iam
+    assert 'role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"' in iam
+    assert 'member        = "serviceAccount:${google_service_account.runtime["api"].email}"' in iam
+    assert 'name  = "PII_ENCRYPTION_PROVIDER"' in cloud_run
+    assert 'value = "gcp-kms"' in cloud_run
+    assert 'name  = "PII_KMS_KEY_NAME"' in cloud_run
+    assert "value = var.pii_kms_key_name" in cloud_run
+
+
+def test_gcp_demo_documents_kms_pii_provider_and_synthetic_validation() -> None:
+    project_doc = (GCP_ROOT / "project.md").read_text(encoding="utf-8")
+
+    for required in (
+        "PII_ENCRYPTION_PROVIDER=gcp-kms",
+        "PII_KMS_KEY_NAME",
+        "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+        "additional authenticated data",
+        "synthetic",
+        "key rotation",
+        "fail closed",
+    ):
+        assert required in project_doc
+
+
 def test_terraform_format_and_validate() -> None:
     terraform = os.environ.get("TERRAFORM_BIN") or shutil.which("terraform")
     assert terraform, "T236 需要 terraform CLI；請安裝後重新執行 Contract Test"
