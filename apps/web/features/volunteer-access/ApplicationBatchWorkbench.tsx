@@ -30,7 +30,6 @@ type Batch = {
 };
 
 type BatchItem = {
-  id: string;
   application_id: string;
   expected_version: number;
   result: string;
@@ -340,7 +339,7 @@ export function ApplicationBatchWorkbench({
       {results.length ? (
         <ul>
           {results.map((item) => (
-            <li key={item.id}>
+            <li key={item.application_id}>
               {item.application_id}：
               <Badge className={`batch-result batch-result-${item.result}`}>
                 {item.result}

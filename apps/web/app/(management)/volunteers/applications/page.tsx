@@ -13,7 +13,6 @@ type Application = {
 };
 
 type BatchItem = {
-  id: string;
   application_id: string;
   expected_version: number;
   result: string;
