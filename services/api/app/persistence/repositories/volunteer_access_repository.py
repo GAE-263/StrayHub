@@ -368,7 +368,7 @@ class VolunteerAccessRepository:
             )
         return int((await self.session.execute(statement)).scalar_one())
 
-    async def pending_service_date_counts(self) -> list[tuple[date, int]]:
+    async def review_calendar_overview(self) -> list[tuple[date, int]]:
         statement = (
             select(
                 VolunteerApplicationServiceDate.service_date,
@@ -393,6 +393,10 @@ class VolunteerAccessRepository:
         )
         result = await self.session.execute(statement)
         return [(service_date, int(count)) for service_date, count in result.all()]
+
+    async def pending_service_date_counts(self) -> list[tuple[date, int]]:
+        """Backward-compatible alias for the review calendar aggregation."""
+        return await self.review_calendar_overview()
 
     async def pending_snapshot(
         self,

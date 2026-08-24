@@ -1117,7 +1117,7 @@ async def list_volunteer_applications(
             submitted_from=submitted_from,
             submitted_to=submitted_to,
         )
-        review_calendar = await repository.pending_service_date_counts()
+        review_calendar = await repository.review_calendar_overview()
     await session.commit()
     has_more = len(items) > limit
     page_items = items[:limit]
