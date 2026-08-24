@@ -69,7 +69,7 @@ async def test_committed_reveal_auditor_commits_only_allowlisted_metadata() -> N
 
     await auditor.persist_committed_reveal(event)
 
-    assert session.events == ["scope"] * 5 + ["add", "flush", "commit"]
+    assert session.events == ["scope"] * 6 + ["add", "flush", "commit"]
     assert session.record.action == "pii.revealed"
     assert session.record.organization_id == event.organization_id
     assert session.record.resource_id == event.application_id
