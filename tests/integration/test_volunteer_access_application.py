@@ -80,7 +80,14 @@ class _PiiService:
 
 
 class _DetailRepository:
-    def __init__(self, organization_id, application, *, membership=True, membership_status="active"):
+    def __init__(
+        self,
+        organization_id,
+        application,
+        *,
+        membership=True,
+        membership_status="active",
+    ):
         self.organization_id = organization_id
         self.application_value = application
         self.membership = membership
