@@ -35,7 +35,7 @@ def test_demo_script_is_executable_and_has_local_mvp_smoke_steps() -> None:
     assert 'API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"' in text
 
 
-def test_line_demo_script_declares_two_tunnel_startup_contract() -> None:
+def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
     script = ROOT / "scripts/demo-line.sh"
     assert script.exists()
     assert os.access(script, os.X_OK)
@@ -49,9 +49,12 @@ def test_line_demo_script_declares_two_tunnel_startup_contract() -> None:
         "ngrok",
         "volunteer-entry?entry=",
         "trap cleanup EXIT INT TERM",
-        "API tunnel health check",
+        'API_BASE_URL="http://${API_HOST}:${API_PORT}"',
+        'start_tunnel "Web"',
         "wait_for_tunnel_http",
         "Could not reach tunnel",
+        "@1.1.1.1",
+        "--resolve",
         "TUNNEL_URL=",
         "read_dotenv_value",
         "source .env" not in text,
@@ -60,3 +63,5 @@ def test_line_demo_script_declares_two_tunnel_startup_contract() -> None:
             assert required
         else:
             assert required in text
+    assert 'start_tunnel "API"' not in text
+    assert "API tunnel:" not in text

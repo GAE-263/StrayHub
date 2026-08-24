@@ -89,8 +89,19 @@ wait_for_tunnel_http() {
   local label="$1"
   local url="$2"
   local path="$3"
+  local host="${url#https://}"
+  local public_ip=""
+  host="${host%%/*}"
   for _ in $(seq 1 45); do
     if curl --max-time 5 -fsS "${url}${path}" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ -z "$public_ip" ]] && command -v dig >/dev/null 2>&1; then
+      public_ip="$(dig +short @1.1.1.1 A "$host" | sed -nE '/^[0-9]+(\.[0-9]+){3}$/p' | head -n 1)"
+    fi
+    if [[ -n "$public_ip" ]] && curl --max-time 5 -fsS \
+      --resolve "${host}:443:${public_ip}" "${url}${path}" >/dev/null 2>&1; then
+      echo "[Line Demo] ${label} tunnel reachable via public DNS fallback"
       return 0
     fi
     sleep 1
@@ -160,7 +171,7 @@ uv run python -m uvicorn services.api.app.main:app \
 pids+=("$!")
 
 for _ in $(seq 1 30); do
-  if curl --max-time 1 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null; then
+  if curl --max-time 1 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null 2>&1; then
     break
   fi
   sleep 1
@@ -170,20 +181,15 @@ curl --max-time 5 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null || {
   exit 1
 }
 
-echo "[Line Demo] Starting API tunnel (${TUNNEL_PROVIDER})"
-start_tunnel "API" "$API_PORT" "$log_dir/api.log"
-API_TUNNEL_URL="$TUNNEL_URL"
-echo "[Line Demo] API tunnel health check"
-wait_for_tunnel_http "API" "$API_TUNNEL_URL" "/healthz"
-
-# API_BASE_URL is a Next.js server-runtime value. It must be set before Next.js starts.
-echo "[Line Demo] Starting Next.js with API_BASE_URL=${API_TUNNEL_URL}"
-API_BASE_URL="$API_TUNNEL_URL" LIFF_ID="$LIFF_ID" \
+# Next.js proxies /v1 server-side, so FastAPI stays private on the same host.
+API_BASE_URL="http://${API_HOST}:${API_PORT}"
+echo "[Line Demo] Starting Next.js with local API proxy"
+API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
   npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
 pids+=("$!")
 
 for _ in $(seq 1 30); do
-  if curl --max-time 1 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/null; then
+  if curl --max-time 1 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/null 2>&1; then
     break
   fi
   sleep 1
@@ -209,7 +215,7 @@ LIFF_URL="https://liff.line.me/${LIFF_ID}/volunteer-entry?entry=${SHELTER_ENTRY_
 
 echo
 echo "[Line Demo] PASS"
-echo "API tunnel:       ${API_TUNNEL_URL}"
+echo "Local API:        ${API_BASE_URL}"
 echo "Web tunnel:       ${WEB_TUNNEL_URL}"
 echo "LIFF Endpoint:    ${WEB_TUNNEL_URL}/volunteer-entry"
 echo "手機 LINE 入口:   ${LIFF_URL}"

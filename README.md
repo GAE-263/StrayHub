@@ -94,7 +94,7 @@ uv run python -m scripts.reset_local --yes
 
 ### 一鍵 LINE／LIFF 手機 Demo
 
-`scripts/demo-line.sh` 會依序啟動 FastAPI、API tunnel、Next.js、Web tunnel，
+`scripts/demo-line.sh` 會依序啟動 FastAPI、Next.js、Web tunnel，
 並輸出 LIFF Endpoint 與手機入口。請先在 `.env` 填入真實受控測試值：
 
 ```dotenv
@@ -110,9 +110,9 @@ START_WORKER=1
 ./scripts/demo-line.sh
 ```
 
-腳本預設使用 `cloudflared`；也可設定 `TUNNEL_PROVIDER=ngrok`。Web tunnel 與
-API tunnel 會動態產生，Next.js 會在啟動前自動使用 API tunnel 作為
-`API_BASE_URL`。腳本不會替你修改 LINE Developers Console；請將輸出的
+腳本預設使用 `cloudflared`；也可設定 `TUNNEL_PROVIDER=ngrok`。腳本只會公開
+Web tunnel；Next.js 的 `/v1` server-side proxy 會使用本機 FastAPI 作為
+`API_BASE_URL`，因此 API 不會直接公開到 Internet。腳本不會替你修改 LINE Developers Console；請將輸出的
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 
