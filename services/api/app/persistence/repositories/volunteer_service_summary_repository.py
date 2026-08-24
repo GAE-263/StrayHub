@@ -70,7 +70,7 @@ class VolunteerServiceSummaryRepository:
                 )
             )
         statement = statement.order_by(service_date.desc(), Organization.id).limit(
-            min(max(limit, 1), 100)
+            min(max(limit, 1), 101)
         )
 
         await set_platform_scope(self.session)
