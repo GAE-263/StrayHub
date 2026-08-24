@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.volunteer_access_service import VolunteerAccessService
+from services.api.app.domain.tenant_context import TenantContext
 
 
 class _Verifier:
@@ -76,6 +77,116 @@ class _PiiService:
     async def create_profile(self, **kwargs):
         self.calls.append(kwargs)
         return SimpleNamespace(application_id=kwargs["application_id"])
+
+
+class _DetailRepository:
+    def __init__(self, organization_id, application, *, membership=True, membership_status="active"):
+        self.organization_id = organization_id
+        self.application_value = application
+        self.membership = membership
+        self.membership_status = membership_status
+
+    async def active_membership(self, user_id, *, for_update=False):
+        if not self.membership or self.membership_status != "active":
+            return None
+        return SimpleNamespace(
+            organization_id=self.organization_id,
+            user_id=user_id,
+            role="SHELTER_ADMIN",
+            status="active",
+        )
+
+    async def application_detail(self, application_id, *, for_update=False):
+        if self.application_value is None or self.application_value.id != application_id:
+            return None
+        return self.application_value, []
+
+
+def _detail_application(organization_id):
+    return SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        status="pending",
+        submitted_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
+        decided_at=None,
+        decision_reason=None,
+        version=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_application_detail_is_tenant_scoped_and_masks_profile_fields() -> None:
+    organization_a = uuid4()
+    application = _detail_application(organization_a)
+    service = VolunteerAccessService(
+        _DetailRepository(organization_a, application),
+        _IdentityRepository(),
+        _Verifier(),
+    )
+
+    detail = await service.application_detail(
+        application.id,
+        tenant_context=TenantContext(uuid4(), organization_a, "SHELTER_ADMIN"),
+    )
+
+    assert detail.application.id == application.id
+    assert detail.service_dates == []
+    serialized = repr(detail)
+    assert "applicant_name" not in serialized
+    assert "phone_number" not in serialized
+    assert "ciphertext" not in serialized
+
+    with pytest.raises(DomainError) as error:
+        await service.application_detail(
+            application.id,
+            tenant_context=TenantContext(uuid4(), uuid4(), "SHELTER_ADMIN"),
+        )
+    assert error.value.code == "volunteer_application_not_found"
+    assert error.value.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("membership_status", ["inactive", "suspended"])
+async def test_application_detail_denies_inactive_or_suspended_membership(
+    membership_status: str,
+) -> None:
+    organization_id = uuid4()
+    application = _detail_application(organization_id)
+    service = VolunteerAccessService(
+        _DetailRepository(
+            organization_id,
+            application,
+            membership_status=membership_status,
+        ),
+        _IdentityRepository(),
+        _Verifier(),
+    )
+
+    with pytest.raises(DomainError) as error:
+        await service.application_detail(
+            application.id,
+            tenant_context=TenantContext(uuid4(), organization_id, "SHELTER_ADMIN"),
+        )
+    assert error.value.code == "volunteer_application_not_found"
+    assert error.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_application_detail_missing_application_does_not_reveal_profile_state() -> None:
+    organization_id = uuid4()
+    service = VolunteerAccessService(
+        _DetailRepository(organization_id, None),
+        _IdentityRepository(),
+        _Verifier(),
+    )
+
+    with pytest.raises(DomainError) as error:
+        await service.application_detail(
+            uuid4(),
+            tenant_context=TenantContext(uuid4(), organization_id, "SHELTER_ADMIN"),
+        )
+    assert error.value.code == "volunteer_application_not_found"
+    assert error.value.status_code == 404
 
 
 @pytest.mark.asyncio
