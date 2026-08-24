@@ -36,6 +36,16 @@ type BatchItem = {
   error_code?: string | null;
 };
 
+function isTerminalBatch(batch: Batch): boolean {
+  return (
+    batch.status === "completed" || batch.status === "completed_with_errors"
+  );
+}
+
+function shouldReloadAfterTerminalBatch(batch: Batch): boolean {
+  return batch.status === "completed" || batch.succeeded_count > 0;
+}
+
 function utcValue(localValue: string): string | null {
   if (!localValue) return null;
   const parsed = new Date(localValue);
@@ -49,6 +59,7 @@ export function ApplicationBatchWorkbench({
   onSubmit,
   onLoadItems,
   onLoadBatch,
+  onBatchTerminalSuccess,
   onViewApplicant,
 }: {
   applications: Application[];
@@ -71,6 +82,7 @@ export function ApplicationBatchWorkbench({
   onSubmit?: (payload: object) => Promise<Batch | void> | Batch | void;
   onLoadItems?: (batchId: string) => Promise<BatchItem[]>;
   onLoadBatch?: (batchId: string) => Promise<Batch>;
+  onBatchTerminalSuccess?: (batch: Batch) => void | Promise<void>;
   onViewApplicant?: (applicationId: string) => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
@@ -87,6 +99,7 @@ export function ApplicationBatchWorkbench({
   const [results, setResults] = useState<BatchItem[]>([]);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const operationId = useRef<string | null>(null);
+  const terminalNotifiedBatch = useRef<string | null>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   function decisionItems(ids: Set<string>) {
@@ -167,6 +180,46 @@ export function ApplicationBatchWorkbench({
     }
   }
 
+  async function loadBatchState(batchId: string) {
+    const [latest, latestItems] = await Promise.all([
+      onLoadBatch?.(batchId) ?? Promise.resolve(batch),
+      onLoadItems?.(batchId) ?? Promise.resolve(results),
+    ]);
+    if (!latest) return;
+    setBatch(latest);
+    setResults(latestItems);
+    if (
+      isTerminalBatch(latest) &&
+      shouldReloadAfterTerminalBatch(latest) &&
+      terminalNotifiedBatch.current !== latest.id
+    ) {
+      terminalNotifiedBatch.current = latest.id;
+      await onBatchTerminalSuccess?.(latest);
+    }
+    return latest;
+  }
+
+  React.useEffect(() => {
+    if (!batch || isTerminalBatch(batch) || !onLoadBatch) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const latest = await loadBatchState(batch.id);
+        if (!cancelled && latest && !isTerminalBatch(latest)) {
+          timer = setTimeout(() => void poll(), 1000);
+        }
+      } catch {
+        if (!cancelled) timer = setTimeout(() => void poll(), 1500);
+      }
+    };
+    timer = setTimeout(() => void poll(), 500);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [batch, onLoadBatch]);
+
   async function submit() {
     if (!allFiltered && selected.length === 0) {
       setMessage("請至少選擇一筆申請");
@@ -187,12 +240,7 @@ export function ApplicationBatchWorkbench({
   async function refresh() {
     if (!batch) return;
     try {
-      const [latest, latestItems] = await Promise.all([
-        onLoadBatch?.(batch.id) ?? Promise.resolve(batch),
-        onLoadItems?.(batch.id) ?? Promise.resolve(results),
-      ]);
-      setBatch(latest);
-      setResults(latestItems);
+      await loadBatchState(batch.id);
       setMessage("已更新批次進度與逐筆結果。");
     } catch {
       setMessage("無法更新批次進度，請稍後再試。");

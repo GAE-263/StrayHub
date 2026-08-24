@@ -138,4 +138,78 @@ describe("ApplicationBatchWorkbench", () => {
     consoleError.mockRestore();
     await act(async () => root.unmount());
   });
+
+  it("notifies page when a batch reaches a terminal success status", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onBatchTerminalSuccess = vi.fn();
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+
+    await act(async () => {
+      root.render(
+        <ApplicationBatchWorkbench
+          applications={[
+            {
+              id: "app-a",
+              display_name: "志工 A",
+              status: "pending",
+              version: 1,
+            },
+          ]}
+          matchingCount={1}
+          filter={{ status: "pending", service_date: "2026-08-25" }}
+          onSubmit={vi.fn().mockResolvedValue({
+            id: "batch-a",
+            status: "queued",
+            requested_count: 1,
+            processed_count: 0,
+            succeeded_count: 0,
+            conflict_count: 0,
+            failed_count: 0,
+          })}
+          onLoadItems={vi.fn().mockResolvedValue([])}
+          onLoadBatch={vi.fn().mockResolvedValue({
+            id: "batch-a",
+            status: "completed",
+            requested_count: 1,
+            processed_count: 1,
+            succeeded_count: 1,
+            conflict_count: 0,
+            failed_count: 0,
+          })}
+          onBatchTerminalSuccess={onBatchTerminalSuccess}
+        />,
+      );
+    });
+    await act(async () =>
+      (
+        container.querySelector('input[type="checkbox"]') as HTMLInputElement
+      )?.click(),
+    );
+    await act(async () =>
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("確認並建立批次"))
+        ?.click(),
+    );
+    await act(async () =>
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("送出完整快照"))
+        ?.click(),
+    );
+    await act(async () =>
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("更新進度"))
+        ?.click(),
+    );
+
+    expect(onBatchTerminalSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "batch-a", status: "completed" }),
+    );
+    await act(async () => root.unmount());
+  });
 });

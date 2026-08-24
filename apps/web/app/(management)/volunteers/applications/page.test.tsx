@@ -44,6 +44,125 @@ afterEach(async () => {
 });
 
 describe("volunteer application review date", () => {
+  it("reloads current list and calendar after completed date-scoped rejection", async () => {
+    const today = localDate(new Date());
+    let listCall = 0;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/volunteer-decision-batches")) {
+          return response({
+            id: "batch-a",
+            status: "queued",
+            requested_count: 1,
+            processed_count: 0,
+            succeeded_count: 0,
+            conflict_count: 0,
+            failed_count: 0,
+          });
+        }
+        if (url.pathname.endsWith("/batch-a")) {
+          return response({
+            id: "batch-a",
+            status: "completed",
+            requested_count: 1,
+            processed_count: 1,
+            succeeded_count: 1,
+            conflict_count: 0,
+            failed_count: 0,
+          });
+        }
+        if (url.pathname.endsWith("/batch-a/items")) {
+          return response({
+            items: [
+              {
+                application_id: "application-a",
+                expected_version: 1,
+                result: "succeeded",
+              },
+            ],
+            next_cursor: null,
+          });
+        }
+        listCall += 1;
+        if (init?.method === "POST") return response({});
+        if (listCall === 1) {
+          return response({
+            items: [
+              {
+                id: "application-a",
+                display_name: "LINE 志工",
+                status: "pending",
+                version: 1,
+              },
+            ],
+            matching_count: 1,
+            review_calendar: [
+              { service_date: today, pending_count: 1 },
+              { service_date: "2026-08-26", pending_count: 1 },
+            ],
+            available_service_dates: [],
+          });
+        }
+        return response({
+          items: [],
+          matching_count: 0,
+          review_calendar: [{ service_date: "2026-08-26", pending_count: 1 }],
+          available_service_dates: [],
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("React", React);
+    window.sessionStorage.setItem("access_token", "local-token");
+    window.sessionStorage.setItem("active_organization_id", "org-a");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<VolunteerApplicationsPage />);
+      await flush();
+    });
+    expect(container.textContent).toContain("LINE 志工");
+    const checkbox = container!.querySelector(
+      'input[aria-label="選取 LINE 志工"]',
+    ) as HTMLInputElement;
+    await act(async () => checkbox.click());
+    const decision = container!.querySelector("select") as HTMLSelectElement;
+    await act(async () => {
+      decision.value = "reject";
+      decision.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const reason = container!.querySelector(
+      'input[aria-label="拒絕原因"]',
+    ) as HTMLInputElement;
+    await act(async () => {
+      reason.value = "診斷用原因";
+      reason.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      Array.from(container!.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("確認並建立批次"))
+        ?.click(),
+    );
+    await act(async () =>
+      Array.from(container!.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("送出完整快照"))
+        ?.click(),
+    );
+    await act(async () =>
+      Array.from(container!.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("更新進度"))
+        ?.click(),
+    );
+    await flush();
+
+    expect(listCall).toBe(2);
+    expect(container.textContent).not.toContain("LINE 志工");
+    expect(container.textContent).toContain("2026-08-26");
+  });
+
   it("selects the nearest future date that has pending applications when today is empty", () => {
     expect(
       selectInitialServiceDate("2026-08-24", [

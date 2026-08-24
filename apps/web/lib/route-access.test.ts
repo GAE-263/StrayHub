@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { decideRouteAccess, routeAreaForPathname } from "./route-access";
+import { canReviewVolunteerApplications } from "./management-capabilities";
 
 describe("route access decision matrix", () => {
+  it("limits volunteer review capability to admin roles", () => {
+    expect(canReviewVolunteerApplications("STAFF")).toBe(false);
+    expect(canReviewVolunteerApplications("SHELTER_ADMIN")).toBe(true);
+    expect(canReviewVolunteerApplications("PLATFORM_ADMIN")).toBe(true);
+  });
+
   it("keeps the public volunteer entry public regardless of session state", () => {
     expect(
       decideRouteAccess({

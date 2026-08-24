@@ -13,6 +13,7 @@ import {
 } from "../../lib/auth";
 import { ErrorState, LoadingState } from "./StateViews";
 import { StatusBanner } from "./StatusBanner";
+import { canReviewVolunteerApplications } from "../../lib/management-capabilities";
 
 type Props = { children: React.ReactNode };
 type OrganizationSummary = { id: string; code: string; name: string };
@@ -191,10 +192,7 @@ export function ManagementLayout({ children }: Props) {
   const volunteerManagementPath =
     pathname.startsWith("/volunteers/") ||
     pathname === "/settings/volunteer-access";
-  if (
-    volunteerManagementPath &&
-    !["PLATFORM_ADMIN", "SHELTER_ADMIN"].includes(role)
-  ) {
+  if (volunteerManagementPath && !canReviewVolunteerApplications(role)) {
     return (
       <ErrorState
         title="無法開啟志工管理"

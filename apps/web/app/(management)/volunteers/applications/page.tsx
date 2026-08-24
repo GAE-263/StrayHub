@@ -74,7 +74,20 @@ export default function VolunteerApplicationsPage() {
       const response = await authFetch(
         `/v1/organizations/${id}/volunteer-applications?${query.toString()}`,
       );
-      if (!response.ok) throw new Error("無法載入志工報名名單");
+      if (!response.ok) {
+        if (response.status === 403) {
+          let code = "";
+          try {
+            code = ((await response.json()) as { code?: string }).code ?? "";
+          } catch {
+            // Preserve the safe permission fallback when the error body is absent.
+          }
+          if (code === "volunteer_management_denied" || !code) {
+            throw new Error("需收容所管理員權限才能審核志工申請");
+          }
+        }
+        throw new Error("無法載入志工報名名單");
+      }
       const value = (await response.json()) as {
         items?: Application[];
         matching_count?: number;
@@ -283,6 +296,15 @@ export default function VolunteerApplicationsPage() {
         onSubmit={createBatch}
         onLoadItems={loadItems}
         onLoadBatch={loadBatch}
+        onBatchTerminalSuccess={() => {
+          void loadApplications(
+            organizationId,
+            submittedFrom,
+            submittedTo,
+            serviceDate,
+            unassigned,
+          );
+        }}
         onViewApplicant={setDetailApplicationId}
       />
       <VolunteerApplicantDetail
