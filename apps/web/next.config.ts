@@ -6,7 +6,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   devIndicators: false,
   output: "standalone",
-  allowedDevOrigins: lineDemoWebOriginHost ? [lineDemoWebOriginHost] : undefined,
+  allowedDevOrigins: lineDemoWebOriginHost
+    ? [lineDemoWebOriginHost]
+    : undefined,
 };
 
 export default nextConfig;

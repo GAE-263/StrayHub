@@ -24,8 +24,8 @@ export function resolveOrganizationLabel(
 ): string {
   if (isPlatformGovernanceRoute) return "平台治理";
   return (
-    organizations.find((organization) => organization.id === organizationId)?.name ??
-    "未選擇收容所"
+    organizations.find((organization) => organization.id === organizationId)
+      ?.name ?? "未選擇收容所"
   );
 }
 

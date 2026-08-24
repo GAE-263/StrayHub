@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import { resolveOrganizationLabel } from "./ManagementLayout";
 
 describe("resolveOrganizationLabel", () => {
-  const organizations = [
-    { id: "org-a", code: "ORG-A", name: "南港收容所" },
-  ];
+  const organizations = [{ id: "org-a", code: "ORG-A", name: "南港收容所" }];
 
   it("uses the server-confirmed organization name", () => {
     expect(resolveOrganizationLabel(organizations, "org-a", false)).toBe(
@@ -20,6 +18,8 @@ describe("resolveOrganizationLabel", () => {
   });
 
   it("labels platform governance separately", () => {
-    expect(resolveOrganizationLabel(organizations, null, true)).toBe("平台治理");
+    expect(resolveOrganizationLabel(organizations, null, true)).toBe(
+      "平台治理",
+    );
   });
 });
