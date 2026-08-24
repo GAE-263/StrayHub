@@ -4,7 +4,7 @@ import base64
 import binascii
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -31,6 +31,7 @@ from services.api.app.application.volunteer_notification_service import (
 )
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
 from services.api.app.config.settings import get_settings
+from services.api.app.domain.volunteer_access import validate_service_date_selection
 from services.api.app.domain.volunteer_target import (
     EntryTarget,
     OrganizationTarget,
@@ -186,6 +187,12 @@ class VolunteerApplicationCreateRequest(VolunteerIdentityRequest):
     insurance_consent_acknowledged: bool = False
     client_request_id: UUID
     consent_acknowledged: Literal[True]
+    service_dates: list[date] = Field(min_length=1, max_length=14)
+
+    @model_validator(mode="after")
+    def validate_service_dates(self) -> VolunteerApplicationCreateRequest:
+        validate_service_date_selection(self.service_dates, today=date.today())
+        return self
 
 
 class VolunteerApplicationWithdrawRequest(VolunteerEntryIdentityRequest):
@@ -371,6 +378,7 @@ class VolunteerAccessPolicyResponse(BaseModel):
     organization_id: UUID
     applications_enabled: bool
     default_grant_duration_hours: int = Field(ge=1)
+    daily_application_limit: int = Field(ge=1)
     version: int = Field(ge=1)
 
 
@@ -380,10 +388,15 @@ class VolunteerAccessPolicyUpdateRequest(BaseModel):
     expected_version: int = Field(ge=1)
     applications_enabled: bool = Field(default=None)
     default_grant_duration_hours: int = Field(default=None, ge=1)
+    daily_application_limit: int = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def validate_update_fields(self) -> VolunteerAccessPolicyUpdateRequest:
-        if not {"applications_enabled", "default_grant_duration_hours"} & self.model_fields_set:
+        if not {
+            "applications_enabled",
+            "default_grant_duration_hours",
+            "daily_application_limit",
+        } & self.model_fields_set:
             raise ValueError("at least one policy field is required")
         return self
 
@@ -416,6 +429,7 @@ class VolunteerApplicationBatchFilter(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["pending"]
+    service_date: date | None = None
     submitted_from: datetime | None = None
     submitted_to: datetime | None = None
 
@@ -704,6 +718,7 @@ async def submit_volunteer_application(
             basic_profile=payload.basic_profile,
             insurance_identity=payload.insurance_identity,
             insurance_consent_acknowledged=payload.insurance_consent_acknowledged,
+            service_dates=payload.service_dates,
         )
         response_body = _response(result.status)
         await session.commit()
@@ -938,6 +953,7 @@ async def update_volunteer_access_policy(
             expected_version=payload.expected_version,
             applications_enabled=payload.applications_enabled,
             default_grant_duration_hours=payload.default_grant_duration_hours,
+            daily_application_limit=payload.daily_application_limit,
         )
     response_body = _policy_response(policy)
     await session.commit()
@@ -953,6 +969,8 @@ async def update_volunteer_access_policy(
 async def list_volunteer_applications(
     organizationId: UUID,  # noqa: N803
     application_status: ApplicationStatus | None = Query(default=None, alias="status"),  # noqa: B008
+    service_date: date | None = None,
+    unassigned: bool = False,
     submitted_from: datetime | None = None,
     submitted_to: datetime | None = None,
     cursor: str | None = None,
@@ -971,6 +989,8 @@ async def list_volunteer_applications(
         repository = VolunteerAccessRepository(session, organizationId)
         items = await repository.list_applications(
             status=application_status,
+            service_date=service_date,
+            unassigned=unassigned,
             submitted_from=submitted_from,
             submitted_to=submitted_to,
             cursor=_decode_application_cursor(cursor),
@@ -978,6 +998,8 @@ async def list_volunteer_applications(
         )
         matching_count = await repository.count_applications(
             status=application_status,
+            service_date=service_date,
+            unassigned=unassigned,
             submitted_from=submitted_from,
             submitted_to=submitted_to,
         )

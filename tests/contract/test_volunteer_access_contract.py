@@ -12,6 +12,7 @@ from services.api.app.api.volunteer_access import (
     GrantPeriodUpdateRequest,
     GrantRevokeRequest,
     VolunteerApplicationCreateRequest,
+    VolunteerApplicationBatchFilter,
     VolunteerApplicationWithdrawRequest,
     VolunteerIdentityRequest,
     VolunteerNotificationRetryRequest,
@@ -111,6 +112,7 @@ def test_application_router_and_payloads_match_canonical_contract() -> None:
         "insurance_consent_acknowledged",
         "client_request_id",
         "consent_acknowledged",
+        "service_dates",
     }
     assert set(VolunteerApplicationWithdrawRequest.model_fields) == {
         "id_token",
@@ -119,6 +121,15 @@ def test_application_router_and_payloads_match_canonical_contract() -> None:
     }
     assert VolunteerApplicationCreateRequest.model_fields["consent_acknowledged"].is_required()
     assert VolunteerApplicationWithdrawRequest.model_fields["expected_version"].is_required()
+
+
+def test_management_application_filter_accepts_a_service_date() -> None:
+    payload = VolunteerApplicationBatchFilter.model_validate(
+        {"status": "pending", "service_date": "2026-08-20"}
+    )
+
+    assert payload.service_date is not None
+    assert payload.service_date.isoformat() == "2026-08-20"
 
 
 def test_public_volunteer_organization_directory_and_identity_schema_are_canonical() -> None:
@@ -178,6 +189,7 @@ def test_submit_request_contract_supports_exactly_one_target_and_profile_fields(
         "phone_number",
         "client_request_id",
         "consent_acknowledged",
+        "service_dates",
     ]
     assert "organization_id" in schema["properties"]
     assert "shelter_entry_reference" in schema["properties"]
@@ -233,6 +245,7 @@ def test_submit_model_rejects_missing_or_ambiguous_target() -> None:
         "phone_number": "0900000000",
         "client_request_id": "00000000-0000-0000-0000-000000000001",
         "consent_acknowledged": True,
+        "service_dates": ["2026-08-15"],
     }
     with pytest.raises(ValidationError):
         VolunteerApplicationCreateRequest.model_validate(common)

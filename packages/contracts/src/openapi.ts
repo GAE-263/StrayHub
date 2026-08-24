@@ -2626,6 +2626,7 @@ export interface components {
             client_request_id: string;
             /** @constant */
             consent_acknowledged: true;
+            service_dates: string[];
         } & ({
             /** Format: uuid */
             organization_id: string;
@@ -2692,12 +2693,18 @@ export interface components {
              * @default 168
              */
             default_grant_duration_hours: number;
+            /**
+             * @description 每一服務日期可接受的志工申請數量上限
+             * @default 20
+             */
+            daily_application_limit: number;
             version: number;
         };
         VolunteerAccessPolicyUpdateRequest: {
             expected_version: number;
             applications_enabled?: boolean;
             default_grant_duration_hours?: number;
+            daily_application_limit?: number;
         };
         VolunteerDecisionBatchRequest: {
             /** Format: uuid */
@@ -2731,6 +2738,8 @@ export interface components {
         VolunteerApplicationBatchFilter: {
             /** @constant */
             status: "pending";
+            /** Format: date */
+            service_date?: string | null;
             /** Format: date-time */
             submitted_from?: string | null;
             /** Format: date-time */
@@ -5450,6 +5459,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["ApplicationStatus"];
+                service_date?: string;
+                unassigned?: boolean;
                 submitted_from?: string;
                 submitted_to?: string;
                 cursor?: string;

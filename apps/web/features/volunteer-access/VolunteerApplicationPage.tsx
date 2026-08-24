@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import {
@@ -53,6 +53,21 @@ async function readStatus(response: Response): Promise<VolunteerStatus> {
   return body as VolunteerStatus;
 }
 
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatServiceDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
 export function VolunteerApplicationPage({
   idToken,
   shelterEntryReference,
@@ -66,9 +81,21 @@ export function VolunteerApplicationPage({
   const [insuranceIdentity, setInsuranceIdentity] = useState("");
   const [consent, setConsent] = useState(false);
   const [insuranceConsent, setInsuranceConsent] = useState(false);
+  const [selectedServiceDates, setSelectedServiceDates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const serviceDateOptions = useMemo(() => {
+    const options: string[] = [];
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    for (let offset = 0; offset < 14; offset += 1) {
+      const value = new Date(today);
+      value.setDate(today.getDate() + offset);
+      options.push(formatLocalDate(value));
+    }
+    return options;
+  }, []);
 
   useEffect(() => {
     if (initialStatus !== null) return;
@@ -102,6 +129,7 @@ export function VolunteerApplicationPage({
       !consent ||
       !applicantName.trim() ||
       !phoneNumber.trim() ||
+      selectedServiceDates.length === 0 ||
       (insuranceRequired && (!insuranceIdentity.trim() || !insuranceConsent))
     )
       return;
@@ -124,6 +152,7 @@ export function VolunteerApplicationPage({
             : {}),
           client_request_id: crypto.randomUUID(),
           consent_acknowledged: true,
+          service_dates: selectedServiceDates,
         }),
       });
       setStatus(await readStatus(response));
@@ -176,6 +205,7 @@ export function VolunteerApplicationPage({
     !consent ||
     !applicantName.trim() ||
     !phoneNumber.trim() ||
+    selectedServiceDates.length === 0 ||
     (insuranceRequired && (!insuranceIdentity.trim() || !insuranceConsent)) ||
     submitting;
 
@@ -282,6 +312,27 @@ export function VolunteerApplicationPage({
                   />
                   <span>我確認送出志工報名，並同意由此收容所審核。</span>
                 </label>
+                <fieldset className="volunteer-service-date-picker">
+                  <legend>選擇服務日期（可複選，限今天起兩週內）</legend>
+                  <div className="volunteer-service-date-grid">
+                    {serviceDateOptions.map((serviceDate) => (
+                      <label key={serviceDate}>
+                        <Checkbox
+                          aria-label={`服務日期 ${serviceDate}`}
+                          checked={selectedServiceDates.includes(serviceDate)}
+                          onChange={(event) =>
+                            setSelectedServiceDates((current) =>
+                              event.target.checked
+                                ? [...current, serviceDate]
+                                : current.filter((value) => value !== serviceDate),
+                            )
+                          }
+                        />
+                        <span>{formatServiceDate(serviceDate)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <Button
                   type="button"
                   disabled={submitDisabled}

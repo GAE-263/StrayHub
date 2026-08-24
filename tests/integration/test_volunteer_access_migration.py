@@ -5,6 +5,7 @@ ENFORCE = Path("services/api/migrations/versions/0025_volunteer_access_enforce.p
 SYSTEM_ACTOR = Path("services/api/migrations/versions/0026_audit_system_actor.py")
 INSURANCE_POLICY = Path("services/api/migrations/versions/0031_volunteer_insurance_policy.py")
 PUBLIC_DIRECTORY = Path("services/api/migrations/versions/0032_public_volunteer_directory_scope.py")
+SERVICE_DATES = Path("services/api/migrations/versions/0034_volunteer_service_dates.py")
 ALEMBIC_ENV = Path("services/api/migrations/env.py")
 
 
@@ -71,3 +72,10 @@ def test_alembic_version_storage_supports_long_revision_ids() -> None:
     migration_env = ALEMBIC_ENV.read_text()
     assert "String(255)" in migration_env
     assert "ALTER TABLE alembic_version" in migration_env
+
+
+def test_service_dates_migration_preserves_legacy_applications_without_dates() -> None:
+    migration = SERVICE_DATES.read_text()
+
+    assert "CREATE TEMP TABLE volunteer_legacy_applications_to_delete" not in migration
+    assert "DELETE FROM volunteer_applications" not in migration

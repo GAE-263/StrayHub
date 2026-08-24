@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -43,6 +43,9 @@ class OrganizationVolunteerAccessPolicy(AuditMixin, Base):
     )
     default_grant_duration_hours: Mapped[int] = mapped_column(
         Integer, default=168, server_default=text("168"), nullable=False
+    )
+    daily_application_limit: Mapped[int] = mapped_column(
+        Integer, default=20, server_default=text("20"), nullable=False
     )
     version: Mapped[int] = mapped_column(
         Integer, default=1, server_default=text("1"), nullable=False
@@ -149,6 +152,41 @@ class VolunteerApplication(IdentityMixin, AuditMixin, Base):
     decided_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     decision_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
+
+
+class VolunteerApplicationServiceDate(IdentityMixin, AuditMixin, Base):
+    """One independently reviewable service-date request for an application."""
+
+    __tablename__ = "volunteer_application_service_dates"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "application_id",
+            "service_date",
+            name="uq_volunteer_application_service_date",
+        ),
+        Index(
+            "ix_volunteer_service_dates_org_date_status",
+            "organization_id",
+            "service_date",
+            "status",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'withdrawn')",
+            name="ck_volunteer_service_date_status",
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
+    application_id: Mapped[UUID] = mapped_column(ForeignKey("volunteer_applications.id"))
+    service_date: Mapped[date] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decision_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     version: Mapped[int] = mapped_column(
         Integer, default=1, server_default=text("1"), nullable=False
     )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -19,6 +19,7 @@ from services.api.app.domain.volunteer_access import (
     snapshot_policy,
     transition_application,
     validate_grant_period,
+    validate_service_date_selection,
 )
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
@@ -273,6 +274,7 @@ class VolunteerAccessService:
         basic_profile: dict[str, Any] | None = None,
         insurance_identity: str | None = None,
         insurance_consent_acknowledged: bool = False,
+        service_dates: list[date] | None = None,
         now: datetime | None = None,
     ) -> VolunteerSubmitResult:
         if (entry_reference_id is None) == (organization_id is None):
@@ -335,6 +337,11 @@ class VolunteerAccessService:
                 )
         previous_application_id = history[0].id if history else None
         submitted_at = now or datetime.now(timezone.utc)
+        normalized_service_dates = (
+            validate_service_date_selection(service_dates, today=submitted_at.date())
+            if service_dates is not None
+            else []
+        )
         policy = None
         normalized_identity = None
         if self.pii_service is not None:
@@ -364,6 +371,18 @@ class VolunteerAccessService:
         else:
             application, created = await race_safe_add(application)
         if created:
+            if normalized_service_dates:
+                add_service_dates = getattr(
+                    self.repository, "add_service_dates_with_capacity", None
+                )
+                if add_service_dates is None:
+                    raise DomainError("service_dates_unavailable", "服務日期暫時無法建立", 503)
+                policy_for_dates = policy or await self.repository.policy()
+                await add_service_dates(
+                    application.id,
+                    normalized_service_dates,
+                    daily_limit=policy_for_dates.daily_application_limit,
+                )
             if self.pii_service is not None:
                 assert policy is not None
                 await self.pii_service.create_profile(
@@ -483,21 +502,27 @@ class VolunteerAccessService:
         expected_version: int,
         applications_enabled: bool | None,
         default_grant_duration_hours: int | None,
+        daily_application_limit: int | None = None,
     ) -> OrganizationVolunteerAccessPolicy:
         policy = await self.repository.policy(for_update=True)
         if policy.version != expected_version:
             raise DomainError("policy_version_conflict", "設定已更新，請重新載入", 409)
         if default_grant_duration_hours is not None and default_grant_duration_hours <= 0:
             raise DomainError("invalid_policy_duration", "預設授權期限必須大於 0", 422)
+        if daily_application_limit is not None and daily_application_limit <= 0:
+            raise DomainError("invalid_daily_application_limit", "每日申請上限必須大於 0", 422)
         before = {
             "applications_enabled": policy.applications_enabled,
             "default_grant_duration_hours": policy.default_grant_duration_hours,
+            "daily_application_limit": policy.daily_application_limit,
             "version": policy.version,
         }
         if applications_enabled is not None:
             policy.applications_enabled = applications_enabled
         if default_grant_duration_hours is not None:
             policy.default_grant_duration_hours = default_grant_duration_hours
+        if daily_application_limit is not None:
+            policy.daily_application_limit = daily_application_limit
         policy.version += 1
         if self.audit is not None:
             await self.audit.record(
@@ -511,6 +536,7 @@ class VolunteerAccessService:
                 after={
                     "applications_enabled": policy.applications_enabled,
                     "default_grant_duration_hours": policy.default_grant_duration_hours,
+                    "daily_application_limit": policy.daily_application_limit,
                     "version": policy.version,
                 },
             )
@@ -529,6 +555,7 @@ class VolunteerAccessService:
         policy_version_used: int | None = None,
         duration_hours_used: int | None = None,
         operation_id: UUID | None = None,
+        service_date: date | None = None,
         now: datetime | None = None,
     ) -> tuple[VolunteerApplication, OrganizationMembership | None, VolunteerAccessGrant | None]:
         clock = now or datetime.now(timezone.utc)
@@ -537,6 +564,32 @@ class VolunteerAccessService:
             raise DomainError("application_not_found", "找不到此志工申請", 404)
         if application.status != "pending" or application.version != expected_version:
             raise DomainError("application_version_conflict", "申請狀態已更新", 409)
+        service_date_item = None
+        if service_date is not None:
+            getter = getattr(self.repository, "service_date_for_application", None)
+            if getter is None:
+                raise DomainError("service_date_unavailable", "服務日期暫時無法審核", 503)
+            service_date_item = await getter(application.id, service_date, for_update=True)
+            if service_date_item is None or service_date_item.status != "pending":
+                raise DomainError("service_date_version_conflict", "服務日期已更新", 409)
+            existing_grant = await self.repository.grant_for_application(application.id)
+            if existing_grant is not None:
+                service_date_item.status = decision
+                service_date_item.decided_at = clock
+                service_date_item.decided_by_user_id = actor_user_id
+                service_date_item.decision_reason = normalize_reason(
+                    reason, required=decision == "reject"
+                )
+                service_date_item.version += 1
+                pending_count = await self.repository.pending_service_date_count(application.id)
+                application.status = "pending" if pending_count else "approved"
+                application.decided_at = clock
+                application.decided_by_user_id = actor_user_id
+                application.version += 1
+                membership = await self.identities.get_membership(
+                    application.user_id, self.repository.organization_id
+                )
+                return application, membership, existing_grant
         before = {"status": application.status, "version": application.version}
         membership = None
         grant = None
@@ -600,6 +653,14 @@ class VolunteerAccessService:
         application.decided_at = clock
         application.decided_by_user_id = actor_user_id
         application.version += 1
+        if service_date_item is not None:
+            service_date_item.status = decision
+            service_date_item.decided_at = clock
+            service_date_item.decided_by_user_id = actor_user_id
+            service_date_item.decision_reason = normalize_reason(reason)
+            service_date_item.version += 1
+            if await self.repository.pending_service_date_count(application.id):
+                application.status = "pending"
         if self.audit is not None:
             await self.audit.record(
                 organization_id=self.repository.organization_id,

@@ -113,6 +113,7 @@ export default function VolunteerAccessSettingsPage() {
           expected_version: value.version,
           applications_enabled: value.applications_enabled,
           default_grant_duration_hours: value.default_grant_duration_hours,
+          daily_application_limit: value.daily_application_limit,
         }),
       },
     );

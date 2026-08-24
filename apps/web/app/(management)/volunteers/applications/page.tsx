@@ -19,10 +19,19 @@ type BatchItem = {
   error_code?: string | null;
 };
 
+function todayLocalDate(): string {
+  const value = new Date();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${value.getFullYear()}-${month}-${day}`;
+}
+
 export default function VolunteerApplicationsPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [applications, setApplications] = useState<Application[]>([]);
   const [matchingCount, setMatchingCount] = useState(0);
+  const [serviceDate, setServiceDate] = useState(todayLocalDate);
+  const [unassigned, setUnassigned] = useState(false);
   const [submittedFrom, setSubmittedFrom] = useState("");
   const [submittedTo, setSubmittedTo] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -31,8 +40,11 @@ export default function VolunteerApplicationsPage() {
     id: string,
     from = submittedFrom,
     to = submittedTo,
+    selectedServiceDate = serviceDate,
   ) {
     const query = new URLSearchParams({ status: "pending", limit: "100" });
+    if (unassigned) query.set("unassigned", "true");
+    else if (selectedServiceDate) query.set("service_date", selectedServiceDate);
     if (from) query.set("submitted_from", new Date(from).toISOString());
     if (to) query.set("submitted_to", new Date(to).toISOString());
     const response = await authFetch(
@@ -49,7 +61,7 @@ export default function VolunteerApplicationsPage() {
     const id = window.sessionStorage.getItem("active_organization_id") ?? "";
     setOrganizationId(id);
     if (!id) return;
-    void loadApplications(id, "", "").catch((error) =>
+    void loadApplications(id, "", "", todayLocalDate()).catch((error) =>
       setLoadError(error instanceof Error ? error.message : "載入失敗"),
     );
     // Initial load intentionally ignores local date-filter state.
@@ -116,6 +128,23 @@ export default function VolunteerApplicationsPage() {
         }}
       >
         <label>
+          審核服務日期
+          <input
+            type="date"
+            value={serviceDate}
+            onChange={(event) => setServiceDate(event.target.value)}
+            disabled={unassigned}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={unassigned}
+            onChange={(event) => setUnassigned(event.target.checked)}
+          />
+          未指定日期（既有歷史申請）
+        </label>
+        <label>
           送出時間起
           <input
             type="datetime-local"
@@ -141,6 +170,7 @@ export default function VolunteerApplicationsPage() {
         matchingCount={matchingCount}
         filter={{
           status: "pending",
+          ...(unassigned ? {} : serviceDate ? { service_date: serviceDate } : {}),
           ...(submittedFrom
             ? { submitted_from: new Date(submittedFrom).toISOString() }
             : {}),

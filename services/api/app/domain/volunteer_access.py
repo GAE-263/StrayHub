@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -13,6 +13,7 @@ from uuid import UUID
 from services.api.app.api.errors import DomainError
 
 DEFAULT_GRANT_DURATION_HOURS = 168
+MAX_SERVICE_DATE_DAYS_AHEAD = 14
 ENTRY_REFERENCE_PURPOSE = "volunteer_application_entry"
 MAX_REASON_LENGTH = 500
 
@@ -66,6 +67,21 @@ def validate_grant_period(
                 422,
             )
     return valid_from, expires_at
+
+
+def validate_service_date_selection(
+    service_dates: list[date], *, today: date
+) -> list[date]:
+    """Validate a volunteer's selectable dates in the next 14-day window."""
+
+    if not service_dates:
+        raise DomainError("service_date_required", "至少選擇一天服務日期", 422)
+    if len(service_dates) != len(set(service_dates)):
+        raise DomainError("duplicate_service_date", "服務日期不可重複", 422)
+    window_end = today + timedelta(days=MAX_SERVICE_DATE_DAYS_AHEAD - 1)
+    if any(service_date < today or service_date > window_end for service_date in service_dates):
+        raise DomainError("service_date_out_of_range", "服務日期只能選擇未來兩週內", 422)
+    return sorted(service_dates)
 
 
 def normalize_reason(reason: str | None, *, required: bool = False) -> str | None:

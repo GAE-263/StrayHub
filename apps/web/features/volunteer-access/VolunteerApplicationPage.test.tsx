@@ -75,6 +75,9 @@ describe("VolunteerApplicationPage", () => {
       container
         .querySelector<HTMLInputElement>('input[type="checkbox"]')
         ?.click();
+      container
+        .querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.click();
     });
     await act(async () => {
       Array.from(container.querySelectorAll("button"))
@@ -95,6 +98,7 @@ describe("VolunteerApplicationPage", () => {
         phone_number: "0912345678",
         consent_acknowledged: true,
         shelter_entry_reference: "opaque-entry-reference-0123456789abcdef",
+        service_dates: expect.arrayContaining([expect.any(String)]),
       }),
     );
 

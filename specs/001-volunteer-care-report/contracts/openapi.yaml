@@ -1494,6 +1494,16 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/ApplicationStatus'
+        - name: service_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: unassigned
+          in: query
+          schema:
+            type: boolean
+            default: false
         - name: submitted_from
           in: query
           schema:
@@ -3602,7 +3612,7 @@ components:
               pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationCreateRequest:
       type: object
-      required: [id_token, applicant_name, phone_number, client_request_id, consent_acknowledged]
+      required: [id_token, applicant_name, phone_number, client_request_id, consent_acknowledged, service_dates]
       additionalProperties: false
       properties:
         id_token:
@@ -3639,6 +3649,13 @@ components:
         consent_acknowledged:
           type: boolean
           const: true
+        service_dates:
+          type: array
+          minItems: 1
+          maxItems: 14
+          items:
+            type: string
+            format: date
       oneOf:
         - required: [organization_id]
           properties:
@@ -3764,7 +3781,7 @@ components:
           type: [string, 'null']
     VolunteerAccessPolicy:
       type: object
-      required: [organization_id, applications_enabled, default_grant_duration_hours, version]
+      required: [organization_id, applications_enabled, default_grant_duration_hours, daily_application_limit, version]
       properties:
         organization_id:
           type: string
@@ -3777,6 +3794,11 @@ components:
           minimum: 1
           default: 168
           description: 新 organization 建立 transaction 內初始為 168；更新只影響後續建立的 decision
+        daily_application_limit:
+          type: integer
+          minimum: 1
+          default: 20
+          description: 每一服務日期可接受的志工申請數量上限
         version:
           type: integer
           minimum: 1
@@ -3792,6 +3814,9 @@ components:
         applications_enabled:
           type: boolean
         default_grant_duration_hours:
+          type: integer
+          minimum: 1
+        daily_application_limit:
           type: integer
           minimum: 1
     VolunteerDecisionBatchRequest:
@@ -3863,6 +3888,9 @@ components:
         status:
           type: string
           const: pending
+        service_date:
+          type: [string, 'null']
+          format: date
         submitted_from:
           type: [string, 'null']
           format: date-time

@@ -54,6 +54,7 @@ export function ApplicationBatchWorkbench({
   matchingCount: number;
   filter?: {
     status: "pending";
+    service_date?: string;
     submitted_from?: string;
     submitted_to?: string;
   };

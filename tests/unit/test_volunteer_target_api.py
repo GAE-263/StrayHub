@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -433,6 +433,7 @@ async def test_invalid_line_token_is_verified_before_legacy_entry_resolution(
             phone_number="0900000000",
             client_request_id=uuid4(),
             consent_acknowledged=True,
+            service_dates=[date.today()],
         )
     elif operation == "withdraw":
         payload = api.VolunteerApplicationWithdrawRequest(
@@ -500,6 +501,7 @@ async def test_mutations_validate_response_before_commit(
             phone_number="0900000000",
             client_request_id=uuid4(),
             consent_acknowledged=True,
+            service_dates=[date.today()],
         )
         with pytest.raises(RuntimeError, match="response validation failed"):
             await api.submit_volunteer_application(payload, Response(), session, verifier)
@@ -527,6 +529,7 @@ def test_organization_target_mutations_are_rejected_by_entry_only_request_models
                 shelter_entry_reference=None,
                 client_request_id=uuid4(),
                 consent_acknowledged=True,
+                service_dates=[date.today()],
             )
         else:
             api.VolunteerApplicationWithdrawRequest(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, TypeVar
 from uuid import UUID, uuid4
 
@@ -187,6 +187,16 @@ class VolunteerBatchService:
         batch.status = "processing"
         for item in items:
             try:
+                service_date = None
+                filter_snapshot = getattr(batch, "filter_snapshot", None)
+                if filter_snapshot:
+                    raw_service_date = filter_snapshot.get("service_date")
+                    if raw_service_date:
+                        service_date = (
+                            raw_service_date
+                            if isinstance(raw_service_date, date)
+                            else date.fromisoformat(raw_service_date)
+                        )
                 decision_arguments = {
                     "application_id": item.application_id,
                     "expected_version": item.expected_version,
@@ -198,6 +208,7 @@ class VolunteerBatchService:
                     "policy_version_used": batch.policy_version_used,
                     "duration_hours_used": batch.default_duration_hours_used,
                     "operation_id": getattr(batch, "operation_id", None),
+                    "service_date": service_date,
                 }
                 session = getattr(self.repository, "session", None)
                 if session is None:
