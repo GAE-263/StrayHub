@@ -96,6 +96,43 @@ test("manager generates, previews, and invokes print from the animal detail", as
 
 for (const viewport of [
   { width: 360, height: 800 },
+  { width: 1024, height: 768 },
+  { width: 1440, height: 900 },
+]) {
+  test(`16-character shelter number remains intact at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    const shelterNumber = "TW2026A000000001";
+    await page.setViewportSize(viewport);
+    await mockManagementApi(page, {
+      animalDetails: {
+        "animal-a": {
+          id: "animal-a",
+          organization_id: "org-a",
+          name: "小森",
+          shelter_number: shelterNumber,
+          status: "active",
+          photo_key: null,
+          area_name: "一區",
+          area_type: "room",
+        },
+      },
+    });
+    await page.goto("/animals/animal-a");
+
+    const number = page.locator(".animal-profile-number strong");
+    await expect(number).toHaveText(shelterNumber);
+    await expect(number).toHaveCSS("white-space", "nowrap");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+  });
+}
+
+for (const viewport of [
+  { width: 360, height: 800 },
   { width: 768, height: 1024 },
   { width: 1440, height: 900 },
 ]) {
