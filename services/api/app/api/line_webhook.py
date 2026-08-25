@@ -25,8 +25,12 @@ from services.api.app.application.line_draft_conversation import (
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
 from services.api.app.application.line_message_presenter import (
-    WOOD,
-    WOOD_DEEP,
+    BUTTER,
+    LEAF,
+    LILAC,
+    PEACH,
+    SKY,
+    animal_confirmation_bubble,
     celebration_bubble,
     daily_care_bubble,
     prompt_bubble,
@@ -114,38 +118,63 @@ def _postback(label: str, data: str, *, display_text: str | None = None) -> dict
     }
 
 
-async def _animal_confirmation_messages(session, animal, organization_id: UUID) -> list[dict]:
-    messages = []
-    if animal.current_photo_key:
-        try:
-            photo_url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
-                media_organization_id=organization_id,
-                object_key=animal.current_photo_key,
-                expires_seconds=300,
-            )
-            messages.append(
-                {
-                    "type": "image",
-                    "originalContentUrl": photo_url,
-                    "previewImageUrl": photo_url,
-                }
-            )
-        except Exception:
-            # The identity confirmation remains available when the current
-            # photo cannot be fetched; the failure is not a reason to change
-            # the selected animal.
-            pass
-    area_label = "未維護"
-    if animal.area_id is not None:
-        result = await session.execute(
-            select(ShelterArea.name).where(
-                ShelterArea.id == animal.area_id,
-                ShelterArea.organization_id == organization_id,
-            )
+async def _animal_photo_message(session, animal, organization_id: UUID) -> dict | None:
+    if not animal.current_photo_key:
+        return None
+    try:
+        photo_url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
+            media_organization_id=organization_id,
+            object_key=animal.current_photo_key,
+            expires_seconds=300,
         )
-        area_label = result.scalar_one_or_none() or area_label
-    messages.append(_text(f"所在籠位／區域：{area_label}"))
-    return messages
+        return {
+            "type": "image",
+            "originalContentUrl": photo_url,
+            "previewImageUrl": photo_url,
+        }
+    except Exception:
+        # The identity confirmation remains available when the current photo
+        # cannot be fetched; the failure is not a reason to change the
+        # selected animal.
+        return None
+
+
+async def _animal_area_label(session, animal, organization_id: UUID) -> str:
+    if animal.area_id is None:
+        return "未維護"
+    result = await session.execute(
+        select(ShelterArea.name).where(
+            ShelterArea.id == animal.area_id,
+            ShelterArea.organization_id == organization_id,
+        )
+    )
+    return result.scalar_one_or_none() or "未維護"
+
+
+async def _animal_confirmation_messages(
+    session,
+    animal,
+    organization_id: UUID,
+    *,
+    token: str | None = None,
+) -> list[dict]:
+    data = urlencode(
+        {
+            "action": "confirm_animal",
+            "animal_id": str(animal.id),
+            **({"draft_token": token} if token else {}),
+        }
+    )
+    photo = await _animal_photo_message(session, animal, organization_id)
+    area_label = await _animal_area_label(session, animal, organization_id)
+    return ([photo] if photo else []) + [
+        animal_confirmation_bubble(
+            animal_name=animal.name,
+            shelter_number=animal.shelter_number or "無收容編號",
+            area_label=area_label,
+            confirm_data=data,
+        )
+    ]
 
 
 async def _reply_animal_confirmation(
@@ -157,29 +186,10 @@ async def _reply_animal_confirmation(
     *,
     token: str | None = None,
 ) -> None:
-    data = urlencode(
-        {
-            "action": "confirm_animal",
-            "animal_id": str(animal.id),
-            **({"draft_token": token} if token else {}),
-        }
-    )
     await _reply(
         line,
         event,
-        await _animal_confirmation_messages(session, animal, organization_id)
-        + [
-            _text(f"請確認：{animal.name}／{animal.shelter_number or '無收容編號'}"),
-            {
-                "type": "template",
-                "altText": "確認動物",
-                "template": {
-                    "type": "buttons",
-                    "text": "是這隻動物嗎？",
-                    "actions": [_postback_action("確認是這隻", data)],
-                },
-            },
-        ],
+        await _animal_confirmation_messages(session, animal, organization_id, token=token),
     )
 
 
@@ -259,7 +269,7 @@ async def _daily_care_overview(
     """The card behind 今日照護毛孩: who needs care today, and what is already done."""
     animals = await _scoped_animals(session, organization_id, volunteer_user_id)
     if not animals:
-        return [_text("今日目前沒有可回報的動物。")]
+        return [_no_reportable_animals_bubble()]
     organization = (
         await session.execute(select(Organization).where(Organization.id == organization_id))
     ).scalar_one_or_none()
@@ -429,6 +439,55 @@ async def _options_requiring_note(session, organization_id: UUID, answers: dict)
     return labels
 
 
+def _no_reportable_animals_bubble() -> dict:
+    return prompt_bubble(
+        title="今日目前沒有可回報的動物",
+        caption="散步回報",
+        body_text="今天的可回報清單是空的，之後有動物排進今日名單再回來看看 🐾",
+        glyph="🐕",
+        tone=LEAF,
+        choices=[],
+    )
+
+
+def _media_failure_bubble(subject: str) -> dict:
+    """A failed photo must still leave a way forward.
+
+    The body text has always promised a button; with ``choices=[]`` none was
+    drawn, so the volunteer could only resend the photo that just failed. Both
+    skip actions are on the tokenless whitelist, so no draft token is needed.
+    """
+    return prompt_bubble(
+        title="照片處理失敗",
+        caption="散步回報",
+        body_text="請重新傳送，或按下面的按鈕略過照片。",
+        glyph="⚠️",
+        tone=PEACH,
+        choices=[
+            (
+                "略過照片",
+                "action=skip_stool_media" if subject == "stool" else "action=skip_media",
+                "⏭",
+            )
+        ],
+    )
+
+
+def _find_dog_hub_bubble() -> dict:
+    return prompt_bubble(
+        title="要幫哪隻毛孩回報",
+        caption="散步回報",
+        body_text="選一種方式找到今天要回報的毛孩 🔎",
+        glyph="🔎",
+        tone=BUTTER,
+        choices=[
+            ("掃描 QR 貼紙", "action=qr_scan", "📷"),
+            ("輸入編號或名字", "action=search_animal", "🔤"),
+            ("看今日名單", "action=today_overview", "📋"),
+        ],
+    )
+
+
 async def _reply_next_step(
     session,
     line: LineMessagingPort,
@@ -445,7 +504,27 @@ async def _reply_next_step(
     # "Invalid reply token".
     messages: list[dict] = list(prefix_messages or [])
     state = DraftState(draft.current_step)
-    if state in {
+    if state == DraftState.SELECTING_ANIMAL:
+        # Backing out of CONFIRMING_ANIMAL lands here; without a card the bot
+        # goes silent and a volunteer has nothing left to tap but a stale
+        # button from an earlier message in the chat history.
+        messages.append(_find_dog_hub_bubble())
+    elif state == DraftState.CONFIRMING_ANIMAL:
+        # "上一步" on the very first question lands here — the most reachable
+        # silent state of the two, and the one _PREVIOUS_STATE points at.
+        # candidate_animal_id is set mid-reselection: confirm the animal the
+        # volunteer is actually being asked about, not the one he is leaving.
+        animal_id = getattr(draft, "candidate_animal_id", None) or draft.animal_id
+        animal = await AnimalRepository(session, organization_id).get(animal_id)
+        if animal is None:
+            messages.append(_find_dog_hub_bubble())
+        else:
+            messages.extend(
+                await _animal_confirmation_messages(
+                    session, animal, organization_id, token=raw_token
+                )
+            )
+    elif state in {
         DraftState.ANSWERING_WALK_COMPLETION,
         DraftState.ANSWERING_ACTIVITY,
         DraftState.ANSWERING_GAIT,
@@ -481,8 +560,7 @@ async def _reply_next_step(
                     "這張只給照護判讀用，不會出現在對外的貼文 🔒"
                 ),
                 glyph="🔬",
-                start=WOOD,
-                end=WOOD_DEEP,
+                tone=PEACH,
                 choices=[
                     ("這次略過", f"action=skip_stool_media&draft_token={raw_token}", "⏭"),
                     ("上一步", f"action=back&draft_token={raw_token}", "←"),
@@ -512,6 +590,7 @@ async def _reply_next_step(
                     "這些會變成之後幫牠找家的小故事。"
                 ),
                 glyph="✨",
+                tone=BUTTER,
                 choices=[
                     ("今天沒什麼特別的", f"action=skip_story&draft_token={raw_token}", "⏭"),
                     ("上一步", f"action=back&draft_token={raw_token}", "←"),
@@ -529,8 +608,7 @@ async def _reply_next_step(
                     caption="照護回報 · 必填",
                     body_text=f"你選了下面的選項，請直接打字說明 ✏️\n\n{listed}",
                     glyph="✍️",
-                    start=WOOD,
-                    end=WOOD_DEEP,
+                    tone=PEACH,
                     choices=[
                         ("上一步", f"action=back&draft_token={raw_token}", "←"),
                     ],
@@ -543,8 +621,7 @@ async def _reply_next_step(
                     caption="照護回報 · 選填",
                     body_text="想補充的事情直接打字傳過來就好 ✏️\n例如今天特別黏人、或是走路好像怪怪的。",
                     glyph="💭",
-                    start=WOOD,
-                    end=WOOD_DEEP,
+                    tone=LILAC,
                     choices=[
                         ("略過心得", f"action=skip_note&draft_token={raw_token}", "⏭"),
                         ("上一步", f"action=back&draft_token={raw_token}", "←"),
@@ -608,7 +685,7 @@ async def _handle_postback(
     if action in {"start_care_report", "more_animals"}:
         animals = await _scoped_animals(session, organization_id, user_id)
         if not animals:
-            await _reply(line, event, [_text("今日目前沒有可回報的動物。")])
+            await _reply(line, event, [_no_reportable_animals_bubble()])
             return None
         offset = _offset_value(values.get("offset", [""])[0])
         items = _reportable_animals(
@@ -640,40 +717,26 @@ async def _handle_postback(
         )
         return None
     if action == "find_dog":
-        await _reply(
-            line,
-            event,
-            [
-                prompt_bubble(
-                    title="要幫哪隻毛孩回報",
-                    caption="散步回報",
-                    body_text="選一種方式找到今天要回報的毛孩 🔎",
-                    glyph="🔎",
-                    choices=[
-                        ("掃描 QR 貼紙", "action=qr_scan", "📷"),
-                        ("輸入編號或名字", "action=search_animal", "🔤"),
-                        ("看今日名單", "action=today_overview", "📋"),
-                    ],
-                )
-            ],
-        )
+        await _reply(line, event, [_find_dog_hub_bubble()])
         return None
     if action == "qr_scan":
         await _reply(
             line,
             event,
             [
-                _text(
-                    "點下面的 📷 相機，對準籠舍上的 QR 貼紙拍下去就好。\n"
-                    "貼紙壞了或找不到，可以改用輸入搜尋。"
-                ),
-                {
-                    "type": "text",
-                    "text": "改用輸入搜尋",
-                    "quickReply": {
-                        "items": [_postback("改用輸入搜尋", "action=search_animal")]
-                    },
-                },
+                prompt_bubble(
+                    title="掃描籠舍上的 QR 貼紙",
+                    caption="散步回報",
+                    body_text=(
+                        "點下面的 📷 相機，對準 QR 貼紙拍下去就好。\n"
+                        "貼紙壞了或找不到，可以改用輸入搜尋。"
+                    ),
+                    glyph="📷",
+                    tone=SKY,
+                    choices=[
+                        ("改用輸入搜尋", "action=search_animal", "🔤"),
+                    ],
+                )
             ],
         )
         return None
@@ -682,21 +745,47 @@ async def _handle_postback(
             line,
             event,
             [
-                _text(
-                    "直接在下面輸入框打幾個字就好，例如「財」或收容編號後幾碼，"
-                    "不用打全名。"
+                prompt_bubble(
+                    title="輸入編號或名字",
+                    caption="散步回報",
+                    body_text=(
+                        "直接在下面輸入框打幾個字就好，例如「財」或收容編號後幾碼，"
+                        "不用打全名。"
+                    ),
+                    glyph="🔤",
+                    tone=LILAC,
+                    choices=[],
                 )
             ],
         )
         return None
     token = values.get("draft_token", [""])[0]
     if action == "contact_staff":
-        await _reply(line, event, [_text("請直接聯繫目前收容所的工作人員協助處理。")])
+        await _reply(
+            line,
+            event,
+            [
+                prompt_bubble(
+                    title="請直接聯繫工作人員",
+                    caption="聯絡",
+                    body_text="請直接聯繫目前收容所的工作人員協助處理。",
+                    glyph="💬",
+                    tone=SKY,
+                    choices=[],
+                )
+            ],
+        )
         return None
     if action == "reselect_animal":
-        if not token:
-            raise DomainError("draft_token_required", "缺少回報草稿識別", 422)
-        draft = await CareReportDraftRepository(session, organization_id).get_by_token(token)
+        draft_repository = CareReportDraftRepository(session, organization_id)
+        # Cards issued on the tokenless path (rich menu / QR / today's list /
+        # text search) embed draft_token= empty, so fall back to the
+        # volunteer's active draft the way submit_current/cancel_current do.
+        draft = (
+            await draft_repository.get_by_token(token)
+            if token
+            else await draft_repository.get_active_for_volunteer(user_id)
+        )
         if draft is None or draft.volunteer_user_id != user_id or draft.status != "active":
             raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
         items = _reportable_animals(
@@ -706,7 +795,7 @@ async def _handle_postback(
             line,
             event,
             [
-                _text("請選擇要更換的動物；原有答案會保留但必須重新確認，照片不會沿用。"),
+                _text("請選擇要更換的動物；原有答案會保留但必須重新確認，照片與心得不會沿用。"),
                 {"type": "text", "text": "可回報動物", "quickReply": {"items": items}},
             ],
         )
@@ -751,29 +840,113 @@ async def _handle_postback(
             draft = await CareReportDraftRepository(session, organization_id).get_by_token(token)
             if draft is None or draft.volunteer_user_id != user_id or draft.status != "active":
                 raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
-            await draft_service.begin_reselection(draft.id, candidate_animal_id=animal.id)
-            await draft_service.confirm_reselection(draft.id)
-            await CareReportDraftRepository(session, organization_id).clear_media(draft.id)
             raw_token = token
-            message = f"已更換為 {animal.name}；原有答案需重新確認，照片不會沿用。"
+            if draft.animal_id == animal.id:
+                # "換一隻" then picking the same one means "never mind", not a
+                # reselection; begin_reselection would answer that with a 422
+                # error card and no way back to the report.
+                message = f"沒有更換，還是 {animal.name} 的回報。"
+            else:
+                await draft_service.begin_reselection(draft.id, candidate_animal_id=animal.id)
+                # confirm_reselection clears media, note and story itself.
+                await draft_service.confirm_reselection(draft.id)
+                message = f"已更換為 {animal.name}；原有答案需重新確認，照片與心得不會沿用。"
         else:
-            draft, raw_token = await draft_service.create(
-                volunteer_user_id=user_id,
-                membership_id=membership_id,
-                animal_id=animal.id,
-            )
-            # A new draft starts in CONFIRMING_ANIMAL; advance it so the reply
-            # below carries the first question instead of stalling here.
-            await LineDraftConversationService(
-                CareReportDraftRepository(session, organization_id)
-            ).handle(
-                token=raw_token,
-                volunteer_user_id=user_id,
-                action="confirm_animal",
-                value=None,
-                event_id=event.get("webhookEventId", ""),
-            )
-            message = f"已確認 {animal.name}，現在開始照護回報。"
+            # The volunteer came in without a draft_token — find_dog, QR,
+            # today's list and text search never carry one.
+            existing_draft = await CareReportDraftRepository(
+                session, organization_id
+            ).get_active_for_volunteer(user_id)
+            if existing_draft is None:
+                draft, raw_token = await draft_service.create(
+                    volunteer_user_id=user_id,
+                    membership_id=membership_id,
+                    animal_id=animal.id,
+                )
+                # A new draft starts in CONFIRMING_ANIMAL; advance it so the
+                # reply below carries the first question instead of stalling.
+                await LineDraftConversationService(
+                    CareReportDraftRepository(session, organization_id)
+                ).handle(
+                    token=raw_token,
+                    volunteer_user_id=user_id,
+                    action="confirm_animal",
+                    value=None,
+                    event_id=event.get("webhookEventId", ""),
+                )
+                message = f"已確認 {animal.name}，現在開始照護回報。"
+            elif existing_draft.animal_id == animal.id:
+                # He backed out to the picker and chose the animal he is
+                # already reporting on: that means "carry on", not "switch".
+                # begin_reselection would reject it with same_animal (422).
+                draft, raw_token = existing_draft, ""
+                if DraftState(draft.current_step) in {
+                    DraftState.SELECTING_ANIMAL,
+                    DraftState.CONFIRMING_ANIMAL,
+                }:
+                    # The draft is parked on the picker/confirmation card he
+                    # just tapped. Walk it forward, or the reply below would
+                    # hand him the same card again — a loop with no way out.
+                    draft.current_step = DraftState.CONFIRMING_ANIMAL.value
+                    await LineDraftConversationService(
+                        CareReportDraftRepository(session, organization_id)
+                    ).handle(
+                        token=None,
+                        volunteer_user_id=user_id,
+                        action="confirm_animal",
+                        value=None,
+                        event_id=event.get("webhookEventId", ""),
+                    )
+                    message = f"已確認 {animal.name}，現在開始照護回報。"
+                else:
+                    message = f"繼續回報 {animal.name}，接著回答目前的問題就好。"
+            elif values.get("switch", [""])[0] != "1":
+                # Switching animals discards photos, note and story, so ask
+                # first instead of quietly rewriting the half-finished report.
+                previous = await AnimalRepository(session, organization_id).get(
+                    existing_draft.animal_id
+                )
+                previous_name = previous.name if previous is not None else "上一隻毛孩"
+                await _reply(
+                    line,
+                    event,
+                    [
+                        prompt_bubble(
+                            title="還有一筆回報沒送出",
+                            caption="散步回報",
+                            body_text=(
+                                f"{previous_name} 的回報還沒送出。改成回報 {animal.name} 的話，"
+                                f"{previous_name} 已上傳的照片和心得都不會保留，"
+                                "先前的答案也要重新確認一次。"
+                            ),
+                            glyph="⚠️",
+                            tone=PEACH,
+                            choices=[
+                                (f"繼續回報 {previous_name}", "action=resume_draft", "↩"),
+                                (
+                                    f"改成回報 {animal.name}",
+                                    urlencode(
+                                        {
+                                            "action": "confirm_animal",
+                                            "animal_id": str(animal.id),
+                                            "switch": "1",
+                                        }
+                                    ),
+                                    "🔄",
+                                ),
+                            ],
+                        )
+                    ],
+                )
+                return None
+            else:
+                await draft_service.begin_reselection(
+                    existing_draft.id, candidate_animal_id=animal.id
+                )
+                # confirm_reselection clears media, note and story itself.
+                await draft_service.confirm_reselection(existing_draft.id)
+                draft, raw_token = existing_draft, ""
+                message = f"已改成回報 {animal.name}；先前的答案需重新確認，照片與心得不會沿用。"
         await _reply_next_step(
             session,
             line,
@@ -789,7 +962,20 @@ async def _handle_postback(
             user_id
         )
         if draft is None:
-            await _reply(line, event, [_text("目前沒有可繼續的回報。")])
+            await _reply(
+                line,
+                event,
+                [
+                    prompt_bubble(
+                        title="目前沒有未完成的回報",
+                        caption="散步回報",
+                        body_text="按「開始散步回報」就可以挑一隻毛孩了 🐾",
+                        glyph="📭",
+                        tone=PEACH,
+                        choices=[],
+                    )
+                ],
+            )
             return None
         await _reply_next_step(
             session,
@@ -826,7 +1012,20 @@ async def _handle_postback(
         draft.status = "cancelled"
         draft.current_step = DraftState.CANCELLED.value
         await session.flush()
-        await _reply(line, event, [_text("已取消這次回報，沒有建立正式紀錄。")])
+        await _reply(
+            line,
+            event,
+            [
+                prompt_bubble(
+                    title="已取消這次回報",
+                    caption="散步回報",
+                    body_text="沒有建立正式紀錄，之後要回報再按一次選單就好 🐾",
+                    glyph="🗑",
+                    tone=PEACH,
+                    choices=[],
+                )
+            ],
+        )
         return None
     validator = None
     note_validator = None
@@ -941,6 +1140,13 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             DraftState.AWAITING_NOTE.value,
                             DraftState.AWAITING_STORY.value,
                         }
+                        # A draft sitting at SELECTING_ANIMAL has no committed
+                        # animal yet — the volunteer backed all the way out —
+                        # so it counts the same as no draft for search purposes.
+                        no_committed_animal = (
+                            draft is None
+                            or draft.current_step == DraftState.SELECTING_ANIMAL.value
+                        )
                         if draft is not None and draft.current_step in text_waiting_states:
                             text_action = (
                                 "note"
@@ -967,7 +1173,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                     draft=draft,
                                     raw_token="",
                                 )
-                        elif draft is None and text_value.strip():
+                        elif no_committed_animal and text_value.strip():
                             # 沒有進行中的草稿時，把文字當成「找動物」的搜尋關鍵字；
                             # 比對不到就照舊回聊天訊息，不引入新的持久化狀態去記
                             # 「正在等搜尋輸入」。
@@ -1066,7 +1272,11 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                     stored_event, status="processed", error_code=error_code
                                 )
                                 await _reply(
-                                    line, event, [_text("照片處理失敗，請重新傳送或略過照片。")]
+                                    line,
+                                    event,
+                                    [
+                                        _media_failure_bubble(subject)
+                                    ],
                                 )
                                 results.append(
                                     {
@@ -1146,7 +1356,20 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         if error.code in {"line_binding_required", "shelter_context_required"}
                         else error.message
                     )
-                    await _reply(line, event, [_text(message)])
+                    await _reply(
+                        line,
+                        event,
+                        [
+                            prompt_bubble(
+                                title="這一步沒有成功",
+                                caption="散步回報",
+                                body_text=message,
+                                glyph="⚠️",
+                                tone=PEACH,
+                                choices=[],
+                            )
+                        ],
+                    )
                     results.append(
                         {"webhook_event_id": event_id, "status": "rejected", "reason": error.code}
                     )

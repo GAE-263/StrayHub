@@ -84,6 +84,11 @@ class LineDraftService:
         draft.reconfirmation_keys = [
             key for key in REQUIRED_ANSWER_KEYS if key in (draft.answers or {})
         ]
+        # note/story are free text about the animal that was walked, not
+        # vocabulary answers that can be reconfirmed. Carrying them over would
+        # file one animal's write-up under another animal's report.
+        draft.note = None
+        draft.story = None
         draft.current_step = DraftState.ANSWERING_WALK_COMPLETION.value
         draft.last_interaction_at = datetime.now(timezone.utc)
         return draft

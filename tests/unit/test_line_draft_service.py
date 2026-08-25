@@ -68,3 +68,21 @@ async def test_reselect_animal_preserves_answers_but_requires_reconfirmation() -
         "gait": "gait.normal",
         "appearance_special_status": "appearance.none_found",
     }
+
+
+@pytest.mark.asyncio
+async def test_reselect_animal_drops_the_previous_animals_free_text() -> None:
+    """答案可以重新確認，心得不行——那是寫給某一隻的，不能跟著換過去。"""
+    repository = FakeDraftRepository()
+    service = LineDraftService(repository, ttl_seconds=60)
+    draft, _ = await service.create(
+        volunteer_user_id=uuid4(), membership_id=uuid4(), animal_id=uuid4()
+    )
+    draft.note = "小黑後腳有點拖"
+    draft.story = "今天終於願意讓我摸頭"
+
+    await service.begin_reselection(draft.id, candidate_animal_id=uuid4())
+    await service.confirm_reselection(draft.id)
+
+    assert draft.note is None
+    assert draft.story is None
