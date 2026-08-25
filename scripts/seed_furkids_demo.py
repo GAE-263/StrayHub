@@ -1,25 +1,33 @@
-"""Seed the deterministic FurKids demo dataset without copying public media."""
+"""Seed the deterministic FurKids demo dataset and its approved primary photos."""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
+from io import BytesIO
 from uuid import UUID, uuid5
 
+import httpx
+from PIL import Image, UnidentifiedImageError
 from services.api.app.application.animal_selection import AnimalSelectionService
+from services.api.app.application.media_sanitization import MAX_IMAGE_BYTES
+from services.api.app.application.media_service import MediaProcessingService
 from services.api.app.application.qr_token_service import issue_printable_qr_token
 from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
 from services.api.app.domain.organization_timezone import local_to_utc
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
+from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
+from services.api.app.infrastructure.storage.ports import ObjectScope, ObjectStoragePort
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.animal import Animal
-from services.api.app.persistence.models.care_report import CareReport
+from services.api.app.persistence.models.care_report import CareReport, MediaAsset
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.medical_care import CareReminderSeries, MedicalRecord
 from services.api.app.persistence.models.qr_code import AnimalQrCode
@@ -56,11 +64,16 @@ class AnimalSpec:
     area_name: str
     profile_url: str
     selected_image_url: str
+    source_sha256: str
     source_facts: dict[str, object]
 
     @property
     def id(self) -> UUID:
         return stable_id("animal", self.key)
+
+    @property
+    def photo_object_key(self) -> str:
+        return f"furkids-demo/animals/{self.shelter_number}/primary.jpg"
 
 
 ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
@@ -71,6 +84,7 @@ ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
         "M-01",
         "https://furkidsasia.weebly.com/295224064322969-huang-mei",
         "https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/1347663248_orig.jpg",
+        "5d8041f538f6294bda9c811adcda02e30c06a58c693f7949caa8c92973df1bf4",
         {
             "intake_date": "2014-05-31",
             "life_stage": "高齡犬",
@@ -85,6 +99,7 @@ ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
         "M-02",
         "https://furkidsasia.weebly.com/295221996825619-yi-cuo",
         "https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/s-52420615-0_orig.jpg",
+        "9be308fb745887a3920fbaedb0a086bbadbef77c77152e3bafdde0d6af68aee0",
         {
             "sex": "公犬",
             "intake_date": "2024-12-13",
@@ -99,6 +114,7 @@ ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
         "M-03",
         "https://furkidsasia.weebly.com/295222992634532-ua-ha",
         "https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/447692789-851850686969842-5265211632358069069-n_1.jpg",
+        "6b42425edaf27d4bfb2a33220200c2cb9d22a68bf6a98c15d7671ed777555c7b",
         {
             "intake_date": "2024-05-15",
             "temperament": ["親人", "愛玩"],
@@ -113,6 +129,7 @@ ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
         "M-04",
         "https://furkidsasia.weebly.com/295222097735199-cash",
         "https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/editor/1620557754.jpg?1600933902",
+        "66353360f6e83cdb33bb4e18f6d6f9e4af00a272c566b3647d2e257a79d2af20",
         {
             "intake_date": "2020-06-05",
             "temperament": ["親人", "愛玩", "合群"],
@@ -125,6 +142,7 @@ ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
         "S-01",
         "https://furkidsasia.weebly.com/266123111931119-fu-fu",
         "https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/s-249888796_1.jpg",
+        "5555f76bfdea9873dfd93fa78179847c8ffaa777004f8f369943a3a87a43d17e",
         {
             "sex": "公犬",
             "breed": "柴犬系米克斯",
@@ -134,6 +152,137 @@ ANIMAL_SPECS: tuple[AnimalSpec, ...] = (
         },
     ),
 )
+
+
+@dataclass(frozen=True)
+class DownloadedPhoto:
+    data: bytes
+    content_type: str
+
+
+@dataclass(frozen=True)
+class PhotoIngestionResult:
+    object_key: str
+    content_type: str
+    checksum: str
+    downloaded: bool
+
+
+PhotoDownloader = Callable[[str], Awaitable[DownloadedPhoto]]
+
+
+async def download_approved_photo(url: str) -> DownloadedPhoto:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    return DownloadedPhoto(response.content, content_type)
+
+
+def _stored_photo_is_valid(data: bytes, asset: MediaAsset) -> bool:
+    if not data or len(data) > MAX_IMAGE_BYTES:
+        return False
+    if hashlib.sha256(data).hexdigest() != asset.checksum:
+        return False
+    try:
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+            return image.format == "JPEG" and not image.getexif() and "exif" not in image.info
+    except (UnidentifiedImageError, OSError):
+        return False
+
+
+class ApprovedPhotoIngestor:
+    def __init__(
+        self,
+        storage: ObjectStoragePort,
+        *,
+        download: PhotoDownloader = download_approved_photo,
+    ) -> None:
+        self.storage = storage
+        self.download = download
+        self.media = MediaProcessingService(storage)
+
+    async def ensure(
+        self,
+        *,
+        organization_id: UUID,
+        spec: AnimalSpec,
+        existing_asset: MediaAsset | None = None,
+    ) -> PhotoIngestionResult:
+        object_key = spec.photo_object_key
+        if existing_asset is not None:
+            if (
+                existing_asset.organization_id != organization_id
+                or existing_asset.object_key != object_key
+            ):
+                raise RuntimeError(f"{spec.name} 的既有照片資產租戶或 object key 不一致")
+            if (
+                existing_asset.status == "processed"
+                and existing_asset.purpose == "animal_primary"
+                and existing_asset.content_type == "image/jpeg"
+                and existing_asset.exif_removed
+            ):
+                try:
+                    stored_data = await self.storage.get(
+                        scope=ObjectScope(organization_id), key=object_key
+                    )
+                except Exception:
+                    stored_data = b""
+                if _stored_photo_is_valid(stored_data, existing_asset):
+                    return PhotoIngestionResult(
+                        object_key,
+                        existing_asset.content_type,
+                        existing_asset.checksum,
+                        False,
+                    )
+
+        try:
+            downloaded = await self.download(spec.selected_image_url)
+        except Exception as exc:
+            raise RuntimeError(f"{spec.name} 核准原圖下載失敗") from exc
+        if hashlib.sha256(downloaded.data).hexdigest() != spec.source_sha256:
+            raise RuntimeError(f"{spec.name} 核准原圖 checksum 不符")
+        try:
+            stored = await self.media.store_cleaned(
+                organization_id=organization_id,
+                object_key=object_key,
+                data=downloaded.data,
+                declared_content_type=downloaded.content_type,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"{spec.name} 核准原圖驗證或儲存失敗") from exc
+        return PhotoIngestionResult(
+            stored.key,
+            stored.metadata.content_type,
+            stored.metadata.checksum,
+            True,
+        )
+
+
+def apply_primary_photo(
+    *,
+    organization_id: UUID,
+    spec: AnimalSpec,
+    animal: Animal,
+    asset: MediaAsset,
+    photo: PhotoIngestionResult,
+) -> None:
+    if (
+        animal.organization_id != organization_id
+        or animal.shelter_number != spec.shelter_number
+        or asset.organization_id != organization_id
+        or photo.object_key != spec.photo_object_key
+    ):
+        raise RuntimeError(f"{spec.name} 的照片與動物或租戶不一致")
+    asset.object_key = photo.object_key
+    asset.content_type = photo.content_type
+    asset.checksum = photo.checksum
+    asset.status = "processed"
+    asset.purpose = "animal_primary"
+    asset.exif_removed = True
+    animal.current_photo_key = photo.object_key
+
 
 CARE_REPORT_COUNTS = {
     "huang-mei": 4,
@@ -195,6 +344,7 @@ def build_seed_plan() -> dict[str, object]:
             "MedicalRecord",
             "CareReminderSeries",
             "CareReport",
+            "MediaAsset",
         ],
     }
 
@@ -420,10 +570,19 @@ def _answer_snapshots() -> dict[str, dict[str, str]]:
     }
 
 
-async def seed(session: AsyncSession | None = None) -> dict[str, object]:
+async def seed(
+    session: AsyncSession | None = None,
+    *,
+    storage: ObjectStoragePort | None = None,
+    download: PhotoDownloader = download_approved_photo,
+) -> dict[str, object]:
     owns_session = session is None
     if session is None:
         session = session_factory()
+    storage = storage or MinioStorageAdapter()
+    if isinstance(storage, MinioStorageAdapter):
+        await storage.ensure_bucket()
+    photo_ingestor = ApprovedPhotoIngestor(storage, download=download)
     try:
         async with session.begin():
             organization = await _one_or_create(
@@ -443,6 +602,8 @@ async def seed(session: AsyncSession | None = None) -> dict[str, object]:
             admin, volunteer, membership = await _seed_identity(session, organization)
             areas = await _seed_areas(session, organization)
             animals: dict[str, Animal] = {}
+            photos_downloaded = 0
+            photos_reused = 0
             for spec in ANIMAL_SPECS:
                 animal = await _one_or_create(
                     session,
@@ -462,9 +623,34 @@ async def seed(session: AsyncSession | None = None) -> dict[str, object]:
                 animal.name = spec.name
                 animal.area_id = areas[spec.area_name].id
                 animal.status = "active"
-                # Public pages do not state a reusable media license. Keep source URLs in
-                # the manifest/documentation and do not copy the files into object storage.
-                animal.current_photo_key = None
+                asset = (
+                    await session.execute(
+                        select(MediaAsset).where(MediaAsset.object_key == spec.photo_object_key)
+                    )
+                ).scalar_one_or_none()
+                if asset is not None and asset.organization_id != organization.id:
+                    raise RuntimeError(f"{spec.name} 的照片 object key 已屬於其他租戶")
+                photo = await photo_ingestor.ensure(
+                    organization_id=organization.id,
+                    spec=spec,
+                    existing_asset=asset,
+                )
+                if asset is None:
+                    asset = MediaAsset(
+                        id=stable_id("media-asset", spec.key),
+                        organization_id=organization.id,
+                        object_key=photo.object_key,
+                    )
+                    session.add(asset)
+                apply_primary_photo(
+                    organization_id=organization.id,
+                    spec=spec,
+                    animal=animal,
+                    asset=asset,
+                    photo=photo,
+                )
+                photos_downloaded += int(photo.downloaded)
+                photos_reused += int(not photo.downloaded)
                 animals[spec.key] = animal
                 await _seed_qr(session, organization, animal)
 
@@ -557,7 +743,9 @@ async def seed(session: AsyncSession | None = None) -> dict[str, object]:
                 "animals": len(ANIMAL_SPECS),
                 "active_qr_codes": len(ANIMAL_SPECS),
                 **build_seed_plan()["synthetic_counts"],
-                "photos_ingested": 0,
+                "photos_ingested": len(ANIMAL_SPECS),
+                "photos_downloaded": photos_downloaded,
+                "photos_reused": photos_reused,
             }
     finally:
         if owns_session:

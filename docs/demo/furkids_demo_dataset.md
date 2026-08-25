@@ -3,7 +3,8 @@
 ## Purpose and entry point
 
 This local-only dataset creates a tenant named `毛小孩幸福聯盟協會` from five
-public animal profile pages. Run it after migrations with:
+public animal profile pages and ingests their approved primary photos. Run it
+after migrations with:
 
 ```bash
 uv run python -m scripts.seed_furkids_demo
@@ -50,25 +51,26 @@ The shelter numbers are project decisions, not source identifiers:
 | 獒凱西 | `MTF-20200605-001` | `M-04` | active |
 | 柴福福 | `SBA-20170922-001` | `S-01` | active |
 
-## Photo provenance and reuse decision
+## Approved primary-photo provenance
 
-The public [photo album](https://furkidsasia.weebly.com/album.html) and profile
-pages expose the following selected image URLs:
+The FurKids organization explicitly approved these original images for use in
+the StrayHub project demo. This approval is limited to that demo use and is not
+a claim that StrayHub owns the images or has a broader redistribution license.
 
-| Animal | Selected public image URL | `current_photo_key` |
-| --- | --- | --- |
-| 獒黃妹 | [image](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/1347663248_orig.jpg) | null |
-| 獒一搓 | [image](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/s-52420615-0_orig.jpg) | null |
-| 獒瓦蛤 | [image](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/447692789-851850686969842-5265211632358069069-n_1.jpg) | null |
-| 獒凱西 | [image](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/editor/1620557754.jpg?1600933902) | null |
-| 柴福福 | [image](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/s-249888796_1.jpg) | null |
+| Animal | Source profile | Approved selected original | Stored object key | Ingestion |
+| --- | --- | --- | --- | --- |
+| 獒黃妹 | [profile](https://furkidsasia.weebly.com/295224064322969-huang-mei) | [primary photo](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/1347663248_orig.jpg) | `furkids-demo/animals/MTF-20140531-001/primary.jpg` | processed; `current_photo_key` set |
+| 獒一搓 | [profile](https://furkidsasia.weebly.com/295221996825619-yi-cuo) | [primary photo](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/s-52420615-0_orig.jpg) | `furkids-demo/animals/MTF-20241213-001/primary.jpg` | processed; `current_photo_key` set |
+| 獒瓦蛤 | [profile](https://furkidsasia.weebly.com/295222992634532-ua-ha) | [primary photo](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/447692789-851850686969842-5265211632358069069-n_1.jpg) | `furkids-demo/animals/MTF-20240515-001/primary.jpg` | processed; `current_photo_key` set |
+| 獒凱西 | [profile](https://furkidsasia.weebly.com/295222097735199-cash) | [primary photo](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/editor/1620557754.jpg?1600933902) | `furkids-demo/animals/MTF-20200605-001/primary.jpg` | processed; `current_photo_key` set |
+| 柴福福 | [profile](https://furkidsasia.weebly.com/266123111931119-fu-fu) | [primary photo](https://furkidsasia.weebly.com/uploads/6/6/1/8/66183257/s-249888796_1.jpg) | `furkids-demo/animals/SBA-20170922-001/primary.jpg` | processed; `current_photo_key` set |
 
-The pages do not state a license granting StrayHub permission to copy and
-redistribute these images. The seed therefore does not scrape, commit, or upload
-them and leaves `current_photo_key` null. The links are provenance references,
-not a claim of ownership. After the project obtains permission or separately
-licensed originals, ingest sanitized files through the existing tenant-scoped
-`MediaAsset` / object-storage path and then set `current_photo_key`.
+The five URLs are static trusted seed constants. The seed checks each approved
+original's SHA-256 before processing, validates its declared and actual JPEG
+format, re-encodes it through `MediaProcessingService` to remove metadata,
+stores it through the tenant-scoped `MinioStorageAdapter`, and creates or reuses
+a processed `MediaAsset` with purpose `animal_primary`. Remote URLs are never
+stored in `Animal.current_photo_key`, and no generic URL-fetch API is exposed.
 
 ## StrayHub synthetic demo data
 
@@ -112,6 +114,11 @@ restriction model.
   revoked so at most one remains active.
 - Medical records, reminder series, and care reports: deterministic IDs and
   update-in-place behavior.
+- Primary photos: deterministic object keys and `MediaAsset` IDs. A rerun reads
+  the tenant-scoped stored object, verifies its bytes against the recorded
+  processed checksum and metadata state, and skips the remote download when it
+  is valid. Missing or invalid objects are downloaded only from the five static
+  approved URLs, source-checksummed, sanitized, and overwritten at the same key.
 - Users, memberships, application, and grant: stable identity plus natural-key
   lookup; no daily reportable scope is created.
 
