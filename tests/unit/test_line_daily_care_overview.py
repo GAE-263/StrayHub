@@ -84,7 +84,9 @@ SESSION = _SessionStub(ORGANIZATION)
 async def test_nothing_to_care_for_says_so_plainly(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(monkeypatch, [], {})
     messages = await _daily_care_overview(SESSION, uuid4(), uuid4())
-    assert messages == [{"type": "text", "text": "今日目前沒有可回報的動物。"}]
+    assert len(messages) == 1
+    assert messages[0]["type"] == "flex"
+    assert "今日目前沒有可回報的動物" in messages[0]["altText"]
 
 
 @pytest.mark.asyncio
