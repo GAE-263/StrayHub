@@ -142,7 +142,7 @@ presence or absence of a row must not be interpreted as a new restriction model.
 
 QR resolution remains limited to the verified current organization. Cross-shelter deep links
 use the narrow authorized preflight described below; they do not perform a global animal
-lookup or automatic switch. LINE `sendMessages()` remains unimplemented.
+lookup or automatic switch.
 
 The existing HTTP draft creation, final submission, and legacy LINE selection/conversation
 paths still contain their prior scope checks. Those report-flow-team paths are explicitly
@@ -204,15 +204,36 @@ current async call, and immediately calls `POST /v1/care-report-handoffs`. Sourc
 - physical QR/deep link: `qr_deeplink`
 - exact-number or secondary search: `shelter_number`
 
-Success means only that the 15-minute pending handoff is ready. The page does not create a
-`CareReportDraft`, consume the handoff, submit a report, send a LINE message, or claim that a
-report was submitted. It instructs the volunteer to return to LINE and select `照護回報`
-again.
+Success means only that the 15-minute pending handoff is ready. After that HTTP request
+succeeds, `apps/web/lib/liff-line-handoff.ts` attempts exactly one automatic producer trigger
+for that handoff. It sends only this payload:
 
-Item 2C remains responsible for `liff.sendMessages("開始照護回報")`, safe
-close/return-to-LINE behavior, and the unavailable-`sendMessages` fallback integration. LINE
-Developers console enablement and physical-device `scanCodeV2` behavior require device-side
-validation; repository browser tests cover unavailable scanning and deep-link entry.
+```json
+[{ "type": "text", "text": "開始照護回報" }]
+```
+
+The eligibility rule follows the installed `@line/liff` 2.30 runtime: LIFF must have an
+initialized ID (`liff.id !== null`), be running in the LINE client (`liff.isInClient()`),
+expose `sendMessages`, and report `chat_message.write` permission as `granted` or `prompt`.
+The SDK's permission wrapper may complete the prompt. An `unavailable` permission result, an
+external browser, an uninitialized runtime, a missing function, or any capability/send error
+uses the manual fallback. The producer does not use `isApiAvailable()` for `sendMessages`
+because the installed SDK's availability API does not list that function.
+
+After a successful send, the page displays `正在返回 LINE 繼續照護回報…` and calls
+`liff.closeWindow()` only in an initialized in-client runtime. If closing is unavailable or
+throws, the pending handoff is kept and the manual fallback remains usable. The fallback
+tells the volunteer to return to LINE, select `照護回報` or type `開始照護回報`, and notes
+that confirmation remains for about 15 minutes. Physical QR deep links outside LINE are an
+expected fallback case. No automatic retry occurs after a failure, and component operation
+epochs prevent a late result from resurrecting stale or unmounted UI.
+
+LIFF does not consume the handoff, extend its TTL, create a `CareReportDraft`, submit a
+report, or claim that a report was submitted. Messaging API push is not required. The exact
+trigger currently has no dedicated Bot consumer in `services/api/app/api/line_webhook.py`;
+Bot integration remains responsible for resolving the trusted webhook identity and calling
+the service below. LINE Developers console enablement and real-client behavior still require
+physical-device validation.
 
 ## Integration contract for Bot agent
 
