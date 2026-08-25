@@ -18,6 +18,10 @@ dependencies = [
   "python-multipart>=0.0.9,<1",
   "PyYAML>=6,<7",
   "sqlalchemy[asyncio]>=2.0,<3",
+  # 收容所的「今天」是本地日界線，整條時間軸與每日名單都靠 ZoneInfo 換算。
+  # 系統沒有 IANA 時區資料時 ZoneInfo 會直接拋 ZoneInfoNotFoundError，
+  # 而 python:3.11-slim 與 Windows 都不保證有——所以隨套件一起帶著走。
+  "tzdata>=2024.1",
   "uvicorn[standard]>=0.32,<1",
 ]
 
