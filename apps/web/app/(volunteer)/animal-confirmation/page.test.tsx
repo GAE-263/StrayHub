@@ -11,9 +11,19 @@ const scanner = vi.hoisted(() => ({
   scan: vi.fn<() => Promise<string | null>>(),
 }));
 
+const lineHandoff = vi.hoisted(() => ({
+  attempt: vi.fn(),
+  close: vi.fn(),
+}));
+
 vi.mock("../../../lib/liff-scanner", () => ({
   isLiffScannerAvailable: scanner.available,
   scanAnimalQr: scanner.scan,
+}));
+
+vi.mock("../../../lib/liff-line-handoff", () => ({
+  attemptCareReportLineTrigger: lineHandoff.attempt,
+  closeLiffWindow: lineHandoff.close,
 }));
 
 (
@@ -96,6 +106,11 @@ beforeEach(() => {
   });
   scanner.available.mockReset().mockReturnValue(false);
   scanner.scan.mockReset();
+  lineHandoff.attempt.mockReset().mockResolvedValue({
+    status: "unavailable",
+    canClose: false,
+  });
+  lineHandoff.close.mockReset().mockReturnValue(false);
   window.history.replaceState({}, "", "/animal-confirmation");
   window.sessionStorage.clear();
 });
@@ -248,11 +263,137 @@ describe("QR-first animal confirmation page", () => {
       source: "liff_scan",
     });
     expect(container?.textContent).toContain("動物已確認");
-    expect(container?.textContent).toContain("下一步請回到 LINE");
+    expect(lineHandoff.attempt).toHaveBeenCalledOnce();
+    expect(container?.textContent).toContain("再點一次「照護回報」");
+    expect(container?.textContent).toContain("開始照護回報");
+    expect(container?.textContent).toContain("約 15 分鐘");
     expect(window.location.href).not.toContain("confirmation-secret");
     expect(
       JSON.stringify({ ...window.localStorage, ...window.sessionStorage }),
     ).not.toContain("confirmation-secret");
+  });
+
+  it("does not trigger LINE until pending handoff creation resolves", async () => {
+    scanner.available.mockReturnValue(true);
+    scanner.scan.mockResolvedValue("scanner-token-1234567890");
+    let finishHandoff!: (response: Response) => void;
+    const pendingHandoff = new Promise<Response>((resolve) => {
+      finishHandoff = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(candidate))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...candidate, confirmation_token: "short-lived" }),
+      )
+      .mockReturnValueOnce(pendingHandoff);
+
+    await renderPage(fetchMock);
+    await clickButton("掃描動物 QR Code");
+    await clickButton("確認並開始回報");
+    expect(lineHandoff.attempt).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishHandoff(
+        jsonResponse({
+          id: "handoff-a",
+          status: "pending",
+          expires_at: "2026-08-25T13:15:00Z",
+        }),
+      );
+      await flushEffects();
+    });
+    expect(lineHandoff.attempt).toHaveBeenCalledOnce();
+  });
+
+  it("shows auto-return status and closes after a successful trigger", async () => {
+    lineHandoff.attempt.mockResolvedValue({ status: "sent", canClose: true });
+    lineHandoff.close.mockReturnValue(true);
+    window.history.replaceState(
+      {},
+      "",
+      "/animal-confirmation?qr_token=direct-token-123456789",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(candidate))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...candidate, confirmation_token: "short-lived" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ status: "pending", expires_at: "later" }),
+      );
+
+    await renderPage(fetchMock);
+    await clickButton("確認並開始回報");
+
+    expect(container?.textContent).toContain("正在返回 LINE 繼續照護回報");
+    expect(lineHandoff.attempt).toHaveBeenCalledOnce();
+    expect(lineHandoff.close).toHaveBeenCalledOnce();
+  });
+
+  it("shows an alert fallback when automatic LINE messaging fails", async () => {
+    lineHandoff.attempt.mockResolvedValue({ status: "failed", canClose: true });
+    window.history.replaceState(
+      {},
+      "",
+      "/animal-confirmation?qr_token=direct-token-123456789",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(candidate))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...candidate, confirmation_token: "short-lived" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ status: "pending", expires_at: "later" }),
+      );
+
+    await renderPage(fetchMock);
+    await clickButton("確認並開始回報");
+
+    expect(container?.querySelector('[role="alert"]')?.textContent).toContain(
+      "目前無法自動返回 LINE",
+    );
+    expect(container?.textContent).not.toContain("sendMessages");
+    expect(container?.textContent).not.toContain("chat_message.write");
+    await clickButton("返回 LINE");
+    expect(lineHandoff.close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps manual fallback when closeWindow fails and never retriggers on rerender", async () => {
+    lineHandoff.attempt.mockResolvedValue({ status: "sent", canClose: true });
+    lineHandoff.close.mockReturnValue(false);
+    window.history.replaceState(
+      {},
+      "",
+      "/animal-confirmation?qr_token=direct-token-123456789",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(candidate))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...candidate, confirmation_token: "short-lived" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ status: "pending", expires_at: "later" }),
+      );
+
+    await renderPage(fetchMock);
+    await clickButton("確認並開始回報");
+    expect(container?.textContent).toContain("再點一次「照護回報」");
+
+    await act(async () => {
+      root?.render(
+        <VolunteerShelterContext.Provider
+          value={{ organizationId: "org-a", organizationName: "南港收容所" }}
+        >
+          <AnimalConfirmationPage />
+        </VolunteerShelterContext.Provider>,
+      );
+      await flushEffects();
+    });
+    expect(lineHandoff.attempt).toHaveBeenCalledOnce();
   });
 
   it("does not show success when handoff creation fails", async () => {
@@ -278,6 +419,42 @@ describe("QR-first animal confirmation page", () => {
     expect(container?.querySelector('[role="alert"]')?.textContent).toContain(
       "目前無法準備照護回報",
     );
+    expect(lineHandoff.attempt).not.toHaveBeenCalled();
+    expect(lineHandoff.close).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late trigger result after unmount", async () => {
+    let finishTrigger!: (result: { status: "sent"; canClose: boolean }) => void;
+    lineHandoff.attempt.mockReturnValue(
+      new Promise((resolve) => {
+        finishTrigger = resolve;
+      }),
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/animal-confirmation?qr_token=direct-token-123456789",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(candidate))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...candidate, confirmation_token: "short-lived" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ status: "pending", expires_at: "later" }),
+      );
+
+    await renderPage(fetchMock);
+    await clickButton("確認並開始回報");
+    await act(async () => root?.unmount());
+    root = undefined;
+    await act(async () => {
+      finishTrigger({ status: "sent", canClose: true });
+      await flushEffects();
+    });
+
+    expect(lineHandoff.close).not.toHaveBeenCalled();
   });
 
   it("keeps the latest scanned candidate when an older resolve returns late", async () => {

@@ -153,6 +153,68 @@ test("same-shelter QR deep link confirms animal and creates a handoff", async ({
   );
 });
 
+for (const scenario of [
+  "supported",
+  "unavailable",
+  "send-fails",
+  "close-fails",
+] as const) {
+  test(`LINE handoff runtime: ${scenario}`, async ({ page }) => {
+    await page.addInitScript((value) => {
+      sessionStorage.setItem("liff_handoff_scenario", value);
+    }, scenario);
+    await mockQrFlow(page);
+    await page.goto(
+      "/animal-confirmation?organization_id=org-a&qr_token=playwright-line-trigger-token-123456",
+    );
+    await page.getByRole("button", { name: "確認並開始回報" }).click();
+    await expect(
+      page.getByRole("heading", { name: "動物已確認" }),
+    ).toBeVisible();
+
+    const runtime = await page.evaluate(() => ({
+      count: Number(sessionStorage.getItem("liff_handoff_send_count") ?? "0"),
+      messages: sessionStorage.getItem("liff_handoff_messages"),
+      closes: Number(sessionStorage.getItem("liff_handoff_close_count") ?? "0"),
+    }));
+
+    if (scenario === "unavailable") {
+      expect(runtime.count).toBe(0);
+      await expect(page.getByText("此確認將保留約 15 分鐘。")).toBeVisible();
+      await expect(
+        page.getByText("開始照護回報", { exact: false }),
+      ).toBeVisible();
+      return;
+    }
+
+    expect(runtime.count).toBe(1);
+    expect(JSON.parse(runtime.messages ?? "null")).toEqual([
+      { type: "text", text: "開始照護回報" },
+    ]);
+    expect(runtime.messages).not.toMatch(
+      /animal_id|handoff_id|confirmation_token|membership_id/,
+    );
+
+    if (scenario === "supported") {
+      expect(runtime.closes).toBe(1);
+      await expect(page.getByText("正在返回 LINE 繼續照護回報…")).toBeVisible();
+    } else if (scenario === "send-fails") {
+      expect(runtime.closes).toBe(0);
+      await expect(
+        page.locator(".handoff-success-content [role='alert']"),
+      ).toContainText("目前無法自動返回 LINE");
+    } else {
+      expect(runtime.closes).toBe(1);
+      await expect(
+        page.locator(".handoff-success-content [role='alert']"),
+      ).toContainText("目前無法自動返回 LINE");
+      await expect(
+        page.getByRole("button", { name: "返回 LINE" }),
+      ).toBeEnabled();
+    }
+  });
+}
+
 test("exact shelter-number fallback uses the same confirmation and handoff path", async ({
   page,
 }) => {
@@ -242,6 +304,29 @@ for (const viewport of [
     await page.screenshot({
       path: testInfo.outputPath(
         `scanner-first-${viewport.width}x${viewport.height}.png`,
+      ),
+      fullPage: true,
+    });
+
+    await page.goto(
+      "/animal-confirmation?organization_id=org-a&qr_token=playwright-responsive-token-123456",
+    );
+    await page.getByRole("button", { name: "確認並開始回報" }).click();
+    await expect(page.getByText("此確認將保留約 15 分鐘。")).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
+    const fallbackResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      fallbackResults.violations.filter((item) =>
+        ["critical", "serious"].includes(item.impact ?? ""),
+      ),
+    ).toEqual([]);
+    await page.screenshot({
+      path: testInfo.outputPath(
+        `handoff-fallback-${viewport.width}x${viewport.height}.png`,
       ),
       fullPage: true,
     });

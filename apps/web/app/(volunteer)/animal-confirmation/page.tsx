@@ -30,6 +30,10 @@ import {
   isLiffScannerAvailable,
   scanAnimalQr,
 } from "../../../lib/liff-scanner";
+import {
+  attemptCareReportLineTrigger,
+  closeLiffWindow,
+} from "../../../lib/liff-line-handoff";
 
 type AnimalCandidate = {
   id: string;
@@ -53,6 +57,7 @@ type Phase =
   | "resolving-animal"
   | "confirming-animal"
   | "creating-handoff"
+  | "triggering-line"
   | "success";
 
 type CandidateState = {
@@ -66,6 +71,13 @@ type PendingSwitch = {
   source: HandoffSource;
   organizationId: string;
   organizationName: string;
+};
+
+type SuccessState = {
+  animalName: string;
+  shelterName: string;
+  outcome: "triggering" | "auto" | "manual" | "failed";
+  canClose: boolean;
 };
 
 class ApiResponseError extends Error {
@@ -106,6 +118,7 @@ function phaseMessage(phase: Phase): string | null {
     "resolving-animal": "正在取得動物資料…",
     "confirming-animal": "正在確認動物…",
     "creating-handoff": "正在準備照護回報…",
+    "triggering-line": "已確認動物，正在返回 LINE…",
   };
   return messages[phase] ?? null;
 }
@@ -114,7 +127,9 @@ export default function AnimalConfirmationPage() {
   const shelterContext = useVolunteerShelterContext();
   const operationEpoch = useRef(0);
   const scanButtonRef = useRef<HTMLButtonElement>(null);
+  const successRef = useRef<HTMLElement>(null);
   const directPayloadHandled = useRef(false);
+  const confirmationInFlight = useRef(false);
   const [activeShelter, setActiveShelter] = useState<{
     id: string;
     name: string;
@@ -127,10 +142,7 @@ export default function AnimalConfirmationPage() {
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(
     null,
   );
-  const [success, setSuccess] = useState<{
-    animalName: string;
-    shelterName: string;
-  } | null>(null);
+  const [success, setSuccess] = useState<SuccessState | null>(null);
   const [exactNumber, setExactNumber] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<AnimalCandidate[]>([]);
@@ -284,6 +296,10 @@ export default function AnimalConfirmationPage() {
     [],
   );
 
+  useEffect(() => {
+    if (success) successRef.current?.focus();
+  }, [success]);
+
   const launchScanner = async () => {
     if (!scannerAvailable) {
       setFallbackMode("exact");
@@ -410,7 +426,9 @@ export default function AnimalConfirmationPage() {
   };
 
   const confirmAnimalAndCreateHandoff = async () => {
-    if (!candidate) return;
+    if (!candidate || confirmationInFlight.current) return;
+    confirmationInFlight.current = true;
+    const confirmedCandidate = candidate;
     const epoch = operationEpoch.current + 1;
     operationEpoch.current = epoch;
     setErrorMessage("");
@@ -435,13 +453,43 @@ export default function AnimalConfirmationPage() {
       );
       if (!isCurrent(epoch)) return;
       setSuccess({
-        animalName: candidate.animal.name,
-        shelterName: candidate.shelterName,
+        animalName: confirmedCandidate.animal.name,
+        shelterName: confirmedCandidate.shelterName,
+        outcome: "triggering",
+        canClose: false,
       });
       setCandidate(null);
       setPendingSwitch(null);
       setSearchResults([]);
-      setPhase("success");
+      setPhase("triggering-line");
+
+      const trigger = await attemptCareReportLineTrigger();
+      if (!isCurrent(epoch)) return;
+      if (trigger.status === "sent") {
+        setSuccess((current) =>
+          current
+            ? { ...current, outcome: "auto", canClose: trigger.canClose }
+            : current,
+        );
+        setPhase("success");
+        if (trigger.canClose && !closeLiffWindow()) {
+          if (!isCurrent(epoch)) return;
+          setSuccess((current) =>
+            current ? { ...current, outcome: "failed" } : current,
+          );
+        }
+      } else {
+        setSuccess((current) =>
+          current
+            ? {
+                ...current,
+                outcome: trigger.status === "failed" ? "failed" : "manual",
+                canClose: trigger.canClose,
+              }
+            : current,
+        );
+        setPhase("success");
+      }
     } catch (error) {
       if (!isCurrent(epoch)) return;
       setPhase("idle");
@@ -450,6 +498,16 @@ export default function AnimalConfirmationPage() {
           error.code === "animal_no_longer_available"
           ? "這隻動物目前無法進行照護回報。"
           : "目前無法準備照護回報，請重新確認動物後再試。",
+      );
+    } finally {
+      if (isCurrent(epoch)) confirmationInFlight.current = false;
+    }
+  };
+
+  const returnToLine = () => {
+    if (!closeLiffWindow()) {
+      setSuccess((current) =>
+        current ? { ...current, outcome: "failed" } : current,
       );
     }
   };
@@ -461,11 +519,17 @@ export default function AnimalConfirmationPage() {
     "switching-shelter",
     "confirming-animal",
     "creating-handoff",
+    "triggering-line",
   ].includes(phase);
 
   if (success) {
     return (
-      <main className="volunteer-page" aria-labelledby="handoff-success-title">
+      <main
+        ref={successRef}
+        className="volunteer-page"
+        aria-labelledby="handoff-success-title"
+        tabIndex={-1}
+      >
         <Card className="handoff-success-card">
           <CardHeader>
             <span className="eyebrow">VOLUNTEER CARE</span>
@@ -474,11 +538,39 @@ export default function AnimalConfirmationPage() {
           <CardContent className="handoff-success-content">
             <strong>{success.animalName}</strong>
             <span>{success.shelterName}</span>
-            <p>已準備好照護回報。</p>
-            <p>下一步請回到 LINE，再點一次「照護回報」。</p>
-            <p className="muted">
-              若目前不在 LINE 內，請回到 LINE 繼續照護回報。
-            </p>
+            {success.outcome === "triggering" || success.outcome === "auto" ? (
+              <>
+                <p role="status" aria-live="polite">
+                  正在返回 LINE 繼續照護回報…
+                </p>
+                <p className="muted">
+                  若未自動返回，請回到 LINE 再點一次「照護回報」。
+                </p>
+              </>
+            ) : (
+              <div
+                role={success.outcome === "failed" ? "alert" : "status"}
+                aria-live={
+                  success.outcome === "failed" ? "assertive" : "polite"
+                }
+              >
+                {success.outcome === "failed" && (
+                  <p>動物已確認，但目前無法自動返回 LINE。</p>
+                )}
+                <p>已準備好照護回報。</p>
+                <p>
+                  請回到 LINE，再點一次「照護回報」
+                  <br />
+                  或輸入「開始照護回報」。
+                </p>
+                <p className="muted">此確認將保留約 15 分鐘。</p>
+              </div>
+            )}
+            {success.canClose && (
+              <Button type="button" onClick={returnToLine}>
+                返回 LINE
+              </Button>
+            )}
           </CardContent>
         </Card>
       </main>
