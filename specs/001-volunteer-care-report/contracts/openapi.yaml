@@ -420,6 +420,24 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AnimalCandidate" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+  /v1/qr-tokens/candidate-organization:
+    post:
+      tags: [Animal Selection]
+      operationId: authorizeQrCandidateOrganization
+      description: 驗證目前使用者可進入候選收容所且 QR 綁定該收容所；成功只回傳收容所身分，不揭露動物資料或切換目前 context。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QrCandidateOrganizationRequest" }
+      responses:
+        "200":
+          description: 已授權、可供使用者確認切換的候選收容所
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QrCandidateOrganizationResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
   /v1/animals/{animalId}/confirm:
     post:
       tags: [Animal Selection]
@@ -434,6 +452,25 @@ paths:
               schema:
                 { $ref: "#/components/schemas/AnimalConfirmationResponse" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/care-report-handoffs:
+    post:
+      tags: [Care Report Handoffs]
+      operationId: createOrReplaceCareReportHandoff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CareReportHandoffCreateRequest" }
+      responses:
+        "201":
+          description: 已建立或取代待處理的照護回報交接
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareReportHandoffResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/care-report-drafts:
     post:
       tags: [Drafts]
@@ -1170,6 +1207,13 @@ paths:
     get:
       tags: [Management Settings]
       operationId: listManagementQrCodes
+      parameters:
+        - {
+            name: animal_id,
+            in: query,
+            required: false,
+            schema: { type: string, format: uuid },
+          }
       responses:
         "200":
           description: 動物 QR 綁定清單
@@ -1189,7 +1233,7 @@ paths:
             schema: { $ref: "#/components/schemas/ManagementQrCodeRequest" }
       responses:
         "201":
-          description: 已建立 QR；token 僅於此回應顯示一次
+          description: 已建立或重用目前的 active QR；回傳可列印 deep link
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManagementQrCode" }
@@ -1220,7 +1264,7 @@ paths:
         - $ref: "#/components/parameters/QrCodeId"
       responses:
         "200":
-          description: QR Token 已重新產生；舊 Token 立即失效
+          description: 已建立替代 QR；舊 QR 立即失效且舊標籤必須更換
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManagementQrCode" }
@@ -2593,13 +2637,24 @@ components:
         ends_at: { type: string, format: date-time }
     ManagementQrCode:
       type: object
-      required: [id, animal_id, status, deep_link]
+      required:
+        [id, organization_id, animal_id, status, revoked, deep_link, token]
       properties:
         id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
         animal_id: { type: string, format: uuid }
         status: { type: string, enum: [active, revoked] }
-        deep_link: { type: string }
-        token: { type: [string, "null"], description: 僅建立時回傳 }
+        revoked: { type: boolean }
+        deep_link:
+          {
+            type: [string, "null"],
+            description: 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null,
+          }
+        token:
+          {
+            type: "null",
+            description: raw token 不作為獨立欄位顯示；locator 僅存在 deep_link,
+          }
     ManagementQrCodeList:
       type: object
       required: [items]
@@ -3128,6 +3183,23 @@ components:
           required: [confirmation_token]
           properties:
             confirmation_token: { type: string, minLength: 1 }
+    CareReportHandoffCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [animal_id, confirmation_token, source]
+      properties:
+        animal_id: { type: string, format: uuid }
+        confirmation_token: { type: string, minLength: 1 }
+        source:
+          type: string
+          enum: [liff_scan, qr_deeplink, shelter_number]
+    CareReportHandoffResponse:
+      type: object
+      required: [id, status, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending] }
+        expires_at: { type: string, format: date-time }
     AnimalListResponse:
       type: object
       required: [items, page, page_size]
@@ -3144,6 +3216,20 @@ components:
       required: [qr_token]
       properties:
         qr_token: { type: string }
+    QrCandidateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [qr_token, candidate_organization_id]
+      properties:
+        qr_token: { type: string, minLength: 1 }
+        candidate_organization_id: { type: string, format: uuid }
+    QrCandidateOrganizationResponse:
+      type: object
+      additionalProperties: false
+      required: [organization_id, organization_name]
+      properties:
+        organization_id: { type: string, format: uuid }
+        organization_name: { type: string, minLength: 1 }
     DraftCreateRequest:
       type: object
       required: [animal_id, confirmation_token]

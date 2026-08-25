@@ -15,6 +15,10 @@ def test_generated_contract_types_exist_for_openapi_source_of_truth() -> None:
     assert "CareReminderSeriesCreate" in content
     assert "OccurrenceAction" in content
     assert '"/v1/management/care-agenda"' in content
+    assert '"/v1/care-report-handoffs"' in content
+    assert '"/v1/qr-tokens/candidate-organization"' in content
+    assert "CareReportHandoffCreateRequest" in content
+    assert "CareReportHandoffResponse" in content
 
 
 def test_volunteer_access_contract_has_expected_operation_and_schema_surface() -> None:

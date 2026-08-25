@@ -19,19 +19,22 @@ from services.api.app.application.line_image_service import LineImageService
 from services.api.app.application.ports.line_messaging import LineImageContent
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.application.timeline_service import TimelineService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.domain.line_care_report_state import DraftState
 from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
 from services.api.app.infrastructure.storage.memory import InMemoryStorageFake
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
+from services.api.app.persistence.repositories.authentication_repository import (
+    AuthenticationRepository,
+)
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
 )
 from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
-)
 from services.api.app.persistence.repositories.timeline_repository import TimelineRepository
 
 
@@ -47,6 +50,7 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
     connection = await asyncpg.connect(_database_url())
     organization_id, user_id, membership_id = uuid4(), uuid4(), uuid4()
     session_id, area_id, animal_id, qr_id = uuid4(), uuid4(), uuid4(), uuid4()
+    application_id, grant_id = uuid4(), uuid4()
     raw_qr_token = f"local-flow-{qr_id}"
     now = datetime.now(timezone.utc).replace(microsecond=0)
     report_id = None
@@ -90,6 +94,35 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
             user_id,
             organization_id,
             now + timedelta(days=1),
+        )
+        await connection.execute(
+            """
+            INSERT INTO volunteer_applications
+                (id, organization_id, user_id, status, source_channel, submitted_at,
+                 decided_at, version, created_at, updated_at)
+            VALUES ($1, $2, $3, 'approved', 'liff', $4, $4, 1, now(), now())
+            """,
+            application_id,
+            organization_id,
+            user_id,
+            now - timedelta(hours=1),
+        )
+        await connection.execute(
+            """
+            INSERT INTO volunteer_access_grants
+                (id, organization_id, user_id, membership_id, application_id, status,
+                 valid_from, expires_at, approved_at, source_type, version,
+                 created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $6,
+                    'manager_approval', 1, now(), now())
+            """,
+            grant_id,
+            organization_id,
+            user_id,
+            membership_id,
+            application_id,
+            now - timedelta(hours=1),
+            now + timedelta(days=7),
         )
         await connection.execute(
             """
@@ -141,17 +174,28 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
         async with session_factory() as session:
             async with session.begin():
                 await set_organization_scope(session, organization_id)
+                animals = AnimalRepository(session, organization_id)
                 selection = AnimalSelectionService(
-                    AnimalRepository(session, organization_id),
+                    animals,
                     QrCodeRepository(session, organization_id),
-                    ReportableScopeRepository(session, organization_id),
+                    VolunteerReportingAuthorizationService(
+                        AuthenticationRepository(session), animals
+                    ),
                 )
                 candidate = await selection.resolve_qr(
-                    raw_token=raw_qr_token, user_id=user_id, role="VOLUNTEER"
+                    raw_token=raw_qr_token,
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
+                    role="VOLUNTEER",
                 )
                 assert candidate.animal.id == animal_id
                 confirmed = await selection.confirm(
-                    animal_id=animal_id, user_id=user_id, role="VOLUNTEER"
+                    animal_id=animal_id,
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
+                    role="VOLUNTEER",
                 )
                 assert confirmed.animal.shelter_number == "VAAAG114080610"
                 confirmation_token = issue_animal_confirmation_token(
@@ -276,6 +320,8 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
                 "animals",
                 "shelter_areas",
                 "session_records",
+                "volunteer_access_grants",
+                "volunteer_applications",
                 "organization_memberships",
             ):
                 await cleanup.execute(

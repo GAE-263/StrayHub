@@ -10,6 +10,7 @@ from services.api.app.api.assigned_care import router as assigned_care_router
 from services.api.app.api.audit import router as audit_router
 from services.api.app.api.authentication import router as authentication_router
 from services.api.app.api.care_reminders import router as care_reminders_router
+from services.api.app.api.care_report_handoffs import router as care_report_handoffs_router
 from services.api.app.api.care_reports import router as care_reports_router
 from services.api.app.api.dashboard import router as dashboard_router
 from services.api.app.api.errors import (
@@ -76,6 +77,7 @@ app.include_router(reportable_scope_router)
 app.include_router(qr_codes_router)
 app.include_router(audit_router)
 app.include_router(animal_selection_router)
+app.include_router(care_report_handoffs_router)
 app.include_router(care_reports_router)
 app.include_router(animal_timeline_router)
 app.include_router(ai_observations_router)

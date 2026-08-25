@@ -30,8 +30,6 @@ type Qr = {
   animal_id: string;
   status: string;
   revoked: boolean;
-  deep_link: string | null;
-  token: string | null;
 };
 
 type PendingQrAction = {
@@ -43,7 +41,6 @@ type PendingQrAction = {
 export default function QrCodesPage() {
   const [items, setItems] = useState<Qr[]>([]);
   const [animalId, setAnimalId] = useState("");
-  const [issuedToken, setIssuedToken] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -79,8 +76,6 @@ export default function QrCodesPage() {
       setError(`QR 建立失敗（HTTP ${response.status}）`);
       return;
     }
-    const value = (await response.json()) as Qr;
-    setIssuedToken(value.token ?? "");
     setAnimalId("");
     load();
   };
@@ -91,7 +86,7 @@ export default function QrCodesPage() {
     });
     if (!response.ok) setError(`QR 撤銷失敗（HTTP ${response.status}）`);
     else {
-      setMessage("QR 已撤銷，既有 Token 已失效。");
+      setMessage("QR 已撤銷，已張貼的舊標籤無法再使用。");
       load();
     }
   };
@@ -105,9 +100,7 @@ export default function QrCodesPage() {
       setError(`QR 重新產生失敗（HTTP ${response.status}）`);
       return;
     }
-    const value = (await response.json()) as Qr;
-    setIssuedToken(value.token ?? "");
-    setMessage("QR 已重新產生，既有 Token 已失效。");
+    setMessage("QR 已重新產生，請至動物檔案列印並更換舊標籤。");
     load();
   };
 
@@ -118,25 +111,17 @@ export default function QrCodesPage() {
     if (action.action === "revoke") await revoke(action.id);
     else await regenerate(action.id);
   };
-  const print = () => {
-    if (typeof window !== "undefined") window.print();
-  };
   return (
     <section aria-labelledby="qr-title">
       <div className="page-heading">
         <div>
           <span className="eyebrow">QR BINDINGS</span>
           <h1 id="qr-title">QR 綁定</h1>
-          <p>QR 只提供動物候選查詢，不是授權憑證；Token 僅在建立時顯示一次。</p>
+          <p>QR 只提供動物候選查詢，不是授權憑證；請至動物檔案預覽與列印。</p>
         </div>
       </div>
       {error ? <Alert role="alert">{error}</Alert> : null}
       {message ? <Toast>{message}</Toast> : null}
-      {issuedToken ? (
-        <Alert role="status">
-          請立即保存此一次性 Token：<code>{issuedToken}</code>
-        </Alert>
-      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>建立 QR</CardTitle>
@@ -177,7 +162,6 @@ export default function QrCodesPage() {
                 <tr>
                   <TableHead>動物</TableHead>
                   <TableHead>狀態</TableHead>
-                  <TableHead>Deep Link</TableHead>
                   <TableHead>操作</TableHead>
                 </tr>
               </TableHeader>
@@ -188,7 +172,6 @@ export default function QrCodesPage() {
                     <TableCell>
                       <Badge>{item.status}</Badge>
                     </TableCell>
-                    <TableCell>{item.deep_link ?? "—"}</TableCell>
                     <TableCell>
                       <div className="p1-actions">
                         <Button
@@ -218,13 +201,6 @@ export default function QrCodesPage() {
                         >
                           重新產生
                         </Button>
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          onClick={print}
-                        >
-                          列印
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -244,7 +220,7 @@ export default function QrCodesPage() {
       >
         <p className="dialog-description">
           動物：{pendingAction?.animalId ?? "未知動物"}。這會讓目前綁定的 QR
-          與既有 Token 立即失效，已發出的連結無法再使用。
+          立即失效，已張貼的舊標籤需要更換。
         </p>
         <div className="dialog-actions">
           <Button

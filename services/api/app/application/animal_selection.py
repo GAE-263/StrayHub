@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.config.settings import get_settings
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.shelter_area import ShelterArea
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
-)
 
 
 @dataclass(frozen=True)
@@ -103,50 +103,86 @@ class AnimalSelectionService:
         self,
         animals: AnimalRepository,
         qr_codes: QrCodeRepository,
-        reportable_scopes: ReportableScopeRepository,
+        authorization: VolunteerReportingAuthorizationService,
     ) -> None:
         self.animals = animals
         self.qr_codes = qr_codes
-        self.reportable_scopes = reportable_scopes
+        self.authorization = authorization
 
     async def list_candidates(
-        self, *, user_id: UUID, role: str, query: str | None = None
+        self,
+        *,
+        user_id: UUID,
+        organization_id: UUID,
+        membership_id: UUID | None,
+        role: str,
+        query: str | None = None,
     ) -> list[AnimalCandidate]:
+        if role == "VOLUNTEER":
+            await self.authorization.authorize(
+                user_id=user_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
+            )
         rows = (
             await self.animals.search_with_area(query)
             if query is not None
             else await self.animals.list_active_with_area()
         )
-        if role != "VOLUNTEER":
-            return [AnimalCandidate(animal, area) for animal, area in rows]
-        allowed = await self.reportable_scopes.active_animal_ids(volunteer_user_id=user_id)
-        return [AnimalCandidate(animal, area) for animal, area in rows if animal.id in allowed]
+        return [AnimalCandidate(animal, area) for animal, area in rows]
 
-    async def resolve_qr(self, *, raw_token: str, user_id: UUID, role: str) -> AnimalCandidate:
+    async def resolve_qr(
+        self,
+        *,
+        raw_token: str,
+        user_id: UUID,
+        organization_id: UUID,
+        membership_id: UUID | None,
+        role: str,
+    ) -> AnimalCandidate:
         qr_code = await self.qr_codes.resolve(raw_token)
-        if qr_code is None:
+        if qr_code is None or qr_code.organization_id != organization_id:
             raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+        if role == "VOLUNTEER":
+            await self.authorization.authorize(
+                user_id=user_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
+                animal_id=qr_code.animal_id,
+            )
         row = await self.animals.get_with_area(qr_code.animal_id)
         if row is None:
             raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
         animal, area = row
-        if animal.status != "active":
-            raise DomainError("animal_not_found", "動物不存在或無法回報", 404)
-        if role == "VOLUNTEER" and not await self.reportable_scopes.is_animal_reportable(
-            animal_id=animal.id, volunteer_user_id=user_id
+        if (
+            animal.status != "active"
+            or animal.organization_id != organization_id
+            or qr_code.animal_id != animal.id
+            or qr_code.organization_id != animal.organization_id
         ):
-            raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+            raise DomainError("animal_not_found", "動物不存在或無法回報", 404)
         return AnimalCandidate(animal, area)
 
-    async def confirm(self, *, animal_id: UUID, user_id: UUID, role: str) -> AnimalCandidate:
+    async def confirm(
+        self,
+        *,
+        animal_id: UUID,
+        user_id: UUID,
+        organization_id: UUID,
+        membership_id: UUID | None,
+        role: str,
+    ) -> AnimalCandidate:
+        if role == "VOLUNTEER":
+            await self.authorization.authorize(
+                user_id=user_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
+                animal_id=animal_id,
+            )
         row = await self.animals.get_with_area(animal_id)
         if row is None:
             raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
         animal, area = row
-        if animal.status != "active":
+        if animal.status != "active" or animal.organization_id != organization_id:
             raise DomainError("animal_not_found", "動物不存在或無法回報", 404)
-        if role == "VOLUNTEER" and not await self.reportable_scopes.is_animal_reportable(
-            animal_id=animal.id, volunteer_user_id=user_id
-        ):
-            raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
         return AnimalCandidate(animal, area)

@@ -364,6 +364,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/qr-tokens/candidate-organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 驗證目前使用者可進入候選收容所且 QR 綁定該收容所；成功只回傳收容所身分，不揭露動物資料或切換目前 context。 */
+        post: operations["authorizeQrCandidateOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/animals/{animalId}/confirm": {
         parameters: {
             query?: never;
@@ -374,6 +391,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["confirmAnimal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/care-report-handoffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createOrReplaceCareReportHandoff"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1875,12 +1908,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
             animal_id: string;
             /** @enum {string} */
             status: "active" | "revoked";
-            deep_link: string;
-            /** @description 僅建立時回傳 */
-            token?: string | null;
+            revoked: boolean;
+            /** @description 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null */
+            deep_link: string | null;
+            /** @description raw token 不作為獨立欄位顯示；locator 僅存在 deep_link */
+            token: null;
         };
         ManagementQrCodeList: {
             items: components["schemas"]["ManagementQrCode"][];
@@ -2296,6 +2333,21 @@ export interface components {
         AnimalConfirmationResponse: components["schemas"]["AnimalCandidate"] & {
             confirmation_token: string;
         };
+        CareReportHandoffCreateRequest: {
+            /** Format: uuid */
+            animal_id: string;
+            confirmation_token: string;
+            /** @enum {string} */
+            source: "liff_scan" | "qr_deeplink" | "shelter_number";
+        };
+        CareReportHandoffResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending";
+            /** Format: date-time */
+            expires_at: string;
+        };
         AnimalListResponse: {
             items: components["schemas"]["AnimalCandidate"][];
             page: number;
@@ -2303,6 +2355,16 @@ export interface components {
         };
         QrResolveRequest: {
             qr_token: string;
+        };
+        QrCandidateOrganizationRequest: {
+            qr_token: string;
+            /** Format: uuid */
+            candidate_organization_id: string;
+        };
+        QrCandidateOrganizationResponse: {
+            /** Format: uuid */
+            organization_id: string;
+            organization_name: string;
         };
         DraftCreateRequest: {
             /** Format: uuid */
@@ -4127,6 +4189,32 @@ export interface operations {
             404: components["responses"]["NotFoundOrForbidden"];
         };
     };
+    authorizeQrCandidateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QrCandidateOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已授權、可供使用者確認切換的候選收容所 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QrCandidateOrganizationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
     confirmAnimal: {
         parameters: {
             query?: never;
@@ -4148,6 +4236,34 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createOrReplaceCareReportHandoff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareReportHandoffCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立或取代待處理的照護回報交接 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareReportHandoffResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listCareReportDrafts: {
@@ -5247,7 +5363,9 @@ export interface operations {
     };
     listManagementQrCodes: {
         parameters: {
-            query?: never;
+            query?: {
+                animal_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5281,7 +5399,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已建立 QR；token 僅於此回應顯示一次 */
+            /** @description 已建立或重用目前的 active QR；回傳可列印 deep link */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5331,7 +5449,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description QR Token 已重新產生；舊 Token 立即失效 */
+            /** @description 已建立替代 QR；舊 QR 立即失效且舊標籤必須更換 */
             200: {
                 headers: {
                     [name: string]: unknown;

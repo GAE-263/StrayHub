@@ -182,6 +182,18 @@ export async function mockManagementApi(
       });
       return;
     }
+    if (url.pathname === "/v1/qr-tokens/resolve") {
+      await json(route, {
+        id: "animal-a",
+        name: "小森",
+        shelter_number: "A-001",
+        cage: "犬舍 A3",
+        area: "北區",
+        can_report: true,
+        organization_id: "org-a",
+      });
+      return;
+    }
     if (url.pathname.match(/\/animals\/[^/]+\/confirm$/)) {
       await json(route, {
         id: "animal-a",
@@ -190,6 +202,14 @@ export async function mockManagementApi(
         can_report: true,
         organization_id: "org-a",
         confirmation_token: "confirm-a",
+      });
+      return;
+    }
+    if (url.pathname === "/v1/care-report-handoffs") {
+      await json(route, {
+        id: "handoff-a",
+        status: "pending",
+        expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
       });
       return;
     }
@@ -460,6 +480,7 @@ export async function mockManagementApi(
         {
           animal: options.animalDetails?.[animalId] ?? {
             id: "animal-a",
+            organization_id: activeOrganizationId,
             name: "小森",
             shelter_number: "A-001",
             status: "active",
@@ -575,6 +596,18 @@ export async function mockVolunteerApi(
       });
       return;
     }
+    if (url.pathname === "/v1/qr-tokens/resolve") {
+      await json(route, {
+        id: "animal-a",
+        name: "小森",
+        shelter_number: "A-001",
+        cage: "犬舍 A3",
+        area: "北區",
+        can_report: true,
+        organization_id: "org-a",
+      });
+      return;
+    }
     if (url.pathname.match(/\/animals\/[^/]+\/confirm$/)) {
       await json(route, {
         id: "animal-a",
@@ -583,6 +616,14 @@ export async function mockVolunteerApi(
         can_report: true,
         organization_id: "org-a",
         confirmation_token: "confirm-a",
+      });
+      return;
+    }
+    if (url.pathname === "/v1/care-report-handoffs") {
+      await json(route, {
+        id: "handoff-a",
+        status: "pending",
+        expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
       });
       return;
     }

@@ -84,11 +84,16 @@ test("志工搜尋與照護表單可用鍵盤操作", async ({ page }) => {
   );
   await mockManagementApi(page);
   await page.goto("/animal-confirmation");
-  const query = page.getByLabel("完整或部分收容編號");
+  const fallback = page.getByRole("button", { name: "輸入完整收容編號" });
+  await fallback.focus();
+  await page.keyboard.press("Enter");
+  const query = page.getByRole("textbox", { name: "完整收容編號" });
   await query.focus();
   await page.keyboard.type("A-001");
   await page.keyboard.press("Enter");
-  await expect(page.getByText("小森／A-001")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "確認照護動物" }),
+  ).toBeVisible();
 
   await page.goto("/care-report");
   await expect(

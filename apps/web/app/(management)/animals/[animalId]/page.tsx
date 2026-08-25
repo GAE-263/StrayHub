@@ -15,10 +15,12 @@ import { Button } from "../../../../components/ui/button";
 import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFormDialog";
 import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
 import { Toast } from "../../../../components/ui/toast";
+import { AnimalCareQrCard } from "../../../../features/animal-management/AnimalCareQrCard";
 
 type Props = { params: Promise<{ animalId: string }> };
 type Animal = {
   id: string;
+  organization_id: string;
   name: string;
   shelter_number: string;
   status: string;
@@ -202,11 +204,17 @@ export default function AnimalProfilePage({ params }: Props) {
           <Button type="button" onClick={() => setReminderOpen(true)}>
             建立提醒
           </Button>
-          <Link className="link-card" href="/settings/qr-codes">
-            <strong>QR 綁定</strong>
-            <p className="muted">前往管理此收容所的 QR 綁定。</p>
-          </Link>
         </Card>
+        <AnimalCareQrCard
+          animal={{
+            id: animal.id,
+            organizationId: animal.organization_id,
+            name: animal.name,
+            shelterNumber: animal.shelter_number,
+            status: animal.status,
+            areaName: animal.area_name,
+          }}
+        />
       </div>
       <ReminderFormDialog
         open={reminderOpen}
