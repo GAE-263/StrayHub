@@ -235,6 +235,71 @@ Bot integration remains responsible for resolving the trusted webhook identity a
 the service below. LINE Developers console enablement and real-client behavior still require
 physical-device validation.
 
+## Management Animal QR lifecycle
+
+The management animal detail route `/animals/{animalId}` contains the V1 `照護 QR Code`
+card implemented by `apps/web/features/animal-management/AnimalCareQrCard.tsx`. It loads only
+QR rows for that tenant-scoped animal through:
+
+```http
+GET /v1/management/qr-codes?animal_id=<current organization animal UUID>
+```
+
+If no active QR exists, an administrator must explicitly select `產生 QR Code`, which calls
+`POST /v1/management/qr-codes`. Creation remains restricted to `SHELTER_ADMIN` or a
+tenant-scoped `PLATFORM_ADMIN`; the existing read boundary remains available to management
+staff. The animal must be active and belong to the current verified organization. Creation
+uses a transaction-scoped organization-and-animal advisory lock and reuses the current active
+row instead of generating on page load or creating another active row.
+
+New-format QR records continue to store only a SHA-256 token digest. The printable opaque
+locator is deterministically reconstructed from the random QR record ID plus a
+domain-separated HMAC using the existing server confirmation-secret key. The opaque token
+does not encode animal, organization, volunteer, confirmation, or handoff data. Existing
+legacy random-token rows remain active but cannot be reconstructed from their digest; the UI
+does not silently invalidate them. It explains that reprinting requires the guarded
+`重新產生` action and replacement of the old physical label.
+
+Regeneration requires explicit confirmation that the old label will stop working. The server
+locks the animal, revokes the selected active record, and creates a new active record with a
+new opaque locator, preserving the revoked row as history. A concurrent or repeated
+regeneration cannot create another replacement from the already revoked record. Inactive or
+transferred animals cannot receive a new or replacement QR. A transferred animal's old QR
+also fails the existing organization/animal consistency checks during volunteer resolution.
+
+The API returns the canonical relative deep-link form:
+
+```text
+/animal-confirmation?organization_id=<untrusted candidate organization UUID>&qr_token=<opaque locator>
+```
+
+The manager page resolves that path against the public application origin before rendering
+the QR. The organization ID remains only a routing hint. The printed code is a locator and
+does not authorize reporting; Item 2B still requires authenticated effective volunteer
+membership, matching grant, verified organization, valid active QR, and active animal.
+
+The preview uses `qrcode.react` 4.2.0 to render a real SVG with a four-module quiet zone and
+medium error correction. Normal UI never renders the raw token or deep link as text. The
+print-only A4 portrait layout hides navigation and actions, renders a 90 mm label with an
+approximately 50 mm QR, and includes only StrayHub, `照護回報 QR Code`, animal name, shelter
+number, shelter name, and the current area when available. Automated Chromium PDF inspection
+verified a single unclipped A4 page. Physical printed-label scanning remains unverified on a
+real device.
+
+The resulting field flow is:
+
+```text
+manager generates or reuses active Animal QR
+→ preview printable label
+→ print and attach label
+→ volunteer scans
+→ Item 2B resolves and confirms the authorized animal
+→ Item 2C creates the pending handoff and triggers LINE when possible
+→ Bot consumer uses trusted webhook identity and server-side handoff state
+```
+
+`DailyReportableScope` is not consulted or configured by this manager QR lifecycle.
+
 ## Integration contract for Bot agent
 
 1. Receive a trusted LINE webhook.
