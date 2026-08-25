@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { Alert } from "../../components/ui/alert";
-import { Button } from "../../components/ui/button";
 import { Dialog } from "../../components/ui/dialog";
 import { authFetch } from "../../lib/auth";
 import {
@@ -74,6 +73,7 @@ export function VolunteerApplicantDetail({
     setSummaryError("");
     setSummaryLoading(false);
     setLoading(true);
+    setRevealing(true);
     void (async () => {
       try {
         const response = await authFetch(
@@ -88,6 +88,27 @@ export function VolunteerApplicantDetail({
         }
       } finally {
         if (generation === requestGeneration.current) setLoading(false);
+      }
+    })();
+    void (async () => {
+      try {
+        const response = await authFetch(
+          `/v1/organizations/${organizationId}/volunteer-applications/${applicationId}/pii-reveal`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ purpose_code: "application_review" }),
+          },
+        );
+        if (!response.ok) throw new Error("目前無法查看申請人資料");
+        const value = (await response.json()) as RevealedProfile;
+        if (generation === requestGeneration.current) setRevealed(value);
+      } catch {
+        if (generation === requestGeneration.current) {
+          setRevealError("目前無法查看申請人資料，請稍後再試。");
+        }
+      } finally {
+        if (generation === requestGeneration.current) setRevealing(false);
       }
     })();
   }, [applicationId, open, organizationId]);
@@ -106,31 +127,6 @@ export function VolunteerApplicantDetail({
     setLoading(false);
     setRevealing(false);
     onClose();
-  }
-
-  async function reveal() {
-    if (!applicationId || !organizationId) return;
-    setRevealed(null);
-    setRevealError("");
-    setRevealing(true);
-    try {
-      const response = await authFetch(
-        `/v1/organizations/${organizationId}/volunteer-applications/${applicationId}/pii-reveal`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ purpose_code: "application_review" }),
-        },
-      );
-      if (!response.ok) throw new Error("目前無法揭露申請人資料");
-      setRevealed((await response.json()) as RevealedProfile);
-    } catch (revealFailure) {
-      setRevealError(
-        revealFailure instanceof Error ? revealFailure.message : "揭露失敗",
-      );
-    } finally {
-      setRevealing(false);
-    }
   }
 
   async function loadSummary(cursor: string | null = null) {
@@ -178,7 +174,7 @@ export function VolunteerApplicantDetail({
       onClose={close}
       closeLabel="關閉申請人資料"
     >
-      {loading ? <p role="status">載入遮罩資料中…</p> : null}
+      {loading ? <p role="status">正在載入申請資料…</p> : null}
       {error ? <Alert role="alert">{error}</Alert> : null}
       {detail ? (
         <div className="space-y-3">
@@ -203,24 +199,23 @@ export function VolunteerApplicantDetail({
               )}
             </ul>
           </div>
-          <p>申請人姓名與電話需為本次申請審核明確揭露。</p>
-          <Button
-            type="button"
-            onClick={() => void reveal()}
-            disabled={revealing}
-          >
-            {revealing ? "揭露中…" : "申請審核用途揭露"}
-          </Button>
-          {revealError ? <Alert role="alert">{revealError}</Alert> : null}
-          {revealed ? (
-            <div role="status">
-              <p>姓名：{revealed.applicant_name}</p>
-              <p>電話：{revealed.phone_number}</p>
-              {revealed.basic_profile?.experience ? (
-                <p>照護經驗：{revealed.basic_profile.experience}</p>
-              ) : null}
-            </div>
-          ) : null}
+          <section aria-labelledby="applicant-information-title">
+            <h3 id="applicant-information-title">申請人資料</h3>
+            <p className="muted">
+              申請人資料僅供本次審核使用，查看紀錄將留存。
+            </p>
+            {revealing ? <p role="status">正在載入申請人資料…</p> : null}
+            {revealError ? <Alert role="alert">{revealError}</Alert> : null}
+            {revealed ? (
+              <div>
+                <p>姓名：{revealed.applicant_name}</p>
+                <p>電話：{revealed.phone_number}</p>
+                {revealed.basic_profile?.experience ? (
+                  <p>照護經驗：{revealed.basic_profile.experience}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
           <VolunteerServiceSummary
             loaded={summaryLoaded}
             items={summaryItems}

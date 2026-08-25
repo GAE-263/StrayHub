@@ -40,6 +40,7 @@ describe("VolunteerReviewCalendar", () => {
 
     const buttons = container?.querySelectorAll("button") ?? [];
     expect(buttons).toHaveLength(2);
+    expect(buttons[0].getAttribute("role")).toBeNull();
     expect(buttons[0].getAttribute("aria-pressed")).toBe("true");
     expect(buttons[1].getAttribute("aria-pressed")).toBe("false");
     expect(container?.textContent).toContain("3 筆待審核");

@@ -98,7 +98,7 @@ uv run python -m scripts.reset_local --yes
 並輸出 LIFF Endpoint 與手機入口。請先在 `.env` 填入真實受控測試值：
 
 ```dotenv
-TUNNEL_PROVIDER=cloudflared
+NGROK_URL=https://your-reserved-domain.ngrok.app
 LIFF_ID=<LINE_LOGIN_CHANNEL_LIFF_ID>
 LINE_LOGIN_CHANNEL_ID=<LINE_LOGIN_CHANNEL_ID>
 SHELTER_ENTRY_REFERENCE=<SHELTER_ENTRY_REFERENCE>
@@ -111,9 +111,11 @@ START_WORKER=1
 ./scripts/demo-line.sh
 ```
 
-腳本預設使用 `cloudflared`；也可設定 `TUNNEL_PROVIDER=ngrok`。腳本只會公開
-Web tunnel；Next.js 的 `/v1` server-side proxy 會使用本機 FastAPI 作為
-`API_BASE_URL`，因此 API 不會直接公開到 Internet。腳本不會替你修改 LINE Developers Console；請將輸出的
+腳本使用 ngrok 的保留網址；先在 ngrok 建立或保留固定 HTTPS 網址，並完成本機
+authtoken 設定，再將該網址設為 `NGROK_URL`。腳本只會公開 Web tunnel；Next.js 的
+`/v1` server-side proxy 會使用本機 FastAPI 作為 `API_BASE_URL`，因此 API 不會直接公開到
+Internet。腳本會以 `ngrok http --url "$NGROK_URL"` 啟動，若實際 tunnel URL 不符合設定就會失敗，
+避免輸出會在重啟後變動的 LIFF Endpoint。腳本不會替你修改 LINE Developers Console；請將輸出的
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 

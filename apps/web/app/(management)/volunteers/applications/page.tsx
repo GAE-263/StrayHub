@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { authFetch } from "../../../../lib/auth";
+import { Button } from "../../../../components/ui/button";
+import { Checkbox } from "../../../../components/ui/checkbox";
+import { Field } from "../../../../components/ui/field";
+import { Input } from "../../../../components/ui/input";
 import { ApplicationBatchWorkbench } from "../../../../features/volunteer-access/ApplicationBatchWorkbench";
 import { VolunteerApplicantDetail } from "../../../../features/volunteer-access/VolunteerApplicantDetail";
 import {
@@ -35,6 +39,24 @@ function todayLocalDate(): string {
   return `${value.getFullYear()}-${month}-${day}`;
 }
 
+function localDateTimeValue(value: Date): string {
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  const hours = String(value.getHours()).padStart(2, "0");
+  const minutes = String(value.getMinutes()).padStart(2, "0");
+  return `${value.getFullYear()}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function defaultSubmittedFrom(): string {
+  const value = new Date();
+  value.setDate(value.getDate() - 7);
+  return localDateTimeValue(value);
+}
+
+function defaultSubmittedTo(): string {
+  return localDateTimeValue(new Date());
+}
+
 export default function VolunteerApplicationsPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [applications, setApplications] = useState<Application[]>([]);
@@ -44,8 +66,8 @@ export default function VolunteerApplicationsPage() {
   const [matchingCount, setMatchingCount] = useState(0);
   const [serviceDate, setServiceDate] = useState(todayLocalDate);
   const [unassigned, setUnassigned] = useState(false);
-  const [submittedFrom, setSubmittedFrom] = useState("");
-  const [submittedTo, setSubmittedTo] = useState("");
+  const [submittedFrom, setSubmittedFrom] = useState(defaultSubmittedFrom);
+  const [submittedTo, setSubmittedTo] = useState(defaultSubmittedTo);
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(false);
   const [detailApplicationId, setDetailApplicationId] = useState<string | null>(
@@ -117,7 +139,7 @@ export default function VolunteerApplicationsPage() {
     setOrganizationId(id);
     if (!id) return;
     const today = todayLocalDate();
-    void loadApplications(id, "", "", today)
+    void loadApplications(id, submittedFrom, submittedTo, today)
       .then((value) => {
         if (!value) return;
         const selectedDate = selectInitialServiceDate(
@@ -126,12 +148,12 @@ export default function VolunteerApplicationsPage() {
         );
         if (selectedDate === today) return;
         setServiceDate(selectedDate);
-        return loadApplications(id, "", "", selectedDate);
+        return loadApplications(id, submittedFrom, submittedTo, selectedDate);
       })
       .catch((error) =>
         setLoadError(error instanceof Error ? error.message : "載入失敗"),
       );
-    // Initial load intentionally ignores local date-filter state.
+    // Initial load uses the default local date-filter range.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -199,12 +221,12 @@ export default function VolunteerApplicationsPage() {
   }
 
   return (
-    <div>
-      <div className="page-heading">
+    <div className="volunteer-review-page">
+      <div className="page-heading volunteer-review-heading">
         <div>
           <span className="eyebrow">VOLUNTEER APPLICATIONS</span>
           <h1>志工報名審核</h1>
-          <p>明確選取，或鎖定目前篩選結果的完整快照後批次核准／拒絕。</p>
+          <p>選取申請後，批次核准或拒絕目前的服務日期。</p>
         </div>
       </div>
       <VolunteerReviewCalendar
@@ -215,7 +237,8 @@ export default function VolunteerApplicationsPage() {
         onSelectDate={selectReviewDate}
       />
       <form
-        className="ui-card ui-card-padded mb-4 flex flex-wrap items-end gap-4"
+        className="ui-card ui-card-padded volunteer-review-filters"
+        aria-label="志工申請篩選"
         onSubmit={(event) => {
           event.preventDefault();
           void loadApplications(organizationId).catch((error) =>
@@ -223,54 +246,68 @@ export default function VolunteerApplicationsPage() {
           );
         }}
       >
-        <label>
-          審核服務日期
-          <input
-            type="date"
-            value={serviceDate}
-            onChange={(event) => {
-              invalidateLoadedApplications();
-              setServiceDate(event.target.value);
-            }}
-            disabled={unassigned}
-            required={!unassigned}
-          />
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={unassigned}
-            onChange={(event) => {
-              invalidateLoadedApplications();
-              setUnassigned(event.target.checked);
-            }}
-          />
-          未指定日期（既有歷史申請）
-        </label>
-        <label>
-          送出時間起
-          <input
-            type="datetime-local"
-            value={submittedFrom}
-            onChange={(event) => {
-              invalidateLoadedApplications();
-              setSubmittedFrom(event.target.value);
-            }}
-          />
-        </label>
-        <label>
-          送出時間迄
-          <input
-            type="datetime-local"
-            value={submittedTo}
-            onChange={(event) => {
-              invalidateLoadedApplications();
-              setSubmittedTo(event.target.value);
-            }}
-          />
-        </label>
-        <button type="submit">套用篩選</button>
-        <p role="status" aria-live="polite">
+        <div className="volunteer-filter-grid">
+          <Field>
+            <label htmlFor="volunteer-service-date">審核服務日期</label>
+            <Input
+              id="volunteer-service-date"
+              type="date"
+              value={serviceDate}
+              onChange={(event) => {
+                invalidateLoadedApplications();
+                setServiceDate(event.target.value);
+              }}
+              disabled={unassigned}
+              required={!unassigned}
+            />
+          </Field>
+          <Field>
+            <label htmlFor="volunteer-submitted-from">送出時間起</label>
+            <Input
+              id="volunteer-submitted-from"
+              type="datetime-local"
+              value={submittedFrom}
+              onChange={(event) => {
+                invalidateLoadedApplications();
+                setSubmittedFrom(event.target.value);
+              }}
+            />
+          </Field>
+          <Field>
+            <label htmlFor="volunteer-submitted-to">送出時間迄</label>
+            <Input
+              id="volunteer-submitted-to"
+              type="datetime-local"
+              value={submittedTo}
+              onChange={(event) => {
+                invalidateLoadedApplications();
+                setSubmittedTo(event.target.value);
+              }}
+            />
+          </Field>
+          <div className="volunteer-filter-toggle">
+            <span className="ui-label">申請範圍</span>
+            <label htmlFor="volunteer-unassigned" className="toggle-control">
+              <Checkbox
+                id="volunteer-unassigned"
+                checked={unassigned}
+                onChange={(event) => {
+                  invalidateLoadedApplications();
+                  setUnassigned(event.target.checked);
+                }}
+              />
+              <span>未指定日期（既有歷史申請）</span>
+            </label>
+          </div>
+          <div className="volunteer-filter-action">
+            <Button type="submit">套用篩選</Button>
+          </div>
+        </div>
+        <p
+          className="volunteer-filter-status"
+          role={loadError ? "alert" : "status"}
+          aria-live="polite"
+        >
           {loadError ||
             (!unassigned && serviceDate
               ? `目前顯示 ${serviceDate} 的待審核申請`
@@ -280,6 +317,7 @@ export default function VolunteerApplicationsPage() {
       <ApplicationBatchWorkbench
         key={`${serviceDate}:${unassigned}:${submittedFrom}:${submittedTo}`}
         applications={loading ? [] : applications}
+        loading={loading}
         matchingCount={loading ? 0 : matchingCount}
         filter={{
           status: "pending",
