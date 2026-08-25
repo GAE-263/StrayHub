@@ -71,6 +71,9 @@ uv run alembic upgrade head
 echo "[Demo] Fictional ORG-A／ORG-B seed"
 uv run python -m scripts.seed_local
 
+echo "[Demo] FurKids public-profile-based demo seed"
+uv run python -m scripts.seed_furkids_demo
+
 echo "[Demo] US0～US3 and AI failure degradation smoke"
 uv run pytest \
   tests/e2e/test_us0_shelter_isolation.py \
@@ -87,6 +90,8 @@ echo "Volunteer A:  local-volunteer-a / local-only-password"
 echo "Staff B:      local-staff-b / local-only-password"
 echo "Platform:     local-platform-admin / local-only-password"
 echo "Platform disabled: local-platform-admin-disabled / local-only-password"
+echo "FurKids admin: demo-furkids-admin / local-only-password"
+echo "FurKids volunteer: demo-furkids-volunteer / local-only-password"
 echo "API:          http://${API_HOST}:${API_PORT}/healthz"
 echo "Web:          http://${WEB_HOST}:${WEB_PORT}"
 
