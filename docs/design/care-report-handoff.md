@@ -37,9 +37,9 @@ sendMessages unavailable
 → Bot consumes pending handoff
 ```
 
-The future cross-shelter LIFF flow must explicitly confirm a switch before creating the
-handoff. The handoff records the final, server-verified organization; it never performs a
-silent organization switch.
+The implemented cross-shelter LIFF flow explicitly confirms a switch before resolving animal
+identity or creating the handoff. The handoff records the final, server-verified organization;
+it never performs a silent organization switch.
 
 ## Ownership boundary
 
@@ -140,16 +140,79 @@ resolution, confirmation, handoff creation, or handoff consumption. Its table, h
 rows, repository, RLS, and management APIs remain intact for legacy/history purposes. The
 presence or absence of a row must not be interpreted as a new restriction model.
 
-This cutover does not implement the LIFF scanner UI, `scanCodeV2()`, cross-shelter switch
-confirmation UI, or LINE `sendMessages()`. QR resolution remains limited to the already
-verified current organization; it does not perform a global or automatic cross-shelter
-lookup.
+QR resolution remains limited to the verified current organization. Cross-shelter deep links
+use the narrow authorized preflight described below; they do not perform a global animal
+lookup or automatic switch. LINE `sendMessages()` remains unimplemented.
 
 The existing HTTP draft creation, final submission, and legacy LINE selection/conversation
 paths still contain their prior scope checks. Those report-flow-team paths are explicitly
 deferred; the future handoff consumer can create a draft through `LineDraftService` without
 that HTTP draft gate, but its final submission authorization must be cut over by the owning
 team before the end-to-end Bot flow ships.
+
+## Implemented LIFF / QR producer
+
+The volunteer route is `/animal-confirmation`. It is scanner-first and uses the installed
+`@line/liff` singleton through `apps/web/lib/liff-scanner.ts`; it does not initialize LIFF a
+second time. `liff.isApiAvailable("scanCodeV2")` controls capability and
+`liff.scanCodeV2()` supplies the scanned value. If scanning is unavailable, the page remains
+usable through the exact shelter-number fallback. Physical QR codes use this canonical deep
+link:
+
+```text
+/animal-confirmation?organization_id=<candidate organization UUID>&qr_token=<opaque token>
+```
+
+`organization_id` is an untrusted routing hint and `qr_token` is only an opaque locator. The
+client parses neither animal identity nor authorization from the URL. It removes the query
+string after reading it and never stores QR, confirmation, or handoff tokens in browser
+storage.
+
+For a same-shelter QR, the page calls `POST /v1/qr-tokens/resolve` in the current tenant and
+shows the returned safe animal candidate. For a different candidate organization, it first
+calls:
+
+```http
+POST /v1/qr-tokens/candidate-organization
+
+{
+  "qr_token": "<opaque locator>",
+  "candidate_organization_id": "<untrusted candidate UUID>"
+}
+```
+
+The endpoint is implemented in `services/api/app/api/animal_selection.py`. It uses the
+existing authenticated-user/exact-organization RLS boundary to verify effective volunteer
+access plus a valid QR and active animal in that organization. Its response contains only
+`organization_id` and `organization_name`; animal identity is not returned. The application
+restores the request's original tenant scope before returning. The page then presents an
+accessible explicit switch dialog. Only after confirmation does it call the existing
+`PUT /v1/auth/active-shelter-context`, followed by the normal tenant-scoped QR resolver.
+Cancellation makes no context change and returns focus to the scanner action.
+
+The fallback for a complete shelter number calls the existing tenant-scoped
+`GET /v1/animals/search` and accepts only one exact `shelter_number` match. Partial search is
+available only behind the secondary `搜尋動物` action and remains current-tenant only. All
+resolution paths feed the same confirmation card, which displays the photo when available,
+name, full shelter number, cage/area, and verified shelter name.
+
+On `確認並開始回報`, the page calls
+`POST /v1/animals/{animalId}/confirm`, holds its five-minute confirmation token only in the
+current async call, and immediately calls `POST /v1/care-report-handoffs`. Source mapping is:
+
+- LIFF `scanCodeV2`: `liff_scan`
+- physical QR/deep link: `qr_deeplink`
+- exact-number or secondary search: `shelter_number`
+
+Success means only that the 15-minute pending handoff is ready. The page does not create a
+`CareReportDraft`, consume the handoff, submit a report, send a LINE message, or claim that a
+report was submitted. It instructs the volunteer to return to LINE and select `照護回報`
+again.
+
+Item 2C remains responsible for `liff.sendMessages("開始照護回報")`, safe
+close/return-to-LINE behavior, and the unavailable-`sendMessages` fallback integration. LINE
+Developers console enablement and physical-device `scanCodeV2` behavior require device-side
+validation; repository browser tests cover unavailable scanning and deep-link entry.
 
 ## Integration contract for Bot agent
 
