@@ -16,12 +16,15 @@ from services.api.app.application.animal_selection import (
     issue_animal_confirmation_token,
 )
 from services.api.app.application.media_access import MediaAccessService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
-from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
+from services.api.app.persistence.repositories.authentication_repository import (
+    AuthenticationRepository,
 )
+from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Animal Selection"])
@@ -81,10 +84,11 @@ async def _candidate(
 
 
 def _selection_service(session: AsyncSession, organization_id: UUID) -> AnimalSelectionService:
+    animals = AnimalRepository(session, organization_id)
     return AnimalSelectionService(
-        AnimalRepository(session, organization_id),
+        animals,
         QrCodeRepository(session, organization_id),
-        ReportableScopeRepository(session, organization_id),
+        VolunteerReportingAuthorizationService(AuthenticationRepository(session), animals),
     )
 
 
@@ -100,7 +104,10 @@ async def list_reportable_animals(
     if context.organization_id is None:
         return AnimalListResponse(items=[], page=page, page_size=page_size)
     candidates = await _selection_service(session, context.organization_id).list_candidates(
-        user_id=context.user_id, role=context.role
+        user_id=context.user_id,
+        organization_id=context.organization_id,
+        membership_id=context.membership_id,
+        role=context.role,
     )
     start = (page - 1) * page_size
     return AnimalListResponse(
@@ -124,7 +131,11 @@ async def search_animals(
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
     candidates = await _selection_service(session, context.organization_id).list_candidates(
-        user_id=context.user_id, role=context.role, query=query
+        user_id=context.user_id,
+        organization_id=context.organization_id,
+        membership_id=context.membership_id,
+        role=context.role,
+        query=query,
     )
     start = (page - 1) * page_size
     return AnimalListResponse(
@@ -146,7 +157,11 @@ async def resolve_qr_token(
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
     candidate = await _selection_service(session, context.organization_id).resolve_qr(
-        raw_token=payload.qr_token, user_id=context.user_id, role=context.role
+        raw_token=payload.qr_token,
+        user_id=context.user_id,
+        organization_id=context.organization_id,
+        membership_id=context.membership_id,
+        role=context.role,
     )
     return await _candidate(candidate, organization_id=context.organization_id)
 
@@ -162,7 +177,11 @@ async def confirm_animal(
     if context.membership_id is None or context.session_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
     candidate = await _selection_service(session, context.organization_id).confirm(
-        animal_id=animalId, user_id=context.user_id, role=context.role
+        animal_id=animalId,
+        user_id=context.user_id,
+        organization_id=context.organization_id,
+        membership_id=context.membership_id,
+        role=context.role,
     )
     response = await _candidate(candidate, organization_id=context.organization_id)
     return AnimalConfirmationResponse(

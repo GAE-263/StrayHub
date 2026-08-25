@@ -9,6 +9,9 @@ import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.animal_selection import issue_animal_confirmation_token
 from services.api.app.application.care_report_handoff_service import CareReportHandoffService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 
 
 class HandoffRepository:
@@ -77,14 +80,6 @@ class Animals:
         return self.animal if self.animal.id == animal_id else None
 
 
-class Scopes:
-    def __init__(self, allowed=True):
-        self.allowed = allowed
-
-    async def is_animal_reportable(self, **_kwargs):
-        return self.allowed
-
-
 @pytest.fixture
 def handoff_fixture(monkeypatch):
     monkeypatch.setenv("ANIMAL_CONFIRMATION_SECRET", "handoff-unit-test-secret")
@@ -118,12 +113,9 @@ def handoff_fixture(monkeypatch):
         grant=grant,
     )
     animals = Animals(animal)
-    scopes = Scopes()
     service = CareReportHandoffService(
         repository,
-        authentication=authentication,
-        animals=animals,
-        reportable_scopes=scopes,
+        authorization=VolunteerReportingAuthorizationService(authentication, animals),
         clock=lambda: now,
     )
     token = issue_animal_confirmation_token(
@@ -254,6 +246,7 @@ async def test_inactive_animal_rejects_consume(handoff_fixture) -> None:
         )
 
     assert error.value.code == "animal_no_longer_available"
+    assert error.value.status_code == 409
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,9 @@ from uuid import UUID
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.animal_selection import verify_animal_confirmation_token
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
 
 HANDOFF_TTL = timedelta(minutes=15)
@@ -17,15 +20,11 @@ class CareReportHandoffService:
         self,
         repository,
         *,
-        authentication,
-        animals,
-        reportable_scopes,
+        authorization: VolunteerReportingAuthorizationService,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.repository = repository
-        self.authentication = authentication
-        self.animals = animals
-        self.reportable_scopes = reportable_scopes
+        self.authorization = authorization
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     async def create_or_replace_handoff(
@@ -49,21 +48,15 @@ class CareReportHandoffService:
             session_id=session_id,
             animal_id=animal_id,
         )
-        await self._require_effective_access(
+        authorized = await self.authorization.authorize(
             user_id=user_id,
             organization_id=organization_id,
             membership_id=membership_id,
+            animal_id=animal_id,
+            animal_unavailable_status=409,
         )
-        animal = await self._require_animal(animal_id, organization_id)
-        if not await self.reportable_scopes.is_animal_reportable(
-            animal_id=animal.id,
-            volunteer_user_id=user_id,
-        ):
-            raise DomainError(
-                "authorization_no_longer_valid",
-                "目前無法開始此照護回報",
-                403,
-            )
+        assert authorized.animal is not None
+        animal = authorized.animal
         now = self.clock()
         return await self.repository.replace_pending(
             CareReportHandoff(
@@ -109,76 +102,16 @@ class CareReportHandoffService:
             await self.repository.flush()
             raise DomainError("handoff_expired", "動物確認已逾時，請重新掃描確認", 409)
 
-        await self._require_effective_access(
+        authorized = await self.authorization.authorize(
             user_id=user_id,
             organization_id=organization_id,
             membership_id=handoff.membership_id,
+            animal_id=handoff.animal_id,
+            animal_unavailable_status=409,
         )
-        animal = await self._require_animal(handoff.animal_id, organization_id)
-        if not await self.reportable_scopes.is_animal_reportable(
-            animal_id=animal.id,
-            volunteer_user_id=user_id,
-        ):
-            raise DomainError(
-                "authorization_no_longer_valid",
-                "目前無法開始此照護回報",
-                403,
-            )
+        assert authorized.animal is not None
 
         handoff.status = "consumed"
         handoff.consumed_at = now
         await self.repository.flush()
         return handoff
-
-    async def _require_effective_access(
-        self,
-        *,
-        user_id: UUID,
-        organization_id: UUID,
-        membership_id: UUID,
-    ) -> None:
-        user = await self.authentication.get_user(user_id)
-        organization = await self.authentication.get_organization(organization_id)
-        if (
-            user is None
-            or user.status != "active"
-            or organization is None
-            or organization.status != "active"
-        ):
-            raise DomainError(
-                "authorization_no_longer_valid",
-                "目前無法開始此照護回報",
-                403,
-            )
-        access = await self.authentication.lock_effective_volunteer_access(user_id, organization_id)
-        if access is None:
-            raise DomainError(
-                "authorization_no_longer_valid",
-                "目前無法開始此照護回報",
-                403,
-            )
-        membership, grant = access
-        if (
-            membership.id != membership_id
-            or membership.user_id != user_id
-            or membership.organization_id != organization_id
-            or membership.role != "VOLUNTEER"
-            or grant.user_id != user_id
-            or grant.organization_id != organization_id
-            or grant.membership_id != membership.id
-        ):
-            raise DomainError(
-                "authorization_no_longer_valid",
-                "目前無法開始此照護回報",
-                403,
-            )
-
-    async def _require_animal(self, animal_id: UUID, organization_id: UUID):
-        animal = await self.animals.get(animal_id)
-        if animal is None or animal.organization_id != organization_id or animal.status != "active":
-            raise DomainError(
-                "animal_no_longer_available",
-                "動物目前無法進行照護回報",
-                409,
-            )
-        return animal

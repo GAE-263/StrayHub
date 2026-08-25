@@ -15,15 +15,15 @@ from services.api.app.api.errors import DomainError
 from services.api.app.application.care_report_handoff_service import (
     CareReportHandoffService,
 )
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
 from services.api.app.persistence.repositories.care_report_handoff_repository import (
     CareReportHandoffRepository,
-)
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,11 +64,12 @@ async def create_or_replace_care_report_handoff(
         raise DomainError("invalid_session", "Session 無效", 401)
 
     organization_id = context.organization_id
+    animals = AnimalRepository(session, organization_id)
     handoff = await CareReportHandoffService(
         CareReportHandoffRepository(session, organization_id),
-        authentication=AuthenticationRepository(session),
-        animals=AnimalRepository(session, organization_id),
-        reportable_scopes=ReportableScopeRepository(session, organization_id),
+        authorization=VolunteerReportingAuthorizationService(
+            AuthenticationRepository(session), animals
+        ),
     ).create_or_replace_handoff(
         user_id=context.user_id,
         organization_id=organization_id,

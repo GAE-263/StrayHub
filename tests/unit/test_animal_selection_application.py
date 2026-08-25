@@ -27,21 +27,127 @@ def test_animal_confirmation_token_is_bound_to_actor_session_and_animal() -> Non
 
 
 @pytest.mark.asyncio
-async def test_volunteer_selection_is_limited_to_current_reportable_scope() -> None:
-    allowed = SimpleNamespace(id=uuid4(), name="小黑", status="active")
-    excluded = SimpleNamespace(id=uuid4(), name="小白", status="active")
+@pytest.mark.parametrize("query", [None, "小"])
+async def test_scope_free_volunteer_list_and_search_return_active_tenant_animals(query) -> None:
+    organization_id = uuid4()
+    membership_id = uuid4()
+    first = SimpleNamespace(id=uuid4(), name="小黑", status="active")
+    second = SimpleNamespace(id=uuid4(), name="小白", status="active")
 
     class Animals:
         async def list_active_with_area(self):
-            return [(allowed, None), (excluded, None)]
+            return [(first, None), (second, None)]
+
+        async def search_with_area(self, value):
+            assert value == "小"
+            return [(first, None), (second, None)]
 
     class QrCodes:
         pass
 
-    class Scopes:
-        async def active_animal_ids(self, *, volunteer_user_id):
-            return {allowed.id}
+    class Authorization:
+        async def authorize(self, **_kwargs):
+            return SimpleNamespace(animal=None)
 
-    service = AnimalSelectionService(Animals(), QrCodes(), Scopes())
-    result = await service.list_candidates(user_id=uuid4(), role="VOLUNTEER")
-    assert [candidate.animal.id for candidate in result] == [allowed.id]
+    service = AnimalSelectionService(Animals(), QrCodes(), Authorization())
+    result = await service.list_candidates(
+        user_id=uuid4(),
+        organization_id=organization_id,
+        membership_id=membership_id,
+        role="VOLUNTEER",
+        query=query,
+    )
+    assert [candidate.animal.id for candidate in result] == [first.id, second.id]
+
+
+@pytest.mark.asyncio
+async def test_scope_free_qr_resolve_and_confirmation_succeed() -> None:
+    organization_id = uuid4()
+    animal = SimpleNamespace(id=uuid4(), organization_id=organization_id, status="active")
+    qr = SimpleNamespace(animal_id=animal.id, organization_id=organization_id)
+
+    class Animals:
+        async def get_with_area(self, animal_id):
+            return (animal, None) if animal_id == animal.id else None
+
+    class QrCodes:
+        async def resolve(self, raw_token):
+            return qr if raw_token == "valid-token" else None
+
+    class Authorization:
+        async def authorize(self, **_kwargs):
+            return SimpleNamespace(animal=animal)
+
+    service = AnimalSelectionService(Animals(), QrCodes(), Authorization())
+
+    resolved = await service.resolve_qr(
+        raw_token="valid-token",
+        user_id=uuid4(),
+        organization_id=organization_id,
+        membership_id=uuid4(),
+        role="VOLUNTEER",
+    )
+    confirmed = await service.confirm(
+        animal_id=animal.id,
+        user_id=uuid4(),
+        organization_id=organization_id,
+        membership_id=uuid4(),
+        role="VOLUNTEER",
+    )
+
+    assert resolved.animal is animal
+    assert confirmed.animal is animal
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token", ["tampered-token", "revoked-token"])
+async def test_unresolved_or_revoked_qr_fails_without_animal_details(token) -> None:
+    class Animals:
+        pass
+
+    class QrCodes:
+        async def resolve(self, _raw_token):
+            return None
+
+    class Authorization:
+        async def authorize(self, **_kwargs):
+            raise AssertionError("Unresolved QR must not reach animal authorization")
+
+    with pytest.raises(DomainError) as error:
+        await AnimalSelectionService(Animals(), QrCodes(), Authorization()).resolve_qr(
+            raw_token=token,
+            user_id=uuid4(),
+            organization_id=uuid4(),
+            membership_id=uuid4(),
+            role="VOLUNTEER",
+        )
+
+    assert error.value.code == "animal_not_found"
+    assert "id" not in error.value.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_qr_from_other_organization_fails_before_animal_lookup() -> None:
+    current_organization_id = uuid4()
+
+    class Animals:
+        pass
+
+    class QrCodes:
+        async def resolve(self, _raw_token):
+            return SimpleNamespace(animal_id=uuid4(), organization_id=uuid4())
+
+    class Authorization:
+        async def authorize(self, **_kwargs):
+            raise AssertionError("Foreign QR must not reach animal authorization")
+
+    with pytest.raises(DomainError) as error:
+        await AnimalSelectionService(Animals(), QrCodes(), Authorization()).resolve_qr(
+            raw_token="foreign-token",
+            user_id=uuid4(),
+            organization_id=current_organization_id,
+            membership_id=uuid4(),
+            role="VOLUNTEER",
+        )
+
+    assert error.value.code == "animal_not_found"

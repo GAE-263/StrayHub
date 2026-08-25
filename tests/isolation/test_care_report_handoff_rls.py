@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -9,7 +10,14 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 from services.api.app.api.errors import DomainError
+from services.api.app.application.animal_selection import (
+    AnimalSelectionService,
+    issue_animal_confirmation_token,
+)
 from services.api.app.application.care_report_handoff_service import CareReportHandoffService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
@@ -19,9 +27,7 @@ from services.api.app.persistence.repositories.authentication_repository import 
 from services.api.app.persistence.repositories.care_report_handoff_repository import (
     CareReportHandoffRepository,
 )
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
-)
+from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
@@ -55,8 +61,10 @@ async def _setup_fixture() -> SimpleNamespace:
         grant_b=uuid4(),
         animal_a=uuid4(),
         animal_b=uuid4(),
-        scope_a=uuid4(),
-        scope_b=uuid4(),
+        qr_a=uuid4(),
+        qr_b=uuid4(),
+        qr_token_a=f"handoff-qr-a-{uuid4().hex}",
+        qr_token_b=f"handoff-qr-b-{uuid4().hex}",
         handoff_a=uuid4(),
     )
     connection = await asyncpg.connect(_database_url())
@@ -145,9 +153,9 @@ async def _setup_fixture() -> SimpleNamespace:
                 now - timedelta(hours=1),
                 now + timedelta(hours=2),
             )
-        for organization_id, animal_id, scope_id in (
-            (ids.organization_a, ids.animal_a, ids.scope_a),
-            (ids.organization_b, ids.animal_b, ids.scope_b),
+        for organization_id, animal_id, qr_id, qr_token in (
+            (ids.organization_a, ids.animal_a, ids.qr_a, ids.qr_token_a),
+            (ids.organization_b, ids.animal_b, ids.qr_b, ids.qr_token_b),
         ):
             await connection.execute(
                 """
@@ -160,17 +168,15 @@ async def _setup_fixture() -> SimpleNamespace:
             )
             await connection.execute(
                 """
-                INSERT INTO daily_reportable_scopes
-                    (id, organization_id, animal_id, volunteer_user_id, starts_at, ends_at,
-                     status, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, 'active', now(), now())
+                INSERT INTO animal_qr_codes
+                    (id, organization_id, animal_id, token_digest, status, revoked,
+                     created_at, updated_at)
+                VALUES ($1, $2, $3, $4, 'active', false, now(), now())
                 """,
-                scope_id,
+                qr_id,
                 organization_id,
                 animal_id,
-                ids.user,
-                now - timedelta(hours=1),
-                now + timedelta(hours=2),
+                hashlib.sha256(qr_token.encode()).hexdigest(),
             )
         await connection.execute(
             """
@@ -207,8 +213,7 @@ async def _cleanup_fixture(ids: SimpleNamespace) -> None:
             organizations,
         )
         await connection.execute(
-            "DELETE FROM daily_reportable_scopes WHERE organization_id = ANY($1::uuid[])",
-            organizations,
+            "DELETE FROM animal_qr_codes WHERE organization_id = ANY($1::uuid[])", organizations
         )
         await connection.execute(
             "DELETE FROM volunteer_access_grants WHERE organization_id = ANY($1::uuid[])",
@@ -237,12 +242,102 @@ async def _cleanup_fixture(ids: SimpleNamespace) -> None:
 
 
 def _service(session, organization_id: UUID) -> CareReportHandoffService:
+    animals = AnimalRepository(session, organization_id)
     return CareReportHandoffService(
         CareReportHandoffRepository(session, organization_id),
-        authentication=AuthenticationRepository(session),
-        animals=AnimalRepository(session, organization_id),
-        reportable_scopes=ReportableScopeRepository(session, organization_id),
+        authorization=VolunteerReportingAuthorizationService(
+            AuthenticationRepository(session), animals
+        ),
     )
+
+
+def _selection_service(session, organization_id: UUID) -> AnimalSelectionService:
+    animals = AnimalRepository(session, organization_id)
+    return AnimalSelectionService(
+        animals,
+        QrCodeRepository(session, organization_id),
+        VolunteerReportingAuthorizationService(AuthenticationRepository(session), animals),
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_scope_free_qr_confirm_handoff_create_and_consume() -> None:
+    ids = await _setup_fixture()
+    engine = create_async_engine(_async_database_url(), pool_pre_ping=True)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    session_id = uuid4()
+    try:
+        async with sessions() as session:
+            async with session.begin():
+                await set_organization_scope(session, ids.organization_a)
+                selection = _selection_service(session, ids.organization_a)
+                candidate = await selection.resolve_qr(
+                    raw_token=ids.qr_token_a,
+                    user_id=ids.user,
+                    organization_id=ids.organization_a,
+                    membership_id=ids.membership_a,
+                    role="VOLUNTEER",
+                )
+                assert candidate.animal.id == ids.animal_a
+                confirmed = await selection.confirm(
+                    animal_id=ids.animal_a,
+                    user_id=ids.user,
+                    organization_id=ids.organization_a,
+                    membership_id=ids.membership_a,
+                    role="VOLUNTEER",
+                )
+                assert confirmed.animal.id == ids.animal_a
+                with pytest.raises(DomainError) as cross_tenant:
+                    await selection.resolve_qr(
+                        raw_token=ids.qr_token_b,
+                        user_id=ids.user,
+                        organization_id=ids.organization_a,
+                        membership_id=ids.membership_a,
+                        role="VOLUNTEER",
+                    )
+                assert cross_tenant.value.code == "animal_not_found"
+
+                confirmation_token = issue_animal_confirmation_token(
+                    user_id=ids.user,
+                    organization_id=ids.organization_a,
+                    membership_id=ids.membership_a,
+                    session_id=session_id,
+                    animal_id=ids.animal_a,
+                )
+                handoff = await _service(session, ids.organization_a).create_or_replace_handoff(
+                    user_id=ids.user,
+                    organization_id=ids.organization_a,
+                    membership_id=ids.membership_a,
+                    session_id=session_id,
+                    animal_id=ids.animal_a,
+                    confirmation_token=confirmation_token,
+                    source="liff_scan",
+                )
+                assert handoff.status == "pending"
+
+        async with sessions() as session:
+            async with session.begin():
+                await set_organization_scope(session, ids.organization_a)
+                consumed = await _service(session, ids.organization_a).consume_pending_handoff(
+                    user_id=ids.user,
+                    organization_id=ids.organization_a,
+                )
+                assert consumed.status == "consumed"
+
+        connection = await asyncpg.connect(_database_url())
+        try:
+            assert (
+                await connection.fetchval(
+                    "SELECT count(*) FROM daily_reportable_scopes WHERE organization_id = $1",
+                    ids.organization_a,
+                )
+                == 0
+            )
+        finally:
+            await connection.close()
+    finally:
+        await engine.dispose()
+        await _cleanup_fixture(ids)
 
 
 @pytest.mark.asyncio
