@@ -140,14 +140,15 @@ test("review page opens the nearest pending service date and preserves it in exp
   ).toBeVisible();
   expect(today).not.toBe(nextDate);
 
-  await page.getByRole("button", { name: "查看申請人" }).click();
+  await page.getByRole("button", { name: "查看申請資料" }).click();
   await expect(page.getByRole("dialog")).toContainText("LINE 志工");
-  await expect(page.getByRole("dialog")).not.toContainText("核准顯示名");
-  await page.getByRole("button", { name: "載入服務紀錄" }).click();
-  await expect(page.getByRole("dialog")).toContainText("收容所 B");
-  await page.getByRole("button", { name: "申請審核用途揭露" }).click();
   await expect(page.getByRole("dialog")).toContainText("核准顯示名");
   await expect(page.getByRole("dialog")).toContainText("0900000000");
+  await expect(
+    page.getByRole("button", { name: "申請審核用途揭露" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "載入服務紀錄" }).click();
+  await expect(page.getByRole("dialog")).toContainText("收容所 B");
   await page.getByRole("button", { name: "關閉申請人資料" }).click();
   await expect(page.getByText("核准顯示名", { exact: true })).toHaveCount(0);
   await expect(page.getByText("0900000000", { exact: true })).toHaveCount(0);

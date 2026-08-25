@@ -350,7 +350,7 @@ export function ApplicationBatchWorkbench({
                     variant="secondary"
                     onClick={() => onViewApplicant(application.id)}
                   >
-                    查看申請人
+                    查看申請資料
                   </Button>
                 </td>
               ) : null}

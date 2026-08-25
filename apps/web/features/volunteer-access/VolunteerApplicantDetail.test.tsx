@@ -53,7 +53,7 @@ async function renderDetail(onClose = vi.fn()) {
 }
 
 describe("VolunteerApplicantDetail", () => {
-  it("loads masked detail first and only reveals after explicit action", async () => {
+  it("opens applicant detail and automatically requests application-review PII", async () => {
     HTMLDialogElement.prototype.showModal = function showModal() {
       this.open = true;
     };
@@ -92,24 +92,29 @@ describe("VolunteerApplicantDetail", () => {
     await renderDetail();
     await act(async () => flush());
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).not.toContain("pii-reveal");
-    expect(container?.textContent).toContain("LINE 志工");
-    expect(container?.textContent).not.toContain("核准顯示名");
-
-    await act(async () => {
-      Array.from(container?.querySelectorAll("button") ?? [])
-        .find((button) => button.textContent?.includes("申請審核用途揭露"))
-        ?.click();
-      await flush();
-    });
-
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    const revealCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/pii-reveal"),
+    );
+    expect(revealCall).toBeDefined();
+    expect(revealCall?.[1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ purpose_code: "application_review" }),
+      }),
+    );
+    expect(container?.textContent).toContain("LINE 志工");
     expect(container?.textContent).toContain("核准顯示名");
     expect(container?.textContent).toContain("0900000000");
+    expect(container?.textContent).toContain(
+      "申請人資料僅供本次審核使用，查看紀錄將留存。",
+    );
+    expect(container?.textContent).not.toContain("申請審核用途揭露");
+    expect(window.localStorage.getItem("applicant_name")).toBeNull();
+    expect(window.sessionStorage.getItem("applicant_name")).toBeNull();
   });
 
-  it("keeps reveal failure free of plaintext and clears revealed state on close", async () => {
+  it("keeps masked detail visible when automatic reveal fails", async () => {
     HTMLDialogElement.prototype.showModal = function showModal() {
       this.open = true;
     };
@@ -138,16 +143,49 @@ describe("VolunteerApplicantDetail", () => {
 
     await renderDetail(onClose);
     await act(async () => flush());
-    await act(async () => {
-      Array.from(container?.querySelectorAll("button") ?? [])
-        .find((button) => button.textContent?.includes("申請審核用途揭露"))
-        ?.click();
-      await flush();
-    });
 
-    expect(container?.textContent).toContain("目前無法揭露申請人資料");
+    expect(container?.textContent).toContain("LINE 志工");
+    expect(container?.textContent).toContain(
+      "目前無法查看申請人資料，請稍後再試。",
+    );
     expect(container?.textContent).not.toContain("核准顯示名");
     expect(container?.textContent).not.toContain("0900000000");
+  });
+
+  it("clears automatically revealed data on close", async () => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    const onClose = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith("/pii-reveal")
+          ? response({
+              applicant_name: "核准顯示名",
+              phone_number: "0900000000",
+              basic_profile: null,
+            })
+          : response({
+              id: "application-a",
+              organization_id: "org-a",
+              display_name: "LINE 志工",
+              status: "pending",
+              submitted_at: "2026-08-24T00:00:00Z",
+              decided_at: null,
+              decision_reason: null,
+              version: 1,
+              service_dates: [],
+            }),
+      ),
+    );
+
+    await renderDetail(onClose);
+    await act(async () => flush());
+    expect(container?.textContent).toContain("核准顯示名");
 
     await act(async () => {
       container
@@ -159,6 +197,72 @@ describe("VolunteerApplicantDetail", () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(container?.textContent).not.toContain("核准顯示名");
     expect(container?.textContent).not.toContain("0900000000");
+  });
+
+  it("rejects a stale reveal response after switching applicants", async () => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    let resolveAReveal: ((value: Response) => void) | undefined;
+    const delayedAReveal = new Promise<Response>((resolve) => {
+      resolveAReveal = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("application-a/pii-reveal")) return delayedAReveal;
+        if (url.endsWith("application-b/pii-reveal")) {
+          return response({
+            applicant_name: "申請人 B",
+            phone_number: "0922222222",
+            basic_profile: null,
+          });
+        }
+        return response({
+          id: url.endsWith("application-b") ? "application-b" : "application-a",
+          organization_id: "org-a",
+          display_name: url.endsWith("application-b")
+            ? "LINE 志工 B"
+            : "LINE 志工 A",
+          status: "pending",
+          submitted_at: "2026-08-24T00:00:00Z",
+          decided_at: null,
+          decision_reason: null,
+          version: 1,
+          service_dates: [],
+        });
+      }),
+    );
+
+    await renderDetail();
+    await act(async () => flush());
+    await act(async () => {
+      root?.render(
+        <VolunteerApplicantDetail
+          organizationId="org-a"
+          applicationId="application-b"
+          open
+          onClose={vi.fn()}
+        />,
+      );
+      await flush();
+    });
+    resolveAReveal?.(
+      response({
+        applicant_name: "申請人 A",
+        phone_number: "0911111111",
+        basic_profile: null,
+      }),
+    );
+    await act(async () => flush());
+
+    expect(container?.textContent).toContain("申請人 B");
+    expect(container?.textContent).not.toContain("申請人 A");
+    expect(container?.textContent).not.toContain("0911111111");
   });
 
   it("loads summary separately from PII reveal and clears it on close", async () => {
@@ -203,7 +307,7 @@ describe("VolunteerApplicantDetail", () => {
 
     await renderDetail(onClose);
     await act(async () => flush());
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container?.textContent).not.toContain("收容所 B");
 
     await act(async () => {

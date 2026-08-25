@@ -33,7 +33,7 @@ describe("ApplicationBatchWorkbench", () => {
     expect(html).toContain("ui-input");
     expect(html).toContain("ui-table batch-table");
     expect(html).toContain("ui-button ui-button-default");
-    expect(html).toContain("查看申請人");
+    expect(html).toContain("查看申請資料");
     expect(html).not.toContain("bg-emerald");
   });
 
