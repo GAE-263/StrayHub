@@ -364,6 +364,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/qr-tokens/candidate-organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 驗證目前使用者可進入候選收容所且 QR 綁定該收容所；成功只回傳收容所身分，不揭露動物資料或切換目前 context。 */
+        post: operations["authorizeQrCandidateOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/animals/{animalId}/confirm": {
         parameters: {
             query?: never;
@@ -2335,6 +2352,16 @@ export interface components {
         QrResolveRequest: {
             qr_token: string;
         };
+        QrCandidateOrganizationRequest: {
+            qr_token: string;
+            /** Format: uuid */
+            candidate_organization_id: string;
+        };
+        QrCandidateOrganizationResponse: {
+            /** Format: uuid */
+            organization_id: string;
+            organization_name: string;
+        };
         DraftCreateRequest: {
             /** Format: uuid */
             animal_id: string;
@@ -4155,6 +4182,32 @@ export interface operations {
                     "application/json": components["schemas"]["AnimalCandidate"];
                 };
             };
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    authorizeQrCandidateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QrCandidateOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已授權、可供使用者確認切換的候選收容所 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QrCandidateOrganizationResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
         };
     };

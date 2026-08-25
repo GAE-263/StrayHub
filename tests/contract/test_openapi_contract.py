@@ -27,6 +27,7 @@ def test_required_paths_and_security_are_declared() -> None:
         "/v1/organizations/{organizationId}/initial-admin",
         "/v1/animals/search",
         "/v1/qr-tokens/resolve",
+        "/v1/qr-tokens/candidate-organization",
         "/v1/care-report-handoffs",
         "/v1/care-report-drafts",
         "/v1/media",

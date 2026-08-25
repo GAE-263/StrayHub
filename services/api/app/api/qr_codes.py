@@ -34,7 +34,11 @@ def _payload(value: AnimalQrCode, token: str | None = None) -> dict:
         "status": value.status,
         "revoked": value.revoked,
         "token": token,
-        "deep_link": f"/animal-confirmation?qr_token={token}" if token else None,
+        "deep_link": (
+            f"/animal-confirmation?organization_id={value.organization_id}&qr_token={token}"
+            if token
+            else None
+        ),
     }
 
 

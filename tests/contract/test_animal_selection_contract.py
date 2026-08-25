@@ -5,6 +5,8 @@ from fastapi.routing import APIRoute
 from services.api.app.api.animal_selection import (
     AnimalCandidateResponse,
     AnimalListResponse,
+    QrCandidateOrganizationRequest,
+    QrCandidateOrganizationResponse,
     QrResolveRequest,
     router,
 )
@@ -21,6 +23,7 @@ def test_animal_selection_router_exposes_all_selection_operations() -> None:
     assert ("/v1/animals", "GET") in routes
     assert ("/v1/animals/search", "GET") in routes
     assert ("/v1/qr-tokens/resolve", "POST") in routes
+    assert ("/v1/qr-tokens/candidate-organization", "POST") in routes
     assert ("/v1/animals/{animalId}/confirm", "POST") in routes
 
 
@@ -31,6 +34,14 @@ def test_animal_selection_contract_preserves_identity_and_disambiguation_fields(
     assert fields["can_report"].is_required()
     assert AnimalListResponse.model_fields["page"].is_required()
     assert QrResolveRequest.model_fields["qr_token"].is_required()
+    assert set(QrCandidateOrganizationRequest.model_fields) == {
+        "qr_token",
+        "candidate_organization_id",
+    }
+    assert set(QrCandidateOrganizationResponse.model_fields) == {
+        "organization_id",
+        "organization_name",
+    }
     assert DraftCreateRequest.model_fields["animal_id"].is_required()
     assert DraftCreateRequest.model_fields["confirmation_token"].is_required()
 
@@ -43,8 +54,12 @@ def test_animal_selection_openapi_declares_consistent_error_and_request_shapes()
     assert "/v1/animals" in paths
     assert "/v1/animals/search" in paths
     assert "/v1/qr-tokens/resolve" in paths
+    assert "/v1/qr-tokens/candidate-organization" in paths
     assert "/v1/animals/{animalId}/confirm" in paths
     assert paths["/v1/qr-tokens/resolve"]["post"]["responses"]["404"]
+    candidate_operation = paths["/v1/qr-tokens/candidate-organization"]["post"]
+    assert candidate_operation["operationId"] == "authorizeQrCandidateOrganization"
+    assert "AnimalCandidate" not in str(candidate_operation["responses"]["200"])
     assert paths["/v1/animals/{animalId}/confirm"]["post"]["responses"]["403"]
     assert (
         "confirmation_token" in document["components"]["schemas"]["DraftCreateRequest"]["required"]

@@ -420,6 +420,24 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AnimalCandidate" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+  /v1/qr-tokens/candidate-organization:
+    post:
+      tags: [Animal Selection]
+      operationId: authorizeQrCandidateOrganization
+      description: 驗證目前使用者可進入候選收容所且 QR 綁定該收容所；成功只回傳收容所身分，不揭露動物資料或切換目前 context。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QrCandidateOrganizationRequest" }
+      responses:
+        "200":
+          description: 已授權、可供使用者確認切換的候選收容所
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QrCandidateOrganizationResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
   /v1/animals/{animalId}/confirm:
     post:
       tags: [Animal Selection]
@@ -3180,6 +3198,20 @@ components:
       required: [qr_token]
       properties:
         qr_token: { type: string }
+    QrCandidateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [qr_token, candidate_organization_id]
+      properties:
+        qr_token: { type: string, minLength: 1 }
+        candidate_organization_id: { type: string, format: uuid }
+    QrCandidateOrganizationResponse:
+      type: object
+      additionalProperties: false
+      required: [organization_id, organization_name]
+      properties:
+        organization_id: { type: string, format: uuid }
+        organization_name: { type: string, minLength: 1 }
     DraftCreateRequest:
       type: object
       required: [animal_id, confirmation_token]

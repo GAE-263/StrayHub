@@ -3,9 +3,10 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from services.api.app.api.dependencies import (
     RequestContext,
+    authenticated_request_context,
     current_request_context,
     request_session,
 )
@@ -20,6 +21,10 @@ from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
+from services.api.app.persistence.database.scope import (
+    set_authentication_user_organization_scope,
+    set_organization_scope,
+)
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -53,6 +58,20 @@ class AnimalListResponse(BaseModel):
 
 class QrResolveRequest(BaseModel):
     qr_token: str
+
+
+class QrCandidateOrganizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    qr_token: str = Field(min_length=1)
+    candidate_organization_id: UUID
+
+
+class QrCandidateOrganizationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: UUID
+    organization_name: str = Field(min_length=1)
 
 
 async def _candidate(
@@ -164,6 +183,50 @@ async def resolve_qr_token(
         role=context.role,
     )
     return await _candidate(candidate, organization_id=context.organization_id)
+
+
+@router.post(
+    "/v1/qr-tokens/candidate-organization",
+    response_model=QrCandidateOrganizationResponse,
+)
+async def authorize_qr_candidate_organization(
+    payload: QrCandidateOrganizationRequest,
+    context: RequestContext = Depends(authenticated_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> QrCandidateOrganizationResponse:
+    original_organization_id = context.organization_id
+    target_organization_id = payload.candidate_organization_id
+    await set_authentication_user_organization_scope(
+        session, context.user_id, target_organization_id
+    )
+    try:
+        authentication = AuthenticationRepository(session)
+        organization = await authentication.get_organization(target_organization_id)
+        animals = AnimalRepository(session, target_organization_id)
+        await VolunteerReportingAuthorizationService(authentication, animals).authorize(
+            user_id=context.user_id,
+            organization_id=target_organization_id,
+        )
+        await set_organization_scope(session, target_organization_id)
+        qr_code = await QrCodeRepository(session, target_organization_id).resolve(payload.qr_token)
+        animal = None if qr_code is None else await animals.get(qr_code.animal_id)
+        if (
+            qr_code is None
+            or animal is None
+            or qr_code.organization_id != target_organization_id
+            or animal.organization_id != target_organization_id
+            or qr_code.animal_id != animal.id
+            or animal.status != "active"
+        ):
+            raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+        assert organization is not None
+        return QrCandidateOrganizationResponse(
+            organization_id=organization.id,
+            organization_name=organization.name,
+        )
+    finally:
+        if original_organization_id is not None:
+            await set_organization_scope(session, original_organization_id)
 
 
 @router.post("/v1/animals/{animalId}/confirm", response_model=AnimalConfirmationResponse)

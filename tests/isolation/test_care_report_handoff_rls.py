@@ -9,6 +9,11 @@ from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
+from services.api.app.api.animal_selection import (
+    QrCandidateOrganizationRequest,
+    authorize_qr_candidate_organization,
+)
+from services.api.app.api.dependencies import RequestContext
 from services.api.app.api.errors import DomainError
 from services.api.app.application.animal_selection import (
     AnimalSelectionService,
@@ -258,6 +263,69 @@ def _selection_service(session, organization_id: UUID) -> AnimalSelectionService
         QrCodeRepository(session, organization_id),
         VolunteerReportingAuthorizationService(AuthenticationRepository(session), animals),
     )
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_cross_shelter_qr_preflight_is_authorized_and_restores_scope() -> None:
+    ids = await _setup_fixture()
+    engine = create_async_engine(_async_database_url(), pool_pre_ping=True)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    context = RequestContext(
+        user_id=ids.user,
+        organization_id=ids.organization_a,
+        membership_id=ids.membership_a,
+        role="VOLUNTEER",
+        session_id=uuid4(),
+    )
+    try:
+        async with sessions() as session:
+            async with session.begin():
+                await set_organization_scope(session, ids.organization_a)
+                response = await authorize_qr_candidate_organization(
+                    QrCandidateOrganizationRequest(
+                        qr_token=ids.qr_token_b,
+                        candidate_organization_id=ids.organization_b,
+                    ),
+                    context,
+                    session,
+                )
+                assert response.organization_id == ids.organization_b
+                assert response.model_dump().keys() == {
+                    "organization_id",
+                    "organization_name",
+                }
+                animals_a = AnimalRepository(session, ids.organization_a)
+                assert await animals_a.get(ids.animal_a) is not None
+                assert await animals_a.get(ids.animal_b) is None
+
+        connection = await asyncpg.connect(_database_url())
+        try:
+            await connection.execute("BEGIN")
+            await _set_platform(connection)
+            await connection.execute(
+                "UPDATE volunteer_access_grants "
+                "SET expires_at = now() - interval '1 minute' WHERE id = $1",
+                ids.grant_b,
+            )
+            await connection.execute("COMMIT")
+        finally:
+            await connection.close()
+
+        async with sessions() as session:
+            async with session.begin():
+                await set_organization_scope(session, ids.organization_a)
+                with pytest.raises(DomainError):
+                    await authorize_qr_candidate_organization(
+                        QrCandidateOrganizationRequest(
+                            qr_token=ids.qr_token_b,
+                            candidate_organization_id=ids.organization_b,
+                        ),
+                        context,
+                        session,
+                    )
+    finally:
+        await engine.dispose()
+        await _cleanup_fixture(ids)
 
 
 @pytest.mark.asyncio
