@@ -1372,6 +1372,50 @@ dialog.ui-sheet[open] {
   display: grid;
   gap: 16px;
 }
+.scanner-first-card {
+  overflow: hidden;
+}
+.scanner-first-content,
+.scanner-fallback-actions,
+.handoff-success-content {
+  display: grid;
+  gap: 16px;
+}
+.scanner-primary-action {
+  font-size: 1.05rem;
+  min-height: 56px;
+  width: 100%;
+}
+.scanner-fallback-actions {
+  align-items: center;
+  color: var(--muted);
+  grid-template-columns: 1fr;
+}
+.scanner-fallback-actions .ui-button {
+  min-height: 48px;
+  width: 100%;
+}
+.shelter-switch-dialog {
+  display: grid;
+  gap: 16px;
+  max-width: 520px;
+  padding: 24px;
+  width: 100%;
+}
+.shelter-switch-dialog h2,
+.shelter-switch-dialog p,
+.handoff-success-content p {
+  margin: 0;
+}
+.animal-confirmation-card:focus {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+.handoff-success-card {
+  margin: min(12vh, 96px) auto 0;
+  max-width: 560px;
+  width: 100%;
+}
 .volunteer-candidate-list {
   display: grid;
   gap: 16px;
@@ -1977,6 +2021,9 @@ dialog.ui-sheet[open] {
   }
   .volunteer-search-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scanner-fallback-actions {
+    grid-template-columns: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
   }
   .volunteer-candidate-item {
     align-items: center;

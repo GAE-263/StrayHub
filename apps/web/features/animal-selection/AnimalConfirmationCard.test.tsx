@@ -7,7 +7,12 @@ describe("AnimalConfirmationCard", () => {
   it("uses shared card structure with responsive media and actions hooks", () => {
     const html = renderToStaticMarkup(
       <AnimalConfirmationCard
-        animal={{ id: "animal-a", name: "小黑", canReport: true }}
+        animal={{
+          id: "animal-a",
+          name: "小黑",
+          shelterName: "南港收容所",
+          canReport: true,
+        }}
         onConfirm={() => undefined}
         onReselect={() => undefined}
       />,
@@ -27,7 +32,12 @@ describe("AnimalConfirmationCard", () => {
       <>
         <h1 id="animal-confirmation-title">選擇照護動物</h1>
         <AnimalConfirmationCard
-          animal={{ id: "animal-a", name: "小黑", canReport: true }}
+          animal={{
+            id: "animal-a",
+            name: "小黑",
+            shelterName: "南港收容所",
+            canReport: true,
+          }}
           onConfirm={() => undefined}
           onReselect={() => undefined}
         />
@@ -53,6 +63,7 @@ describe("AnimalConfirmationCard", () => {
           photoUrl: "/animals/a.jpg",
           cage: "Cage 1",
           area: "北區",
+          shelterName: "南港收容所",
           canReport: true,
         }}
         onConfirm={() => undefined}
@@ -68,11 +79,18 @@ describe("AnimalConfirmationCard", () => {
   it("disables confirmation when the candidate is not reportable", () => {
     const html = renderToStaticMarkup(
       <AnimalConfirmationCard
-        animal={{ id: "animal-a", name: "小黑", canReport: false }}
+        animal={{
+          id: "animal-a",
+          name: "小黑",
+          shelterName: "南港收容所",
+          canReport: false,
+        }}
         onConfirm={() => undefined}
         onReselect={() => undefined}
       />,
     );
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>確認是這隻<\/button>/);
+    expect(html).toMatch(
+      /<button[^>]*disabled=""[^>]*>確認並開始回報<\/button>/,
+    );
   });
 });

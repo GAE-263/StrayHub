@@ -104,25 +104,29 @@ describe("animal disambiguation", () => {
   it("keeps same-name search results separate with full shelter identity", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ items: [] }))
       .mockResolvedValueOnce(jsonResponse({ items: candidates }));
 
     await renderPage(fetchMock);
+    const searchButton = Array.from(
+      container?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("搜尋動物"));
+    expect(searchButton).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      (searchButton as HTMLButtonElement).click();
+    });
     const queryInput = container?.querySelector(
-      "#shelter-number-query",
+      "#animal-search-query",
     ) as HTMLInputElement;
     await act(async () => {
       setInputValue(queryInput, "11408061");
     });
     await submit(
       container?.querySelector(
-        'form[aria-label="shelter-number-search-form"]',
+        'form[aria-label="animal-search-form"]',
       ) as HTMLFormElement,
     );
 
-    const results = container?.querySelectorAll(
-      '[aria-labelledby="today-list-title"] li',
-    );
+    const results = container?.querySelectorAll('[aria-label="搜尋結果"] li');
     expect(results).toHaveLength(2);
     expect(container?.textContent).toContain("小黑／VAAAG114080610");
     expect(container?.textContent).toContain("小黑／VAAAG114080611");
@@ -139,6 +143,7 @@ describe("animal disambiguation", () => {
             photoUrl: candidate.photo_url,
             cage: candidate.cage,
             area: candidate.area,
+            shelterName: "南港收容所",
             canReport: candidate.can_report,
           },
           onConfirm: () => undefined,

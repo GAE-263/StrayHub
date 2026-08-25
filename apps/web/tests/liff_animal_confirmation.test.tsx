@@ -2,25 +2,25 @@
 
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AnimalConfirmationPage from "../app/(volunteer)/animal-confirmation/page";
+import { VolunteerShelterContext } from "../components/auth/VolunteerShelterContext";
+
+const scanner = vi.hoisted(() => ({
+  available: vi.fn(() => false),
+  scan: vi.fn<() => Promise<string | null>>(),
+}));
+
+vi.mock("../lib/liff-scanner", () => ({
+  isLiffScannerAvailable: scanner.available,
+  scanAnimalQr: scanner.scan,
+}));
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-type Candidate = {
-  id: string;
-  name: string;
-  shelter_number: string;
-  photo_url: string;
-  cage: string;
-  area: string;
-  organization_id: string;
-  can_report: boolean;
-};
-
-const candidate: Candidate = {
+const candidate = {
   id: "animal-a",
   name: "小黑",
   shelter_number: "VAAAG114080610",
@@ -32,25 +32,12 @@ const candidate: Candidate = {
 };
 
 function jsonResponse(data: unknown, ok = true, status = 200): Response {
-  return {
-    ok,
-    status,
-    json: async () => data,
-  } as Response;
+  return { ok, status, json: async () => data } as Response;
 }
 
 async function flushEffects() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
-function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 let root: Root | undefined;
@@ -63,145 +50,106 @@ async function renderPage(fetchMock: ReturnType<typeof vi.fn>) {
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root?.render(<AnimalConfirmationPage />);
-    await flushEffects();
-  });
-}
-
-async function submit(form: HTMLFormElement) {
-  await act(async () => {
-    form.dispatchEvent(
-      new Event("submit", { bubbles: true, cancelable: true }),
+    root?.render(
+      <VolunteerShelterContext.Provider
+        value={{ organizationId: "org-a", organizationName: "南港收容所" }}
+      >
+        <AnimalConfirmationPage />
+      </VolunteerShelterContext.Provider>,
     );
     await flushEffects();
   });
 }
 
-async function click(button: HTMLButtonElement) {
+async function clickButton(label: string) {
+  const button = Array.from(container?.querySelectorAll("button") ?? []).find(
+    (item) => item.textContent?.includes(label),
+  );
+  expect(button).toBeInstanceOf(HTMLButtonElement);
   await act(async () => {
-    button.click();
+    (button as HTMLButtonElement).click();
     await flushEffects();
   });
 }
 
+beforeEach(() => {
+  scanner.available.mockReset().mockReturnValue(false);
+  scanner.scan.mockReset();
+  window.history.replaceState({}, "", "/animal-confirmation");
+  window.sessionStorage.clear();
+});
+
 afterEach(async () => {
-  await act(async () => {
-    root?.unmount();
-  });
+  await act(async () => root?.unmount());
   root = undefined;
   container?.remove();
   container = undefined;
-  window.history.replaceState({}, "", "/");
   vi.unstubAllGlobals();
 });
 
-describe("LIFF animal confirmation", () => {
-  it("loads a QR deep link, reports scan failure, then allows search fallback", async () => {
+describe("LIFF animal confirmation integration", () => {
+  it("resolves a QR deep link with authenticated headers and hides the token from the URL", async () => {
     window.history.replaceState(
       {},
       "",
-      "/animal-confirmation?qr_token=qr-deep-link",
+      "/animal-confirmation?organization_id=org-a&qr_token=qr-deep-link-token-123456",
     );
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ items: [] }))
-      .mockResolvedValueOnce(
-        jsonResponse({ message: "QR Code 無法辨識" }, false, 404),
-      )
-      .mockResolvedValueOnce(jsonResponse({ items: [candidate] }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(candidate));
 
     await renderPage(fetchMock);
-    const requestHeaders = fetchMock.mock.calls[0][1].headers as Headers;
+
+    const requestHeaders = (fetchMock.mock.calls[0][1] as RequestInit)
+      .headers as Headers;
     expect(requestHeaders.get("Authorization")).toBe(
       "Bearer active-session-token",
     );
-    const qrInput = container?.querySelector("#qr-token") as HTMLInputElement;
-    expect(qrInput.value).toBe("qr-deep-link");
-
-    await submit(
-      container?.querySelector(
-        'form[aria-label="qr-search-form"]',
-      ) as HTMLFormElement,
-    );
-    expect(container?.querySelector('[role="alert"]')?.textContent).toContain(
-      "QR Code 無法辨識",
-    );
-
-    const queryInput = container?.querySelector(
-      "#shelter-number-query",
-    ) as HTMLInputElement;
-    await act(async () => {
-      setInputValue(queryInput, "114080610");
-    });
-    await submit(
-      container?.querySelector(
-        'form[aria-label="shelter-number-search-form"]',
-      ) as HTMLFormElement,
-    );
-    expect(container?.textContent).toContain("小黑／VAAAG114080610");
+    expect(String(fetchMock.mock.calls[0][0])).toBe("/v1/qr-tokens/resolve");
+    expect(window.location.search).toBe("");
+    expect(container?.textContent).toContain("VAAAG114080610");
+    expect(container?.textContent).not.toContain("qr-deep-link-token-123456");
   });
 
-  it("confirms a LIFF candidate and creates a draft within two explicit actions", async () => {
-    window.history.replaceState({}, "", "/animal-confirmation");
-    const confirmed = { ...candidate, confirmation_token: "confirmation-1" };
+  it("turns confirmed animal state into a pending handoff, never a draft", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/animal-confirmation?organization_id=org-a&qr_token=qr-deep-link-token-123456",
+    );
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ items: [candidate] }))
-      .mockResolvedValueOnce(jsonResponse(confirmed))
-      .mockResolvedValueOnce(jsonResponse({ id: "draft-1" }));
+      .mockResolvedValueOnce(jsonResponse(candidate))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...candidate, confirmation_token: "confirmation-1" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ status: "pending" }));
 
     await renderPage(fetchMock);
-    const identifyButton = Array.from(
-      container?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("查看確認卡"));
-    expect(identifyButton).toBeInstanceOf(HTMLButtonElement);
-    await click(identifyButton as HTMLButtonElement);
-    expect(container?.textContent).toContain("請確認回報對象");
+    await clickButton("確認並開始回報");
 
-    const confirmButton = Array.from(
-      container?.querySelectorAll("button") ?? [],
-    ).find((button) => button.textContent?.includes("確認是這隻"));
-    expect(confirmButton).toBeInstanceOf(HTMLButtonElement);
-    await click(confirmButton as HTMLButtonElement);
-
-    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(String(fetchMock.mock.calls[1][0])).toContain(
       "/v1/animals/animal-a/confirm",
     );
-    const draftRequest = fetchMock.mock.calls[2][1] as RequestInit;
-    expect(JSON.parse(String(draftRequest.body))).toEqual({
+    expect(String(fetchMock.mock.calls[2][0])).toBe("/v1/care-report-handoffs");
+    expect(
+      JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body)),
+    ).toEqual({
       animal_id: "animal-a",
       confirmation_token: "confirmation-1",
+      source: "qr_deeplink",
     });
-    expect(container?.textContent).toContain("已建立回報草稿：draft-1");
+    expect(fetchMock.mock.calls.flat().join(" ")).not.toContain(
+      "/v1/care-report-drafts",
+    );
+    expect(container?.textContent).toContain("已準備好照護回報");
   });
 
-  it("clears previously loaded animals when a later request returns 401", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ items: [candidate] }))
-      .mockResolvedValueOnce(
-        jsonResponse({ message: "登入狀態已失效" }, false, 401),
-      );
+  it("keeps fallback available when LIFF scanCodeV2 is unavailable", async () => {
+    await renderPage(vi.fn());
 
-    await renderPage(fetchMock);
-    expect(container?.textContent).toContain("小黑／VAAAG114080610");
-
-    const queryInput = container?.querySelector(
-      "#shelter-number-query",
-    ) as HTMLInputElement;
-    await act(async () => {
-      setInputValue(queryInput, "114080610");
-    });
-    await submit(
-      container?.querySelector(
-        'form[aria-label="shelter-number-search-form"]',
-      ) as HTMLFormElement,
-    );
-
-    expect(container?.textContent).not.toContain("小黑／VAAAG114080610");
-    expect(container?.querySelector('[role="alert"]')?.textContent).toContain(
-      "登入狀態已失效",
+    expect(container?.textContent).toContain("此裝置目前無法直接掃描 QR Code");
+    await clickButton("輸入完整收容編號");
+    expect(container?.querySelector("#exact-shelter-number")).toBeInstanceOf(
+      HTMLInputElement,
     );
   });
 });

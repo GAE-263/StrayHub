@@ -2,18 +2,15 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mockVolunteerApi } from "./fixtures";
 
-test("志工可找到並確認動物", async ({ page }) => {
+test("志工可透過 QR deep link 找到並確認動物", async ({ page }) => {
   await mockVolunteerApi(page);
-  await page.goto("/animal-confirmation");
+  await page.goto(
+    "/animal-confirmation?organization_id=org-a&qr_token=volunteer-core-token-123456",
+  );
   await expect(
-    page.getByRole("heading", { name: "選擇照護動物" }),
+    page.getByRole("heading", { name: "確認照護動物" }),
   ).toBeVisible();
-  await expect(page.getByText("小森／A-001")).toBeVisible();
-  await page.getByRole("button", { name: "查看確認卡" }).click();
-  await expect(
-    page.getByRole("heading", { name: "請確認回報對象" }),
-  ).toBeVisible();
-  await expect(page.locator("[id='animal-confirmation-title']")).toHaveCount(1);
+  await expect(page.getByText("小森")).toBeVisible();
   await expect(
     page.locator("[id='animal-confirmation-card-title']"),
   ).toHaveCount(1);
@@ -38,20 +35,15 @@ test("動物確認頁在手機與平板使用一致的志工 shell", async ({
     await page.goto("/animal-confirmation");
     const shell = page.locator("main.volunteer-page");
     await expect(shell).toBeVisible();
-    await expect(page.locator(".volunteer-search-card.ui-card")).toHaveCount(2);
+    await expect(page.locator(".scanner-first-card.ui-card")).toHaveCount(1);
     const geometry = await page.evaluate(() => {
       const pageShell = document.querySelector<HTMLElement>(".volunteer-page");
-      const grid = document.querySelector<HTMLElement>(
-        ".volunteer-search-grid",
-      );
       return {
-        columns: getComputedStyle(grid!).gridTemplateColumns.split(" ").length,
         pageWidth: pageShell!.getBoundingClientRect().width,
         viewportWidth: window.innerWidth,
         overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
       };
     });
-    expect(geometry.columns).toBe(viewport.columns);
     expect(geometry.pageWidth).toBeLessThanOrEqual(960);
     expect(geometry.pageWidth).toBeLessThanOrEqual(geometry.viewportWidth);
     expect(geometry.overflow).toBe(false);
@@ -64,7 +56,9 @@ test("動物確認頁在手機與平板使用一致的志工 shell", async ({
       path: testInfo.outputPath(`ft019-after-${viewport.width}.png`),
       fullPage: true,
     });
-    await page.getByRole("button", { name: "查看確認卡" }).click();
+    await page.getByRole("button", { name: "輸入完整收容編號" }).click();
+    await page.getByRole("textbox", { name: "完整收容編號" }).fill("A-001");
+    await page.getByRole("button", { name: "確認收容編號" }).click();
     await expect(page.locator(".animal-confirmation-card")).toBeVisible();
     const confirmationColumns = await page
       .locator(".animal-confirmation-layout")
