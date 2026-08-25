@@ -215,6 +215,8 @@ test("unauthorized cross-shelter QR and scanner-unavailable UI leak no identity"
 
 for (const viewport of [
   { width: 360, height: 800 },
+  { width: 390, height: 844 },
+  { width: 768, height: 1024 },
   { width: 1440, height: 900 },
 ]) {
   test(`scanner-first page is responsive and accessible at ${viewport.width}x${viewport.height}`, async ({
