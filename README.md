@@ -19,6 +19,8 @@ cp .env.example .env
 docker compose -f infra/local/docker-compose.yml up -d postgres minio
 uv run alembic upgrade head
 uv run python -m scripts.seed_local
+# 載入毛小孩幸福聯盟協會 5 隻動物的可重跑展示資料
+uv run python -m scripts.seed_furkids_demo
 # 載入 T255 工作人員驗收用的固定 14 日 Timeline（需先完成 seed_local）
 uv run python -m scripts.seed_t255_timeline
 ```
@@ -52,6 +54,7 @@ uv run python -m services.worker.worker
 - 管理登入頁：<http://127.0.0.1:3001/login>
 - Swagger：<http://127.0.0.1:8001/docs>
 - 本機資料帳號：`local-staff-a`、`local-volunteer-a`、`local-platform-admin`，密碼都是 `local-only-password`
+- FurKids 展示帳號：`demo-furkids-admin`、`demo-furkids-volunteer`，密碼同為 `local-only-password`
 - 另一個租戶帳號：`local-staff-b`、`local-volunteer-b`
 
 `local-platform-admin` 是沒有 Shelter Membership 的平台級 `PLATFORM_ADMIN`，登入後可選擇並管理 `ORG-A`／`ORG-B`。
