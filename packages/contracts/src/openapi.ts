@@ -1908,12 +1908,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
             animal_id: string;
             /** @enum {string} */
             status: "active" | "revoked";
-            deep_link: string;
-            /** @description 僅建立時回傳 */
-            token?: string | null;
+            revoked: boolean;
+            /** @description 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null */
+            deep_link: string | null;
+            /** @description raw token 不作為獨立欄位顯示；locator 僅存在 deep_link */
+            token: null;
         };
         ManagementQrCodeList: {
             items: components["schemas"]["ManagementQrCode"][];
@@ -5359,7 +5363,9 @@ export interface operations {
     };
     listManagementQrCodes: {
         parameters: {
-            query?: never;
+            query?: {
+                animal_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5393,7 +5399,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已建立 QR；token 僅於此回應顯示一次 */
+            /** @description 已建立或重用目前的 active QR；回傳可列印 deep link */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5443,7 +5449,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description QR Token 已重新產生；舊 Token 立即失效 */
+            /** @description 已建立替代 QR；舊 QR 立即失效且舊標籤必須更換 */
             200: {
                 headers: {
                     [name: string]: unknown;

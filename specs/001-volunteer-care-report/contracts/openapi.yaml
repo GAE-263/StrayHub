@@ -1207,6 +1207,13 @@ paths:
     get:
       tags: [Management Settings]
       operationId: listManagementQrCodes
+      parameters:
+        - {
+            name: animal_id,
+            in: query,
+            required: false,
+            schema: { type: string, format: uuid },
+          }
       responses:
         "200":
           description: 動物 QR 綁定清單
@@ -1226,7 +1233,7 @@ paths:
             schema: { $ref: "#/components/schemas/ManagementQrCodeRequest" }
       responses:
         "201":
-          description: 已建立 QR；token 僅於此回應顯示一次
+          description: 已建立或重用目前的 active QR；回傳可列印 deep link
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManagementQrCode" }
@@ -1257,7 +1264,7 @@ paths:
         - $ref: "#/components/parameters/QrCodeId"
       responses:
         "200":
-          description: QR Token 已重新產生；舊 Token 立即失效
+          description: 已建立替代 QR；舊 QR 立即失效且舊標籤必須更換
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ManagementQrCode" }
@@ -2630,13 +2637,24 @@ components:
         ends_at: { type: string, format: date-time }
     ManagementQrCode:
       type: object
-      required: [id, animal_id, status, deep_link]
+      required:
+        [id, organization_id, animal_id, status, revoked, deep_link, token]
       properties:
         id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
         animal_id: { type: string, format: uuid }
         status: { type: string, enum: [active, revoked] }
-        deep_link: { type: string }
-        token: { type: [string, "null"], description: 僅建立時回傳 }
+        revoked: { type: boolean }
+        deep_link:
+          {
+            type: [string, "null"],
+            description: 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null,
+          }
+        token:
+          {
+            type: "null",
+            description: raw token 不作為獨立欄位顯示；locator 僅存在 deep_link,
+          }
     ManagementQrCodeList:
       type: object
       required: [items]

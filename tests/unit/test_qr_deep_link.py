@@ -23,4 +23,5 @@ def test_animal_qr_deep_link_carries_only_candidate_organization_and_opaque_toke
     assert result["deep_link"] == (
         f"/animal-confirmation?organization_id={organization_id}&qr_token={token}"
     )
+    assert result["token"] is None
     assert str(animal_id) not in result["deep_link"]
