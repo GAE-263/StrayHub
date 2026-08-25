@@ -6,8 +6,12 @@ cd "$ROOT_DIR"
 
 read_dotenv_value() {
   local name="$1"
+  local python_bin="python"
   [[ -f .env ]] || return 0
-  python - "$name" <<'PY'
+  if ! command -v "$python_bin" >/dev/null 2>&1; then
+    python_bin="python3"
+  fi
+  "$python_bin" - "$name" <<'PY'
 from pathlib import Path
 import ast
 import sys
@@ -36,11 +40,11 @@ load_dotenv_value() {
   fi
 }
 
-for dotenv_name in TUNNEL_PROVIDER API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE PII_LOCAL_KEY_BASE64; do
+for dotenv_name in NGROK_URL API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE PII_LOCAL_KEY_BASE64; do
   load_dotenv_value "$dotenv_name"
 done
 
-TUNNEL_PROVIDER="${TUNNEL_PROVIDER:-cloudflared}"
+NGROK_URL="${NGROK_URL:-}"
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8001}"
 WEB_HOST="${WEB_HOST:-127.0.0.1}"
@@ -76,14 +80,10 @@ require_port_available() {
 
 extract_tunnel_url() {
   local log_file="$1"
-  case "$TUNNEL_PROVIDER" in
-    cloudflared)
-      sed -nE 's#.*(https://[A-Za-z0-9.-]+\.trycloudflare\.com).*#\1#p' "$log_file" | head -n 1
-      ;;
-    ngrok)
-      sed -nE 's#.*Forwarding[[:space:]]+(https://[^[:space:]]+).*#\1#p' "$log_file" | head -n 1
-      ;;
-  esac
+  sed -nE \
+    -e 's#.*url=(https://[^[:space:]]+).*#\1#p' \
+    -e 's#.*Forwarding[[:space:]]+(https://[^[:space:]]+).*#\1#p' \
+    "$log_file" | head -n 1
 }
 
 wait_for_tunnel_http() {
@@ -115,18 +115,8 @@ start_tunnel() {
   local label="$1"
   local port="$2"
   local log_file="$3"
-  case "$TUNNEL_PROVIDER" in
-    cloudflared)
-      cloudflared tunnel --url "http://127.0.0.1:${port}" >"$log_file" 2>&1 &
-      ;;
-    ngrok)
-      ngrok http "$port" --log=stdout >"$log_file" 2>&1 &
-      ;;
-    *)
-      echo "TUNNEL_PROVIDER 必須是 cloudflared 或 ngrok" >&2
-      exit 2
-      ;;
-  esac
+  ngrok http "$port" --url "$NGROK_URL" --log=stdout --log-format=logfmt \
+    >"$log_file" 2>&1 &
   pids+=("$!")
   local url=""
   for _ in $(seq 1 30); do
@@ -139,11 +129,21 @@ start_tunnel() {
     sed -n '1,80p' "$log_file" >&2 || true
     exit 1
   fi
+  if [[ "$url" != "$NGROK_URL" ]]; then
+    echo "${label} tunnel URL 與 NGROK_URL 不一致：${url}" >&2
+    exit 1
+  fi
   TUNNEL_URL="$url"
 }
 
 require_value LIFF_ID
 require_value SHELTER_ENTRY_REFERENCE
+require_value NGROK_URL
+NGROK_URL="${NGROK_URL%/}"
+if [[ ! "$NGROK_URL" =~ ^https:// ]]; then
+  echo "NGROK_URL 必須是 HTTPS 保留網址，例如 https://your-domain.ngrok.app" >&2
+  exit 2
+fi
 require_command uv
 require_command npm
 require_command curl
@@ -154,11 +154,7 @@ if [[ "$LIFF_ID" != fake-* ]] && {
   exit 2
 fi
 export LINE_LOGIN_CHANNEL_ID
-case "$TUNNEL_PROVIDER" in
-  cloudflared) require_command cloudflared ;;
-  ngrok) require_command ngrok ;;
-  *) echo "TUNNEL_PROVIDER 必須是 cloudflared 或 ngrok" >&2; exit 2 ;;
-esac
+require_command ngrok
 require_port_available "API" "$API_PORT"
 require_port_available "Web" "$WEB_PORT"
 
@@ -207,7 +203,7 @@ curl --max-time 5 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null || {
   exit 1
 }
 
-echo "[Line Demo] Starting Web tunnel (${TUNNEL_PROVIDER})"
+echo "[Line Demo] Starting Web tunnel (ngrok: ${NGROK_URL})"
 start_tunnel "Web" "$WEB_PORT" "$log_dir/web.log"
 WEB_TUNNEL_URL="$TUNNEL_URL"
 WEB_TUNNEL_HOST="${WEB_TUNNEL_URL#https://}"
