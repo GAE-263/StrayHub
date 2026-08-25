@@ -480,6 +480,7 @@ export async function mockManagementApi(
         {
           animal: options.animalDetails?.[animalId] ?? {
             id: "animal-a",
+            organization_id: activeOrganizationId,
             name: "小森",
             shelter_number: "A-001",
             status: "active",

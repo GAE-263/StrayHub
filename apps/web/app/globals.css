@@ -1416,6 +1416,145 @@ dialog.ui-sheet[open] {
   max-width: 560px;
   width: 100%;
 }
+.animal-care-qr-card {
+  grid-column: 1 / -1;
+}
+.animal-care-qr-heading,
+.animal-care-qr-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+}
+.animal-care-qr-heading p {
+  margin: 8px 0 0;
+}
+.animal-care-qr-content,
+.animal-care-qr-empty-state,
+.animal-care-qr-legacy-state {
+  display: grid;
+  gap: 16px;
+}
+.animal-qr-print-label {
+  background: #fff;
+  border: 2px solid #17221b;
+  border-radius: 18px;
+  color: #17221b;
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  margin: 0 auto;
+  max-width: 420px;
+  padding: 24px;
+  width: 100%;
+}
+.animal-qr-print-label:focus {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+.animal-qr-print-label header {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+.animal-qr-print-label header strong {
+  font-size: 1.5rem;
+}
+.animal-care-qr-image {
+  background: #fff;
+  max-width: 100%;
+  padding: 4px;
+}
+.animal-care-qr-image svg {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+.animal-qr-print-label dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  width: 100%;
+}
+.animal-qr-print-label dl div {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 96px 1fr;
+}
+.animal-qr-print-label dt {
+  color: #526158;
+  font-size: 0.875rem;
+}
+.animal-qr-print-label dd {
+  font-weight: 700;
+  margin: 0;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: A4 portrait;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .app-header,
+  .app-sidebar,
+  .mobile-navigation,
+  .breadcrumbs,
+  .app-main > section > .page-heading,
+  .content-grid > :not(.animal-care-qr-card),
+  .animal-care-qr-card > :not(.animal-care-qr-content),
+  .animal-care-qr-content > :not(.animal-qr-print-label) {
+    display: none !important;
+  }
+
+  .app-frame,
+  .app-body,
+  .app-main,
+  .app-main > section,
+  .content-grid,
+  .animal-care-qr-card,
+  .animal-care-qr-content {
+    display: block;
+    margin: 0;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .animal-care-qr-card {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    width: auto;
+  }
+
+  .animal-qr-print-label {
+    border: 0.5mm solid #000;
+    border-radius: 3mm;
+    box-sizing: border-box;
+    margin: 0;
+    max-width: none;
+    padding: 6mm;
+    width: 90mm;
+  }
+
+  .animal-qr-print-label:focus {
+    outline: none;
+  }
+
+  .animal-care-qr-image svg {
+    height: 50mm;
+    width: 50mm;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+}
 .volunteer-candidate-list {
   display: grid;
   gap: 16px;
