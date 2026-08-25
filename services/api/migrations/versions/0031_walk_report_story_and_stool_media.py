@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0031_walk_report_story_media"
-down_revision = "0030_device_activity_telemetry"
+down_revision = "0029_platform_admin_governance"
 branch_labels = None
 depends_on = None
 
