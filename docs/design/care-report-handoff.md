@@ -7,7 +7,7 @@ LIFF identifies and confirms the animal. LINE Bot performs the care-report conve
 bridges those responsibilities. The LINE message is only a trigger and never carries the
 animal or authorization context.
 
-This design does not replace `DailyReportableScope`, the animal confirmation card, the
+This design does not delete `DailyReportableScope`, the animal confirmation card, the
 existing five-minute confirmation token, `CareReportDraft`, or final report authorization.
 
 ## User flow
@@ -109,13 +109,47 @@ privilege was introduced.
 - A handoff is bound to one organization, user, membership, and animal.
 - Membership and its matching grant must be effective when creating and consuming.
 - The organization, user, and animal must be active when consuming.
-- The existing `DailyReportableScope` rule remains enforced in this item.
+- Ordinary QR-first reporting does not interpret `DailyReportableScope` as an allow-list or
+  restriction model.
 - An expired handoff cannot be consumed.
 - A consumed handoff cannot be reused.
 - Consumption locks and transitions the row atomically.
 - Final draft and report-submission authorization remains the Bot/care-report flow's
   responsibility.
 - Normal tenant scope cannot read or consume another organization's handoff.
+
+## Ordinary reporting authorization
+
+`VolunteerReportingAuthorizationService` in
+`services/api/app/application/volunteer_reporting_authorization.py` is the shared
+application-layer boundary for animal list/search, QR resolution, animal confirmation, and
+handoff create/consume.
+
+Ordinary QR-first reporting requires all of the following:
+
+- active internal user;
+- active verified organization;
+- current effective `VOLUNTEER` membership for that user and organization;
+- current active grant matching that exact membership, user, and organization;
+- active animal belonging to the verified organization when an animal is selected;
+- active, non-revoked QR bound to that organization and animal on the QR path; and
+- the existing five-minute, context-bound confirmation token for handoff creation.
+
+`DailyReportableScope` is not required for ordinary QR-first animal list/search, QR
+resolution, confirmation, handoff creation, or handoff consumption. Its table, historical
+rows, repository, RLS, and management APIs remain intact for legacy/history purposes. The
+presence or absence of a row must not be interpreted as a new restriction model.
+
+This cutover does not implement the LIFF scanner UI, `scanCodeV2()`, cross-shelter switch
+confirmation UI, or LINE `sendMessages()`. QR resolution remains limited to the already
+verified current organization; it does not perform a global or automatic cross-shelter
+lookup.
+
+The existing HTTP draft creation, final submission, and legacy LINE selection/conversation
+paths still contain their prior scope checks. Those report-flow-team paths are explicitly
+deferred; the future handoff consumer can create a draft through `LineDraftService` without
+that HTTP draft gate, but its final submission authorization must be cut over by the owning
+team before the end-to-end Bot flow ships.
 
 ## Integration contract for Bot agent
 
@@ -186,12 +220,12 @@ methods return the persisted `CareReportHandoff`. The consumed result contains t
 `organization_id`, `user_id`, `membership_id`, and `animal_id` context. Both methods flush but
 do not commit so their callers control the surrounding transaction.
 
-The Bot integration must construct the service in the webhook event's organization-scoped
-`AsyncSession` with `CareReportHandoffRepository`, `AuthenticationRepository`,
-`AnimalRepository`, and `ReportableScopeRepository`. It must call consume and
-`LineDraftService` in that same transaction. The existing webhook event boundary catches
-`DomainError` before the transaction exits; this also allows an encountered expired row to
-commit its terminal `expired` state while returning the safe error UX.
+The Bot integration must construct `VolunteerReportingAuthorizationService` from
+`AuthenticationRepository` and the organization-scoped `AnimalRepository`, then inject it
+with `CareReportHandoffRepository` into `CareReportHandoffService`. It must call consume and
+`LineDraftService` in the same webhook event transaction. The existing webhook event boundary
+catches `DomainError` before the transaction exits; this also allows an encountered expired
+row to commit its terminal `expired` state while returning the safe error UX.
 
 ## Confirmation token decision
 
@@ -210,8 +244,8 @@ creation continues to require the existing confirmation token.
 - `no_pending_handoff`: no current pending handoff exists for the trusted user and tenant.
 - `handoff_expired`: the current pending handoff exceeded its fixed TTL and was marked expired.
 - `handoff_already_consumed`: the latest handoff is already consumed.
-- `authorization_no_longer_valid`: user, organization, membership, grant, or current
-  `DailyReportableScope` authorization is no longer effective.
+- `authorization_no_longer_valid`: user, organization, membership, or matching grant is no
+  longer effective.
 - `animal_no_longer_available`: the trusted handoff animal is missing, inactive, or no longer
   belongs to the handoff organization.
 - `animal_confirmation_required`: the create request did not contain a valid confirmation
