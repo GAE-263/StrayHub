@@ -380,6 +380,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/care-report-handoffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createOrReplaceCareReportHandoff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/care-report-drafts": {
         parameters: {
             query?: never;
@@ -2296,6 +2312,21 @@ export interface components {
         AnimalConfirmationResponse: components["schemas"]["AnimalCandidate"] & {
             confirmation_token: string;
         };
+        CareReportHandoffCreateRequest: {
+            /** Format: uuid */
+            animal_id: string;
+            confirmation_token: string;
+            /** @enum {string} */
+            source: "liff_scan" | "qr_deeplink" | "shelter_number";
+        };
+        CareReportHandoffResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending";
+            /** Format: date-time */
+            expires_at: string;
+        };
         AnimalListResponse: {
             items: components["schemas"]["AnimalCandidate"][];
             page: number;
@@ -4148,6 +4179,34 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createOrReplaceCareReportHandoff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareReportHandoffCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立或取代待處理的照護回報交接 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CareReportHandoffResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listCareReportDrafts: {

@@ -12,6 +12,7 @@ from services.api.app.persistence.models.care_report import (
     ReportIdempotencyKey,
 )
 from services.api.app.persistence.models.care_report_draft import CareReportDraft, DraftMediaAsset
+from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     LineWebhookEvent,
@@ -58,6 +59,7 @@ __all__ = [
     "CareReport",
     "CareReportCorrection",
     "CareReportDraft",
+    "CareReportHandoff",
     "CareReportMedia",
     "DailyReportableScope",
     "DraftMediaAsset",
