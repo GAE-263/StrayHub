@@ -1416,6 +1416,272 @@ dialog.ui-sheet[open] {
   max-width: 560px;
   width: 100%;
 }
+.animal-profile-page {
+  --profile-accent: #166a55;
+  --profile-ink: #18332d;
+  --profile-mint: #e7f2ed;
+  --profile-amber: #b86712;
+}
+.animal-profile-hero {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 20px 54px rgba(24, 51, 45, 0.09);
+  gap: 28px;
+  margin-bottom: 22px;
+  overflow: hidden;
+  padding: 24px 26px 24px 32px;
+  position: relative;
+}
+.animal-profile-hero::before {
+  background: var(--profile-accent);
+  content: "";
+  inset: 0 auto 0 0;
+  position: absolute;
+  width: 7px;
+}
+.animal-profile-identity {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  min-width: 0;
+}
+.animal-profile-number {
+  align-content: center;
+  align-self: stretch;
+  background: var(--profile-ink);
+  border-radius: 12px;
+  color: #fff;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-width: 184px;
+  min-height: 104px;
+  padding: 18px;
+}
+.animal-profile-number span {
+  color: #bcd4cc;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.animal-profile-number strong {
+  font-family:
+    ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: clamp(0.95rem, 1.4vw, 1.25rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.animal-profile-title-block {
+  min-width: 0;
+}
+.animal-profile-title-block .eyebrow {
+  color: var(--profile-accent);
+  margin-bottom: 7px;
+}
+.animal-profile-name-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.animal-profile-name-row h1 {
+  color: var(--profile-ink);
+  font-size: clamp(2.35rem, 5vw, 4rem);
+  line-height: 1;
+}
+.animal-profile-status {
+  padding: 6px 11px;
+}
+.animal-profile-title-block p {
+  margin-top: 12px;
+}
+.animal-profile-history-action {
+  flex: 0 0 auto;
+  gap: 12px;
+}
+.animal-profile-history-action span {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.animal-profile-grid {
+  align-items: start;
+}
+.animal-profile-main-column {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+.animal-profile-section-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.animal-profile-section-heading .eyebrow {
+  color: var(--profile-accent);
+  margin-bottom: 6px;
+}
+.animal-profile-section-heading h2,
+.animal-profile-section-heading p {
+  margin: 0;
+}
+.animal-profile-section-heading h2 {
+  font-size: 1.25rem;
+}
+.animal-profile-section-heading p {
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 240px;
+  text-align: right;
+}
+.animal-today-summary {
+  background: var(--profile-mint);
+  border-color: #c9ded5;
+  box-shadow: none;
+  min-height: 220px;
+}
+.animal-today-summary[data-tone="overdue"] {
+  background: #fff8ed;
+  border-color: #ebc999;
+}
+.animal-today-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.animal-today-heading .eyebrow {
+  color: var(--profile-accent);
+  margin: 0;
+}
+.animal-today-heading time {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.animal-today-message {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  margin-top: 26px;
+}
+.animal-today-indicator {
+  background: var(--profile-accent);
+  border: 5px solid rgba(22, 106, 85, 0.14);
+  border-radius: 50%;
+  box-sizing: content-box;
+  flex: 0 0 auto;
+  height: 10px;
+  margin-top: 5px;
+  width: 10px;
+}
+.animal-today-summary[data-tone="pending"] .animal-today-indicator,
+.animal-today-summary[data-tone="overdue"] .animal-today-indicator {
+  background: var(--profile-amber);
+  border-color: rgba(184, 103, 18, 0.16);
+}
+.animal-today-message h2 {
+  font-size: clamp(1.35rem, 2.6vw, 1.9rem);
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin: 0;
+}
+.animal-today-message p {
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+.animal-today-counts {
+  display: flex;
+  gap: 32px;
+  margin: 28px 0 0 34px;
+}
+.animal-today-counts div {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+}
+.animal-today-counts dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.animal-today-counts dd {
+  color: var(--profile-ink);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  margin: 0;
+}
+.animal-profile-record {
+  align-self: start;
+  box-shadow: 0 16px 42px rgba(24, 51, 45, 0.07);
+}
+.animal-profile-record .detail-list div {
+  align-items: center;
+  min-height: 43px;
+}
+.animal-profile-record .detail-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.animal-profile-record .detail-list dd {
+  text-align: right;
+}
+.animal-profile-workbench {
+  box-shadow: 0 16px 42px rgba(24, 51, 45, 0.07);
+}
+.animal-profile-action-list {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: grid;
+  margin-bottom: 18px;
+}
+.animal-profile-action {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 14px 4px;
+  transition:
+    color 160ms ease,
+    padding 160ms ease;
+}
+.animal-profile-action + .animal-profile-action {
+  border-top: 1px solid var(--line);
+}
+.animal-profile-action:hover {
+  color: var(--profile-accent);
+  padding-left: 10px;
+}
+.animal-profile-action > span:first-child {
+  display: grid;
+  gap: 4px;
+}
+.animal-profile-action strong {
+  font-size: 1rem;
+}
+.animal-profile-action small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.animal-profile-action > span:last-child {
+  color: var(--profile-accent);
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+.animal-profile-reminder-action {
+  width: 100%;
+}
+.animal-profile-page .animal-care-qr-card {
+  border-top: 4px solid var(--profile-accent);
+  margin-top: 2px;
+}
 .animal-care-qr-card {
   grid-column: 1 / -1;
 }
@@ -2467,6 +2733,56 @@ dialog.ui-sheet[open] {
     align-items: flex-start;
     flex-direction: column;
     gap: 16px;
+  }
+  .animal-profile-hero {
+    padding: 20px 18px 20px 25px;
+  }
+  .animal-profile-identity {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+    width: 100%;
+  }
+  .animal-profile-number {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: space-between;
+    min-height: 0;
+    padding: 14px 16px;
+  }
+  .animal-profile-number strong {
+    font-size: clamp(0.82rem, 4vw, 1rem);
+  }
+  .animal-profile-name-row {
+    align-items: flex-start;
+  }
+  .animal-profile-history-action {
+    justify-content: center;
+    width: 100%;
+  }
+  .animal-profile-section-heading {
+    display: grid;
+    gap: 6px;
+  }
+  .animal-profile-section-heading p {
+    max-width: none;
+    text-align: left;
+  }
+  .animal-today-summary {
+    min-height: 0;
+  }
+  .animal-today-heading {
+    align-items: flex-start;
+    display: grid;
+    gap: 5px;
+  }
+  .animal-today-counts {
+    justify-content: space-between;
+    margin-left: 0;
+  }
+  .animal-profile-action {
+    min-height: 82px;
   }
   .metric-grid,
   .form-grid {
