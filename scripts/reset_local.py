@@ -76,6 +76,15 @@ async def reset() -> int:
                 "audit_records",
                 "webhook_sessions",
             ):
+                # 有些表屬於可選功能（例如裝置遙測的 activity_readings/devices），
+                # 這份 checkout 不一定套過它們的 migration。少一張表就整個重置腳本
+                # 爆掉，本機環境會沒辦法收拾。
+                if not (
+                    await session.execute(
+                        text("SELECT to_regclass(:name)"), {"name": f"public.{table}"}
+                    )
+                ).scalar():
+                    continue
                 await session.execute(
                     text(f"DELETE FROM {table} WHERE organization_id = ANY(:organization_ids)"),
                     params,
