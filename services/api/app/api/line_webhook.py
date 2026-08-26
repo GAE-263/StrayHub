@@ -207,6 +207,30 @@ def _decode_qr(image_bytes: bytes) -> str | None:
 # list is paged rather than silently cut off.
 _SELECTION_PAGE = 12
 _OVERVIEW_PAGE = 8
+# LIFF 確認完動物後會自動送出這句話（apps/web/lib/liff-line-handoff.ts 的
+# CARE_REPORT_TRIGGER_TEXT），確認頁的手動備援也叫志工自己打這句。兩邊必須一致。
+_LIFF_CARE_REPORT_TRIGGER = "開始照護回報"
+_TEXT_WAITING_STATES = frozenset({DraftState.AWAITING_NOTE.value, DraftState.AWAITING_STORY.value})
+
+
+def _route_text_message(draft, text_value: str) -> str:
+    """志工打的一段字到底是什麼意思。
+
+    順序有意義：入口指令 MUST 先被認出來。LIFF 掃完 QR 會自動送出
+    `_LIFF_CARE_REPORT_TRIGGER`，確認頁的手動備援也叫志工自己打同一句；
+    如果先落到 answer 分支，這句話就會被存成上一隻狗的備註或故事。
+    """
+    stripped = text_value.strip()
+    if stripped == _LIFF_CARE_REPORT_TRIGGER:
+        return "start_report"
+    if draft is not None and draft.current_step in _TEXT_WAITING_STATES:
+        return "answer"
+    # A draft sitting at SELECTING_ANIMAL has no committed animal yet — the
+    # volunteer backed all the way out — so it counts the same as no draft.
+    no_committed_animal = draft is None or draft.current_step == DraftState.SELECTING_ANIMAL.value
+    if no_committed_animal and stripped:
+        return "search"
+    return "chit_chat"
 
 
 def _animal_label(animal) -> str:
@@ -671,6 +695,34 @@ async def _reply_next_step(
         await _reply(line, event, messages)
 
 
+async def _reply_animal_picker(
+    session,
+    line: LineMessagingPort,
+    event: dict,
+    *,
+    organization_id: UUID,
+    user_id: UUID,
+    offset: int = 0,
+    draft_token: str | None = None,
+) -> None:
+    """Ask which animal this report is about, paging through today's scope."""
+    animals = await _scoped_animals(session, organization_id, user_id)
+    if not animals:
+        await _reply(line, event, [_no_reportable_animals_bubble()])
+        return
+    items = _reportable_animals(animals, offset=offset, draft_token=draft_token)
+    if not items:
+        # The list shrank between taps; start over rather than show nothing.
+        items = _reportable_animals(animals)
+        offset = 0
+    prompt = "請選擇本次照護的動物。" if offset == 0 else "請繼續選擇本次照護的動物。"
+    await _reply(
+        line,
+        event,
+        [{"type": "text", "text": prompt, "quickReply": {"items": items}}],
+    )
+
+
 async def _handle_postback(
     session,
     line: LineMessagingPort,
@@ -683,25 +735,14 @@ async def _handle_postback(
     values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
     action = values.get("action", [""])[0]
     if action in {"start_care_report", "more_animals"}:
-        animals = await _scoped_animals(session, organization_id, user_id)
-        if not animals:
-            await _reply(line, event, [_no_reportable_animals_bubble()])
-            return None
-        offset = _offset_value(values.get("offset", [""])[0])
-        items = _reportable_animals(
-            animals,
-            offset=offset,
-            draft_token=values.get("draft_token", [""])[0] or None,
-        )
-        if not items:
-            # The list shrank between taps; start over rather than show nothing.
-            items = _reportable_animals(animals)
-            offset = 0
-        prompt = "請選擇本次照護的動物。" if offset == 0 else "請繼續選擇本次照護的動物。"
-        await _reply(
+        await _reply_animal_picker(
+            session,
             line,
             event,
-            [{"type": "text", "text": prompt, "quickReply": {"items": items}}],
+            organization_id=organization_id,
+            user_id=user_id,
+            offset=_offset_value(values.get("offset", [""])[0]),
+            draft_token=values.get("draft_token", [""])[0] or None,
         )
         return None
     if action in {"list_reportable_animals", "today_overview"}:
@@ -749,8 +790,7 @@ async def _handle_postback(
                     title="輸入編號或名字",
                     caption="散步回報",
                     body_text=(
-                        "直接在下面輸入框打幾個字就好，例如「財」或收容編號後幾碼，"
-                        "不用打全名。"
+                        "直接在下面輸入框打幾個字就好，例如「財」或收容編號後幾碼，不用打全名。"
                     ),
                     glyph="🔤",
                     tone=LILAC,
@@ -1136,18 +1176,19 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         draft_repository = CareReportDraftRepository(session, organization_id)
                         draft = await draft_repository.get_active_for_volunteer(user_id)
                         text_value = event["message"].get("text", "")
-                        text_waiting_states = {
-                            DraftState.AWAITING_NOTE.value,
-                            DraftState.AWAITING_STORY.value,
-                        }
-                        # A draft sitting at SELECTING_ANIMAL has no committed
-                        # animal yet — the volunteer backed all the way out —
-                        # so it counts the same as no draft for search purposes.
-                        no_committed_animal = (
-                            draft is None
-                            or draft.current_step == DraftState.SELECTING_ANIMAL.value
-                        )
-                        if draft is not None and draft.current_step in text_waiting_states:
+                        route = _route_text_message(draft, text_value)
+                        if route == "start_report":
+                            # TODO(handoff): 等 CareReportHandoffService 的
+                            # consume_pending_handoff 接上之後，這裡應該先讀掉待
+                            # 處理的 handoff 直接鎖定掃到的那隻動物，而不是重問。
+                            await _reply_animal_picker(
+                                session,
+                                line,
+                                event,
+                                organization_id=organization_id,
+                                user_id=user_id,
+                            )
+                        elif route == "answer":
                             text_action = (
                                 "note"
                                 if draft.current_step == DraftState.AWAITING_NOTE.value
@@ -1173,7 +1214,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                     draft=draft,
                                     raw_token="",
                                 )
-                        elif no_committed_animal and text_value.strip():
+                        elif route == "search":
                             # 沒有進行中的草稿時，把文字當成「找動物」的搜尋關鍵字；
                             # 比對不到就照舊回聊天訊息，不引入新的持久化狀態去記
                             # 「正在等搜尋輸入」。
@@ -1243,9 +1284,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                 else "portrait"
                             )
                             try:
-                                await LineImageService(
-                                    line, MinioStorageAdapter()
-                                ).attach_to_draft(
+                                await LineImageService(line, MinioStorageAdapter()).attach_to_draft(
                                     message_id=event["message"]["id"],
                                     organization_id=organization_id,
                                     object_key=f"drafts/{draft.id}/{event_id}.media",
@@ -1274,9 +1313,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                 await _reply(
                                     line,
                                     event,
-                                    [
-                                        _media_failure_bubble(subject)
-                                    ],
+                                    [_media_failure_bubble(subject)],
                                 )
                                 results.append(
                                     {
