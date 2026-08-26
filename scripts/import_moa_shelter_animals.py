@@ -22,6 +22,8 @@ async def run(args):
             batch = select_records(
                 await client.fetch_records(), shelter=args.shelter, kind=args.kind, limit=args.limit
             )
+            names = await client.fetch_names(batch)
+            name_detail_requests = client.name_detail_requests
             photos = None if args.dry_run else await MoaImportService.download_photos(batch, client)
         stage = "database_or_storage"
         storage = MinioStorageAdapter()
@@ -35,6 +37,8 @@ async def run(args):
                 shelter=args.shelter,
                 limit=args.limit,
                 photos=photos,
+                names=names,
+                name_detail_requests=name_detail_requests,
                 dry_run=args.dry_run,
             )
         print(json.dumps(summary, ensure_ascii=False, indent=2))

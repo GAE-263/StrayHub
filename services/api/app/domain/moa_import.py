@@ -64,6 +64,59 @@ class MoaBatch:
     errors: list[dict]
 
 
+@dataclass(frozen=True)
+class MoaNameObservation:
+    raw_name: str | None = None
+    normalized_name: str | None = None
+    error_code: str | None = None
+
+
+def normalize_official_name(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or "\x00" in value:
+        raise ValueError("name_invalid_value")
+    try:
+        size = len(value.encode("utf-8"))
+    except UnicodeError:
+        raise ValueError("name_invalid_value") from None
+    normalized = " ".join(value.split())
+    if size > 1024 or len(normalized) > 200:
+        raise ValueError("name_value_too_large")
+    # The official Vue template displays --- for an empty value, not an animal name.
+    return None if normalized in {"", "---"} else normalized
+
+
+def parse_name_detail(payload: object, record: MoaAnimal) -> MoaNameObservation:
+    try:
+        if not isinstance(payload, dict) or payload.get("Success") is not True:
+            raise ValueError
+        rows = json.loads(payload["Message"])
+        if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+            raise ValueError
+        row = rows[0]
+        if (
+            row.get("收容編號") != record.fields["shelter_number"]
+            or row.get("公告收容所") != record.snapshot["shelter_name"]
+        ):
+            raise ValueError("name_identity_mismatch")
+        raw = row["動物名"]
+        normalized = normalize_official_name(raw)
+        if "AnimalName" in row and normalize_official_name(row["AnimalName"]) != normalized:
+            raise ValueError("name_alias_mismatch")
+        return MoaNameObservation(raw or "", normalized)
+    except (KeyError, TypeError, ValueError, RecursionError) as exc:
+        code = str(exc)
+        if code not in {
+            "name_identity_mismatch",
+            "name_alias_mismatch",
+            "name_invalid_value",
+            "name_value_too_large",
+        }:
+            code = "name_invalid_response"
+        raise ValueError(code) from None
+
+
 def normalize(row: dict) -> MoaAnimal:
     external_id = official_id(row.get("animal_id"))
     shelter_id = official_id(row.get("animal_shelter_pkid"))

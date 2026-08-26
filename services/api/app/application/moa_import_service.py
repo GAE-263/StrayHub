@@ -4,22 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from collections import Counter
 from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.media_service import MediaProcessingService
 from services.api.app.application.qr_token_service import QrTokenService
-from services.api.app.domain.moa_import import SOURCE, MoaBatch
+from services.api.app.domain.moa_import import SOURCE, MoaBatch, MoaNameObservation
 from services.api.app.infrastructure.moa_open_data import MoaOpenDataClient, MoaPhoto
 from services.api.app.infrastructure.storage.ports import ObjectScope, ObjectStoragePort
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.animal_external_source import AnimalExternalSource
+from services.api.app.persistence.models.audit import AuditRecord
 from services.api.app.persistence.models.care_report import MediaAsset
 from services.api.app.persistence.models.identity import Organization
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
@@ -58,6 +60,8 @@ class MoaImportService:
         shelter: str,
         limit: int,
         photos: dict[str, MoaPhoto | str] | None = None,
+        names: dict[str, MoaNameObservation] | None = None,
+        name_detail_requests: int = 0,
         dry_run: bool = False,
     ):
         if not self.session.in_transaction():
@@ -80,11 +84,17 @@ class MoaImportService:
                     "qr_reused",
                     "images_preserved_manual",
                     "records_failed",
+                    "names_official_applied",
+                    "names_official_unchanged",
+                    "names_fallback",
+                    "name_conflicts_preserved",
+                    "name_enrichment_failures",
                 )
             }
         )
         summary = {
             "dry_run": dry_run,
+            "name_detail_requests": name_detail_requests,
             "source": SOURCE,
             "records_fetched": batch.fetched_count,
             "shelter": shelter.strip(),
@@ -153,9 +163,18 @@ class MoaImportService:
                     mapping.source_status = "unavailable"
         for record in batch.selected:
             mapping = by_id.get(record.external_id)
+            observation = (names or {}).get(
+                record.external_id, MoaNameObservation(error_code="name_detail_not_requested")
+            )
             if dry_run:
                 animal = await self.session.get(Animal, mapping.animal_id) if mapping else None
-                changed = animal and any(getattr(animal, k) != v for k, v in record.fields.items())
+                name, _, name_counts, name_errors = await self._name_plan(
+                    org_id, record, mapping, animal, observation, now, created=mapping is None
+                )
+                counts.update(name_counts)
+                summary["errors"].extend(name_errors)
+                fields = {**record.fields, "name": name}
+                changed = animal and any(getattr(animal, k) != v for k, v in fields.items())
                 counts[
                     "animals_created"
                     if not mapping
@@ -173,6 +192,7 @@ class MoaImportService:
                         mapping,
                         now,
                         (photos or {}).get(record.external_id, "missing_image"),
+                        observation,
                     )
                 counts.update(result[0])
                 summary["errors"].extend(result[1])
@@ -194,7 +214,122 @@ class MoaImportService:
             )
         return summary
 
-    async def _record(self, org_id, record, mapping, now, photo):
+    async def _legacy_name_owned(self, org_id, record, mapping, animal):
+        if mapping.source != SOURCE or animal.name != record.fields["name"]:
+            return False
+        if str(mapping.source_snapshot.get("animal_id")) != mapping.external_id:
+            return False
+        if mapping.source_snapshot.get("animal_subid") != (record.fields["shelter_number"] or ""):
+            return False
+        audits = (
+            await self.session.scalars(
+                select(AuditRecord).where(
+                    AuditRecord.organization_id == org_id,
+                    AuditRecord.resource_id == animal.id,
+                    func.lower(AuditRecord.resource_type) == "animal",
+                )
+            )
+        ).all()
+        proven = False
+        for audit in audits:
+            before, after = audit.before_data or {}, audit.after_data or {}
+            if not isinstance(before, dict) or not isinstance(after, dict):
+                return False
+            importer = (
+                audit.actor_type == "system"
+                and audit.actor_reference == "moa_importer"
+                and audit.source_channel == "import"
+                and audit.action in {"import_create", "import_update"}
+            )
+            if importer:
+                proven |= (
+                    after.get("name") == animal.name
+                    and after.get("source") == SOURCE
+                    and str(after.get("external_id")) == mapping.external_id
+                )
+            elif "name" in before or "name" in after:
+                # Includes an edit away from and then back to the fallback.
+                if "name" not in before or "name" not in after or before["name"] != after["name"]:
+                    return False
+            elif audit.action != "animal.status_changed":
+                # Unexplained profile history is not proof of importer ownership.
+                return False
+        return proven
+
+    async def _name_plan(self, org_id, record, mapping, animal, observation, now, *, created):
+        previous_snapshot = mapping.source_snapshot if mapping is not None else {}
+        previous = previous_snapshot.get("name_enrichment")
+        previous = previous if isinstance(previous, dict) else {}
+
+        def prior_name(key):
+            value = previous.get(key)
+            return value if isinstance(value, str) and len(value) <= 200 else None
+
+        current = animal.name if animal is not None else record.fields["name"]
+        last_applied = prior_name("last_applied_name")
+        if created:
+            owned = True
+        elif "name_enrichment" in previous_snapshot:
+            owned = last_applied is not None and current == last_applied
+        else:
+            owned = await self._legacy_name_owned(org_id, record, mapping, animal)
+        if owned:
+            last_applied = current
+        counts, errors = Counter(), []
+        metadata = {
+            "source": "official_detail" if observation.normalized_name else "fallback",
+            "raw_name": observation.raw_name,
+            "normalized_name": observation.normalized_name,
+            "last_applied_name": last_applied,
+            "last_successful_name": prior_name("last_successful_name"),
+            "fetched_at": now.isoformat(),
+            "detail_action": "AnnounceMentDataDetail",
+            "identity_verified": observation.error_code is None,
+            "ownership": "importer" if owned else "unowned",
+        }
+        if not owned:
+            counts["name_conflicts_preserved"] += 1
+        if observation.error_code:
+            counts["name_enrichment_failures"] += 1
+            metadata.update(
+                status="failed",
+                error_code=observation.error_code,
+                source=previous.get("source")
+                if previous.get("source") in {"fallback", "official_detail"}
+                else None,
+            )
+            errors.append(
+                {
+                    "stage": "name_enrichment",
+                    "external_id": record.external_id,
+                    "code": observation.error_code,
+                }
+            )
+        elif not owned:
+            metadata["status"] = "conflict"
+        elif observation.normalized_name:
+            counts[
+                "names_official_unchanged"
+                if current == observation.normalized_name
+                else "names_official_applied"
+            ] += 1
+            current = observation.normalized_name
+            metadata.update(
+                status="applied", last_applied_name=current, last_successful_name=current
+            )
+        else:
+            counts["names_fallback"] += 1
+            # An authoritative blank does not downgrade a previously applied name.
+            metadata["status"] = "official_empty"
+        snapshot = {**record.snapshot, "name_enrichment": metadata}
+        if (
+            len(json.dumps(metadata, ensure_ascii=False).encode()) > 6144
+            or len(json.dumps(snapshot, ensure_ascii=False).encode()) > 32768
+        ):
+            raise ValueError("source_snapshot_too_large")
+        return current, snapshot, counts, errors
+
+    async def _record(self, org_id, record, mapping, now, photo, observation):
         counts, errors = Counter(), []
         created = mapping is None
         if created:
@@ -227,11 +362,17 @@ class MoaImportService:
             if animal is None:
                 raise ValueError("mapped_animal_unavailable")
         before = {field: getattr(animal, field) for field in record.fields}
-        for field, value in record.fields.items():
+        name, snapshot, name_counts, name_errors = await self._name_plan(
+            org_id, record, mapping, animal, observation, now, created=created
+        )
+        counts.update(name_counts)
+        errors.extend(name_errors)
+        fields = {**record.fields, "name": name}
+        for field, value in fields.items():
             setattr(animal, field, value)
         previous_photo = animal.current_photo_key
         mapping.source_updated_at = record.source_updated_at
-        mapping.source_snapshot = record.snapshot
+        mapping.source_snapshot = snapshot
         mapping.last_imported_at = mapping.last_seen_at = now
         mapping.source_status = "present"
         if isinstance(photo, str):
@@ -257,7 +398,7 @@ class MoaImportService:
                 mapping.photo_source_checksum = photo.source_checksum
                 mapping.photo_object_key = animal.current_photo_key = key
                 counts["images_reused" if reused else "images_updated"] += 1
-        changed = before != record.fields or previous_photo != animal.current_photo_key
+        changed = before != fields or previous_photo != animal.current_photo_key
         counts[
             "animals_created" if created else "animals_updated" if changed else "animals_unchanged"
         ] += 1
@@ -277,7 +418,7 @@ class MoaImportService:
                 resource_id=animal.id,
                 source_channel="import",
                 before=None if created else before,
-                after={**record.fields, "source": SOURCE, "external_id": record.external_id},
+                after={**fields, "source": SOURCE, "external_id": record.external_id},
             )
         return counts, errors
 
