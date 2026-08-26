@@ -20,6 +20,7 @@ from services.api.app.application.qr_token_service import issue_printable_qr_tok
 from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
+from services.api.app.domain.animal_profile import AnimalProfile
 from services.api.app.domain.organization_timezone import local_to_utc
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
@@ -290,6 +291,49 @@ CARE_REPORT_COUNTS = {
     "ua-ha": 5,
     "cash": 4,
     "fu-fu": 4,
+}
+
+# Source facts and synthetic operational guidance are separately documented.
+# Source age lower bounds are deliberately not converted into birth dates.
+ANIMAL_PROFILES: dict[str, AnimalProfile] = {
+    "huang-mei": AnimalProfile(
+        sex="female",
+        breed="獒犬",
+        intake_date=date(2014, 5, 31),
+        age_description="10歲以上",
+        behavior_notes="親人、溫柔且喜歡撒嬌；與其他犬隻互動時需特別留意。",
+        care_guidance="與其他犬隻保持適當距離；互動與牽行請依現場人員安排。",
+    ),
+    "yi-cuo": AnimalProfile(
+        sex="male",
+        breed="藏獒",
+        intake_date=date(2024, 12, 13),
+        age_description="5歲以上",
+        behavior_notes="親人、愛撒嬌；初次見面也願意主動靠近人。",
+    ),
+    "ua-ha": AnimalProfile(
+        sex="female",
+        breed="藏獒",
+        intake_date=date(2024, 5, 15),
+        age_description="5歲以上",
+        behavior_notes="親人、愛玩；面對其他犬隻較謹慎，在陌生環境喜歡跟著熟悉的人。",
+        care_guidance="腸胃較敏感，飲食及零食請依現場安排。",
+    ),
+    "cash": AnimalProfile(
+        sex="female",
+        breed="混種獒犬",
+        intake_date=date(2020, 6, 5),
+        age_description="7歲以上",
+        behavior_notes="親人、愛玩且合群。",
+    ),
+    "fu-fu": AnimalProfile(
+        sex="male",
+        breed="混種柴犬",
+        intake_date=date(2017, 9, 22),
+        age_description="5歲以上",
+        behavior_notes="喜歡探索環境，對人親近、愛撒嬌，也會主動與其他犬隻互動。",
+        care_guidance="視覺障礙；接近或觸碰前先以聲音讓牠知道你的位置，並依現場安排引導動線。",
+    ),
 }
 
 MEDICAL_SPECS = (
@@ -623,6 +667,8 @@ async def seed(
                 animal.name = spec.name
                 animal.area_id = areas[spec.area_name].id
                 animal.status = "active"
+                for field, value in ANIMAL_PROFILES[spec.key].model_dump().items():
+                    setattr(animal, field, value)
                 asset = (
                     await session.execute(
                         select(MediaAsset).where(MediaAsset.object_key == spec.photo_object_key)

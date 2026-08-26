@@ -27,11 +27,11 @@ repeatedly. It does not delete or alter the existing `ORG-A` / `ORG-B` fixtures.
 
 ## Source-derived data
 
-Only the facts in this section are derived from the linked public pages. The
-current `Animal` schema cannot store sex, breed, intake date, age/life stage,
-behavior/personality, or care guidance. Those facts therefore remain in the
-Python manifest and this document; they are not disguised as medical records,
-care reports, shelter numbers, or area data.
+Only the facts in this section are derived from the linked public pages.
+After migration `0036_animal_profile`, `ANIMAL_PROFILES` persists the supported
+profile fields directly on `Animal`; they are not disguised as medical records,
+care reports, shelter numbers, or area data. The source lower bounds are copied
+as descriptions, not recalculated as the animal's exact current age.
 
 | Animal | Public profile | Source-derived facts retained in manifest |
 | --- | --- | --- |
@@ -50,6 +50,43 @@ The shelter numbers are project decisions, not source identifiers:
 | 獒瓦蛤 | `MTF-20240515-001` | `M-03` | active |
 | 獒凱西 | `MTF-20200605-001` | `M-04` | active |
 | 柴福福 | `SBA-20170922-001` | `S-01` | active |
+
+## Persisted profile provenance
+
+Profile wording was checked against the linked source pages on 2026-08-26.
+Every sex/breed/intake/age/behavior value below is **SOURCE-DERIVED**, except
+一搓's sex is **PROJECT-DECIDED**: the source says `公犬 Female` and its narrative
+describes a boy; the approved project decision is `male`. Behavior is a short
+source-derived summary, not a direct quotation. The database uses constrained
+`male` / `female` / `unknown` values.
+
+| Animal | Sex | Breed | Intake date | Age description | Behavior |
+| --- | --- | --- | --- | --- | --- |
+| 獒黃妹 | female | 獒犬 | 2014-05-31 | 10歲以上 | 親人、溫柔且喜歡撒嬌；與其他犬隻互動時需特別留意。 |
+| 獒一搓 | male (PROJECT-DECIDED) | 藏獒 | 2024-12-13 | 5歲以上 | 親人、愛撒嬌；初次見面也願意主動靠近人。 |
+| 獒瓦蛤 | female | 藏獒 | 2024-05-15 | 5歲以上 | 親人、愛玩；面對其他犬隻較謹慎，在陌生環境喜歡跟著熟悉的人。 |
+| 獒凱西 | female | 混種獒犬 | 2020-06-05 | 7歲以上 | 親人、愛玩且合群。 |
+| 柴福福 | male | 混種柴犬 | 2017-09-22 | 5歲以上 | 喜歡探索環境，對人親近、愛撒嬌，也會主動與其他犬隻互動。 |
+
+All five have `birth_date=null`, `birth_date_estimated=false` — a
+**PROJECT-DECIDED representation of unknown dates**, not fabricated birthdays.
+Names retain Chinese only; shelter numbers, area assignments and active status
+remain **PROJECT-DECIDED** Demo values.
+
+The following `care_guidance` is **SYNTHETIC OPERATIONAL GUIDANCE**, written for
+the StrayHub demo using the source cautions as context. It is neither quoted
+FurKids instruction nor a medical diagnosis/treatment recommendation:
+
+| Animal | Guidance | Basis / absence |
+| --- | --- | --- |
+| 獒黃妹 | 與其他犬隻保持適當距離；互動與牽行請依現場人員安排。 | Source describes caution around dogs |
+| 獒一搓 | null | PROJECT-DECIDED: no special immediate guidance justified |
+| 獒瓦蛤 | 腸胃較敏感，飲食及零食請依現場安排。 | Source describes digestive sensitivity |
+| 獒凱西 | null | PROJECT-DECIDED: no special immediate guidance justified |
+| 柴福福 | 視覺障礙；接近或觸碰前先以聲音讓牠知道你的位置，並依現場安排引導動線。 | Source describes blindness |
+
+`behavior_notes` is management-only. `care_guidance` is safe volunteer-visible
+operational text. See [Animal profile V1](../design/animal-profile.md).
 
 ## Approved primary-photo provenance
 
@@ -110,6 +147,9 @@ restriction model.
 - Organization: lookup by unique code; stable ID on first creation.
 - Areas and cages: lookup by organization/name/parent; stable IDs on creation.
 - Animals: lookup by organization/shelter number; stable IDs and mappings.
+- Profiles: validate `ANIMAL_PROFILES`, then update the same animals in place.
+  Seed reruns restore this Demo profile manifest; do not use this seed on live
+  shelter records. Existing photo checksums and QR bindings are preserved.
 - QR: deterministic record ID; all other active QR rows for that animal are
   revoked so at most one remains active.
 - Medical records, reminder series, and care reports: deterministic IDs and
@@ -122,5 +162,5 @@ restriction model.
 - Users, memberships, application, and grant: stable identity plus natural-key
   lookup; no daily reportable scope is created.
 
-The seed intentionally performs no schema migration and does not persist the
-deferred animal-profile fields listed above.
+The seed intentionally performs no schema migration. Run Alembic upgrade before
+seeding; the profile fields require `0036_animal_profile`.

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from PIL import Image
 from scripts.seed_furkids_demo import (
+    ANIMAL_PROFILES,
     ANIMAL_SPECS,
     CARE_REPORT_COUNTS,
     ORGANIZATION_CODE,
@@ -152,6 +153,18 @@ def test_all_furkids_animals_have_approved_photo_metadata() -> None:
     assert all(spec.source_sha256 for spec in ANIMAL_SPECS)
     assert all(spec.photo_object_key.endswith("/primary.jpg") for spec in ANIMAL_SPECS)
     assert len({spec.photo_object_key for spec in ANIMAL_SPECS}) == 5
+
+
+def test_furkids_profiles_preserve_source_age_without_fabricating_birth_dates() -> None:
+    assert set(ANIMAL_PROFILES) == {spec.key for spec in ANIMAL_SPECS}
+    assert ANIMAL_PROFILES["yi-cuo"].sex == "male"
+    assert ANIMAL_PROFILES["fu-fu"].breed == "混種柴犬"
+    for profile in ANIMAL_PROFILES.values():
+        assert profile.birth_date is None
+        assert profile.birth_date_estimated is False
+        assert profile.intake_date is not None
+        assert profile.age_description.endswith("歲以上")
+        assert profile.behavior_notes
 
 
 def test_current_photo_key_is_applied_only_to_its_intended_tenant_animal() -> None:
