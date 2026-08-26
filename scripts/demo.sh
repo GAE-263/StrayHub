@@ -17,6 +17,14 @@ export WEB_PORT="${WEB_PORT:-3001}"
 
 case "$MODE" in
   check|serve) ;;
+  --help|-h)
+    echo "用法：$0 [check|serve]"
+    echo "正常 demo：FurKids 5、新店犬最多 60、五股犬最多 60；不建立 ORG-A／ORG-B。"
+    echo "check 只 bootstrap/驗證；serve（預設）另啟動 FastAPI／Next.js／Worker。"
+    echo "舊 fixtures 請先預覽：uv run python -m scripts.cleanup_legacy_demo_fixtures；--yes 才刪除。"
+    echo "測試 fixtures 請使用獨立 DB：uv run python -m scripts.seed_test_fixtures"
+    exit 0
+    ;;
   *)
     echo "用法：$0 [check|serve]" >&2
     exit 2
@@ -41,6 +49,9 @@ require_port_available() {
 
 require_command uv
 require_command npm
+
+# Check .env-aware settings before migrations, grants, data or storage writes.
+uv run python -m scripts.local_demo
 
 if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:-}" ]]; then
   require_command openssl
@@ -69,30 +80,15 @@ echo "[Demo] Migration"
 uv run alembic upgrade head
 uv run python -m scripts.configure_runtime_role --apply
 
-echo "[Demo] Fictional ORG-A／ORG-B seed"
-uv run python -m scripts.seed_local
-
-echo "[Demo] FurKids public-profile-based demo seed"
-uv run python -m scripts.seed_furkids_demo
-
-echo "[Demo] US0～US3 and AI failure degradation smoke"
-uv run pytest \
-  tests/e2e/test_us0_shelter_isolation.py \
-  tests/e2e/test_us1_animal_selection.py \
-  tests/e2e/test_us2_line_bot_report.py \
-  tests/e2e/test_us3_animal_timeline.py \
-  tests/integration/test_ai_failure_timeline_status.py \
-  -q
+echo "[Demo] Three-shelter data bootstrap (no test fixtures)"
+uv run python -m scripts.bootstrap_demo
 
 echo "[Demo] PASS"
-echo "Staff A:      local-staff-a / local-only-password"
-echo "Shelter Admin: local-shelter-admin-a / local-only-password (ORG-A)"
-echo "Volunteer A:  local-volunteer-a / local-only-password"
-echo "Staff B:      local-staff-b / local-only-password"
-echo "Platform:     local-platform-admin / local-only-password"
-echo "Platform disabled: local-platform-admin-disabled / local-only-password"
-echo "FurKids admin: demo-furkids-admin / local-only-password"
+echo "Three-shelter manager: demo-furkids-admin / local-only-password"
+echo "Platform: demo-platform-admin / local-only-password"
 echo "FurKids volunteer: demo-furkids-volunteer / local-only-password"
+echo "Xindian volunteer: demo-xindian-volunteer / local-only-password"
+echo "Wugu volunteer: demo-wugu-volunteer / local-only-password"
 echo "API:          http://${API_HOST}:${API_PORT}/healthz"
 echo "Web:          http://${WEB_HOST}:${WEB_PORT}"
 

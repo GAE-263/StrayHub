@@ -35,7 +35,7 @@ async function readError(response: Response): Promise<string> {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("local-staff-a");
+  const [username, setUsername] = useState("demo-furkids-admin");
   const [password, setPassword] = useState("local-only-password");
   const [error, setError] = useState("");
   const [organizations, setOrganizations] = useState<AuthOrganization[]>([]);

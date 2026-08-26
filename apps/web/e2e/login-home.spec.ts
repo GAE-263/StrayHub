@@ -18,7 +18,7 @@ for (const viewport of viewports) {
     await expect(
       page.getByRole("heading", { name: "浪浪森友會管理入口" }),
     ).toBeVisible();
-    await expect(page.getByLabel("帳號")).toHaveValue("local-staff-a");
+    await expect(page.getByLabel("帳號")).toHaveValue("demo-furkids-admin");
     await page.getByRole("button", { name: "登入" }).click();
     await expect(page).toHaveURL(/\/$/);
   });

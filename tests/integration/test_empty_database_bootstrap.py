@@ -46,6 +46,7 @@ async def test_empty_database_bootstrap_seed_reset_and_reversible_upgrade() -> N
 
     env = os.environ.copy()
     env["DATABASE_URL"] = _database_url(database).replace("postgresql://", "postgresql+asyncpg://")
+    env["DATABASE_MIGRATION_URL"] = env["DATABASE_URL"]
     try:
         _run("-m", "alembic", "upgrade", "0014_timeline_query_indexes", env=env)
         _run("-m", "alembic", "upgrade", "head", env=env)
@@ -67,7 +68,7 @@ async def test_empty_database_bootstrap_seed_reset_and_reversible_upgrade() -> N
         finally:
             await connection.close()
         _run("-m", "alembic", "upgrade", "head", env=env)
-        _run("-m", "scripts.seed_local", env=env)
+        _run("-m", "scripts.seed_test_fixtures", env=env)
 
         connection = await asyncpg.connect(_database_url(database))
         try:
