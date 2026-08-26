@@ -40,7 +40,8 @@ uv run python -m scripts.import_moa_shelter_animals \
 Use operator-controlled database/storage settings, never an HTTP caller's tenant
 parameter. `--shelter` is required; only `dog` is supported; `--limit` is 1–60
 (default 60). There is no all-shelters mode. Run dry-run before every new shelter.
-The dry-run transaction is PostgreSQL READ ONLY; no image downloads, bucket
+Dry-run includes official detail-name requests and ownership planning. The dry-run
+transaction is PostgreSQL READ ONLY; no image downloads, bucket
 creation, DB mutations, QR creation, or storage writes occur. Planned update counts
 compare source-managed profile fields, not image bytes (which are not downloaded).
 
@@ -55,7 +56,9 @@ Attribution: 農業部動物保護司「動物認領養」開放資料, with ret
 retained locally. The government dataset lists the open-data license; preserve
 source attribution and consult its terms for downstream reuse. StrayHub does not
 claim ownership of the animal photographs or a broader independent image license.
-`AnimalsCore.ashx` and third-party mirrors are not importer sources.
+Name enrichment additionally uses the **official pet.gov.tw detail backing
+endpoint** described below. It is not a guaranteed/versioned MOA Open Data API
+contract. Third-party mirrors and HTML scraping are not importer sources.
 
 MOA documents `animal_id` as the unique record identifier. Its creation/update
 dates describe data records, not proven shelter intake dates. The official feed
@@ -91,7 +94,8 @@ Neither `unavailable` nor older top-60 exclusion means adopted, transferred or d
 - `organization_id`, `animal_id`, `source`, `external_id`, `source_shelter_id`.
 - `source_updated_at` nullable DATE; `last_imported_at`, `last_seen_at` UTC timestamps.
 - `source_status`: `present` / `unavailable`.
-- `source_snapshot`: 23 whitelisted, trimmed fields, each bounded to 1 KiB UTF-8;
+- `source_snapshot`: 23 whitelisted, trimmed fields, each bounded to 1 KiB UTF-8,
+  plus bounded `name_enrichment` provenance;
   total JSON at most 32 KiB, also enforced by a database check.
 - `photo_source_checksum` (original bytes SHA-256), `photo_object_key` (last importer-owned photo).
 - Standard identity/audit timestamps, organization/source/status index.
@@ -125,7 +129,8 @@ existing animals when mappings are missing.
 | `animal_shelter_pkid` | stable Organization code/ID and mapping | Exact shelter identity |
 | `shelter_name` | Organization.name | Trim; initialize only, preserve existing manual name |
 | `shelter_address` / `shelter_tel` | Organization.address / contact | Fill missing only; preserve manual values |
-| `animal_subid` | Animal.shelter_number / name | Trim; neutral stable name = number, fallback `MOA-<id>` |
+| `animal_subid` | Animal.shelter_number / name fallback | Trim; fallback = number, else `MOA-<id>` |
+| detail `動物名` / `AnimalName` | Animal.name | Full whitespace-normalized value, only when importer ownership is proven |
 | `animal_Variety` | Animal.breed | Trim, empty → null |
 | `animal_sex` | Animal.sex | M/公 → male; F/母 → female; otherwise unknown |
 | `animal_age` | Animal.age_description | ADULT → 成犬; CHILD → 幼犬; otherwise null |
@@ -133,14 +138,137 @@ existing animals when mappings are missing.
 | `album_file` | validated media → current_photo_key | Content-addressed storage; policy below |
 | bodytype, colour, foundplace, sterilization, bacterin, remark, caption, source dates/status | mapping.source_snapshot | Retain for provenance, not automatically volunteer-visible |
 
-Animal name, shelter number, breed, sex and age description are **source-managed**
-and refreshed on selected-record sync; local edits to those five fields may be
-overwritten. Animal status, area, intake date, birth date/estimated flag, behavior
+Shelter number, breed, sex and age description are **source-managed** and refreshed
+on selected-record sync; local edits to those four fields may be overwritten.
+Animal name uses the ownership/conflict rule below, preserving manager edits.
+Animal status, area, intake date, birth date/estimated flag, behavior
 notes and care guidance are **not** overwritten. On creation these nullable fields
 are null, birth_date_estimated is false, status is active. No invented names, birth
 dates, intake dates, cages, MedicalRecords or care instructions. Remarks are not
 promoted into care_guidance. New organizations are active, timezone Asia/Taipei,
 service_area null; existing status/timezone/service_area remain unchanged.
+
+## Official animal-name enrichment
+
+Discovery examined all 27 fields of the full MOA response (8,263 records): the
+known names were absent, and `animal_title` was empty throughout that response.
+The official page loads structured detail JSON; no browser or HTML parser is used.
+
+`MoaOpenDataClient.fetch_names(batch)` posts form-encoded `Method=AnimalsFront`,
+`Param=<JSON string>` to the fixed HTTPS URL
+`https://www.pet.gov.tw/handler/AnimalsCore.ashx`. No caller-selected URL or action
+is exposed. It first queries `AnimalsGetShelter` with `_UIDataParam.filter1=G`,
+exact-matches the MOA shelter name to one official `UserTag`, then uses:
+
+```json
+{
+  "action": "AnnounceMentDataDetail",
+  "_FrontParam": {
+    "AcNum": "<plain animal_subid>",
+    "Shelter": "<official UserTag>",
+    "MenuID": 2,
+    "PageType": "Adopt"
+  }
+}
+```
+
+UserTag is not inferred from a shelter-number prefix or numeric shelter ID.
+Require outer `Success=true`, a JSON-string `Message` containing exactly one
+object, and exact `收容編號` / `公告收容所` matches to the selected MOA record.
+Read `動物名`; when `AnimalName` is supplied, require its normalized value to agree.
+Missing fields, invalid values, mismatches and multiple/absent records are failures,
+not empty names. External identity remains MOA_ADOPTION_OPEN_DATA + animal_id.
+
+Normalization only trims/collapses whitespace (including NBSP). Full names such
+as `歪歪 15M029`, `奈奈 15F036`, `皮皮7F037`, parentheses and punctuation are
+preserved. Suffix meanings are unproven and are never split. Null, empty,
+whitespace-only and the official UI placeholder `---` are authoritative empties.
+The raw value is bounded to 1 KiB UTF-8, normalized value to Animal.name's 200
+characters; invalid/oversized values fail, rather than silently truncating names.
+
+### Ownership and fault isolation
+
+- New importer-created animals start with the unchanged deterministic fallback.
+- Existing `name_enrichment` provenance: current name must equal non-null
+  `last_applied_name` to be importer-owned. A mismatch preserves the current name,
+  stores the observed source name, and records `status=conflict`, `ownership=unowned`.
+  Never set last_applied_name to a conflicting manager value, even on later runs.
+- Legacy rows without the provenance key require matching source/external ID,
+  matching previous snapshot shelter number, current name equal to the fallback,
+  and a tenant-scoped import audit proving the same name/identity from
+  `system/moa_importer`, channel `import`, action `import_create` or `import_update`.
+  Query both `animal` and `Animal` resource types. Non-import audit name changes,
+  including a change back to fallback, deny bootstrap. Missing/ambiguous profile
+  history fails closed. Non-name profile edits with unchanged name and explicit
+  status changes do not by themselves deny ownership.
+- Owned + nonempty official name: apply the complete normalized value.
+- Owned + authoritative empty: retain the fallback/current owned name and record
+  `official_empty`. In particular, do not downgrade a previously applied official
+  name on a later blank observation.
+- Network/parse/identity failure: retain current name and last-applied/successful
+  values, record sanitized failure metadata, continue other records. Directory
+  lookup failure marks the batch's name observations failed, not the whole import.
+- A missing observation in an internal service call is `name_detail_not_requested`,
+  not permission to overwrite the name with fallback.
+
+HTTP work happens before the database transaction. The existing organization
+advisory lock, per-animal row lock and record SAVEPOINT protect name/provenance
+writes together with the import. Dry-run uses the same ownership/decision logic
+without assigning ORM fields. Import audits contain the actual applied name,
+never the fallback when a manager/official name was preserved.
+
+### Bounded provenance
+
+`source_snapshot.name_enrichment` contains exactly the bounded fields:
+
+```json
+{
+  "source": "official_detail",
+  "raw_name": "歪歪 15M029",
+  "normalized_name": "歪歪 15M029",
+  "last_applied_name": "歪歪 15M029",
+  "last_successful_name": "歪歪 15M029",
+  "fetched_at": "<UTC import observation timestamp>",
+  "detail_action": "AnnounceMentDataDetail",
+  "identity_verified": true,
+  "ownership": "importer",
+  "status": "applied"
+}
+```
+
+`source` describes the observation (`official_detail`/`fallback`); on failure it
+retains the previous source or null. Status is `applied`, `official_empty`,
+`conflict`, or `failed`. Failure adds `error_code`; raw/normalized values are null,
+identity_verified=false, while previous last-applied/successful names remain.
+Unowned legacy records have last_applied_name=null, not the manager's current name.
+`last_successful_name` means the last successfully applied nonempty official name,
+not a merely observed/conflicting name. Only these known prior metadata fields are
+retained, never arbitrary payloads. Metadata is capped at 6 KiB; the entire snapshot
+is checked against 32 KiB before assignment and by PostgreSQL. No HTML, chip data,
+full detail response, cookies or tokens are stored. No schema migration is needed.
+
+### Request policy and summary
+
+At most two concurrent detail tasks; all backing-endpoint requests in the client
+share a >=0.5s start interval, including retries/directory lookup. Connect timeout
+5s, per-operation timeout 20s and total attempt deadline 20s; at most three attempts,
+1s/2s backoff, only transport/timeouts and 429/500/502/503/504 retried. Redirects are
+rejected even if an injected HTTP client follows redirects. Cookie headers are
+removed. Responses are streamed with a 64 KiB decoded-byte cap before JSON parsing.
+
+Refresh every selected record on every run, including dry-run. A MOA source date
+is not proven to change when the website name changes, so no timestamp cache is
+introduced. The per-run directory lookup is shared rather than repeated per animal.
+The undocumented backing endpoint can change; retain last names and report failures
+when its contract does not validate. Never substitute guessed values or scrape HTML.
+
+CLI adds `name_detail_requests` (actual detail HTTP attempts, excluding directory),
+`names_official_applied`, `names_official_unchanged`, `names_fallback` (owned empty
+observations retaining current name), `name_conflicts_preserved`, and
+`name_enrichment_failures`. On dry-run, applied/unchanged/fallback/conflict counters
+are plans, not writes. Name failures join the existing sanitized `errors` list and
+exit-code-2 semantics; conflicts are counted separately and do not abort the import.
+No full-record payloads are printed.
 
 ## Images and the PNG/JPEG caveat
 
@@ -214,7 +342,8 @@ not raw SQL, exception payloads, QR tokens or credentials.
 - Core: `application/moa_import_service.py`, `domain/moa_import.py`.
 - HTTP/decode: `infrastructure/moa_open_data.py`.
 - ORM: `persistence/models/animal_external_source.py`.
-- Tests: `tests/unit/test_moa_import.py`, `tests/integration/test_moa_import.py`.
+- Tests: `tests/unit/test_moa_import.py`, `tests/integration/test_moa_import.py`,
+  `tests/unit/test_moa_name_enrichment.py`, `tests/integration/test_moa_name_enrichment.py`.
 
 Integration tests use `STRAYHUB_TEST_DATABASE_URL`, real PostgreSQL with
 `SET LOCAL ROLE strayhub_runtime`, rolled-back fixtures and a one-connection pool.
@@ -544,3 +673,88 @@ the code fix and requested synthetic runtime HTTP/UI/QR isolation checks passed.
 All verification API/web/mock-server processes were stopped, browser viewport
 restored, and synthetic users/memberships deactivated. Existing demo services and
 real users were left unchanged. The completed Wugu import was not repeated.
+
+## Official-name enrichment verification — 2026-08-27
+
+This later run updates the existing 120 mapped MOA animals; it does not recreate
+the shelters, change authorization, or modify the five curated FurKids animals.
+The counts below are observed live results, not constants in the importer.
+
+| Shelter | Selected | Official names applied | Valid empty / fallback retained | Conflicts | Failures |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Xindian | 60 | 49 | 11 | 0 | 0 |
+| Wugu | 60 | 2 | 58 | 0 | 0 |
+| Total | 120 | 51 | 69 | 0 | 0 |
+
+- Both dry-runs made 60 detail requests each, planned the same changes as the real
+  runs, and left database hashes unchanged. No photo download/storage writes in dry-run.
+- Each real run made 60 detail requests, reused all 60 photos and all 60 active QR
+  records, and created no Animals, mappings, MediaAssets or QR records.
+- Identical second imports: 60 Animals unchanged in each shelter; official names
+  unchanged 49/2, fallback retained 11/58; zero applied names, conflicts or failures.
+  IDs/counts and checksums of non-name Animal fields, photos, QR and external mapping
+  identity/source fields match the before backup. Names match the first sync exactly.
+  Only intended name/provenance/import heartbeat and change-audit writes are expected.
+- Verified in database and runtime HTTP list/detail/QR resolution:
+  `AAACG1150527001` → `歪歪 15M029`, `AAACG1150729001` → `奈奈 15F036`,
+  `AAAHG107010403` → `來福`, `AAAHG1141204001` → `麻薯`.
+- Actual snapshot maximum: Xindian 1,599 bytes, Wugu 1,393 bytes (UTF-8 JSON);
+  PostgreSQL snapshot bounds are also covered by integration tests.
+- Local pre-sync custom-format backup, verified by pg_restore listing:
+  `/tmp/strayhub-name-enrichment-rG9IHm/before-name-sync.dump`.
+  Run summaries and integrity evidence are in that same local ephemeral directory;
+  neither credentials, raw QR tokens nor full upstream payloads are committed.
+- Main demo verification with photos: exactly FurKids 5 / Xindian 60 / Wugu 60.
+  Alembic repository/database head remains `0037_animal_external_sources`.
+
+Regression commands (all pass):
+
+```bash
+uv run pytest tests/unit/test_moa_name_enrichment.py tests/unit/test_moa_import.py \
+  tests/integration/test_moa_name_enrichment.py tests/integration/test_moa_import.py \
+  tests/unit/test_demo_bootstrap.py tests/security/test_qr_token_tampering.py \
+  tests/integration/test_scope_free_animal_selection_api.py \
+  tests/unit/test_volunteer_reporting_authorization.py -q
+# 101 passed; integration fixtures use a dedicated PostgreSQL test DB and rollback.
+
+MOA_THREE_SHELTER_TEST=1 STRAYHUB_TEST_DATABASE_URL=<local-three-shelter-db> \
+  uv run pytest tests/isolation/test_moa_three_shelter_rls.py -q
+# 1 passed; read-only, actual strayhub_runtime, all six cross-tenant directions,
+# animals/mappings/media/QR and one reused physical connection.
+
+uv run python -m scripts.verify_demo_data --photos
+uv run ruff check services/api/app scripts tests
+uv run ruff format --check services/api/app scripts tests
+git diff --check
+```
+
+The focused tests include fixed-host/no-cookie/redirect refusal, response bounds,
+normalization/identity/empty semantics, retry/rate/concurrency bounds, strict legacy
+audit proof, manager `小黑` preservation against observed `歪歪 15M029` (including
+dry-run), repeat conflicts, no downgrade after failure or authoritative empty,
+and per-record oversized-metadata rollback while the next record succeeds.
+Public API schemas, frontend production code and migrations are unchanged.
+
+### Name UI / QR verification
+
+The in-app browser used an unmodified frontend copy and a separate database restored
+from the post-sync local backup. Only that disposable copy received demo management
+and shelter-specific volunteer accounts. Its API connections ran as
+`strayhub_runtime`; no main-demo identity, membership or grant was changed.
+
+- Management search/list/detail displayed `歪歪 15M029`, `奈奈 15F036` and Wugu
+  `來福`; fallback shelter-number rows and an unchanged fallback profile were checked.
+- The longest selected official value, `賽巴斯汀(小霸王)11M001(10M098)`, remained
+  complete in the mobile list and in the profile at both 360×800 and 1440×900.
+  Profile headings wrap; no document horizontal overflow. The existing mobile
+  management table keeps its own horizontal scrolling behavior.
+- The scoped volunteer's existing real QR deep links showed `歪歪 15M029` and the
+  complete long-name animal in the confirmation card, correct shelter/number and
+  loaded photo, at both exact viewports. No DailyReportableScope was used.
+- Runtime HTTP checks additionally covered all four known name examples and
+  fallbacks, successful same-tenant QR resolution/confirmation, and foreign-tenant
+  QR/direct-confirm rejection. No questionnaire or LINE message was sent.
+- This is browser/service validation, not physical camera scanning or LINE-device
+  testing. No UI change was necessary, so frontend build/contract regeneration was
+  not required for this backend-only item. Temporary API/web processes were stopped
+  after verification; the backup and disposable DB copies are retained locally.
