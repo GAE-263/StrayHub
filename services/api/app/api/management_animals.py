@@ -9,8 +9,10 @@ from services.api.app.api.dependencies import (
     current_request_context,
     request_session,
 )
+from services.api.app.api.errors import ErrorResponse
 from services.api.app.api.management_access import require_staff_or_admin
 from services.api.app.application.management_animal_service import ManagementAnimalService
+from services.api.app.domain.animal_profile import AnimalProfile, AnimalProfileUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/v1/management/animals", tags=["Management Animals"])
@@ -21,7 +23,32 @@ class AnimalStatusUpdateRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
-@router.get("")
+class ManagementAnimal(AnimalProfile):
+    id: UUID
+    organization_id: UUID
+    name: str
+    shelter_number: str | None
+    photo_key: str | None
+    photo_url: str | None = None
+    status: str
+    area_id: UUID | None
+    area_name: str | None
+    area_type: str | None
+    area_path: str | None = None
+
+
+class ManagementAnimalResponse(BaseModel):
+    animal: ManagementAnimal
+
+
+class ManagementAnimalListResponse(BaseModel):
+    items: list[ManagementAnimal]
+    page: int
+    page_size: int
+    total: int
+
+
+@router.get("", response_model=ManagementAnimalListResponse)
 async def list_management_animals(
     query: str | None = Query(default=None),  # noqa: B008
     area_id: UUID | None = Query(default=None),  # noqa: B008
@@ -41,7 +68,7 @@ async def list_management_animals(
     )
 
 
-@router.get("/{animal_id}")
+@router.get("/{animal_id}", response_model=ManagementAnimalResponse)
 async def get_management_animal(
     animal_id: UUID,
     context: RequestContext = Depends(current_request_context),  # noqa: B008
@@ -49,6 +76,26 @@ async def get_management_animal(
 ) -> dict:
     organization_id = require_staff_or_admin(context)
     return await ManagementAnimalService(session, organization_id).get(animal_id)
+
+
+@router.patch(
+    "/{animal_id}/profile",
+    response_model=ManagementAnimalResponse,
+    operation_id="updateManagementAnimalProfile",
+    responses={code: {"model": ErrorResponse} for code in (401, 403, 404, 409, 422)},
+)
+async def update_management_animal_profile(
+    animal_id: UUID,
+    payload: AnimalProfileUpdate,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    organization_id = require_staff_or_admin(context)
+    return await ManagementAnimalService(session, organization_id).update_profile(
+        animal_id,
+        changes=payload,
+        actor_user_id=context.user_id,
+    )
 
 
 @router.patch("/{animal_id}")

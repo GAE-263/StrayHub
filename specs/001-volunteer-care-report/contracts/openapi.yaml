@@ -1035,7 +1035,7 @@ paths:
           description: 動物檔案摘要
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ManagementAnimal" }
+              schema: { $ref: "#/components/schemas/ManagementAnimalResponse" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
@@ -1060,6 +1060,29 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/animals/{animalId}/profile:
+    patch:
+      tags: [Management Animals]
+      operationId: updateManagementAnimalProfile
+      description: 更新目前收容所的動物基本資料並記錄 before/after 稽核；不變更動物狀態。省略欄位保持原值，nullable 欄位以 null 清除。
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnimalProfileUpdate" }
+      responses:
+        "200":
+          description: 已更新的動物檔案
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementAnimalResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /v1/management/reports:
     get:
       tags: [Management Reports]
@@ -2516,16 +2539,40 @@ components:
         recent_reports:
           type: array
           items: { $ref: "#/components/schemas/ManagementReport" }
+    AnimalProfileUpdate:
+      type: object
+      additionalProperties: false
+      properties: &animalProfileProperties
+        sex: { type: string, enum: [male, female, unknown], default: unknown }
+        breed: { type: [string, "null"], minLength: 1, maxLength: 120, default: null }
+        intake_date: { type: [string, "null"], format: date, default: null }
+        birth_date: { type: [string, "null"], format: date, default: null }
+        birth_date_estimated: { type: boolean, default: false }
+        age_description: { type: [string, "null"], minLength: 1, maxLength: 120, default: null }
+        behavior_notes: { type: [string, "null"], minLength: 1, maxLength: 4000, default: null, description: 管理端個性與行為描述，不向志工確認卡揭露 }
+        care_guidance: { type: [string, "null"], minLength: 1, maxLength: 4000, default: null, description: 可向志工顯示的安全操作指引 }
     ManagementAnimal:
       type: object
-      required: [id, name, shelter_number, status, area]
+      additionalProperties: false
+      required: [id, organization_id, name, shelter_number, photo_key, status, area_id, area_name, area_type]
       properties:
+        <<: *animalProfileProperties
         id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
         name: { type: string }
-        shelter_number: { type: string }
+        shelter_number: { type: [string, "null"] }
         status: { type: string }
-        current_photo_key: { type: [string, "null"] }
-        area: { type: [string, "null"] }
+        photo_key: { type: [string, "null"] }
+        photo_url: { type: [string, "null"], default: null }
+        area_id: { type: [string, "null"], format: uuid }
+        area_name: { type: [string, "null"] }
+        area_type: { type: [string, "null"] }
+        area_path: { type: [string, "null"], default: null }
+    ManagementAnimalResponse:
+      type: object
+      required: [animal]
+      properties:
+        animal: { $ref: "#/components/schemas/ManagementAnimal" }
     ManagementAnimalListResponse:
       type: object
       required: [items, page, page_size, total]
@@ -3176,6 +3223,12 @@ components:
         area: { type: [string, "null"] }
         organization_id: { type: string, format: uuid }
         can_report: { type: boolean }
+        sex: { type: string, enum: [male, female, unknown], default: unknown }
+        breed: { type: [string, "null"], default: null }
+        birth_date: { type: [string, "null"], format: date, default: null }
+        birth_date_estimated: { type: boolean, default: false }
+        age_description: { type: [string, "null"], default: null }
+        care_guidance: { type: [string, "null"], default: null }
     AnimalConfirmationResponse:
       allOf:
         - $ref: "#/components/schemas/AnimalCandidate"

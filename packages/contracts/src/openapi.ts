@@ -897,6 +897,23 @@ export interface paths {
         patch: operations["updateManagementAnimalStatus"];
         trace?: never;
     };
+    "/v1/management/animals/{animalId}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description 更新目前收容所的動物基本資料並記錄 before/after 稽核；不變更動物狀態。省略欄位保持原值，nullable 欄位以 null 清除。 */
+        patch: operations["updateManagementAnimalProfile"];
+        trace?: never;
+    };
     "/v1/management/reports": {
         parameters: {
             query?: never;
@@ -1805,14 +1822,90 @@ export interface components {
             };
             recent_reports: components["schemas"]["ManagementReport"][];
         };
+        AnimalProfileUpdate: {
+            /**
+             * @default unknown
+             * @enum {string}
+             */
+            sex: "male" | "female" | "unknown";
+            /** @default null */
+            breed: string | null;
+            /**
+             * Format: date
+             * @default null
+             */
+            intake_date: string | null;
+            /**
+             * Format: date
+             * @default null
+             */
+            birth_date: string | null;
+            /** @default false */
+            birth_date_estimated: boolean;
+            /** @default null */
+            age_description: string | null;
+            /**
+             * @description 管理端個性與行為描述，不向志工確認卡揭露
+             * @default null
+             */
+            behavior_notes: string | null;
+            /**
+             * @description 可向志工顯示的安全操作指引
+             * @default null
+             */
+            care_guidance: string | null;
+        };
         ManagementAnimal: {
+            /**
+             * @default unknown
+             * @enum {string}
+             */
+            sex: "male" | "female" | "unknown";
+            /** @default null */
+            breed: string | null;
+            /**
+             * Format: date
+             * @default null
+             */
+            intake_date: string | null;
+            /**
+             * Format: date
+             * @default null
+             */
+            birth_date: string | null;
+            /** @default false */
+            birth_date_estimated: boolean;
+            /** @default null */
+            age_description: string | null;
+            /**
+             * @description 管理端個性與行為描述，不向志工確認卡揭露
+             * @default null
+             */
+            behavior_notes: string | null;
+            /**
+             * @description 可向志工顯示的安全操作指引
+             * @default null
+             */
+            care_guidance: string | null;
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            organization_id: string;
             name: string;
-            shelter_number: string;
+            shelter_number: string | null;
             status: string;
-            current_photo_key?: string | null;
-            area: string | null;
+            photo_key: string | null;
+            /** @default null */
+            photo_url: string | null;
+            /** Format: uuid */
+            area_id: string | null;
+            area_name: string | null;
+            area_type: string | null;
+            /** @default null */
+            area_path: string | null;
+        };
+        ManagementAnimalResponse: {
+            animal: components["schemas"]["ManagementAnimal"];
         };
         ManagementAnimalListResponse: {
             items: components["schemas"]["ManagementAnimal"][];
@@ -2329,6 +2422,24 @@ export interface components {
             /** Format: uuid */
             organization_id: string;
             can_report: boolean;
+            /**
+             * @default unknown
+             * @enum {string}
+             */
+            sex: "male" | "female" | "unknown";
+            /** @default null */
+            breed: string | null;
+            /**
+             * Format: date
+             * @default null
+             */
+            birth_date: string | null;
+            /** @default false */
+            birth_date_estimated: boolean;
+            /** @default null */
+            age_description: string | null;
+            /** @default null */
+            care_guidance: string | null;
         };
         AnimalConfirmationResponse: components["schemas"]["AnimalCandidate"] & {
             confirmation_token: string;
@@ -5123,7 +5234,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ManagementAnimal"];
+                    "application/json": components["schemas"]["ManagementAnimalResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -5160,6 +5271,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    updateManagementAnimalProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimalProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description 已更新的動物檔案 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAnimalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
         };
     };
     listManagementReports: {
