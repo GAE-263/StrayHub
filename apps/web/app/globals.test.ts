@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
 
+it("wraps unbroken MOA shelter-number names without widening profile or QR cards", () => {
+  expect(ruleBody(".animal-profile-page")).toContain("overflow-wrap: anywhere");
+});
+
 function ruleBody(selector: string) {
   const match = css.match(
     new RegExp(

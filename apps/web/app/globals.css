@@ -1421,6 +1421,7 @@ dialog.ui-sheet[open] {
   --profile-ink: #18332d;
   --profile-mint: #e7f2ed;
   --profile-amber: #b86712;
+  overflow-wrap: anywhere;
 }
 .animal-profile-hero {
   align-items: center;
