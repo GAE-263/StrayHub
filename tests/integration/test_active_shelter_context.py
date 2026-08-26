@@ -19,6 +19,9 @@ async def test_context_switch_requires_explicit_active_membership():
     )
 
     class Repository:
+        async def set_authentication_context_scope(self, _user_id, _organization_id):
+            pass
+
         async def get_session(self, value):
             return session if value == session.id else None
 
@@ -49,6 +52,9 @@ async def test_future_or_expired_volunteer_cannot_establish_context() -> None:
     )
 
     class Repository:
+        async def set_authentication_context_scope(self, _user_id, _organization_id):
+            pass
+
         async def get_session(self, _value):
             return session
 

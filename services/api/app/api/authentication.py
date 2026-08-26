@@ -297,18 +297,24 @@ async def switch_context(
     if request_context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
     repository = AuthenticationRepository(session)
-    context = await ActiveShelterContextService(repository, audit=AuditService(session)).switch(
-        session_id=request_context.session_id, organization_id=payload.organization_id
-    )
-    if context.active_organization_id is None:
-        raise DomainError("invalid_context", "目前收容所無效", 409)
-    organization = await repository.get_organization(context.active_organization_id)
-    if organization is None:
-        raise DomainError("invalid_context", "目前收容所無效", 409)
-    response = {
-        "organization_id": context.active_organization_id,
-        "organization_name": organization.name,
-        "session_id": context.id,
-    }
-    await session.commit()
+    try:
+        context = await ActiveShelterContextService(repository, audit=AuditService(session)).switch(
+            session_id=request_context.session_id, organization_id=payload.organization_id
+        )
+        if context.active_organization_id is None:
+            raise DomainError("invalid_context", "目前收容所無效", 409)
+        organization = await repository.get_organization(context.active_organization_id)
+        if organization is None:
+            raise DomainError("invalid_context", "目前收容所無效", 409)
+        response = {
+            "organization_id": context.active_organization_id,
+            "organization_name": organization.name,
+            "session_id": context.id,
+        }
+        await session.commit()
+    except Exception:
+        # Includes commit-time failures: no partial session or success audit,
+        # and transaction-local scope is cleared before returning the safe error.
+        await session.rollback()
+        raise
     return response

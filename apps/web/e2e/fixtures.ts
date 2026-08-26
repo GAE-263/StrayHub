@@ -53,7 +53,10 @@ export type ManagementFixtureOptions = {
   dashboardStatus?: FixtureStatus;
   dashboard?: Record<string, unknown>;
   animalsStatus?: FixtureStatus;
-  animals?: (params: URLSearchParams) => ListResponse<AnimalFixture>;
+  animals?: (
+    params: URLSearchParams,
+    organizationId: string,
+  ) => ListResponse<AnimalFixture>;
   animalDelay?: (params: URLSearchParams) => number;
   areas?: Array<{ id: string; name: string; area_type: string }>;
   reportsStatus?: FixtureStatus;
@@ -136,7 +139,11 @@ export async function mockManagementApi(
               membership.organization_id === requestedOrganizationId &&
               membership.status === "active",
           );
-        if (canSwitch && requestedOrganizationId) {
+        if (
+          canSwitch &&
+          requestedOrganizationId &&
+          contextSwitchStatus === 200
+        ) {
           activeOrganizationId = requestedOrganizationId;
         }
         const activeOrganization =
@@ -450,7 +457,7 @@ export async function mockManagementApi(
     if (url.pathname.endsWith("/management/animals")) {
       const params = url.searchParams;
       const data = options.animals
-        ? options.animals(params)
+        ? options.animals(params, activeOrganizationId)
         : { items: [], page: 1, page_size: 20, total: 0 };
       await respond(
         route,

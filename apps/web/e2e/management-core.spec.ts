@@ -104,7 +104,7 @@ test("Report Inbox 可用日期與狀態篩選，並通往 detail 與 animal pro
   await page.getByRole("link", { name: "小森" }).click();
   await expect(page).toHaveURL(/\/animals\/animal-a$/);
   await expect(page.getByRole("heading", { name: "小森" })).toBeVisible();
-  await page.getByRole("link", { name: "開啟近期歷程" }).click();
+  await page.getByRole("link", { name: "查看近期歷程" }).click();
   await expect(page).toHaveURL(/\/animals\/animal-a\/timeline$/);
 });
 

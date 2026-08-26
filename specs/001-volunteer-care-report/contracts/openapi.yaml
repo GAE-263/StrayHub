@@ -131,6 +131,7 @@ paths:
     get:
       tags: [Organizations]
       operationId: listOrganizations
+      description: Non-platform users see only active shelters with current effective membership/grant access; listing does not switch the active tenant.
       responses:
         "200":
           description: 依角色可見的收容所

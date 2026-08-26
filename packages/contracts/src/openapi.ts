@@ -107,6 +107,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Non-platform users see only active shelters with current effective membership/grant access; listing does not switch the active tenant. */
         get: operations["listOrganizations"];
         put?: never;
         post: operations["createOrganization"];

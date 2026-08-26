@@ -91,11 +91,7 @@ class SessionService:
         return await self._issue_session(user.id, session, family_id=record.family_id)
 
     async def _has_active_shelter_access(self, user_id: UUID) -> bool:
-        for membership in await self.repository.memberships(user_id, active_only=True):
-            organization = await self.repository.get_organization(membership.organization_id)
-            if organization is not None and organization.status == "active":
-                return True
-        return False
+        return bool(await self.repository.effective_organization_access(user_id))
 
     async def _available_organizations(
         self, user_id: UUID, *, platform_scope: bool = False
@@ -111,10 +107,9 @@ class SessionService:
                 for organization in await self.repository.organizations(active_only=True)
             ]
         organizations = []
-        for membership in await self.repository.memberships(user_id, active_only=True):
-            organization = await self.repository.get_organization(membership.organization_id)
-            if organization is None or organization.status != "active":
-                continue
+        for membership, organization in await self.repository.effective_organization_access(
+            user_id
+        ):
             organizations.append(
                 {
                     "id": organization.id,

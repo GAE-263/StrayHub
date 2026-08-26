@@ -84,6 +84,40 @@
 
 Authentication API 固定包含 Login、Refresh、Logout、Current User、LIFF Identity Exchange、Active Shelter Context Read 與 Switch；HTTP router 位於 `services/api/app/api/authentication.py`，Session／Token rotation／replay 防護與 Context 切換由 `services/api/app/application/authentication/` 協調。這組 API 與測試是所有受保護 User Story 的 Foundational dependency，不得延後到 US1 或由 Next.js 自行補足。
 
+### Context switch transaction / runtime RLS correction (2026-08-26)
+
+`ActiveShelterContextService.switch()` must validate the trusted active session/user,
+then use the existing exact authenticated-user/target-organization scope to verify B's
+active organization and effective membership (including the matching current volunteer
+grant). Only after authorization may it establish B's normal organization scope, update
+`SessionRecord.active_organization_id`, and write `shelter_context.switched` audit under B.
+The API commits once, after preparing the response; any service, audit, response or commit
+failure explicitly rolls back. The persisted session remains A and no success audit survives.
+Transaction-local GUCs are cleared by commit/rollback; the next request revalidates its
+server-side session and establishes scope again. No platform scope or BYPASSRLS is added.
+`WebhookSession` is independent and is not changed by this browser-session switch.
+
+The same exact-user/organization boundary is required when resolving a volunteer's current
+request context: broad auth-user scope can discover own memberships but cannot read grants
+under migration 0030. `AuthenticationRepository.effective_organization_access()` enumerates
+only the authenticated user's memberships and checks each with the existing effective-access
+predicate in exact auth scope. Login/refresh and the organization selector reuse it.
+`GET /v1/organizations` now lists all currently authorized active shelters for a non-platform
+user, not merely the current one; it restores the current tenant afterward. It neither
+switches context nor authorizes other organizations' resource endpoints. Payload shapes are
+unchanged; OpenAPI description and generated comments document the scope semantics.
+
+Post-migration setup: `uv run python -m scripts.configure_runtime_role` performs a read-only
+runtime-role/ACL/RLS check; an authorized operator can use `--apply` with the migration
+principal to grant only SELECT/INSERT/UPDATE on `users`, `session_records` and
+`refresh_token_records`. These pre-0003 tables were not covered by that migration's default
+privileges. No DELETE, owner privileges, role membership, schema change or RLS policy change
+is introduced. `demo.sh` and `verify_local.sh` invoke the setup after migration; existing
+environments still require operator approval before applying it. The normal API continues
+to run with the restricted runtime role, never the setup principal. Real disposable-DB tests
+cover missing grants, idempotent setup, target audit scope, failed audit/commit rollback,
+unauthorized targets, current/revoked volunteer grants, and a one-connection request pool.
+
 Authentication 外部與密碼學能力以 `services/api/app/application/ports/authentication.py` 定義 `PasswordHasherPort`、`AccessTokenPort` 與 `LineIdentityVerifierPort`。正式實作分別固定於 `services/api/app/infrastructure/auth/password_hasher.py`、`services/api/app/infrastructure/auth/access_token_adapter.py` 與 `services/api/app/infrastructure/line/identity_verification_adapter.py`；Application Service 只能依賴 Port，不得直接呼叫密碼雜湊套件、Token 套件或 LINE 驗證 API。Adapter Contract Test 與 Security Test 必須涵蓋錯誤密碼、過期／格式錯誤 Token、Refresh replay、錯誤 issuer／audience、無效 LINE 身分資料、撤銷後立即拒絕及 Secret 不進 Log。
 
 **Decision**：Password Hash 固定使用 `argon2-cffi` 的 `Argon2id`，採 PHC encoded hash，基準參數為 `m=19456 KiB`、`t=2`、`p=1`，salt 由函式庫逐筆產生；本期不使用 pepper。低於目前基準的舊 hash 在成功登入後重新雜湊。Access Token 固定使用 `PyJWT[crypto]`／`cryptography` 的 `RS256` JWT，RSA key 至少 2048-bit，TTL 15 分鐘，Header 使用 `typ=JWT`、`alg=RS256`、`kid`，Claims 使用 `sub`、`sid`、`jti`、`iat`、`exp`、`iss`、`aud` 與固定 access-token type，不放入 `org_id`、角色或 Membership。`AUTH_JWT_ISSUER`、`AUTH_JWT_AUDIENCE` 與 current／previous key set 由受控設定提供；驗證固定 allowlist `RS256`，並檢查 key、issuer、audience、type、時間與必要 Claims。Refresh Token 是至少 256-bit 的 opaque random value，只保存 `SHA-256` digest，rotation 與 family replay detection 仍由 Server-side Session 執行。
