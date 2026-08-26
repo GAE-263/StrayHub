@@ -67,6 +67,7 @@ fi
 
 echo "[Demo] Migration"
 uv run alembic upgrade head
+uv run python -m scripts.configure_runtime_role --apply
 
 echo "[Demo] Fictional ORG-A／ORG-B seed"
 uv run python -m scripts.seed_local

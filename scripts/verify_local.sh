@@ -18,6 +18,7 @@ fi
 
 echo "[T224] Migration"
 uv run alembic upgrade head
+uv run python -m scripts.configure_runtime_role --apply
 
 echo "[T224] Empty database bootstrap／reversible migration"
 uv run pytest tests/integration/test_empty_database_bootstrap.py -q
