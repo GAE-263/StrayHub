@@ -2,7 +2,7 @@
 
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import VolunteerApplicationsPage from "./page";
 import { selectInitialServiceDate } from "./review-date";
@@ -19,7 +19,9 @@ function response(body: unknown): Response {
   } as Response;
 }
 
-function localDate(value: Date): string {
+function dateFromTestClock(daysFromToday = 0): string {
+  const value = new Date();
+  value.setDate(value.getDate() + daysFromToday);
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${value.getFullYear()}-${month}-${day}`;
@@ -34,6 +36,12 @@ async function flush() {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
+beforeEach(() => {
+  // Freeze local calendar time, but keep timers real for React and flush().
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 7, 26, 12));
+});
+
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;
@@ -41,11 +49,13 @@ afterEach(async () => {
   container = undefined;
   window.sessionStorage.clear();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("volunteer application review date", () => {
   it("reloads current list and calendar after completed date-scoped rejection", async () => {
-    const today = localDate(new Date());
+    const today = dateFromTestClock();
+    const nextDate = dateFromTestClock(1);
     let listCall = 0;
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -99,7 +109,7 @@ describe("volunteer application review date", () => {
             matching_count: 1,
             review_calendar: [
               { service_date: today, pending_count: 1 },
-              { service_date: "2026-08-26", pending_count: 1 },
+              { service_date: nextDate, pending_count: 1 },
             ],
             available_service_dates: [],
           });
@@ -107,7 +117,7 @@ describe("volunteer application review date", () => {
         return response({
           items: [],
           matching_count: 0,
-          review_calendar: [{ service_date: "2026-08-26", pending_count: 1 }],
+          review_calendar: [{ service_date: nextDate, pending_count: 1 }],
           available_service_dates: [],
         });
       },
@@ -160,7 +170,7 @@ describe("volunteer application review date", () => {
 
     expect(listCall).toBe(2);
     expect(container.textContent).not.toContain("LINE 志工");
-    expect(container.textContent).toContain("2026-08-26");
+    expect(container.textContent).toContain(nextDate);
   });
 
   it("selects the nearest future date that has pending applications when today is empty", () => {
@@ -182,8 +192,8 @@ describe("volunteer application review date", () => {
   });
 
   it("loads the selected calendar date and keeps decisions date-scoped", async () => {
-    const today = localDate(new Date());
-    const selectedDate = "2099-08-25";
+    const today = dateFromTestClock();
+    const selectedDate = dateFromTestClock(1);
     const requestedDates: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
@@ -228,10 +238,8 @@ describe("volunteer application review date", () => {
   });
 
   it("reloads the list for the nearest pending date", async () => {
-    const today = localDate(new Date());
-    const nextDateValue = new Date();
-    nextDateValue.setDate(nextDateValue.getDate() + 1);
-    const nextDate = localDate(nextDateValue);
+    const today = dateFromTestClock();
+    const nextDate = dateFromTestClock(1);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
       const selectedDate = url.searchParams.get("service_date");
@@ -281,7 +289,7 @@ describe("volunteer application review date", () => {
   });
 
   it("does not let an older date response replace the current list", async () => {
-    const today = localDate(new Date());
+    const today = dateFromTestClock();
     let resolveToday: ((value: Response) => void) | undefined;
     const todayResponse = new Promise<Response>((resolve) => {
       resolveToday = resolve;
@@ -319,7 +327,7 @@ describe("volunteer application review date", () => {
       Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
         "value",
-      )?.set?.call(input, "2026-08-26");
+      )?.set?.call(input, dateFromTestClock(1));
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
@@ -347,7 +355,7 @@ describe("volunteer application review date", () => {
   });
 
   it("does not let an older request error replace a newer successful list", async () => {
-    const today = localDate(new Date());
+    const today = dateFromTestClock();
     let rejectToday: ((reason: Error) => void) | undefined;
     const todayResponse = new Promise<Response>((_resolve, reject) => {
       rejectToday = reject;
@@ -387,7 +395,7 @@ describe("volunteer application review date", () => {
       Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
         "value",
-      )?.set?.call(input, "2026-08-26");
+      )?.set?.call(input, dateFromTestClock(1));
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
@@ -406,7 +414,7 @@ describe("volunteer application review date", () => {
   });
 
   it("clears the prior date rows when the replacement load fails", async () => {
-    const today = localDate(new Date());
+    const today = dateFromTestClock();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
       if (url.searchParams.get("service_date") === today) {
@@ -445,7 +453,7 @@ describe("volunteer application review date", () => {
       Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
         "value",
-      )?.set?.call(input, "2026-08-26");
+      )?.set?.call(input, dateFromTestClock(1));
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
@@ -462,7 +470,7 @@ describe("volunteer application review date", () => {
   });
 
   it("clears loaded rows as soon as the review date changes", async () => {
-    const today = localDate(new Date());
+    const today = dateFromTestClock();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -500,7 +508,7 @@ describe("volunteer application review date", () => {
       Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
         "value",
-      )?.set?.call(input, "2026-08-26");
+      )?.set?.call(input, dateFromTestClock(1));
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
