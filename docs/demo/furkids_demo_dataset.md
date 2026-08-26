@@ -13,6 +13,10 @@ uv run python -m scripts.seed_furkids_demo
 `scripts/demo.sh` also runs this module. The module uses stable UUIDv5 identifiers
 and natural-key lookups, updates its own fixture rows in place, and is safe to run
 repeatedly. It does not delete or alter the existing `ORG-A` / `ORG-B` fixtures.
+Normal `demo.sh` no longer creates those fixtures; see
+[normal demo / test separation](data-workflows.md). The three-shelter account
+bootstrap reuses `demo-furkids-admin` with explicit management memberships in
+FurKids, Xindian and Wugu. `demo-furkids-volunteer` remains FurKids-only.
 
 ## Organization and locations
 

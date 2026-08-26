@@ -1,5 +1,26 @@
 # MOA public-shelter animal synchronization
 
+## Normal demo bootstrap (2026-08-27)
+
+`./scripts/demo.sh` now runs the existing generic importer for both Xindian and
+Wugu (dog, limit 60), after FurKids and runtime-role provisioning. It never calls
+`seed_local` / `seed_test_fixtures`. See [demo/test workflows](../demo/data-workflows.md)
+for the separate fixture command, minimum demo accounts, local-only safety guards,
+read-only inventory and controlled legacy cleanup. Importer/source/photo ownership
+semantics below are unchanged; no migration was added.
+
+Live synchronization is attempted on startup. If it fails, existing imported local
+data may be reused only after animal/source/QR and all photo-byte checksums verify;
+bootstrap explicitly warns that fresh sync did not succeed. An empty or invalid
+local dataset fails closed. Actual import counts are reported; old animals are
+never deleted merely to force a top-60 count.
+
+The earlier runtime ACL approval caveat at the end of this historical log was
+resolved by the subsequent explicitly authorized local `strayhub` setup: SIU on
+users/session_records/refresh_token_records only, no DELETE/BYPASSRLS/superuser or
+ownership changes. Repeated configuration and runtime context-switch/RLS checks
+passed. This does not authorize staging/production changes.
+
 ## Purpose and entry point
 
 This is an operator-run external-data synchronizer, not curated demo seed data and

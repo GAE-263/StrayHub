@@ -1,5 +1,10 @@
 # Quickstart：本機與 GCP Demo 驗證
 
+正常本機 demo 請用 `./scripts/demo.sh`，只建立 FurKids／新店／五股。
+本頁 ORG-A／ORG-B、LINE mock 與測試命令是獨立 test fixtures 工作流，
+必須指定專用測試 DB，不要指向正常 demo DB。詳見
+[Demo/Test 資料分離](../../docs/demo/data-workflows.md)。
+
 本指南是本功能的驗證與執行入口，不包含完整實作程式碼、migration 內容或測試 fixture。命令名稱代表實作階段應提供的標準命令；若工具鏈命名不同，必須在任務文件與 README 同步更新。
 
 ## 1. 前置條件
@@ -83,7 +88,8 @@ npm --prefix packages/contracts run check
 資訊會以 JSON 輸出：
 
 ```bash
-uv run python -m scripts.seed_local
+# Explicit test universe only; scripts.seed_local remains a compatibility entry.
+uv run python -m scripts.seed_test_fixtures
 uv run python -m scripts.reset_local --yes
 ```
 
