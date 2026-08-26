@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
 import { AppSidebar } from "./AppSidebar";
@@ -14,6 +15,11 @@ import {
 import { ErrorState, LoadingState } from "./StateViews";
 import { StatusBanner } from "./StatusBanner";
 import { canReviewVolunteerApplications } from "../../lib/management-capabilities";
+import {
+  activateOrganizationRequests,
+  clearOrganizationRequests,
+  pauseOrganizationRequests,
+} from "../../lib/organization-request-scope";
 
 type Props = { children: React.ReactNode };
 type OrganizationSummary = { id: string; code: string; name: string };
@@ -39,6 +45,12 @@ export function ManagementLayout({ children }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [contextSwitchError, setContextSwitchError] = useState("");
+  const [contextUncertain, setContextUncertain] = useState(false);
+  const [contextKey, setContextKey] = useState("");
+  const contextLoad = useRef<AbortController | null>(null);
+  const switching = useRef(false);
+
+  useEffect(() => () => clearOrganizationRequests(), []);
 
   useEffect(() => {
     const showContextRequired = () =>
@@ -51,60 +63,73 @@ export function ManagementLayout({ children }: Props) {
       );
   }, []);
 
-  const loadContext = useCallback(async () => {
-    if (!getAccessToken()) {
-      router.replace("/login");
-      return;
-    }
-    const profileResponse = await authFetch("/v1/auth/me");
-    if (!profileResponse.ok) {
-      if (profileResponse.status === 401) {
-        clearAuth();
+  const loadContext = useCallback(
+    async (signal: AbortSignal) => {
+      if (!getAccessToken()) {
         router.replace("/login");
         return;
       }
-      throw new Error("目前帳號尚未準備好管理工作台權限。");
-    }
-    const nextProfile = (await profileResponse.json()) as CurrentUser;
-    setProfile(nextProfile);
-    if (
-      pathname === "/platform-admins" &&
-      nextProfile.user.platform_role === "PLATFORM_ADMIN"
-    ) {
-      setOrganizationId(null);
-      setOrganizations([]);
-      return;
-    }
-    const [contextResponse, organizationsResponse] = await Promise.all([
-      authFetch("/v1/auth/active-shelter-context"),
-      authFetch("/v1/organizations"),
-    ]);
-    if (!contextResponse.ok || !organizationsResponse.ok) {
+      const profileResponse = await authFetch("/v1/auth/me", { signal });
+      if (!profileResponse.ok) {
+        if (profileResponse.status === 401) {
+          clearAuth();
+          router.replace("/login");
+          return;
+        }
+        throw new Error("目前帳號尚未準備好管理工作台權限。");
+      }
+      const nextProfile = (await profileResponse.json()) as CurrentUser;
+      signal.throwIfAborted();
       if (
-        contextResponse.status === 401 ||
-        organizationsResponse.status === 401
+        pathname === "/platform-admins" &&
+        nextProfile.user.platform_role === "PLATFORM_ADMIN"
       ) {
-        clearAuth();
-        router.replace("/login");
+        setProfile(nextProfile);
+        setOrganizationId(null);
+        setOrganizations([]);
         return;
       }
-      throw new Error("目前帳號尚未準備好管理工作台權限。");
-    }
-    const context = (await contextResponse.json()) as {
-      organization_id?: string;
-    };
-    setOrganizationId(context.organization_id ?? null);
-    const organizationData = (await organizationsResponse.json()) as {
-      items: Array<{ id: string; code: string; name: string }>;
-    };
-    setOrganizations(organizationData.items);
-  }, [pathname, router]);
+      const [contextResponse, organizationsResponse] = await Promise.all([
+        authFetch("/v1/auth/active-shelter-context", { signal }),
+        authFetch("/v1/organizations", { signal }),
+      ]);
+      if (!contextResponse.ok || !organizationsResponse.ok) {
+        if (
+          contextResponse.status === 401 ||
+          organizationsResponse.status === 401
+        ) {
+          clearAuth();
+          router.replace("/login");
+          return;
+        }
+        throw new Error("目前帳號尚未準備好管理工作台權限。");
+      }
+      const context = (await contextResponse.json()) as {
+        organization_id?: string;
+      };
+      const organizationData = (await organizationsResponse.json()) as {
+        items: Array<{ id: string; code: string; name: string }>;
+      };
+      signal.throwIfAborted();
+      if (context.organization_id) {
+        setContextKey(
+          activateOrganizationRequests(context.organization_id).key,
+        );
+      }
+      setProfile(nextProfile);
+      setOrganizationId(context.organization_id ?? null);
+      setOrganizations(organizationData.items);
+    },
+    [pathname, router],
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    void loadContext()
+    if (switching.current) return;
+    const controller = new AbortController();
+    contextLoad.current = controller;
+    void loadContext(controller.signal)
       .catch((requestError: unknown) => {
-        if (!cancelled)
+        if (!controller.signal.aborted)
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -112,10 +137,10 @@ export function ManagementLayout({ children }: Props) {
           );
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [loadContext, pathname]);
 
@@ -140,9 +165,35 @@ export function ManagementLayout({ children }: Props) {
   };
 
   const switchOrganization = async (nextOrganizationId: string) => {
-    if (nextOrganizationId === organizationId) return;
-    setLoading(true);
+    if (
+      switching.current ||
+      nextOrganizationId === organizationId ||
+      !organizationId
+    )
+      return;
+    switching.current = true;
+    contextLoad.current?.abort();
+    pauseOrganizationRequests();
+    // Unmount ALL tenant state (animal/report/medical/QR/dialogs) before PUT.
+    // The old URL is the only selection retained, solely for a failed switch.
+    flushSync(() => setLoading(true));
     setContextSwitchError("");
+    const enterAnimalList = (confirmedOrganizationId: string) => {
+      const next = organizations.find(
+        (organization) => organization.id === confirmedOrganizationId,
+      );
+      try {
+        if (next) {
+          window.sessionStorage.setItem("active_organization_id", next.id);
+          window.sessionStorage.setItem("active_organization_code", next.code);
+        }
+      } catch {
+        // Hints are not authority; the new document re-reads the server context.
+      }
+      // Do not reload the old tenant's resource URL or reuse Next's route cache.
+      // Keep requests paused/the subtree unmounted until the new document loads.
+      window.location.replace("/animals");
+    };
     try {
       const response = await authFetch("/v1/auth/active-shelter-context", {
         method: "PUT",
@@ -150,15 +201,31 @@ export function ManagementLayout({ children }: Props) {
         body: JSON.stringify({ organization_id: nextOrganizationId }),
       });
       if (!response.ok) throw new Error("無法切換目前收容所");
-      const next = organizations.find(
-        (organization) => organization.id === nextOrganizationId,
-      );
-      if (next && typeof window !== "undefined") {
-        window.sessionStorage.setItem("active_organization_id", next.id);
-        window.sessionStorage.setItem("active_organization_code", next.code);
-      }
-      window.location.reload();
+      const confirmed = (await response.json()) as { organization_id: string };
+      if (confirmed.organization_id !== nextOrganizationId)
+        throw new Error("無法確認目前收容所");
+      enterAnimalList(confirmed.organization_id);
     } catch (switchError: unknown) {
+      // A lost PUT response is ambiguous: never remount A under a committed B.
+      try {
+        const response = await authFetch("/v1/auth/active-shelter-context");
+        if (!response.ok) throw new Error("context unavailable");
+        const confirmed = (await response.json()) as {
+          organization_id?: string;
+        };
+        if (!confirmed.organization_id) throw new Error("context missing");
+        if (confirmed.organization_id !== organizationId) {
+          enterAnimalList(confirmed.organization_id);
+          return;
+        }
+        setContextKey(activateOrganizationRequests(organizationId).key);
+      } catch {
+        setContextUncertain(true);
+        setError("無法確認目前收容所，已暫停載入動物資料。請重新確認。");
+        setLoading(false);
+        return;
+      }
+      switching.current = false;
       setContextSwitchError(
         switchError instanceof Error
           ? switchError.message
@@ -181,10 +248,21 @@ export function ManagementLayout({ children }: Props) {
     (!organizationId && !(isPlatformGovernanceRoute && isPlatformAdmin))
   ) {
     return (
-      <ErrorState
-        title="無法開啟管理工作台"
-        description={error || "請回到登入頁選擇有效的收容所。"}
-      />
+      <div>
+        <ErrorState
+          title="無法開啟管理工作台"
+          description={error || "請回到登入頁選擇有效的收容所。"}
+        />
+        {contextUncertain ? (
+          <button
+            type="button"
+            className="button"
+            onClick={() => window.location.replace("/animals")}
+          >
+            重新確認收容所
+          </button>
+        ) : null}
+      </div>
     );
   }
 
@@ -225,7 +303,7 @@ export function ManagementLayout({ children }: Props) {
       />
       <div className="app-body">
         <AppSidebar role={role} />
-        <main className="app-main">
+        <main className="app-main" key={`${contextKey}:${pathname}`}>
           {contextSwitchError ? (
             <StatusBanner kind="warning">{contextSwitchError}</StatusBanner>
           ) : null}

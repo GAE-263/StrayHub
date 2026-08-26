@@ -49,16 +49,25 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
   const [regenerateOpen, setRegenerateOpen] = useState(false);
 
   useEffect(() => {
+    setQr(null);
+    setRegenerateOpen(false);
+    setError("");
+    setOrganizationName("目前收容所");
+    setPhase("loading");
     if (animal.status !== "active") {
       setPhase("idle");
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     void Promise.all([
       authFetch(
         `/v1/management/qr-codes?animal_id=${encodeURIComponent(animal.id)}`,
+        { signal: controller.signal },
       ),
-      authFetch("/v1/auth/active-shelter-context"),
+      authFetch("/v1/auth/active-shelter-context", {
+        signal: controller.signal,
+      }),
     ])
       .then(async ([qrResponse, contextResponse]) => {
         if (!qrResponse.ok || !contextResponse.ok)
@@ -95,6 +104,7 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [animal.id, animal.organizationId, animal.status]);
 

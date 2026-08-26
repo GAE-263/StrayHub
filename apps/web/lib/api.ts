@@ -5,6 +5,10 @@ import {
   getSessionSource,
   storeSession,
 } from "./auth";
+import {
+  assertOrganizationRequestScope,
+  captureOrganizationRequestScope,
+} from "./organization-request-scope";
 
 type RefreshResponse = {
   access_token: string;
@@ -43,8 +47,10 @@ export async function apiFetch(
   init?: RequestInit,
   options: { retryOnUnauthorized?: boolean } = {},
 ): Promise<Response> {
+  const requestScope = captureOrganizationRequestScope(input);
   const response = await authFetch(input, init, {
     emitUnauthorized: options.retryOnUnauthorized === false,
+    requestScope,
   });
   if (response.status !== 401 || options.retryOnUnauthorized === false) {
     if (response.status === 409 && typeof window !== "undefined") {
@@ -60,6 +66,8 @@ export async function apiFetch(
     return response;
   }
   const refreshedSession = await refreshSession(refreshToken);
+  assertOrganizationRequestScope(requestScope);
+  init?.signal?.throwIfAborted();
   if (!refreshedSession) {
     clearAuth({ preserveLiffSession: getSessionSource() === "liff" });
     window.dispatchEvent(new Event("strayhub:liff-unauthorized"));
@@ -80,5 +88,5 @@ export async function apiFetch(
       : "GET")
   ).toUpperCase();
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) return response;
-  return authFetch(input, init);
+  return authFetch(input, init, { requestScope });
 }
