@@ -1,7 +1,16 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
@@ -10,6 +19,7 @@ from services.api.app.persistence.database.base import AuditMixin, Base, Identit
 class Animal(IdentityMixin, AuditMixin, Base):
     __tablename__ = "animals"
     __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_animals_org_id"),
         CheckConstraint("sex IN ('male', 'female', 'unknown')", name="ck_animals_sex"),
         CheckConstraint("birth_date <= intake_date", name="ck_animals_birth_intake"),
         CheckConstraint(
