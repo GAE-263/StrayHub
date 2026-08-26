@@ -12,6 +12,7 @@ from services.api.app.persistence.models.care_report import (
     ReportIdempotencyKey,
 )
 from services.api.app.persistence.models.care_report_draft import CareReportDraft, DraftMediaAsset
+from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     LineWebhookEvent,
@@ -40,6 +41,7 @@ from services.api.app.persistence.models.volunteer_access import (
     ShelterVolunteerEntryReference,
     VolunteerAccessGrant,
     VolunteerApplication,
+    VolunteerApplicationServiceDate,
     VolunteerDecisionBatch,
     VolunteerDecisionBatchItem,
     VolunteerNotificationDelivery,
@@ -57,6 +59,7 @@ __all__ = [
     "CareReport",
     "CareReportCorrection",
     "CareReportDraft",
+    "CareReportHandoff",
     "CareReportMedia",
     "DailyReportableScope",
     "DraftMediaAsset",
@@ -79,6 +82,7 @@ __all__ = [
     "ShelterVolunteerEntryReference",
     "VolunteerAccessGrant",
     "VolunteerApplication",
+    "VolunteerApplicationServiceDate",
     "VolunteerDecisionBatch",
     "VolunteerDecisionBatchItem",
     "VolunteerNotificationDelivery",

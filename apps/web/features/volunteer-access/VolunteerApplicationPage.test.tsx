@@ -3,6 +3,8 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
@@ -12,6 +14,101 @@ import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("VolunteerApplicationPage", () => {
+  it("collects required applicant details before submitting the LIFF application", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "org-a",
+          name: "收容所 A",
+          applications_enabled: true,
+          insurance_required: false,
+        },
+        application: { id: "app-a", status: "pending", version: 1 },
+        grant: null,
+        effective_status: "pending",
+        next_actions: ["wait", "withdraw"],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          initialStatus={{
+            organization: {
+              id: "org-a",
+              name: "收容所 A",
+              applications_enabled: true,
+              insurance_required: false,
+            },
+            application: null,
+            grant: null,
+            effective_status: "none",
+            next_actions: ["apply"],
+          }}
+          idToken="id-token"
+          shelterEntryReference="opaque-entry-reference-0123456789abcdef"
+        />,
+      );
+    });
+
+    const setValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const applicantName =
+      container.querySelector<HTMLInputElement>("#applicant-name");
+    const phoneNumber =
+      container.querySelector<HTMLInputElement>("#phone-number");
+    expect(applicantName).not.toBeNull();
+    expect(phoneNumber).not.toBeNull();
+
+    await act(async () => {
+      setValue(applicantName!, "王小明");
+      setValue(phoneNumber!, "0912345678");
+      container
+        .querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.click();
+      container
+        .querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.click();
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent?.trim() === "立即報名")
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/v1/volunteer-applications",
+      expect.objectContaining({
+        body: expect.stringContaining('"applicant_name":"王小明"'),
+      }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(
+      expect.objectContaining({
+        applicant_name: "王小明",
+        phone_number: "0912345678",
+        consent_acknowledged: true,
+        shelter_entry_reference: "opaque-entry-reference-0123456789abcdef",
+        service_dates: expect.arrayContaining([expect.any(String)]),
+      }),
+    );
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
   it("requires confirmation before withdrawal and shows a success toast", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -20,6 +117,7 @@ describe("VolunteerApplicationPage", () => {
           id: "org-a",
           name: "收容所 A",
           applications_enabled: true,
+          insurance_required: false,
         },
         application: { id: "app-a", status: "withdrawn", version: 2 },
         grant: null,
@@ -45,6 +143,7 @@ describe("VolunteerApplicationPage", () => {
               id: "org-a",
               name: "收容所 A",
               applications_enabled: true,
+              insurance_required: false,
             },
             application: { id: "app-a", status: "pending", version: 1 },
             grant: null,
@@ -89,6 +188,7 @@ describe("VolunteerApplicationPage", () => {
             id: "org-a",
             name: "收容所 A",
             applications_enabled: true,
+            insurance_required: false,
           },
           application: null,
           grant: null,
@@ -103,6 +203,40 @@ describe("VolunteerApplicationPage", () => {
     expect(html).toContain("ui-checkbox");
     expect(html).toContain("ui-button ui-button-default");
     expect(html).not.toMatch(/(?:emerald|slate|red)-/);
+  });
+
+  it("renders visible inputs and touch-sized date tiles on mobile", () => {
+    const html = renderToStaticMarkup(
+      <VolunteerApplicationPage
+        initialStatus={{
+          organization: {
+            id: "org-a",
+            name: "收容所 A",
+            applications_enabled: true,
+            insurance_required: false,
+          },
+          application: null,
+          grant: null,
+          effective_status: "none",
+          next_actions: ["apply"],
+        }}
+        idToken="id-token"
+        shelterEntryReference="entry"
+      />,
+    );
+    const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+
+    expect(html.match(/class="ui-input/g) ?? []).toHaveLength(2);
+    expect(html).toContain("volunteer-service-date-option");
+    expect(html).toContain("volunteer-service-date-weekday");
+    expect(html).toContain("volunteer-service-date-value");
+    expect(css).toContain("grid-auto-flow: column");
+    expect(css).toContain("overflow-x: auto");
+    expect(css).toContain("scroll-snap-type: x mandatory");
+    expect(css).toContain(
+      '.volunteer-service-date-option[data-selected="true"]',
+    );
+    expect(css).toContain("min-height: 64px");
   });
 
   it.each([
@@ -121,6 +255,7 @@ describe("VolunteerApplicationPage", () => {
               id: "org-a",
               name: "收容所 A",
               applications_enabled: true,
+              insurance_required: false,
             },
             application:
               status === "none" ? null : { id: "app-a", status, version: 1 },
@@ -145,6 +280,7 @@ describe("VolunteerApplicationPage", () => {
         id: "org-a",
         name: "收容所 A",
         applications_enabled: true,
+        insurance_required: false,
       },
       application: { id: "app-a", status: "approved", version: 2 },
       grant: {

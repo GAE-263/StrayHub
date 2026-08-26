@@ -1,0 +1,99 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "background": {
+      "type": "linearGradient",
+      "angle": "160deg",
+      "startColor": "#5BA85F",
+      "endColor": "#2E8B6B"
+    },
+    "paddingAll": "20px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🎉",
+            "size": "xxl",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "辛苦了，謝謝你 💚",
+                "size": "xs",
+                "color": "#CDECDC"
+              },
+              {
+                "type": "text",
+                "text": "回報完成",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#FDF7E6",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FDF7E6",
+    "paddingAll": "18px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "text",
+        "text": "陪 小黑 的紀錄已經收好了",
+        "color": "#1F3D36",
+        "size": "md",
+        "weight": "bold",
+        "wrap": true,
+        "align": "center"
+      },
+      {
+        "type": "text",
+        "text": "AI 分析會在背景進行，不會影響這筆紀錄。",
+        "color": "#5C7168",
+        "size": "xs",
+        "wrap": true,
+        "align": "center"
+      },
+      {
+        "type": "separator",
+        "color": "#DCE9E0",
+        "margin": "md"
+      },
+      {
+        "type": "text",
+        "text": "下次要回報，再按一次選單就好 🌿",
+        "size": "xxs",
+        "color": "#5C7168",
+        "align": "center"
+      }
+    ]
+  },
+  "styles": {
+    "header": {
+      "separator": false
+    },
+    "body": {
+      "separator": false
+    }
+  }
+}

@@ -251,9 +251,7 @@ class LineDraftConversationService:
         return ConversationResult(state=machine.state)
 
     @staticmethod
-    def _skip_stool_media_if_no_stool(
-        machine: DraftStateMachine, *, key: str, value: Any
-    ) -> None:
+    def _skip_stool_media_if_no_stool(machine: DraftStateMachine, *, key: str, value: Any) -> None:
         """A defecation answer of "no stool" (or "didn't observe") has nothing
         to photograph — advance straight past AWAITING_STOOL_MEDIA rather than
         prompting for a photo the volunteer cannot take."""

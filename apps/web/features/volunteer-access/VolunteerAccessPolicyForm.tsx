@@ -12,6 +12,7 @@ export type VolunteerAccessPolicy = {
   organization_id: string;
   applications_enabled: boolean;
   default_grant_duration_hours: number;
+  daily_application_limit: number;
   version: number;
 };
 
@@ -24,6 +25,7 @@ export function VolunteerAccessPolicyForm({
 }) {
   const [enabled, setEnabled] = useState(policy.applications_enabled);
   const [duration, setDuration] = useState(policy.default_grant_duration_hours);
+  const [dailyLimit, setDailyLimit] = useState(policy.daily_application_limit);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -34,6 +36,10 @@ export function VolunteerAccessPolicyForm({
       setError("預設授權期限必須大於 0 小時");
       return;
     }
+    if (dailyLimit <= 0) {
+      setError("每日報名人數上限必須大於 0");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -41,6 +47,7 @@ export function VolunteerAccessPolicyForm({
         ...policy,
         applications_enabled: enabled,
         default_grant_duration_hours: duration,
+        daily_application_limit: dailyLimit,
       });
       setToast("設定已儲存，只影響後續建立的授權。");
     } catch (reason) {
@@ -71,6 +78,17 @@ export function VolunteerAccessPolicyForm({
           value={duration}
           disabled={busy}
           onChange={(event) => setDuration(Number(event.target.value))}
+        />
+      </Field>
+      <Field>
+        <label htmlFor="policy-daily-limit">每日報名人數上限</label>
+        <Input
+          id="policy-daily-limit"
+          type="number"
+          min={1}
+          value={dailyLimit}
+          disabled={busy}
+          onChange={(event) => setDailyLimit(Number(event.target.value))}
         />
       </Field>
       <p className="policy-note">

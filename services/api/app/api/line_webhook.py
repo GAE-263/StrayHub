@@ -41,6 +41,9 @@ from services.api.app.application.line_webhook_session import LineWebhookSession
 from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.config.settings import get_settings
 from services.api.app.domain.line_care_report_state import (
     REQUIRED_ANSWER_KEYS,
@@ -695,6 +698,21 @@ async def _reply_next_step(
         await _reply(line, event, messages)
 
 
+def _selection_service(session, organization_id: UUID) -> AnimalSelectionService:
+    """跟 api/animal_selection.py 的組法一致。
+
+    origin/main（d86c0d3）把第三個依賴從 ReportableScopeRepository 換成
+    VolunteerReportingAuthorizationService：一般志工回報不再用每日可回報範圍
+    當 allow-list，改成驗「有效 membership + 對應的 access grant」。
+    """
+    animals = AnimalRepository(session, organization_id)
+    return AnimalSelectionService(
+        animals,
+        QrCodeRepository(session, organization_id),
+        VolunteerReportingAuthorizationService(AuthenticationRepository(session), animals),
+    )
+
+
 async def _reply_animal_picker(
     session,
     line: LineMessagingPort,
@@ -1117,7 +1135,7 @@ def _uuid_value(value: str) -> UUID | None:
         return None
 
 
-@router.post("/webhook")
+@router.post("/webhook", openapi_extra={"security": []})
 async def webhook(request: Request, x_line_signature: str | None = Header(default=None)) -> dict:
     raw_body = await request.body()
     settings = get_settings()
@@ -1218,12 +1236,14 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             # 沒有進行中的草稿時，把文字當成「找動物」的搜尋關鍵字；
                             # 比對不到就照舊回聊天訊息，不引入新的持久化狀態去記
                             # 「正在等搜尋輸入」。
-                            candidates = await AnimalSelectionService(
-                                AnimalRepository(session, organization_id),
-                                QrCodeRepository(session, organization_id),
-                                ReportableScopeRepository(session, organization_id),
+                            candidates = await _selection_service(
+                                session, organization_id
                             ).list_candidates(
-                                user_id=user_id, role="VOLUNTEER", query=text_value.strip()
+                                user_id=user_id,
+                                organization_id=organization_id,
+                                membership_id=membership_id,
+                                role="VOLUNTEER",
+                                query=text_value.strip(),
                             )
                             if not candidates:
                                 await _reply(line, event, [_text(_chit_chat_reply(draft))])
@@ -1358,12 +1378,14 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             candidate = None
                             if decoded:
                                 try:
-                                    candidate = await AnimalSelectionService(
-                                        AnimalRepository(session, organization_id),
-                                        QrCodeRepository(session, organization_id),
-                                        ReportableScopeRepository(session, organization_id),
+                                    candidate = await _selection_service(
+                                        session, organization_id
                                     ).resolve_qr(
-                                        raw_token=decoded, user_id=user_id, role="VOLUNTEER"
+                                        raw_token=decoded,
+                                        user_id=user_id,
+                                        organization_id=organization_id,
+                                        membership_id=membership_id,
+                                        role="VOLUNTEER",
                                     )
                                 except DomainError:
                                     candidate = None

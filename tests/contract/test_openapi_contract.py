@@ -27,6 +27,8 @@ def test_required_paths_and_security_are_declared() -> None:
         "/v1/organizations/{organizationId}/initial-admin",
         "/v1/animals/search",
         "/v1/qr-tokens/resolve",
+        "/v1/qr-tokens/candidate-organization",
+        "/v1/care-report-handoffs",
         "/v1/care-report-drafts",
         "/v1/media",
         "/v1/care-reports",
@@ -122,6 +124,88 @@ def test_line_contract_does_not_make_client_org_scope_trusted() -> None:
         properties = document["components"]["schemas"][schema_name].get("properties", {})
         assert "org_id" not in properties
         assert "organization_id" not in properties
+
+
+def test_liff_exchange_uses_state_discriminated_response_contract() -> None:
+    document = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    schemas = document["components"]["schemas"]
+    response = schemas["LiffExchangeResponse"]
+
+    assert response["discriminator"]["propertyName"] == "state"
+    assert {item["$ref"].rsplit("/", 1)[-1] for item in response["oneOf"]} == {
+        "LiffExchangeNewResponse",
+        "LiffExchangePendingResponse",
+        "LiffExchangeActiveResponse",
+        "LiffExchangeSuspendedResponse",
+    }
+
+    credential_fields = {"access_token", "refresh_token", "expires_in", "session_id", "user_id"}
+    active = schemas["LiffExchangeActiveResponse"]
+    assert credential_fields <= set(active["required"])
+    assert active["properties"]["state"]["const"] == "ACTIVE"
+
+    for name, state in (
+        ("LiffExchangeNewResponse", "NEW"),
+        ("LiffExchangePendingResponse", "PENDING"),
+        ("LiffExchangeSuspendedResponse", "SUSPENDED"),
+    ):
+        schema = schemas[name]
+        assert schema["additionalProperties"] is False
+        assert schema["properties"]["state"]["const"] == state
+        assert not credential_fields & schema["properties"].keys()
+
+    responses = document["paths"]["/v1/auth/liff/exchange"]["post"]["responses"]
+    assert responses["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/LiffExchangeResponse"
+    }
+    assert set(responses) >= {"200", "401", "403", "422", "503"}
+
+
+def test_liff_exchange_uses_route_specific_safe_errors() -> None:
+    document = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    responses = document["paths"]["/v1/auth/liff/exchange"]["post"]["responses"]
+    schemas = document["components"]["schemas"]
+
+    assert responses["401"]["$ref"].endswith("/LiffIdentityRejected")
+    assert responses["403"]["$ref"].endswith("/LiffEntryUnavailable")
+    for name, code, message in (
+        ("LiffIdentityError", "invalid_line_id_token", "無法確認 LINE 身分"),
+        ("LiffEntryUnavailableError", "entry_unavailable", "此志工入口目前無法使用"),
+    ):
+        schema = schemas[name]
+        assert schema["additionalProperties"] is False
+        assert set(schema["required"]) == {"code", "message", "request_id"}
+        assert schema["properties"]["code"]["const"] == code
+        assert schema["properties"]["message"]["const"] == message
+        assert "details" not in schema["properties"]
+
+
+def test_004_additive_contract_matches_canonical_liff_boundary() -> None:
+    canonical = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    additive = yaml.safe_load(
+        Path(
+            "specs/004-volunteer-entry-route-isolation/contracts/liff-exchange.openapi.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    canonical_request = canonical["components"]["schemas"]["LiffExchangeRequest"]
+    additive_request = additive["components"]["schemas"]["LiffExchangeRequest"]
+
+    assert additive_request["required"] == canonical_request["required"]
+    assert additive_request["additionalProperties"] is canonical_request["additionalProperties"]
+    for field in ("id_token", "shelter_entry_reference"):
+        assert (
+            additive_request["properties"][field]["minLength"]
+            == canonical_request["properties"][field]["minLength"]
+        )
+        assert (
+            additive_request["properties"][field]["maxLength"]
+            == canonical_request["properties"][field]["maxLength"]
+        )
+    additive_responses = additive["paths"]["/v1/auth/liff/exchange"]["post"]["responses"]
+    canonical_responses = canonical["paths"]["/v1/auth/liff/exchange"]["post"]["responses"]
+    for status in ("200", "401", "403", "422", "503"):
+        assert status in additive_responses
+        assert status in canonical_responses
 
 
 def test_care_answers_distinguish_partial_draft_and_complete_report() -> None:

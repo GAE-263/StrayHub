@@ -13,9 +13,7 @@ from services.api.app.api.line_webhook import _chit_chat_reply, _options_requiri
 
 
 class _Option:
-    def __init__(
-        self, code: str, display_name: str, requires_note: bool, category_id: str
-    ) -> None:
+    def __init__(self, code: str, display_name: str, requires_note: bool, category_id: str) -> None:
         self.code = code
         self.display_name = display_name
         self.requires_note = requires_note

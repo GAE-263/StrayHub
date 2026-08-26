@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
@@ -12,11 +13,14 @@ from services.api.app.application.ports.authentication import LineIdentityVerifi
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
+from services.api.app.application.volunteer_pii_service import VolunteerPiiService
+from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import (
     normalize_reason,
     snapshot_policy,
     transition_application,
     validate_grant_period,
+    validate_service_date_selection,
 )
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
@@ -27,6 +31,7 @@ from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
     VolunteerAccessGrant,
     VolunteerApplication,
+    VolunteerApplicationServiceDate,
 )
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -41,6 +46,7 @@ class PublicOrganizationResult:
     id: UUID
     name: str
     applications_enabled: bool
+    insurance_required: bool
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,12 @@ class VolunteerStatusResult:
 class VolunteerSubmitResult:
     status: VolunteerStatusResult
     created: bool
+
+
+@dataclass(frozen=True)
+class VolunteerApplicationDetailResult:
+    application: VolunteerApplication
+    service_dates: list[VolunteerApplicationServiceDate]
 
 
 def effective_application_status(
@@ -102,12 +114,115 @@ class VolunteerAccessService:
         *,
         audit: AuditService | None = None,
         notifications: VolunteerNotificationService | None = None,
+        pii_service: VolunteerPiiService | None = None,
     ) -> None:
         self.repository = repository
         self.identities = identities
         self.verifier = verifier
         self.audit = audit
         self.notifications = notifications
+        self.pii_service = pii_service
+
+    async def application_detail(
+        self,
+        application_id: UUID,
+        *,
+        tenant_context: TenantContext,
+    ) -> VolunteerApplicationDetailResult:
+        organization_id = self.repository.organization_id
+        if tenant_context.platform_scope or tenant_context.organization_id != organization_id:
+            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        membership = await self.repository.active_membership(tenant_context.user_id)
+        if membership is None:
+            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        detail = await self.repository.application_detail(application_id)
+        if detail is None:
+            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        application, service_dates = detail
+        return VolunteerApplicationDetailResult(application, service_dates)
+
+    @classmethod
+    async def for_organization(
+        cls,
+        organization_id: UUID,
+        repository: VolunteerAccessRepository,
+        identities: AuthenticationRepository,
+        verifier: LineIdentityVerifierPort,
+        *,
+        audit: AuditService | None = None,
+        notifications: VolunteerNotificationService | None = None,
+        pii_service: VolunteerPiiService | None = None,
+    ) -> VolunteerAccessService:
+        """Resolve and validate one organization-scoped volunteer service.
+
+        The organization ID selects the target, but the database remains the
+        source of truth for its active state and display data.  The repository
+        is checked before any lookup so a service can never be built around a
+        repository scoped to a different tenant.
+        """
+        if (
+            not isinstance(organization_id, UUID)
+            or getattr(repository, "organization_id", None) != organization_id
+        ):
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
+
+        organization = await identities.get_organization(organization_id)
+        if organization is None or organization.status != "active":
+            raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
+
+        policy = await repository.policy()
+        if not policy.applications_enabled:
+            raise DomainError(
+                "volunteer_applications_disabled",
+                "此收容所目前暫停接受新申請",
+                403,
+            )
+
+        return cls(
+            repository,
+            identities,
+            verifier,
+            audit=audit,
+            notifications=notifications,
+            pii_service=pii_service,
+        )
+
+    @classmethod
+    async def for_organization_status(
+        cls,
+        organization_id: UUID,
+        repository: VolunteerAccessRepository,
+        identities: AuthenticationRepository,
+        verifier: LineIdentityVerifierPort,
+        *,
+        audit: AuditService | None = None,
+        notifications: VolunteerNotificationService | None = None,
+        pii_service: VolunteerPiiService | None = None,
+    ) -> VolunteerAccessService:
+        """Build an organization-scoped service for status reads only.
+
+        Status remains readable for an active organization when its policy
+        disables new applications.  The submit factory above intentionally
+        keeps the applications-enabled gate.
+        """
+        if (
+            not isinstance(organization_id, UUID)
+            or getattr(repository, "organization_id", None) != organization_id
+        ):
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
+
+        organization = await identities.get_organization(organization_id)
+        if organization is None or organization.status != "active":
+            raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
+        await repository.policy()
+        return cls(
+            repository,
+            identities,
+            verifier,
+            audit=audit,
+            notifications=notifications,
+            pii_service=pii_service,
+        )
 
     @staticmethod
     def validate_entry_reference(raw_reference: str) -> str:
@@ -125,6 +240,7 @@ class VolunteerAccessService:
             id=organization.id,
             name=organization.name,
             applications_enabled=policy.applications_enabled,
+            insurance_required=policy.insurance_required,
         )
 
     async def _status_for_user(
@@ -150,11 +266,20 @@ class VolunteerAccessService:
         return VolunteerStatusResult(organization, application, grant, status, next_actions)
 
     async def status(
-        self, *, id_token: str, entry_reference_id: UUID, now: datetime | None = None
+        self,
+        *,
+        id_token: str,
+        entry_reference_id: UUID | None,
+        verified_line_user_id: str | None = None,
+        now: datetime | None = None,
     ) -> VolunteerStatusResult:
-        if not isinstance(entry_reference_id, UUID):
+        if entry_reference_id is not None and not isinstance(entry_reference_id, UUID):
             raise DomainError("entry_unavailable", "此志工入口目前無法使用", 403)
-        line_user_id = await self.verifier.verify(id_token)
+        line_user_id = (
+            verified_line_user_id
+            if verified_line_user_id is not None
+            else await self.verifier.verify(id_token)
+        )
         organization = await self._public_organization()
         binding = await self.identities.get_line_binding(line_user_id)
         return await self._status_for_user(
@@ -165,14 +290,30 @@ class VolunteerAccessService:
         self,
         *,
         id_token: str,
-        entry_reference_id: UUID,
+        entry_reference_id: UUID | None,
+        verified_line_user_id: str | None = None,
         client_request_id: UUID,
         consent_acknowledged: bool,
+        organization_id: UUID | None = None,
+        applicant_name: str | None = None,
+        phone_number: str | None = None,
+        basic_profile: dict[str, Any] | None = None,
+        insurance_identity: str | None = None,
+        insurance_consent_acknowledged: bool = False,
+        service_dates: list[date] | None = None,
         now: datetime | None = None,
     ) -> VolunteerSubmitResult:
+        if (entry_reference_id is None) == (organization_id is None):
+            raise DomainError("volunteer_target_required", "志工申請目標無效", 422)
+        if organization_id is not None and organization_id != self.repository.organization_id:
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
         if not consent_acknowledged:
             raise DomainError("consent_required", "請先確認志工報名同意事項", 422)
-        line_user_id = await self.verifier.verify(id_token)
+        line_user_id = (
+            verified_line_user_id
+            if verified_line_user_id is not None
+            else await self.verifier.verify(id_token)
+        )
         organization = await self._public_organization()
         binding = await self.identities.get_line_binding(line_user_id)
         user_id = None if binding is None else binding.user_id
@@ -222,6 +363,24 @@ class VolunteerAccessService:
                 )
         previous_application_id = history[0].id if history else None
         submitted_at = now or datetime.now(timezone.utc)
+        normalized_service_dates = (
+            validate_service_date_selection(service_dates, today=submitted_at.date())
+            if service_dates is not None
+            else []
+        )
+        policy = None
+        normalized_identity = None
+        if self.pii_service is not None:
+            if not applicant_name or not phone_number:
+                raise DomainError("application_profile_required", "請完整填寫志工資料", 422)
+            policy = await self.repository.policy(for_update=True)
+            normalized_identity = (insurance_identity or "").strip()
+            if policy.insurance_required and not normalized_identity:
+                raise DomainError("insurance_identity_required", "請提供保險身分資料", 422)
+            if normalized_identity and not policy.insurance_required:
+                raise DomainError("insurance_identity_not_allowed", "此申請不需保險身分資料", 422)
+            if normalized_identity and not insurance_consent_acknowledged:
+                raise DomainError("insurance_consent_required", "請先同意保險身分資料用途", 422)
         application = VolunteerApplication(
             organization_id=self.repository.organization_id,
             user_id=user_id,
@@ -238,6 +397,40 @@ class VolunteerAccessService:
         else:
             application, created = await race_safe_add(application)
         if created:
+            if normalized_service_dates:
+                add_service_dates = getattr(
+                    self.repository, "add_service_dates_with_capacity", None
+                )
+                if add_service_dates is None:
+                    raise DomainError("service_dates_unavailable", "服務日期暫時無法建立", 503)
+                policy_for_dates = policy or await self.repository.policy()
+                await add_service_dates(
+                    application.id,
+                    normalized_service_dates,
+                    daily_limit=policy_for_dates.daily_application_limit,
+                )
+            if self.pii_service is not None:
+                assert policy is not None
+                await self.pii_service.create_profile(
+                    repository=self.repository,
+                    application_id=application.id,
+                    applicant_name=applicant_name,
+                    phone_number=phone_number,
+                    basic_profile=basic_profile,
+                    insurance_identity=normalized_identity or None,
+                    insurance_consent_acknowledged=insurance_consent_acknowledged,
+                    insurance_collection_mode=(
+                        "strayhub_temporary" if normalized_identity else None
+                    ),
+                    insurance_purpose_code=(
+                        "insurance_verification" if normalized_identity else None
+                    ),
+                    insurance_policy_version=(
+                        f"organization-policy-v{policy.version}" if normalized_identity else None
+                    ),
+                    now=submitted_at,
+                    request_id=client_request_id,
+                )
             await self._record_submission(application, organization, binding.id)
         return VolunteerSubmitResult(
             await self._status_for_user(user_id, organization, now=submitted_at), created
@@ -248,11 +441,16 @@ class VolunteerAccessService:
         *,
         id_token: str,
         entry_reference_id: UUID,
+        verified_line_user_id: str | None = None,
         application_id: UUID,
         expected_version: int,
         now: datetime | None = None,
     ) -> VolunteerStatusResult:
-        line_user_id = await self.verifier.verify(id_token)
+        line_user_id = (
+            verified_line_user_id
+            if verified_line_user_id is not None
+            else await self.verifier.verify(id_token)
+        )
         organization = await self._public_organization()
         binding = await self.identities.get_line_binding(line_user_id)
         if binding is None:
@@ -330,21 +528,27 @@ class VolunteerAccessService:
         expected_version: int,
         applications_enabled: bool | None,
         default_grant_duration_hours: int | None,
+        daily_application_limit: int | None = None,
     ) -> OrganizationVolunteerAccessPolicy:
         policy = await self.repository.policy(for_update=True)
         if policy.version != expected_version:
             raise DomainError("policy_version_conflict", "設定已更新，請重新載入", 409)
         if default_grant_duration_hours is not None and default_grant_duration_hours <= 0:
             raise DomainError("invalid_policy_duration", "預設授權期限必須大於 0", 422)
+        if daily_application_limit is not None and daily_application_limit <= 0:
+            raise DomainError("invalid_daily_application_limit", "每日申請上限必須大於 0", 422)
         before = {
             "applications_enabled": policy.applications_enabled,
             "default_grant_duration_hours": policy.default_grant_duration_hours,
+            "daily_application_limit": policy.daily_application_limit,
             "version": policy.version,
         }
         if applications_enabled is not None:
             policy.applications_enabled = applications_enabled
         if default_grant_duration_hours is not None:
             policy.default_grant_duration_hours = default_grant_duration_hours
+        if daily_application_limit is not None:
+            policy.daily_application_limit = daily_application_limit
         policy.version += 1
         if self.audit is not None:
             await self.audit.record(
@@ -358,6 +562,7 @@ class VolunteerAccessService:
                 after={
                     "applications_enabled": policy.applications_enabled,
                     "default_grant_duration_hours": policy.default_grant_duration_hours,
+                    "daily_application_limit": policy.daily_application_limit,
                     "version": policy.version,
                 },
             )
@@ -376,6 +581,7 @@ class VolunteerAccessService:
         policy_version_used: int | None = None,
         duration_hours_used: int | None = None,
         operation_id: UUID | None = None,
+        service_date: date | None = None,
         now: datetime | None = None,
     ) -> tuple[VolunteerApplication, OrganizationMembership | None, VolunteerAccessGrant | None]:
         clock = now or datetime.now(timezone.utc)
@@ -384,6 +590,35 @@ class VolunteerAccessService:
             raise DomainError("application_not_found", "找不到此志工申請", 404)
         if application.status != "pending" or application.version != expected_version:
             raise DomainError("application_version_conflict", "申請狀態已更新", 409)
+        if decision not in {"approve", "reject"}:
+            raise DomainError("invalid_batch_decision", "決策無效", 422)
+        service_date_status = "approved" if decision == "approve" else "rejected"
+        service_date_item = None
+        if service_date is not None:
+            getter = getattr(self.repository, "service_date_for_application", None)
+            if getter is None:
+                raise DomainError("service_date_unavailable", "服務日期暫時無法審核", 503)
+            service_date_item = await getter(application.id, service_date, for_update=True)
+            if service_date_item is None or service_date_item.status != "pending":
+                raise DomainError("service_date_version_conflict", "服務日期已更新", 409)
+            existing_grant = await self.repository.grant_for_application(application.id)
+            if existing_grant is not None:
+                service_date_item.status = service_date_status
+                service_date_item.decided_at = clock
+                service_date_item.decided_by_user_id = actor_user_id
+                service_date_item.decision_reason = normalize_reason(
+                    reason, required=decision == "reject"
+                )
+                service_date_item.version += 1
+                pending_count = await self.repository.pending_service_date_count(application.id)
+                application.status = "pending" if pending_count else "approved"
+                application.decided_at = clock
+                application.decided_by_user_id = actor_user_id
+                application.version += 1
+                membership = await self.identities.get_membership(
+                    application.user_id, self.repository.organization_id
+                )
+                return application, membership, existing_grant
         before = {"status": application.status, "version": application.version}
         membership = None
         grant = None
@@ -442,11 +677,17 @@ class VolunteerAccessService:
             )
             application.status = "approved"
             application.decision_reason = normalize_reason(reason)
-        else:
-            raise DomainError("invalid_batch_decision", "決策無效", 422)
         application.decided_at = clock
         application.decided_by_user_id = actor_user_id
         application.version += 1
+        if service_date_item is not None:
+            service_date_item.status = service_date_status
+            service_date_item.decided_at = clock
+            service_date_item.decided_by_user_id = actor_user_id
+            service_date_item.decision_reason = normalize_reason(reason)
+            service_date_item.version += 1
+            if await self.repository.pending_service_date_count(application.id):
+                application.status = "pending"
         if self.audit is not None:
             await self.audit.record(
                 organization_id=self.repository.organization_id,

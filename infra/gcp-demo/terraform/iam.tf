@@ -70,6 +70,14 @@ resource "google_project_iam_member" "migration" {
   member  = "serviceAccount:${google_service_account.runtime["migration"].email}"
 }
 
+resource "google_kms_crypto_key_iam_member" "api_volunteer_pii" {
+  crypto_key_id = var.pii_kms_key_name
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${google_service_account.runtime["api"].email}"
+
+  depends_on = [google_project_service.required["cloudkms.googleapis.com"]]
+}
+
 resource "google_secret_manager_secret_iam_member" "runtime" {
   for_each = {
     for pair in flatten([

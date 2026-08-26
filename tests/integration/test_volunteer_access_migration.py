@@ -3,6 +3,10 @@ from pathlib import Path
 EXPAND = Path("services/api/migrations/versions/0024_volunteer_access_expand.py")
 ENFORCE = Path("services/api/migrations/versions/0025_volunteer_access_enforce.py")
 SYSTEM_ACTOR = Path("services/api/migrations/versions/0026_audit_system_actor.py")
+INSURANCE_POLICY = Path("services/api/migrations/versions/0031_volunteer_insurance_policy.py")
+PUBLIC_DIRECTORY = Path("services/api/migrations/versions/0032_public_volunteer_directory_scope.py")
+SERVICE_DATES = Path("services/api/migrations/versions/0034_volunteer_service_dates.py")
+ALEMBIC_ENV = Path("services/api/migrations/env.py")
 
 
 def test_two_phase_migration_declares_policy_staging_and_single_head_chain() -> None:
@@ -36,3 +40,42 @@ def test_expand_enables_force_rls_and_fixed_entry_resolver() -> None:
     assert "SECURITY DEFINER" in expand
     assert "SET search_path" in expand
     assert "strayhub_runtime" in expand
+
+
+def test_insurance_policy_migration_declares_exact_chain_and_safe_column() -> None:
+    assert INSURANCE_POLICY.exists()
+    migration = INSURANCE_POLICY.read_text()
+
+    assert 'revision = "0031_volunteer_insurance_policy"' in migration
+    assert 'down_revision = "0030_volunteer_entry_expiry"' in migration
+    assert "op.add_column(" in migration
+    assert '"organization_volunteer_access_policies"' in migration
+    assert '"insurance_required"' in migration
+    assert "sa.Boolean()" in migration
+    assert 'server_default=sa.text("false")' in migration
+    assert "nullable=False" in migration
+    assert (
+        'op.drop_column("organization_volunteer_access_policies", "insurance_required")'
+        in migration
+    )
+
+
+def test_public_directory_revision_id_remains_backward_compatible() -> None:
+    migration = PUBLIC_DIRECTORY.read_text()
+    revision = next(
+        line.split('"', 2)[1] for line in migration.splitlines() if line.startswith("revision = ")
+    )
+    assert revision == "0032_public_volunteer_directory_scope"
+
+
+def test_alembic_version_storage_supports_long_revision_ids() -> None:
+    migration_env = ALEMBIC_ENV.read_text()
+    assert "String(255)" in migration_env
+    assert "ALTER TABLE alembic_version" in migration_env
+
+
+def test_service_dates_migration_preserves_legacy_applications_without_dates() -> None:
+    migration = SERVICE_DATES.read_text()
+
+    assert "CREATE TEMP TABLE volunteer_legacy_applications_to_delete" not in migration
+    assert "DELETE FROM volunteer_applications" not in migration

@@ -1,11 +1,14 @@
 FROM node:22-alpine AS dependencies
 
-WORKDIR /app
+WORKDIR /workspace/apps/web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 
 FROM dependencies AS builder
-COPY apps/web ./
+WORKDIR /workspace
+COPY apps/web ./apps/web
+COPY packages/contracts ./packages/contracts
+WORKDIR /workspace/apps/web
 RUN npm run build
 
 FROM node:22-alpine AS runner
@@ -15,8 +18,8 @@ ENV NODE_ENV=production \
     PORT=8080 \
     HOSTNAME=0.0.0.0
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /workspace/apps/web/.next/standalone ./
+COPY --from=builder /workspace/apps/web/.next/static ./.next/static
 
 EXPOSE 8080
 CMD ["node", "server.js"]

@@ -49,6 +49,24 @@ async def test_empty_database_bootstrap_seed_reset_and_reversible_upgrade() -> N
     try:
         _run("-m", "alembic", "upgrade", "0014_timeline_query_indexes", env=env)
         _run("-m", "alembic", "upgrade", "head", env=env)
+        _run(
+            "-m",
+            "alembic",
+            "downgrade",
+            "0032_public_volunteer_directory_scope",
+            env=env,
+        )
+        connection = await asyncpg.connect(_database_url(database))
+        try:
+            assert (
+                await connection.fetchval(
+                    "SELECT to_regclass('public.volunteer_application_profiles')"
+                )
+                is None
+            )
+        finally:
+            await connection.close()
+        _run("-m", "alembic", "upgrade", "head", env=env)
         _run("-m", "scripts.seed_local", env=env)
 
         connection = await asyncpg.connect(_database_url(database))

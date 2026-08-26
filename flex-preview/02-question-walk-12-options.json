@@ -1,0 +1,455 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "background": {
+      "type": "linearGradient",
+      "angle": "160deg",
+      "startColor": "#5BA85F",
+      "endColor": "#1C6350"
+    },
+    "paddingAll": "20px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🌿",
+            "size": "xxl",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "照護回報 · 第 12 / 13 題",
+                "size": "xs",
+                "color": "#CDECDC"
+              },
+              {
+                "type": "text",
+                "text": "散步",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#FDF7E6",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "height": "12px",
+        "backgroundColor": "#17513F",
+        "cornerRadius": "6px",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "width": "92%",
+            "backgroundColor": "#F7D774",
+            "cornerRadius": "6px",
+            "contents": [
+              {
+                "type": "filler"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FDF7E6",
+    "paddingAll": "16px",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "探索",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.exploring",
+          "displayText": "探索"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "探索",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "平常",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.usual",
+          "displayText": "平常"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "平常",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "願意",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.willing",
+          "displayText": "願意"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "願意",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "猶豫",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.reluctant",
+          "displayText": "猶豫"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "猶豫",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "變慢或停下",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.slow_or_stopping",
+          "displayText": "變慢或停下"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "變慢或停下",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "嘗試返回",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.tries_to_return",
+          "displayText": "嘗試返回"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "嘗試返回",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "對人的反應",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.human_reaction",
+          "displayText": "對人的反應"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "對人的反應",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "對動物的反應",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.animal_reaction",
+          "displayText": "對動物的反應"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "對動物的反應",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "未完成",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.not_done",
+          "displayText": "未完成"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "未完成",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "未觀察到",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.not_observed",
+          "displayText": "未觀察到"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "未觀察到",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "不確定",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.uncertain",
+          "displayText": "不確定"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "不確定",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "其他",
+          "data": "action=answer&draft_token=sample-draft-token&step=answering_behavior&value=walk.other",
+          "displayText": "其他"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "其他",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "center",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      }
+    ]
+  },
+  "styles": {
+    "header": {
+      "separator": false
+    },
+    "body": {
+      "separator": false
+    }
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#F4E9CE",
+    "paddingAll": "12px",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "button",
+        "style": "link",
+        "height": "sm",
+        "color": "#1C6350",
+        "action": {
+          "type": "postback",
+          "label": "← 上一步",
+          "data": "action=back&draft_token=sample-draft-token",
+          "displayText": "上一步"
+        }
+      },
+      {
+        "type": "text",
+        "text": "點錯了也沒關係，可以退回上一題 🍃",
+        "size": "xxs",
+        "color": "#5C7168",
+        "align": "center"
+      }
+    ]
+  }
+}

@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list",
     "test:e2e:tooling": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test e2e/tooling-smoke.spec.ts",
+    "test:e2e:liff": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test e2e/liff-route-isolation.spec.ts",
     "test:e2e:p0": "playwright test e2e/management-shell.spec.ts e2e/volunteer-core.spec.ts e2e/management-core.spec.ts e2e/state-feedback.spec.ts e2e/login-home.spec.ts e2e/volunteer-access-approval.spec.ts e2e/p0-responsive.spec.ts e2e/p0-keyboard.spec.ts",
     "test:e2e:p0:list": "playwright test e2e/management-shell.spec.ts e2e/volunteer-core.spec.ts e2e/management-core.spec.ts e2e/state-feedback.spec.ts e2e/login-home.spec.ts e2e/volunteer-access-approval.spec.ts e2e/p0-responsive.spec.ts e2e/p0-keyboard.spec.ts e2e/p0-visual.spec.ts e2e/p0-a11y.spec.ts e2e/login-home-a11y.spec.ts --list",
     "test:visual": "playwright test e2e/p0-visual.spec.ts e2e/volunteer-access-approval.spec.ts",
@@ -26,10 +27,12 @@
     "quality": "npm run test && npm run typecheck && npm run test:mobile && npm run test:a11y && npm run format:check"
   },
   "dependencies": {
+    "@line/liff": "^2.30.0",
     "@tailwindcss/postcss": "^4.3.3",
     "lucide-react": "^1.31.0",
     "next": "^15.1.0",
     "postcss": "^8.5.26",
+    "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.3.3"

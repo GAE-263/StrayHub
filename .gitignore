@@ -30,5 +30,6 @@ test-results/
 apps/web/test-results/
 playwright-report/
 screenshots/
+AGENTS.md
 # 借用他人 LINE channel 測試的還原備忘，屬於個人操作紀錄不是專案資產
 .line-webhook-restore.txt

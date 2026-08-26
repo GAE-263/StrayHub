@@ -50,6 +50,55 @@ Terraform 只接收 Secret 名稱 Reference，不接收或輸出 Secret 明文�
 - `auth-jwt-active-public-key`
 - `animal-confirmation-secret`
 
+### Volunteer PII encryption
+
+The API uses Cloud KMS for volunteer PII in GCP Demo. Terraform receives an
+existing CryptoKey resource name through `var.pii_kms_key_name`; it never
+creates, imports, or stores key material. The API Cloud Run revision sets:
+
+```text
+PII_ENCRYPTION_PROVIDER=gcp-kms
+PII_KMS_KEY_NAME=<existing CryptoKey resource name>
+```
+
+`strayhub-demo-api` receives only
+`roles/cloudkms.cryptoKeyEncrypterDecrypter` on that one CryptoKey. The worker,
+web service, migration job, GitHub OIDC principal, and project members do not
+receive KMS decrypt permission through this configuration.
+
+Cloud KMS receives the existing field-scoped additional authenticated data:
+organization ID, application ID, field name, and PII schema version. The
+database stores KMS ciphertext, provider algorithm, and the returned CryptoKey
+version only. Plaintext, raw ciphertext, and key material must not be put into
+logs, audit payloads, Terraform state, Secret Manager, Docker images, or
+frontend variables.
+
+The local AES provider is for `local`/`test`/`testing` only. It is fail closed
+outside those environments and the KMS adapter never falls back to it. A
+missing/invalid key resource, KMS permission failure, or KMS outage returns a
+safe 503 without persisting plaintext or returning revealed data.
+
+### KMS key rotation and staging validation
+
+Rotate the primary version of the same CryptoKey using the approved KMS key
+rotation procedure. Stored metadata records the KMS CryptoKeyVersion used for
+encryption; decrypt requests stay bound to the configured CryptoKey, allowing
+KMS to decrypt old-version ciphertext while that version remains enabled. Do
+not disable an old version until retained PII using it has expired or been
+re-encrypted by a separately approved operation.
+
+Before directing staging traffic to the new revision, use only a synthetic
+organization and synthetic applicant values to verify:
+
+1. synthetic application submission creates encrypted profile columns;
+2. same-organization shelter admin reveal succeeds and writes metadata-only audit;
+3. wrong organization/context and unavailable KMS both return safe errors;
+4. audit failure returns no plaintext; and
+5. KMS/audit/application logs contain neither plaintext nor ciphertext.
+
+Record pass/fail and redacted request identifiers in deployment evidence. Live
+KMS validation is not satisfied by a fake client or local AES test.
+
 禁止事項：
 
 1. 禁止將 Secret、JWT Private Key、LINE Token、Signed URL 或正式個資寫入 Git、Docker image、

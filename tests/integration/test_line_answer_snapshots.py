@@ -146,9 +146,7 @@ async def _cleanup(fixture: _Fixture) -> None:
                 f"DELETE FROM {table} WHERE organization_id = $1", fixture.organization_id
             )
         await connection.execute("DELETE FROM users WHERE id = $1", fixture.user_id)
-        await connection.execute(
-            "DELETE FROM organizations WHERE id = $1", fixture.organization_id
-        )
+        await connection.execute("DELETE FROM organizations WHERE id = $1", fixture.organization_id)
         await connection.execute("COMMIT")
     finally:
         await connection.close()

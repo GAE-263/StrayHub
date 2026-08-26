@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, TypeVar
 from uuid import UUID, uuid4
 
@@ -114,9 +114,28 @@ class VolunteerBatchService:
         snapshot_at = datetime.now(timezone.utc)
         if selection_mode == "explicit_items":
             targets = validate_explicit_items(explicit_items or [])
+            raw_service_date = dict(filters or {}).get("service_date")
+            service_date = (
+                raw_service_date
+                if raw_service_date is None or isinstance(raw_service_date, date)
+                else date.fromisoformat(raw_service_date)
+            )
+            await self.repository.validate_explicit_service_date_targets(
+                [application_id for application_id, _ in targets],
+                service_date=service_date,
+            )
         elif selection_mode == "all_filtered":
+            snapshot_filters = dict(filters or {})
+            has_service_date = snapshot_filters.get("service_date") is not None
+            has_unassigned_scope = snapshot_filters.get("unassigned") is True
+            if has_service_date == has_unassigned_scope:
+                raise DomainError(
+                    "invalid_batch_date_scope",
+                    "全選快照必須指定一個日期範圍",
+                    422,
+                )
             applications = await self.repository.pending_snapshot(
-                snapshot_at=snapshot_at, **dict(filters or {})
+                snapshot_at=snapshot_at, **snapshot_filters
             )
             targets = [(application.id, application.version) for application in applications]
             if not targets:
@@ -133,6 +152,11 @@ class VolunteerBatchService:
                 policy_version = policy.version
                 policy_duration = policy.default_grant_duration_hours
 
+        filter_snapshot = {
+            key: value.isoformat() if isinstance(value, (date, datetime)) else value
+            for key, value in dict(filters or {}).items()
+        }
+
         batch = VolunteerDecisionBatch(
             id=uuid4(),
             organization_id=self.repository.organization_id,
@@ -146,7 +170,7 @@ class VolunteerBatchService:
             policy_version_used=policy_version,
             default_duration_hours_used=policy_duration,
             selection_mode=selection_mode,
-            filter_snapshot=dict(filters or {}) if selection_mode == "all_filtered" else None,
+            filter_snapshot=filter_snapshot or None,
             snapshot_at=snapshot_at,
             request_fingerprint=fingerprint,
             status="queued",
@@ -187,6 +211,16 @@ class VolunteerBatchService:
         batch.status = "processing"
         for item in items:
             try:
+                service_date = None
+                filter_snapshot = getattr(batch, "filter_snapshot", None)
+                if filter_snapshot:
+                    raw_service_date = filter_snapshot.get("service_date")
+                    if raw_service_date:
+                        service_date = (
+                            raw_service_date
+                            if isinstance(raw_service_date, date)
+                            else date.fromisoformat(raw_service_date)
+                        )
                 decision_arguments = {
                     "application_id": item.application_id,
                     "expected_version": item.expected_version,
@@ -198,6 +232,7 @@ class VolunteerBatchService:
                     "policy_version_used": batch.policy_version_used,
                     "duration_hours_used": batch.default_duration_hours_used,
                     "operation_id": getattr(batch, "operation_id", None),
+                    "service_date": service_date,
                 }
                 session = getattr(self.repository, "session", None)
                 if session is None:

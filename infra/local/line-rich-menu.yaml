@@ -2,9 +2,10 @@ version: 2
 name: local-volunteer-care
 # 上面一大格（開始散步回報），下面兩小格（繼續回報／聯絡工作人員）。
 # layout 是 [x, y, w, h] 佔整張圖的分數座標，取代舊的 columns 均分格線。
-# QR 掃描已改成「開始散步回報」內的聊天室拍照解碼，不再需要獨立的
-# LIFF 進入按鈕（${LIFF_QR_ENTRY_URL} 從未被展開過，是已知會讓 LINE API
-# 直接回 400 的舊 bug）。
+# QR 掃描已改成「開始散步回報」內的聊天室拍照解碼，不再需要獨立的 LIFF
+# 進入按鈕（舊的 LIFF_QR_ENTRY_URL 佔位符從未被展開過，是已知會讓 LINE
+# API 直接回 400 的舊 bug）。注意 load_definition 的佔位符掃描是純文字比
+# 對，連註解也算，所以這份檔案裡不能再出現大括號佔位符的寫法。
 actions:
   - label: 開始散步回報
     type: postback

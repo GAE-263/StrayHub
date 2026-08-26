@@ -22,6 +22,7 @@ provider "google" {
 locals {
   required_services = toset([
     "artifactregistry.googleapis.com",
+    "cloudkms.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",

@@ -15,10 +15,12 @@ import { Button } from "../../../../components/ui/button";
 import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFormDialog";
 import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
 import { Toast } from "../../../../components/ui/toast";
+import { AnimalCareQrCard } from "../../../../features/animal-management/AnimalCareQrCard";
 
 type Props = { params: Promise<{ animalId: string }> };
 type Animal = {
   id: string;
+  organization_id: string;
   name: string;
   shelter_number: string;
   status: string;
@@ -123,38 +125,121 @@ export default function AnimalProfilePage({ params }: Props) {
     );
 
   return (
-    <section aria-labelledby="animal-profile-title">
+    <section
+      className="animal-profile-page"
+      aria-labelledby="animal-profile-title"
+    >
       <Breadcrumbs
         items={[
           { label: "動物檔案", href: "/animals" },
           { label: animal.name },
         ]}
       />
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">ANIMAL PROFILE</span>
-          <h1 id="animal-profile-title">{animal.name}</h1>
-          <p>
-            {animal.shelter_number} · {animal.area_name ?? "未分配區域"}
-          </p>
+      <div className="page-heading animal-profile-hero">
+        <div className="animal-profile-identity">
+          <div className="animal-profile-number" aria-label="收容編號">
+            <span>收容編號</span>
+            <strong>{animal.shelter_number}</strong>
+          </div>
+          <div className="animal-profile-title-block">
+            <span className="eyebrow">ANIMAL PROFILE · 動物檔案</span>
+            <div className="animal-profile-name-row">
+              <h1 id="animal-profile-title">{animal.name}</h1>
+              <Badge
+                className="animal-profile-status"
+                data-status={animal.status}
+              >
+                {statusLabel(animal.status)}
+              </Badge>
+            </div>
+            <p>
+              目前位置：{animal.area_name ?? "尚未分配區域"}
+              {animal.area_type ? ` · ${animal.area_type}` : ""}
+            </p>
+          </div>
         </div>
         <Link
-          className="ui-button ui-button-default"
+          className="ui-button ui-button-default animal-profile-history-action"
           href={`/animals/${animal.id}/timeline`}
         >
-          開啟近期歷程
+          查看近期歷程
+          <span aria-hidden="true">→</span>
         </Link>
       </div>
-      <div className="content-grid">
-        <AnimalTodaySummary
-          hasActivity={todaySummary.hasActivity}
-          pendingCount={todaySummary.pending}
-          overdueCount={todaySummary.overdue}
-          localToday={todaySummary.today}
-          state={todaySummary.state}
-        />
-        <Card className="ui-card-padded" aria-labelledby="animal-summary-title">
-          <h2 id="animal-summary-title">基本資料</h2>
+      <div className="content-grid animal-profile-grid">
+        <div className="animal-profile-main-column">
+          <AnimalTodaySummary
+            hasActivity={todaySummary.hasActivity}
+            pendingCount={todaySummary.pending}
+            overdueCount={todaySummary.overdue}
+            localToday={todaySummary.today}
+            state={todaySummary.state}
+          />
+          <Card
+            className="ui-card-padded animal-profile-workbench"
+            aria-labelledby="animal-actions-title"
+          >
+            <div className="animal-profile-section-heading">
+              <div>
+                <span className="eyebrow">CARE WORKSPACE</span>
+                <h2 id="animal-actions-title">照護工作台</h2>
+              </div>
+              <p>從今天最需要處理的事情開始。</p>
+            </div>
+            <nav
+              className="animal-profile-action-list"
+              aria-label="動物照護工作入口"
+            >
+              <Link
+                className="animal-profile-action"
+                href={`/animals/${animal.id}/timeline`}
+              >
+                <span>
+                  <strong>近期歷程</strong>
+                  <small>近 14 日回報、事件與 AI 狀態</small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
+              <Link
+                className="animal-profile-action"
+                href={`/animals/${animal.id}/timeline?medical=1`}
+              >
+                <span>
+                  <strong>醫療歷史</strong>
+                  <small>就醫、用藥、疫苗與體重紀錄</small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
+              <Link
+                className="animal-profile-action"
+                href={`/care-calendar?animal_id=${animal.id}`}
+              >
+                <span>
+                  <strong>照護提醒</strong>
+                  <small>今天與近期的待辦安排</small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            </nav>
+            <Button
+              className="animal-profile-reminder-action"
+              type="button"
+              onClick={() => setReminderOpen(true)}
+            >
+              ＋ 建立照護提醒
+            </Button>
+          </Card>
+        </div>
+        <Card
+          className="ui-card-padded animal-profile-record"
+          aria-labelledby="animal-summary-title"
+        >
+          <div className="animal-profile-section-heading">
+            <div>
+              <span className="eyebrow">FILE STATUS</span>
+              <h2 id="animal-summary-title">檔案狀態</h2>
+            </div>
+          </div>
           <dl className="detail-list">
             <div>
               <dt>收容編號</dt>
@@ -167,7 +252,7 @@ export default function AnimalProfilePage({ params }: Props) {
               </dd>
             </div>
             <div>
-              <dt>Cage／Area</dt>
+              <dt>籠舍／區域</dt>
               <dd>
                 {animal.area_name ?? "未分配"}{" "}
                 {animal.area_type ? `（${animal.area_type}）` : ""}
@@ -175,38 +260,20 @@ export default function AnimalProfilePage({ params }: Props) {
             </div>
             <div>
               <dt>照片</dt>
-              <dd>{animal.photo_key ? "已設定" : "尚未設定"}</dd>
+              <dd>{animal.photo_key ? "已建檔" : "尚未建檔"}</dd>
             </div>
           </dl>
         </Card>
-        <Card className="ui-card-padded" aria-labelledby="animal-actions-title">
-          <h2 id="animal-actions-title">工作入口</h2>
-          <Link className="link-card" href={`/animals/${animal.id}/timeline`}>
-            <strong>近期歷程</strong>
-            <p className="muted">查看近 14 日、多筆回報與 AI 狀態。</p>
-          </Link>
-          <Link
-            className="link-card"
-            href={`/animals/${animal.id}/timeline?medical=1`}
-          >
-            <strong>醫療歷史</strong>
-            <p className="muted">查看就醫、用藥、疫苗與體重紀錄。</p>
-          </Link>
-          <Link
-            className="link-card"
-            href={`/care-calendar?animal_id=${animal.id}`}
-          >
-            <strong>照護提醒</strong>
-            <p className="muted">查看這隻動物今天與近期的待辦。</p>
-          </Link>
-          <Button type="button" onClick={() => setReminderOpen(true)}>
-            建立提醒
-          </Button>
-          <Link className="link-card" href="/settings/qr-codes">
-            <strong>QR 綁定</strong>
-            <p className="muted">前往管理此收容所的 QR 綁定。</p>
-          </Link>
-        </Card>
+        <AnimalCareQrCard
+          animal={{
+            id: animal.id,
+            organizationId: animal.organization_id,
+            name: animal.name,
+            shelterNumber: animal.shelter_number,
+            status: animal.status,
+            areaName: animal.area_name,
+          }}
+        />
       </div>
       <ReminderFormDialog
         open={reminderOpen}

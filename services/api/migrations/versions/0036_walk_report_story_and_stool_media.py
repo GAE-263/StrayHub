@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0031_walk_report_story_media"
-down_revision = "0029_platform_admin_governance"
+revision = "0036_walk_report_story_media"
+down_revision = "0035_care_report_handoffs"
 branch_labels = None
 depends_on = None
 

@@ -11,6 +11,7 @@ export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://strayhub:strayhub@127.
 export STRAYHUB_TEST_DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL:-postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub}"
 export API_HOST="${API_HOST:-127.0.0.1}"
 export API_PORT="${API_PORT:-8001}"
+export API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"
 export WEB_HOST="${WEB_HOST:-127.0.0.1}"
 export WEB_PORT="${WEB_PORT:-3001}"
 
@@ -51,6 +52,12 @@ if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:
   export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(<"$key_dir/private.pem")"
   export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(<"$key_dir/public.pem")"
   rm -rf "$key_dir"
+fi
+
+export PII_ALLOW_LOCAL_PROVIDER=true
+if [[ -z "${PII_LOCAL_KEY_BASE64:-}" ]]; then
+  require_command openssl
+  export PII_LOCAL_KEY_BASE64="$(openssl rand -base64 32)"
 fi
 
 if [[ "${DEMO_SKIP_DOCKER:-0}" != "1" ]]; then
@@ -104,7 +111,7 @@ uv run python -m uvicorn services.api.app.main:app \
 pids+=("$!")
 npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
 pids+=("$!")
-uv run python services/worker/worker.py &
+uv run python -m services.worker.worker &
 pids+=("$!")
 
 wait "${pids[0]}" "${pids[1]}" "${pids[2]}"

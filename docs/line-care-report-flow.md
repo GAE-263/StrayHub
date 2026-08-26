@@ -454,11 +454,11 @@ Job，時間落在跑完整測試套件的當下。那是 e2e 測試直接寫入
 
 ```python
 if current_source == "care_report" and note and report is not None:
-    observation.source_type = "note"      # ← 有心得就在這裡結束
+    observation.source_type = "note"  # ← 有心得就在這裡結束
     observation.source_id = report.id
     return
 if media_assets and ...:
-    observation.source_type = "photo"     # ← 同時有心得時永遠走不到
+    observation.source_type = "photo"  # ← 同時有心得時永遠走不到
     observation.source_id = media_assets[0].id
 ```
 

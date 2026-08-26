@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { LiffFallback } from "../../../features/line-bot/LiffFallback";
 import { Button } from "../../../components/ui/button";
 import {
@@ -8,6 +8,8 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../components/management/StateViews";
+import { authFetch } from "../../../lib/auth";
+import { useVolunteerShelterContext } from "../../../components/auth/VolunteerShelterContext";
 
 type Draft = {
   id: string;
@@ -17,15 +19,26 @@ type Draft = {
 };
 
 export default function CareReportPage() {
+  const shelterContext = useVolunteerShelterContext();
+  const contextRequestEpoch = useRef(0);
+  const loadedContext = useRef<{
+    initialized: boolean;
+    organizationId: string | null;
+  }>({ initialized: false, organizationId: null });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
 
-  async function load(isCancelled: () => boolean = () => false) {
+  async function load(
+    isCancelled: () => boolean = () => false,
+    epoch = contextRequestEpoch.current,
+  ) {
+    if (isCancelled()) return;
     setLoading(true);
     setOffline(false);
     try {
-      const response = await fetch("/v1/line/care-report/drafts/current");
+      const response = await authFetch("/v1/line/care-report/drafts/current");
+      if (response.status === 401 && !isCancelled()) setDraft(null);
       if (!response.ok && response.status !== 404) {
         throw new Error("目前無法連線");
       }
@@ -33,38 +46,70 @@ export default function CareReportPage() {
         response.status === 204 || response.status === 404
           ? null
           : await response.json();
-      if (!isCancelled()) setDraft(value);
+      if (!isCancelled() && contextRequestEpoch.current === epoch) {
+        setDraft(value);
+      }
     } catch {
-      if (!isCancelled()) setOffline(true);
+      if (!isCancelled() && contextRequestEpoch.current === epoch) {
+        setOffline(true);
+      }
     } finally {
-      if (!isCancelled()) setLoading(false);
+      if (!isCancelled() && contextRequestEpoch.current === epoch) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
-    let cancelled = false;
-    void load(() => cancelled);
-    return () => {
-      cancelled = true;
-    };
+    const organizationId = shelterContext?.organizationId;
+    if (!organizationId) {
+      contextRequestEpoch.current += 1;
+      loadedContext.current = { initialized: false, organizationId: null };
+      setDraft(null);
+      setOffline(false);
+      setLoading(false);
+      return;
+    }
+    if (
+      loadedContext.current.initialized &&
+      loadedContext.current.organizationId === organizationId
+    ) {
+      return;
+    }
+    loadedContext.current = { initialized: true, organizationId };
+    const epoch = ++contextRequestEpoch.current;
+    setDraft(null);
+    void load(() => contextRequestEpoch.current !== epoch, epoch);
     // Initial draft restoration runs once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [shelterContext?.organizationId]);
 
   const saveDraft = async (answers: Record<string, string>, note: string) => {
     if (!draft) return;
-    const response = await fetch(`/v1/care-report-drafts/${draft.id}`, {
+    const epoch = contextRequestEpoch.current;
+    const draftId = draft.id;
+    const response = await authFetch(`/v1/care-report-drafts/${draft.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers, note }),
     });
-    if (!response.ok) throw new Error("草稿保存失敗，已保留原始輸入，請重試。");
-    setDraft(await response.json());
+    if (contextRequestEpoch.current !== epoch) return;
+    if (!response.ok) {
+      if (response.status === 401) setDraft(null);
+      throw new Error("草稿保存失敗，已保留原始輸入，請重試。");
+    }
+    const updatedDraft: Draft = await response.json();
+    if (contextRequestEpoch.current === epoch && updatedDraft.id === draftId) {
+      setDraft(updatedDraft);
+    }
   };
 
   return (
     <main className="volunteer-page" aria-labelledby="care-report-title">
       <h1 id="care-report-title">照護回報備援介面</h1>
+      {shelterContext?.organizationName && (
+        <p role="status">目前協助收容所：{shelterContext.organizationName}</p>
+      )}
       {loading && (
         <LoadingState
           title="正在恢復回報草稿…"
@@ -79,7 +124,10 @@ export default function CareReportPage() {
             <Button
               variant="secondary"
               type="button"
-              onClick={() => void load()}
+              onClick={() => {
+                const epoch = contextRequestEpoch.current;
+                void load(() => contextRequestEpoch.current !== epoch, epoch);
+              }}
             >
               重新連線
             </Button>

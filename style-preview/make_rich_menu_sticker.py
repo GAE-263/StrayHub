@@ -50,7 +50,7 @@ def px(css: float) -> int:
 
 def font(size_css: float, latin: bool = False) -> ImageFont.FreeTypeFont:
     size = px(size_css)
-    for path in (LATIN if latin else FONTS):
+    for path in LATIN if latin else FONTS:
         if Path(path).exists():
             try:
                 return ImageFont.truetype(path, size)

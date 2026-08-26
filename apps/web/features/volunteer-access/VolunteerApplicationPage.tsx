@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog } from "../../components/ui/dialog";
+import { Input } from "../../components/ui/input";
 import { Toast } from "../../components/ui/toast";
 
 import {
@@ -53,6 +54,37 @@ async function readStatus(response: Response): Promise<VolunteerStatus> {
   return body as VolunteerStatus;
 }
 
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatServiceDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatServiceDateParts(value: string): {
+  date: string;
+  weekday: string;
+} {
+  const date = new Date(`${value}T12:00:00`);
+  return {
+    date: new Intl.DateTimeFormat("zh-TW", {
+      month: "numeric",
+      day: "numeric",
+    }).format(date),
+    weekday: new Intl.DateTimeFormat("zh-TW", { weekday: "short" }).format(
+      date,
+    ),
+  };
+}
+
 export function VolunteerApplicationPage({
   idToken,
   shelterEntryReference,
@@ -61,10 +93,28 @@ export function VolunteerApplicationPage({
   const [status, setStatus] = useState<VolunteerStatus | null>(initialStatus);
   const [loading, setLoading] = useState(initialStatus === null);
   const [submitting, setSubmitting] = useState(false);
+  const [applicantName, setApplicantName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [insuranceIdentity, setInsuranceIdentity] = useState("");
   const [consent, setConsent] = useState(false);
+  const [insuranceConsent, setInsuranceConsent] = useState(false);
+  const [selectedServiceDates, setSelectedServiceDates] = useState<string[]>(
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const serviceDateOptions = useMemo(() => {
+    const options: string[] = [];
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    for (let offset = 0; offset < 14; offset += 1) {
+      const value = new Date(today);
+      value.setDate(today.getDate() + offset);
+      options.push(formatLocalDate(value));
+    }
+    return options;
+  }, []);
 
   useEffect(() => {
     if (initialStatus !== null) return;
@@ -92,7 +142,16 @@ export function VolunteerApplicationPage({
   }, [idToken, initialStatus, shelterEntryReference]);
 
   async function submit() {
-    if (submitting || !consent) return;
+    const insuranceRequired = status?.organization.insurance_required === true;
+    if (
+      submitting ||
+      !consent ||
+      !applicantName.trim() ||
+      !phoneNumber.trim() ||
+      selectedServiceDates.length === 0 ||
+      (insuranceRequired && (!insuranceIdentity.trim() || !insuranceConsent))
+    )
+      return;
     setSubmitting(true);
     setError(null);
     try {
@@ -102,8 +161,17 @@ export function VolunteerApplicationPage({
         body: JSON.stringify({
           id_token: idToken,
           shelter_entry_reference: shelterEntryReference,
+          applicant_name: applicantName.trim(),
+          phone_number: phoneNumber.trim(),
+          ...(insuranceRequired
+            ? {
+                insurance_identity: insuranceIdentity.trim(),
+                insurance_consent_acknowledged: true,
+              }
+            : {}),
           client_request_id: crypto.randomUUID(),
           consent_acknowledged: true,
+          service_dates: selectedServiceDates,
         }),
       });
       setStatus(await readStatus(response));
@@ -151,6 +219,14 @@ export function VolunteerApplicationPage({
     "expired",
     "revoked",
   ].includes(effectiveStatus);
+  const insuranceRequired = status?.organization.insurance_required === true;
+  const submitDisabled =
+    !consent ||
+    !applicantName.trim() ||
+    !phoneNumber.trim() ||
+    selectedServiceDates.length === 0 ||
+    (insuranceRequired && (!insuranceIdentity.trim() || !insuranceConsent)) ||
+    submitting;
 
   return (
     <main className="volunteer-application-page">
@@ -200,6 +276,59 @@ export function VolunteerApplicationPage({
             ) : null}
             {canApply && status?.organization.applications_enabled !== false ? (
               <div className="volunteer-application-actions">
+                <div className="volunteer-application-fields">
+                  <label htmlFor="applicant-name">
+                    姓名
+                    <Input
+                      id="applicant-name"
+                      type="text"
+                      autoComplete="name"
+                      placeholder="請輸入姓名"
+                      value={applicantName}
+                      onChange={(event) => setApplicantName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label htmlFor="phone-number">
+                    手機號碼
+                    <Input
+                      id="phone-number"
+                      type="tel"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      placeholder="例如 0912 345 678"
+                      value={phoneNumber}
+                      onChange={(event) => setPhoneNumber(event.target.value)}
+                      required
+                    />
+                  </label>
+                  {insuranceRequired ? (
+                    <>
+                      <label htmlFor="insurance-identity">
+                        保險身分資料
+                        <Input
+                          id="insurance-identity"
+                          type="text"
+                          placeholder="請輸入保險所需資料"
+                          value={insuranceIdentity}
+                          onChange={(event) =>
+                            setInsuranceIdentity(event.target.value)
+                          }
+                          required
+                        />
+                      </label>
+                      <label className="volunteer-consent">
+                        <Checkbox
+                          checked={insuranceConsent}
+                          onChange={(event) =>
+                            setInsuranceConsent(event.target.checked)
+                          }
+                        />
+                        <span>我同意此資料僅供保險資格確認使用。</span>
+                      </label>
+                    </>
+                  ) : null}
+                </div>
                 <label className="volunteer-consent">
                   <Checkbox
                     checked={consent}
@@ -207,9 +336,51 @@ export function VolunteerApplicationPage({
                   />
                   <span>我確認送出志工報名，並同意由此收容所審核。</span>
                 </label>
+                <fieldset
+                  className="volunteer-service-date-picker"
+                  aria-describedby="service-date-hint"
+                >
+                  <legend>選擇服務日期</legend>
+                  <p id="service-date-hint">可複選，限今天起兩週內</p>
+                  <div className="volunteer-service-date-grid">
+                    {serviceDateOptions.map((serviceDate) => {
+                      const selected =
+                        selectedServiceDates.includes(serviceDate);
+                      const parts = formatServiceDateParts(serviceDate);
+                      return (
+                        <label
+                          key={serviceDate}
+                          className="volunteer-service-date-option"
+                          data-selected={selected}
+                        >
+                          <Checkbox
+                            className="volunteer-service-date-checkbox"
+                            aria-label={`服務日期 ${formatServiceDate(serviceDate)}`}
+                            checked={selected}
+                            onChange={(event) =>
+                              setSelectedServiceDates((current) =>
+                                event.target.checked
+                                  ? [...current, serviceDate]
+                                  : current.filter(
+                                      (value) => value !== serviceDate,
+                                    ),
+                              )
+                            }
+                          />
+                          <span className="volunteer-service-date-weekday">
+                            {parts.weekday}
+                          </span>
+                          <span className="volunteer-service-date-value">
+                            {parts.date}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
                 <Button
                   type="button"
-                  disabled={!consent || submitting}
+                  disabled={submitDisabled}
                   onClick={submit}
                 >
                   {submitting

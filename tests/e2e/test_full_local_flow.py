@@ -22,6 +22,7 @@ class _ObservationRepository:
 async def test_full_local_flow_reaches_human_review_after_real_bot_flow() -> None:
     """Run the real PostgreSQL vertical flow, then complete its local AI boundary."""
     from services.api.app.persistence.database.engine import engine
+
     from tests.e2e.test_local_line_bot_vertical_flow import (
         test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker,
     )

@@ -26,6 +26,8 @@ class LineIdentityVerifierPort(Protocol):
 class ActiveVolunteerEntryReference:
     reference_id: UUID
     organization_id: UUID
+    organization_code: str
+    organization_name: str
 
 
 class VolunteerEntryResolverPort(Protocol):

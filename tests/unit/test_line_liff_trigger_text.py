@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 from services.api.app.api.line_webhook import (
     _LIFF_CARE_REPORT_TRIGGER,
     _route_text_message,
@@ -27,10 +26,6 @@ def _draft(step: DraftState) -> SimpleNamespace:
     return SimpleNamespace(current_step=step.value)
 
 
-@pytest.mark.skipif(
-    not _WEB_HANDOFF.exists(),
-    reason="LIFF 產生端還在 origin/main 上，這條分支合併後才會存在",
-)
 def test_the_bot_and_the_web_agree_on_the_exact_trigger_text() -> None:
     """兩邊是靠字面完全相同才對得上，任一邊改字就整條流程斷掉。"""
     source = _WEB_HANDOFF.read_text(encoding="utf-8")

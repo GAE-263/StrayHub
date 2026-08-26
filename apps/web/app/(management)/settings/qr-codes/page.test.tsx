@@ -90,7 +90,7 @@ describe("QR binding governance actions", () => {
 
     expect(container?.textContent).toContain("確認撤銷 QR");
     expect(container?.textContent).toContain("animal-12345678");
-    expect(container?.textContent).toContain("既有 Token");
+    expect(container?.textContent).toContain("舊標籤需要更換");
     expect(container?.textContent).toContain("立即失效");
     expect(revokeButton?.classList.contains("ui-button-destructive")).toBe(
       true,

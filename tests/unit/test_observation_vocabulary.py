@@ -33,8 +33,6 @@ def test_options_that_require_note_cannot_be_submitted_without_note() -> None:
     )
 
     with pytest.raises(DomainError, match="補充說明"):
-        service.validate_note_requirement(
-            {"appearance_special_status": "appearance.other"}, None
-        )
+        service.validate_note_requirement({"appearance_special_status": "appearance.other"}, None)
 
     service.validate_note_requirement({"appearance_special_status": "appearance.other"}, "有補充")

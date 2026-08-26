@@ -1,0 +1,150 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "background": {
+      "type": "linearGradient",
+      "angle": "160deg",
+      "startColor": "#C8944A",
+      "endColor": "#A5762F"
+    },
+    "paddingAll": "20px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "💭",
+            "size": "xxl",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "照護回報 · 選填",
+                "size": "xs",
+                "color": "#CDECDC"
+              },
+              {
+                "type": "text",
+                "text": "今天有什麼想說的嗎",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#FDF7E6",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FDF7E6",
+    "paddingAll": "16px",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "text",
+        "text": "想補充的事情直接打字傳過來就好 ✏️\n例如今天特別黏人、或是走路好像怪怪的。",
+        "color": "#5C7168",
+        "size": "sm",
+        "wrap": true
+      },
+      {
+        "type": "separator",
+        "color": "#DCE9E0",
+        "margin": "md"
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "略過心得",
+          "data": "action=skip_note&draft_token=sample-draft-token",
+          "displayText": "略過心得"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "⏭",
+            "size": "md",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "略過心得",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "start",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "上一步",
+          "data": "action=back&draft_token=sample-draft-token",
+          "displayText": "上一步"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "←",
+            "size": "md",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "上一步",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "start",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      }
+    ]
+  },
+  "styles": {
+    "header": {
+      "separator": false
+    },
+    "body": {
+      "separator": false
+    }
+  }
+}

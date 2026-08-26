@@ -3,8 +3,9 @@ info:
   title: StrayHub 004 LIFF Exchange Additive Contract
   version: 0.1.0
   description: |
-    規劃階段 additive contract。實作時合併至
-    specs/001-volunteer-care-report/contracts/openapi.yaml；canonical AuthResponse 不變。
+    LIFF identity、收容所 entry context 與志工 onboarding／authorization state 的
+    additive contract。實作時合併至
+    specs/001-volunteer-care-report/contracts/openapi.yaml。
 servers:
   - url: /
 tags:
@@ -25,29 +26,28 @@ paths:
       responses:
         '200':
           description: |
-            LINE Binding、active User/Organization 與 exact organization 的有效限時
-            VOLUNTEER Membership/Grant 全部通過；Session、Refresh Token 與 Active
-            Shelter Context 已在同一 transaction commit。Response schema 維持既有
-            canonical AuthResponse。
+            LINE token 與 entry reference 均已驗證，回傳 NEW、PENDING、ACTIVE 或
+            SUSPENDED。只有 ACTIVE 包含 internal Session／Refresh Token；其他 state
+            禁止包含任何 session credential。
           content:
             application/json:
               schema:
-                $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/AuthResponse'
+                $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/LiffExchangeResponse'
         '401':
-          description: LINE id token 無效、過期、audience 不符或無法驗證
+          description: LINE id token 無效、過期或audience不符
           content:
             application/json:
               schema:
-                $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/ErrorResponse'
+                $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/LiffIdentityError'
         '403':
           description: |
-            entry、Binding、User、Organization 或 Membership/Grant 不可用。Response
-            不得揭露其他收容所、其他使用者、動物、草稿或內部 count；失敗不得留下
-            Session、Refresh Token 或 Active Shelter Context。
+            entry無效、撤銷、過期、purpose不符，或無法安全解析organization。
+            Response不得揭露其他收容所、其他使用者、動物、草稿或內部count；失敗
+            不得留下Session、Refresh Token或Active Shelter Context。
           content:
             application/json:
               schema:
-                $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/ErrorResponse'
+                $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/LiffEntryUnavailableError'
         '422':
           description: Request schema 無效
           content:
@@ -55,7 +55,7 @@ paths:
               schema:
                 $ref: '../../001-volunteer-care-report/contracts/openapi.yaml#/components/schemas/ErrorResponse'
         '503':
-          description: LINE verifier、entry resolver、database 或 authentication 設定暫時不可用
+          description: LINE provider／verifier、entry resolver、database 或 authentication 設定暫時不可用或無法驗證
           content:
             application/json:
               schema:
@@ -63,6 +63,7 @@ paths:
       x-transaction-invariants:
         - entry reference 只解析候選 organization，不授權
         - server 只檢查候選 organization 的 exact VOLUNTEER Membership/Grant
+        - NEW、PENDING、SUSPENDED 不得建立或回傳 internal Session credential
         - SessionRecord.active_organization_id 必須在 Session 建立時一次寫入
         - 任一失敗時新增 SessionRecord、RefreshTokenRecord 與 Active Context 數量皆為 0
 components:

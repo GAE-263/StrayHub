@@ -1,0 +1,610 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "background": {
+      "type": "linearGradient",
+      "angle": "160deg",
+      "startColor": "#C8944A",
+      "endColor": "#A5762F"
+    },
+    "paddingAll": "20px",
+    "spacing": "md",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "📋",
+            "size": "xxl",
+            "flex": 0,
+            "gravity": "center"
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "小黑 · 送出前還可以修改",
+                "size": "xs",
+                "color": "#CDECDC"
+              },
+              {
+                "type": "text",
+                "text": "回報摘要",
+                "size": "xl",
+                "weight": "bold",
+                "color": "#FDF7E6",
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#FDF7E6",
+    "paddingAll": "16px",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🧺",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "照護完成",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "已完成",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🚶",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "散步完成",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "已完成",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🍚",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "進食",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "正常",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "💧",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "飲水",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "有喝水",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "⚡",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "活動",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "較高",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "💦",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "排尿",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "有觀察到",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "💩",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "排便",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "形狀正常",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🦴",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "護食",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "未觀察到",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🤝",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "人際互動",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "主動尋求",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🐕",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "動物互動",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "平常",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "💚",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "情緒",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "平靜",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🌿",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "散步",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "探索",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "baseline",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🔍",
+            "size": "sm",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "外觀／特殊狀態",
+            "size": "sm",
+            "color": "#5C7168",
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "未觀察到",
+            "size": "sm",
+            "color": "#1F3D36",
+            "weight": "bold",
+            "flex": 6,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "separator",
+        "color": "#DCE9E0",
+        "margin": "md"
+      },
+      {
+        "type": "text",
+        "text": "📝 今天的心得",
+        "size": "sm",
+        "color": "#5C7168"
+      },
+      {
+        "type": "text",
+        "text": "今天散步時精神很好，一直想往草叢跑。",
+        "size": "sm",
+        "color": "#1F3D36",
+        "wrap": true
+      }
+    ]
+  },
+  "styles": {
+    "header": {
+      "separator": false
+    },
+    "body": {
+      "separator": false
+    }
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "backgroundColor": "#F4E9CE",
+    "paddingAll": "14px",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#F7D774",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "送出回報",
+          "data": "action=submit&draft_token=sample-draft-token",
+          "displayText": "送出回報"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "✅",
+            "size": "md",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "送出回報",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "start",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "再改一下",
+          "data": "action=back&draft_token=sample-draft-token",
+          "displayText": "再改一下"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "✏️",
+            "size": "md",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "再改一下",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "start",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "換一隻",
+          "data": "action=reselect_animal&draft_token=sample-draft-token",
+          "displayText": "換一隻"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "🔄",
+            "size": "md",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "換一隻",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "start",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "18px",
+        "borderWidth": "2px",
+        "borderColor": "#DCE9E0",
+        "paddingAll": "15px",
+        "action": {
+          "type": "postback",
+          "label": "取消回報",
+          "data": "action=cancel&draft_token=sample-draft-token",
+          "displayText": "取消回報"
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "🗑",
+            "size": "md",
+            "flex": 0
+          },
+          {
+            "type": "text",
+            "text": "取消回報",
+            "color": "#1F3D36",
+            "size": "md",
+            "weight": "bold",
+            "align": "start",
+            "wrap": true,
+            "gravity": "center"
+          }
+        ]
+      }
+    ]
+  }
+}

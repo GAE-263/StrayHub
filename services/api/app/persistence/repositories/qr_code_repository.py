@@ -3,7 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
@@ -23,6 +23,36 @@ class QrCodeRepository:
                 AnimalQrCode.organization_id == self.organization_id,
                 AnimalQrCode.status == "active",
                 AnimalQrCode.revoked.is_(False),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def lock_animal(self, animal_id: UUID) -> None:
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": f"animal-care-qr:{self.organization_id}:{animal_id}"},
+        )
+
+    async def active_for_animal(self, animal_id: UUID) -> AnimalQrCode | None:
+        result = await self.session.execute(
+            select(AnimalQrCode)
+            .where(
+                AnimalQrCode.organization_id == self.organization_id,
+                AnimalQrCode.animal_id == animal_id,
+                AnimalQrCode.status == "active",
+                AnimalQrCode.revoked.is_(False),
+            )
+            .order_by(AnimalQrCode.created_at.desc(), AnimalQrCode.id.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def get(self, qr_code_id: UUID) -> AnimalQrCode | None:
+        result = await self.session.execute(
+            select(AnimalQrCode).where(
+                AnimalQrCode.id == qr_code_id,
+                AnimalQrCode.organization_id == self.organization_id,
             )
         )
         return result.scalar_one_or_none()

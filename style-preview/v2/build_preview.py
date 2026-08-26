@@ -67,7 +67,7 @@ def validate(copy: dict) -> None:
             fail(f"題目 {question['title']} 沒有任何選項")
         for option in question["options"]:
             if not isinstance(option, list) or len(option) != 2:
-                fail(f"題目 {question['title']} 的選項要寫成 [\"文字\", \"圖示\"]")
+                fail(f'題目 {question["title"]} 的選項要寫成 ["文字", "圖示"]')
 
         # The one place logic still depends on a label: say so loudly rather
         # than letting a rename quietly change who gets asked for a photo.
@@ -81,9 +81,22 @@ def validate(copy: dict) -> None:
                 )
 
     for section in (
-        "menu", "find_dog", "qr_scan", "search", "overview", "confirm", "stool_photo",
-        "portrait_photo", "note", "story", "summary", "done", "tones", "glyphs",
-        "steps", "demo_dogs",
+        "menu",
+        "find_dog",
+        "qr_scan",
+        "search",
+        "overview",
+        "confirm",
+        "stool_photo",
+        "portrait_photo",
+        "note",
+        "story",
+        "summary",
+        "done",
+        "tones",
+        "glyphs",
+        "steps",
+        "demo_dogs",
     ):
         if section not in copy:
             fail(f"少了 {section} 區塊")

@@ -8,6 +8,7 @@ from services.api.app.domain.volunteer_access import (
     request_fingerprint,
     snapshot_policy,
     validate_grant_period,
+    validate_service_date_selection,
 )
 
 NOW = datetime(2026, 8, 15, 4, 0, tzinfo=timezone.utc)
@@ -59,3 +60,24 @@ def test_request_fingerprint_ignores_mapping_order_but_not_payload_changes() -> 
     changed = request_fingerprint({"items": [1, 2], "operation_id": operation_id})
     assert left == right
     assert left != changed
+
+
+def test_service_date_selection_accepts_unique_dates_within_next_two_weeks() -> None:
+    selected = validate_service_date_selection(
+        [NOW.date(), NOW.date() + timedelta(days=13)],
+        today=NOW.date(),
+    )
+    assert selected == [NOW.date(), NOW.date() + timedelta(days=13)]
+
+
+def test_service_date_selection_rejects_dates_outside_next_two_weeks_and_duplicates() -> None:
+    with pytest.raises(DomainError, match="兩週"):
+        validate_service_date_selection(
+            [NOW.date() + timedelta(days=14)],
+            today=NOW.date(),
+        )
+    with pytest.raises(DomainError, match="重複"):
+        validate_service_date_selection(
+            [NOW.date(), NOW.date()],
+            today=NOW.date(),
+        )

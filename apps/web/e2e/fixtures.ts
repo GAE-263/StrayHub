@@ -42,6 +42,13 @@ type ListResponse<T> = {
 
 export type ManagementFixtureOptions = {
   organizations?: (typeof organization)[];
+  activeOrganizationId?: string;
+  memberships?: Array<{
+    id: string;
+    organization_id: string;
+    role: string;
+    status: string;
+  }>;
   contextSwitchStatus?: number;
   dashboardStatus?: FixtureStatus;
   dashboard?: Record<string, unknown>;
@@ -88,6 +95,17 @@ export async function mockManagementApi(
   options: ManagementFixtureOptions = {},
 ) {
   const organizations = options.organizations ?? [organization];
+  let activeOrganizationId =
+    options.activeOrganizationId ?? organizations[0]?.id ?? organization.id;
+  const memberships =
+    options.memberships ??
+    organizations.map((item, index) => ({
+      id: `membership-${item.id}`,
+      organization_id: item.id,
+      role: item.role,
+      status: item.status,
+      ...(index === 0 ? {} : {}),
+    }));
   const contextSwitchStatus = options.contextSwitchStatus ?? 200;
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -100,22 +118,46 @@ export async function mockManagementApi(
           platform_role: "STAFF",
           status: "active",
         },
-        memberships: [
-          {
-            id: "membership-a",
-            organization_id: "org-a",
-            role: "STAFF",
-            status: "active",
-          },
-        ],
+        memberships,
       });
       return;
     }
     if (url.pathname.endsWith("/auth/active-shelter-context")) {
       if (route.request().method() === "PUT") {
-        await json(route, { organization_id: "org-a" }, contextSwitchStatus);
+        const body = route.request().postDataJSON() as {
+          organization_id?: string;
+        };
+        const requestedOrganizationId = body.organization_id;
+        const canSwitch =
+          typeof requestedOrganizationId === "string" &&
+          organizations.some((item) => item.id === requestedOrganizationId) &&
+          memberships.some(
+            (membership) =>
+              membership.organization_id === requestedOrganizationId &&
+              membership.status === "active",
+          );
+        if (canSwitch && requestedOrganizationId) {
+          activeOrganizationId = requestedOrganizationId;
+        }
+        const activeOrganization =
+          organizations.find((item) => item.id === activeOrganizationId) ??
+          organization;
+        await json(
+          route,
+          {
+            organization_id: activeOrganization.id,
+            organization_name: activeOrganization.name,
+          },
+          canSwitch ? contextSwitchStatus : 403,
+        );
       } else {
-        await json(route, { organization_id: "org-a" });
+        const activeOrganization =
+          organizations.find((item) => item.id === activeOrganizationId) ??
+          organization;
+        await json(route, {
+          organization_id: activeOrganization.id,
+          organization_name: activeOrganization.name,
+        });
       }
       return;
     }
@@ -140,6 +182,18 @@ export async function mockManagementApi(
       });
       return;
     }
+    if (url.pathname === "/v1/qr-tokens/resolve") {
+      await json(route, {
+        id: "animal-a",
+        name: "小森",
+        shelter_number: "A-001",
+        cage: "犬舍 A3",
+        area: "北區",
+        can_report: true,
+        organization_id: "org-a",
+      });
+      return;
+    }
     if (url.pathname.match(/\/animals\/[^/]+\/confirm$/)) {
       await json(route, {
         id: "animal-a",
@@ -148,6 +202,14 @@ export async function mockManagementApi(
         can_report: true,
         organization_id: "org-a",
         confirmation_token: "confirm-a",
+      });
+      return;
+    }
+    if (url.pathname === "/v1/care-report-handoffs") {
+      await json(route, {
+        id: "handoff-a",
+        status: "pending",
+        expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
       });
       return;
     }
@@ -418,6 +480,7 @@ export async function mockManagementApi(
         {
           animal: options.animalDetails?.[animalId] ?? {
             id: "animal-a",
+            organization_id: activeOrganizationId,
             name: "小森",
             shelter_number: "A-001",
             status: "active",
@@ -471,8 +534,51 @@ export async function mockVolunteerApi(
   options: { saveStatus?: number } = {},
 ) {
   let saveStatus = options.saveStatus ?? 200;
+  const membershipValidFrom = new Date(Date.now() - 60_000).toISOString();
+  const membershipExpiresAt = new Date(Date.now() + 3_600_000).toISOString();
+  await page.addInitScript(() => {
+    sessionStorage.setItem("access_token", "test-access");
+    sessionStorage.setItem("active_organization_id", "org-a");
+    sessionStorage.setItem("active_organization_code", "ORG-A");
+  });
   await page.route("**/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/auth/me")) {
+      await json(route, {
+        user: {
+          id: "volunteer-a",
+          display_name: "志工甲",
+          platform_role: null,
+          status: "active",
+        },
+        memberships: [
+          {
+            id: "membership-a",
+            organization_id: "org-a",
+            role: "VOLUNTEER",
+            status: "active",
+            valid_from: membershipValidFrom,
+            expires_at: membershipExpiresAt,
+            access_grant: {
+              membership_id: "membership-a",
+              organization_id: "org-a",
+              status: "active",
+              valid_from: membershipValidFrom,
+              expires_at: membershipExpiresAt,
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/auth/active-shelter-context")) {
+      await json(route, {
+        organization_id: "org-a",
+        organization_name: "浪浪森友會 A",
+        session_id: "test-session",
+      });
+      return;
+    }
     if (
       url.pathname === "/v1/animals" ||
       url.pathname === "/v1/animals/search"
@@ -490,6 +596,18 @@ export async function mockVolunteerApi(
       });
       return;
     }
+    if (url.pathname === "/v1/qr-tokens/resolve") {
+      await json(route, {
+        id: "animal-a",
+        name: "小森",
+        shelter_number: "A-001",
+        cage: "犬舍 A3",
+        area: "北區",
+        can_report: true,
+        organization_id: "org-a",
+      });
+      return;
+    }
     if (url.pathname.match(/\/animals\/[^/]+\/confirm$/)) {
       await json(route, {
         id: "animal-a",
@@ -498,6 +616,14 @@ export async function mockVolunteerApi(
         can_report: true,
         organization_id: "org-a",
         confirmation_token: "confirm-a",
+      });
+      return;
+    }
+    if (url.pathname === "/v1/care-report-handoffs") {
+      await json(route, {
+        id: "handoff-a",
+        status: "pending",
+        expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
       });
       return;
     }
