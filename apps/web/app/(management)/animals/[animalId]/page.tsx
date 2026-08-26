@@ -16,18 +16,10 @@ import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFo
 import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
 import { Toast } from "../../../../components/ui/toast";
 import { AnimalCareQrCard } from "../../../../features/animal-management/AnimalCareQrCard";
+import { AnimalBasicProfile } from "../../../../features/animal-management/AnimalBasicProfile";
+import type { ManagementAnimal as Animal } from "../../../../lib/animal-profile";
 
 type Props = { params: Promise<{ animalId: string }> };
-type Animal = {
-  id: string;
-  organization_id: string;
-  name: string;
-  shelter_number: string;
-  status: string;
-  photo_key: string | null;
-  area_name: string | null;
-  area_type: string | null;
-};
 
 export default function AnimalProfilePage({ params }: Props) {
   const { animalId } = use(params);
@@ -153,8 +145,7 @@ export default function AnimalProfilePage({ params }: Props) {
               </Badge>
             </div>
             <p>
-              目前位置：{animal.area_name ?? "尚未分配區域"}
-              {animal.area_type ? ` · ${animal.area_type}` : ""}
+              目前位置：{animal.area_path ?? animal.area_name ?? "尚未分配區域"}
             </p>
           </div>
         </div>
@@ -168,6 +159,11 @@ export default function AnimalProfilePage({ params }: Props) {
       </div>
       <div className="content-grid animal-profile-grid">
         <div className="animal-profile-main-column">
+          <AnimalBasicProfile
+            key={animal.id}
+            animal={animal}
+            onSaved={setAnimal}
+          />
           <AnimalTodaySummary
             hasActivity={todaySummary.hasActivity}
             pendingCount={todaySummary.pending}
@@ -253,10 +249,7 @@ export default function AnimalProfilePage({ params }: Props) {
             </div>
             <div>
               <dt>籠舍／區域</dt>
-              <dd>
-                {animal.area_name ?? "未分配"}{" "}
-                {animal.area_type ? `（${animal.area_type}）` : ""}
-              </dd>
+              <dd>{animal.area_path ?? animal.area_name ?? "未分配"}</dd>
             </div>
             <div>
               <dt>照片</dt>
@@ -269,7 +262,7 @@ export default function AnimalProfilePage({ params }: Props) {
             id: animal.id,
             organizationId: animal.organization_id,
             name: animal.name,
-            shelterNumber: animal.shelter_number,
+            shelterNumber: animal.shelter_number ?? "未提供",
             status: animal.status,
             areaName: animal.area_name,
           }}

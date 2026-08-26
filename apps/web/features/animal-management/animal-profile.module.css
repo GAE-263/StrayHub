@@ -1,0 +1,66 @@
+.portrait {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+.facts dd {
+  overflow-wrap: anywhere;
+}
+.notes,
+.careWarning {
+  margin-top: 20px;
+}
+.notes p,
+.careWarning p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.careWarning {
+  border-left: 4px solid var(--warning);
+  background: var(--surface-soft);
+  padding: 12px 16px;
+  border-radius: 6px;
+}
+.careWarning h3,
+.notes h3 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+.formFields {
+  border: 0;
+  padding: 0;
+  margin: 0 0 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+.formFields input,
+.formFields textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+.fullWidth {
+  grid-column: 1 / -1;
+}
+.directoryIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.directoryIdentity img {
+  width: 52px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.directoryIdentity small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
