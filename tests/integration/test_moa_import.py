@@ -210,3 +210,29 @@ async def test_corrupt_storage_never_sets_fake_photo_key(fixture):
     assert result["image_failures"] == 1
     assert await session.scalar(select(Animal.current_photo_key)) is None
     assert await session.scalar(select(func.count()).select_from(MediaAsset)) == 0
+
+
+async def test_same_name_breed_and_sex_in_two_shelters_do_not_collide(fixture):
+    session, _, shelter_id = fixture
+    await execute(fixture, rows(shelter_id, ids=(1,), animal_subid="SAME-NUMBER"))
+    first = await session.scalar(select(Animal))
+    original_mapping = await session.scalar(select(AnimalExternalSource))
+    before = (original_mapping.source_status, original_mapping.last_seen_at)
+    result = await execute(
+        fixture, rows(str(int(shelter_id) + 1), ids=(2,), animal_subid="SAME-NUMBER")
+    )
+    second = await session.scalar(select(Animal))
+    assert result["animals_created"] == 1
+    assert first.name == second.name and first.breed == second.breed and first.sex == second.sex
+    assert first.id != second.id and first.organization_id != second.organization_id
+    assert (original_mapping.source_status, original_mapping.last_seen_at) == before
+
+
+async def test_missing_names_keep_official_identity_across_shelters(fixture):
+    session, _, shelter_id = fixture
+    await execute(fixture, rows(shelter_id, ids=(1,), animal_subid=""))
+    first = await session.scalar(select(Animal))
+    await execute(fixture, rows(str(int(shelter_id) + 1), ids=(2,), animal_subid=""))
+    second = await session.scalar(select(Animal))
+    assert first.name == "MOA-1" and second.name == "MOA-2"
+    assert first.id != second.id

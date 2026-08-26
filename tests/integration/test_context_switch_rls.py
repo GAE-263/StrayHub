@@ -68,11 +68,12 @@ async def runtime_api(request):
             )
             await session.flush()
             now = datetime.now(timezone.utc)
-            for org in orgs[:2]:
+            all_shelters = getattr(request, "param", "STAFF") == "ALL_SHELTERS"
+            for org in orgs if all_shelters else orgs[:2]:
                 membership = OrganizationMembership(
                     organization_id=org,
                     user_id=user_id,
-                    role=getattr(request, "param", "STAFF"),
+                    role="STAFF" if all_shelters else getattr(request, "param", "STAFF"),
                     status="active",
                     valid_from=now - timedelta(hours=1),
                     expires_at=now + timedelta(hours=1),
@@ -291,3 +292,19 @@ async def test_volunteer_current_and_target_grants_checked_in_exact_scope(runtim
         user_id = (await session.get(SessionRecord, runtime_api[4])).user_id
         access = await AuthenticationRepository(session).effective_organization_access(user_id)
         assert [org.id for _, org in access] == [orgs[1]]
+
+
+@pytest.mark.parametrize("runtime_api", ["ALL_SHELTERS"], indirect=True)
+async def test_three_shelter_http_switching_never_returns_stale_animal_rows(runtime_api):
+    client, _, orgs, _, _, _ = runtime_api
+    available = await client.get("/v1/organizations")
+    assert len(available.json()["items"]) == 3
+    for org in (*orgs, orgs[0]):
+        switched = await client.put(
+            "/v1/auth/active-shelter-context", json={"organization_id": str(org)}
+        )
+        assert switched.status_code == 200
+        animals = await client.get("/v1/management/animals")
+        assert animals.status_code == 200
+        assert len(animals.json()["items"]) == 1
+        assert animals.json()["items"][0]["organization_id"] == str(org)
