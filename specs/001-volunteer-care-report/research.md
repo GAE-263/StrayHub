@@ -113,8 +113,8 @@ principal to grant only SELECT/INSERT/UPDATE on `users`, `session_records` and
 `refresh_token_records`. These pre-0003 tables were not covered by that migration's default
 privileges. No DELETE, owner privileges, role membership, schema change or RLS policy change
 is introduced. `demo.sh` and `verify_local.sh` invoke the setup after migration; existing
-environments still require operator approval before applying it. The normal API continues
-to run with the restricted runtime role, never the setup principal. Real disposable-DB tests
+environments still require operator approval before applying it. Application runtime must
+use the restricted role, never the setup principal; the verification API does so. Real disposable-DB tests
 cover missing grants, idempotent setup, target audit scope, failed audit/commit rollback,
 unauthorized targets, current/revoked volunteer grants, and a one-connection request pool.
 
