@@ -85,6 +85,16 @@ ORG-A/B/DISABLED 以外的未知組織會保留並阻擋 exact-demo 驗證，需
 
 正式 LIFF／手機測試不可使用 `localhost`、fake LIFF ID 或單一 tunnel 同時承載 Web 與 API。完整流程與遮罩後證據格式見 [`specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md`](specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md)。
 
+志工申請使用一個 LINE Bot 與一個 LIFF App。LIFF Console 的唯一 Endpoint URL
+設為 Web tunnel 的 `/volunteer-application`；Bot 的「我要報名志工」先顯示三個
+收容所，再以 canonical `https://liff.line.me/<LIFF_ID>?organization_id=<UUID>`
+開啟同一 Endpoint。`organization_id` 只是公開申請目標，後端仍會檢查 active
+organization 與 enabled policy；只有管理員核准後建立的 membership/grant 才是授權。
+
+實體 QR、海報、外部網站或收容所櫃台入口保留
+`https://liff.line.me/<LIFF_ID>?entry=<opaque-reference>`，由相同 Endpoint 轉入既有
+`shelter_entry_reference` 流程。正常 Bot 選擇不需要也不 seed entry reference。
+
 1. 先在本機啟動 FastAPI `127.0.0.1:8001` 與 Next.js `127.0.0.1:3001`。
 2. 建立兩條獨立的HTTPS tunnel：Web→`3001`、API→`8001`。可使用：
 
@@ -96,7 +106,7 @@ ORG-A/B/DISABLED 以外的未知組織會保留並阻擋 exact-demo 驗證，需
    或在受控環境使用兩個獨立的`ngrok http 3001`／`ngrok http 8001` process。
 
 3. 將API tunnel origin設定為Next.js server runtime的`API_BASE_URL`，將LIFF Console取得的LIFF ID設定為`LIFF_ID`，再重新啟動Next.js；兩者不是`NEXT_PUBLIC_*` client fallback。
-4. 在同一LINE Login channel的LIFF Console設定HTTPS Web tunnel `/volunteer-entry` Endpoint並啟用`openid` scope。Rich Menu則使用`https://liff.line.me/<LIFF_ID>/volunteer-entry?entry=<opaque-reference>`，由`sync_line_rich_menu.py` dry-run驗證。
+4. 在同一 LINE Login channel 的 LIFF Console 設定 HTTPS Web tunnel `/volunteer-application` Endpoint 並啟用 `openid` scope。Rich Menu 的實體入口使用 `https://liff.line.me/<LIFF_ID>?entry=<opaque-reference>`，由 `sync_line_rich_menu.py` dry-run 驗證。
 5. 使用受控LINE帳號執行controlled evidence中的Case A–D；raw ID token、raw entry reference、LINE user ID、Secret與protected data不得寫入Git、issue、terminal transcript或截圖。
 
 ## 一鍵本機展示
@@ -136,9 +146,30 @@ Internet。腳本會以 `ngrok http --url "$NGROK_URL"` 啟動，若實際 tunne
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 
-目前單一收容所 Demo 會把 `entry` query 放在 `LIFF Endpoint`，手機入口只使用
-`https://liff.line.me/<LIFF_ID>`。不要再把 `/volunteer-entry?entry=...` 加到手機
-入口，否則 LINE 會將它與 Endpoint path 串接成重複路徑。
+LIFF Endpoint 固定為 `/volunteer-application`，動態 target 放在 canonical LIFF
+入口的 query：Bot 使用 `organization_id`，實體／外部入口使用 `entry`。不要把
+Endpoint path 再附加到 `https://liff.line.me/<LIFF_ID>`，否則 LINE 會與 Console
+Endpoint path 串接成重複路徑。
+
+本機可使用既有 fake LINE verifier 安全模擬全新身分，不需 seed User、membership、
+grant 或 application。先從 `GET /v1/public/volunteer-organizations` 取得 demo 組織 UUID，
+再以不含真實個資的 token 與資料呼叫 status／submit：
+
+```json
+{
+  "id_token": "local-id-token:demo-new-applicant-xindian",
+  "organization_id": "<XINDIAN_ORGANIZATION_UUID>",
+  "applicant_name": "本機測試志工",
+  "phone_number": "0900000000",
+  "client_request_id": "<NEW_UUID>",
+  "consent_acknowledged": true,
+  "service_dates": ["<TODAY_OR_NEXT_13_DAYS>"]
+}
+```
+
+status 不建立身分；首次成功 submit 會依現有 service 建立 applicant `User` 與
+`LineUserBinding`，申請保持 pending。未來若公開連結需要更強的來源綁定，可另加
+短效 signed Bot application context（user + organization + purpose + expiry）；V1 不實作。
 
 正常 demo 不建立 LINE fixture 或執行測試套件；完整隔離、LINE Bot、Timeline 與 AI 失敗降級驗證由獨立 test DB 執行。`DEMO_SKIP_DOCKER=1` 可在本機服務已啟動時略過 `docker compose up`。
 
