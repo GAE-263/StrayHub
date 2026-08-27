@@ -1395,9 +1395,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PublicVolunteerOrganization'
+                $ref: '#/components/schemas/PublicVolunteerDirectory'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /v1/volunteer-applications/status:
@@ -3987,13 +3985,15 @@ components:
             enum: [apply, wait, withdraw, enter_care, reapply, contact_shelter, return_to_line]
     PublicOrganization:
       type: object
-      required: [id, name, applications_enabled, insurance_required]
+      required: [id, name, address, applications_enabled, insurance_required]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+        address:
+          type: [string, 'null']
         applications_enabled:
           type: boolean
           description: false 只阻止新申請；既有 applicant 仍可讀取 own status
@@ -4001,20 +4001,36 @@ components:
           type: boolean
     PublicVolunteerOrganization:
       type: object
-      required: [id, code, name, service_area, insurance_required]
+      required: [id, name, address]
       additionalProperties: false
       properties:
         id:
           type: string
           format: uuid
-        code:
-          type: string
         name:
           type: string
-        service_area:
+        address:
           type: [string, 'null']
-        insurance_required:
-          type: boolean
+    PublicVolunteerRegion:
+      type: object
+      required: [name, organizations]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicVolunteerOrganization'
+    PublicVolunteerDirectory:
+      type: object
+      required: [regions]
+      additionalProperties: false
+      properties:
+        regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicVolunteerRegion'
     VolunteerApplication:
       type: object
       required: [id, organization_id, display_name, status, submitted_at, version]

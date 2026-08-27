@@ -2880,9 +2880,18 @@ export interface components {
         });
         VolunteerApplicationWithdrawRequest: {
             id_token: string;
-            shelter_entry_reference: string;
+            /** Format: uuid */
+            organization_id?: string | null;
+            shelter_entry_reference?: string | null;
             expected_version: number;
-        };
+        } & ({
+            /** Format: uuid */
+            organization_id: string;
+            shelter_entry_reference?: null;
+        } | {
+            organization_id?: null;
+            shelter_entry_reference: string;
+        });
         VolunteerApplicationStatusResponse: {
             organization: components["schemas"]["PublicOrganization"];
             application?: components["schemas"]["VolunteerApplication"] | null;
@@ -2894,6 +2903,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            address: string | null;
             /** @description false 只阻止新申請；既有 applicant 仍可讀取 own status */
             applications_enabled: boolean;
             insurance_required: boolean;
@@ -2901,10 +2911,15 @@ export interface components {
         PublicVolunteerOrganization: {
             /** Format: uuid */
             id: string;
-            code: string;
             name: string;
-            service_area: string | null;
-            insurance_required: boolean;
+            address: string | null;
+        };
+        PublicVolunteerRegion: {
+            name: string;
+            organizations: components["schemas"]["PublicVolunteerOrganization"][];
+        };
+        PublicVolunteerDirectory: {
+            regions: components["schemas"]["PublicVolunteerRegion"][];
         };
         VolunteerApplication: {
             /** Format: uuid */
@@ -5709,7 +5724,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicVolunteerOrganization"][];
+                    "application/json": components["schemas"]["PublicVolunteerDirectory"];
                 };
             };
             503: components["responses"]["DependencyUnavailable"];

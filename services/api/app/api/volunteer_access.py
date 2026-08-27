@@ -36,6 +36,7 @@ from services.api.app.application.volunteer_service_summary import (
     encode_summary_cursor,
 )
 from services.api.app.config.settings import get_settings
+from services.api.app.domain.taiwan_region import TAIWAN_REGIONS, canonical_taiwan_region
 from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import validate_service_date_selection
 from services.api.app.domain.volunteer_target import (
@@ -193,6 +194,7 @@ class PublicOrganizationResponse(BaseModel):
 
     id: UUID
     name: str
+    address: str | None
     applications_enabled: bool
     insurance_required: bool
 
@@ -201,10 +203,21 @@ class PublicVolunteerOrganizationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: UUID
-    code: str
     name: str
-    service_area: str | None
-    insurance_required: bool
+    address: str | None
+
+
+class PublicVolunteerRegionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    organizations: list[PublicVolunteerOrganizationResponse]
+
+
+class PublicVolunteerDirectoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    regions: list[PublicVolunteerRegionResponse]
 
 
 class VolunteerApplicationResponse(BaseModel):
@@ -861,13 +874,13 @@ async def withdraw_volunteer_application(
 
 @router.get(
     "/v1/public/volunteer-organizations",
-    response_model=list[PublicVolunteerOrganizationResponse],
+    response_model=PublicVolunteerDirectoryResponse,
     responses={503: {"model": ErrorResponse}},
     openapi_extra={"security": []},
 )
 async def list_public_volunteer_organizations(
     session: AsyncSession = Depends(request_session),  # noqa: B008
-) -> list[PublicVolunteerOrganizationResponse]:
+) -> PublicVolunteerDirectoryResponse:
     try:
         rows = await OrganizationRepository(session).list_public_volunteer_organizations()
     except SQLAlchemyError as exc:
@@ -876,16 +889,25 @@ async def list_public_volunteer_organizations(
             "公開收容所清單暫時無法使用",
             503,
         ) from exc
-    return [
-        PublicVolunteerOrganizationResponse(
-            id=organization_id,
-            code=code,
-            name=name,
-            service_area=service_area,
-            insurance_required=insurance_required,
+    grouped: dict[str, list[PublicVolunteerOrganizationResponse]] = {}
+    for organization_id, name, address, service_area in rows:
+        region = canonical_taiwan_region(service_area)
+        if region is None:
+            continue
+        grouped.setdefault(region, []).append(
+            PublicVolunteerOrganizationResponse(
+                id=organization_id,
+                name=name,
+                address=address,
+            )
         )
-        for organization_id, code, name, service_area, insurance_required in rows
-    ]
+    return PublicVolunteerDirectoryResponse(
+        regions=[
+            PublicVolunteerRegionResponse(name=region, organizations=grouped[region])
+            for region in TAIWAN_REGIONS
+            if region in grouped
+        ]
+    )
 
 
 def _management_service(

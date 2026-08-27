@@ -12,6 +12,7 @@ export type VolunteerStatus = {
   organization: {
     id: string;
     name: string;
+    address?: string | null;
     applications_enabled: boolean;
     insurance_required: boolean;
   };

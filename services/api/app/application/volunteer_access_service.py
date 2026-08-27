@@ -47,6 +47,7 @@ class PublicOrganizationResult:
     name: str
     applications_enabled: bool
     insurance_required: bool
+    address: str | None = None
 
 
 @dataclass(frozen=True)
@@ -239,6 +240,7 @@ class VolunteerAccessService:
         return PublicOrganizationResult(
             id=organization.id,
             name=organization.name,
+            address=getattr(organization, "address", None),
             applications_enabled=policy.applications_enabled,
             insurance_required=policy.insurance_required,
         )
