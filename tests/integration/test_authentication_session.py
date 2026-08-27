@@ -75,6 +75,13 @@ class FakeAuthRepository:
             return []
         return [self.membership]
 
+    async def effective_organization_access(self, user_id):
+        return [
+            (membership, self.organization)
+            for membership in await self.memberships(user_id, active_only=True)
+            if self.organization.status == "active"
+        ]
+
     async def access_grants_for_memberships(self, user_id, membership_ids):
         return [
             grant

@@ -16,18 +16,10 @@ import { ReminderFormDialog } from "../../../../features/medical-care/ReminderFo
 import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalTodaySummary";
 import { Toast } from "../../../../components/ui/toast";
 import { AnimalCareQrCard } from "../../../../features/animal-management/AnimalCareQrCard";
+import { AnimalBasicProfile } from "../../../../features/animal-management/AnimalBasicProfile";
+import type { ManagementAnimal as Animal } from "../../../../lib/animal-profile";
 
 type Props = { params: Promise<{ animalId: string }> };
-type Animal = {
-  id: string;
-  organization_id: string;
-  name: string;
-  shelter_number: string;
-  status: string;
-  photo_key: string | null;
-  area_name: string | null;
-  area_type: string | null;
-};
 
 export default function AnimalProfilePage({ params }: Props) {
   const { animalId } = use(params);
@@ -45,70 +37,88 @@ export default function AnimalProfilePage({ params }: Props) {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    void authFetch(`/v1/management/animals/${animalId}`)
+    const controller = new AbortController();
+    setAnimal(null);
+    setError("");
+    void authFetch(`/v1/management/animals/${animalId}`, {
+      signal: controller.signal,
+    })
       .then(async (response) => {
         if (!response.ok)
           throw new Error(`動物檔案載入失敗（HTTP ${response.status}）`);
         const data = (await response.json()) as { animal: Animal };
-        setAnimal(data.animal);
+        if (!controller.signal.aborted) setAnimal(data.animal);
       })
-      .catch((requestError: unknown) =>
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "動物檔案載入失敗",
-        ),
-      );
+      .catch((requestError: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "動物檔案載入失敗",
+          );
+      });
+    return () => controller.abort();
   }, [animalId]);
 
   useEffect(() => {
+    const controller = new AbortController();
     void Promise.all([
-      authFetch(`/v1/management/care-agenda?animal_id=${animalId}`),
-      authFetch(`/v1/animals/${animalId}/timeline`),
-    ]).then(async ([agendaResponse, timelineResponse]) => {
-      const data = agendaResponse.ok
-        ? ((await agendaResponse.json()) as {
-            local_today?: string;
-            totals?: {
-              today_pending?: number;
-              overdue?: number;
-              today_resolved?: number;
-            };
-            today_state?:
-              "no_activity" | "events_no_todos" | "pending" | "overdue";
-          })
-        : null;
-      if (!data) return;
-      const timeline = timelineResponse.ok
-        ? ((await timelineResponse.json()) as {
-            days?: Array<{
-              date: string;
-              has_activity?: boolean;
-              events?: unknown[];
-              scheduled?: unknown[];
-            }>;
-          })
-        : null;
-      const todayTimeline = timeline?.days?.find(
-        (day) => day.date === data.local_today,
-      );
-      const timelineHasActivity = Boolean(
-        todayTimeline?.has_activity ||
-        todayTimeline?.events?.length ||
-        todayTimeline?.scheduled?.length,
-      );
-      setTodaySummary({
-        hasActivity:
-          Boolean(
-            (data.totals?.today_resolved ?? 0) +
-            (data.totals?.today_pending ?? 0),
-          ) || timelineHasActivity,
-        pending: data.totals?.today_pending ?? 0,
-        overdue: data.totals?.overdue ?? 0,
-        today: data.local_today ?? "",
-        state: data.today_state,
+      authFetch(`/v1/management/care-agenda?animal_id=${animalId}`, {
+        signal: controller.signal,
+      }),
+      authFetch(`/v1/animals/${animalId}/timeline`, {
+        signal: controller.signal,
+      }),
+    ])
+      .then(async ([agendaResponse, timelineResponse]) => {
+        const data = agendaResponse.ok
+          ? ((await agendaResponse.json()) as {
+              local_today?: string;
+              totals?: {
+                today_pending?: number;
+                overdue?: number;
+                today_resolved?: number;
+              };
+              today_state?:
+                "no_activity" | "events_no_todos" | "pending" | "overdue";
+            })
+          : null;
+        if (!data) return;
+        const timeline = timelineResponse.ok
+          ? ((await timelineResponse.json()) as {
+              days?: Array<{
+                date: string;
+                has_activity?: boolean;
+                events?: unknown[];
+                scheduled?: unknown[];
+              }>;
+            })
+          : null;
+        const todayTimeline = timeline?.days?.find(
+          (day) => day.date === data.local_today,
+        );
+        const timelineHasActivity = Boolean(
+          todayTimeline?.has_activity ||
+          todayTimeline?.events?.length ||
+          todayTimeline?.scheduled?.length,
+        );
+        if (controller.signal.aborted) return;
+        setTodaySummary({
+          hasActivity:
+            Boolean(
+              (data.totals?.today_resolved ?? 0) +
+              (data.totals?.today_pending ?? 0),
+            ) || timelineHasActivity,
+          pending: data.totals?.today_pending ?? 0,
+          overdue: data.totals?.overdue ?? 0,
+          today: data.local_today ?? "",
+          state: data.today_state,
+        });
+      })
+      .catch(() => {
+        // This optional summary must not publish errors/results after unmount.
       });
-    });
+    return () => controller.abort();
   }, [animalId]);
 
   if (error)
@@ -153,8 +163,7 @@ export default function AnimalProfilePage({ params }: Props) {
               </Badge>
             </div>
             <p>
-              目前位置：{animal.area_name ?? "尚未分配區域"}
-              {animal.area_type ? ` · ${animal.area_type}` : ""}
+              目前位置：{animal.area_path ?? animal.area_name ?? "尚未分配區域"}
             </p>
           </div>
         </div>
@@ -168,6 +177,11 @@ export default function AnimalProfilePage({ params }: Props) {
       </div>
       <div className="content-grid animal-profile-grid">
         <div className="animal-profile-main-column">
+          <AnimalBasicProfile
+            key={`${animal.organization_id}:${animal.id}`}
+            animal={animal}
+            onSaved={setAnimal}
+          />
           <AnimalTodaySummary
             hasActivity={todaySummary.hasActivity}
             pendingCount={todaySummary.pending}
@@ -253,10 +267,7 @@ export default function AnimalProfilePage({ params }: Props) {
             </div>
             <div>
               <dt>籠舍／區域</dt>
-              <dd>
-                {animal.area_name ?? "未分配"}{" "}
-                {animal.area_type ? `（${animal.area_type}）` : ""}
-              </dd>
+              <dd>{animal.area_path ?? animal.area_name ?? "未分配"}</dd>
             </div>
             <div>
               <dt>照片</dt>
@@ -269,7 +280,7 @@ export default function AnimalProfilePage({ params }: Props) {
             id: animal.id,
             organizationId: animal.organization_id,
             name: animal.name,
-            shelterNumber: animal.shelter_number,
+            shelterNumber: animal.shelter_number ?? "未提供",
             status: animal.status,
             areaName: animal.area_name,
           }}

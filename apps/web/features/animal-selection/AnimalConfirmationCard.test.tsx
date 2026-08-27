@@ -4,6 +4,30 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AnimalConfirmationCard } from "./AnimalConfirmationCard";
 
 describe("AnimalConfirmationCard", () => {
+  it("shows safe profile guidance but never renders management behavior notes", () => {
+    const animal = {
+      id: "a",
+      name: "獒瓦蛤",
+      shelterName: "毛小孩幸福聯盟協會",
+      canReport: true,
+      sex: "female" as const,
+      breed: "藏獒",
+      age_description: "5歲以上",
+      care_guidance: "飲食及零食請依現場安排。",
+      behavior_notes: "內部管理描述",
+    };
+    const html = renderToStaticMarkup(
+      <AnimalConfirmationCard
+        animal={animal}
+        onConfirm={() => undefined}
+        onReselect={() => undefined}
+      />,
+    );
+    expect(html).toContain("母 · 藏獒 · 5歲以上");
+    expect(html).toContain("照護提醒");
+    expect(html).toContain(animal.care_guidance);
+    expect(html).not.toContain(animal.behavior_notes);
+  });
   it("uses shared card structure with responsive media and actions hooks", () => {
     const html = renderToStaticMarkup(
       <AnimalConfirmationCard

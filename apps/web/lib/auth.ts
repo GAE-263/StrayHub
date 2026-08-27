@@ -1,5 +1,11 @@
 import type { EffectiveRole } from "./route-access";
 import {
+  assertOrganizationRequestScope,
+  captureOrganizationRequestScope,
+  organizationRequestSignal,
+  type OrganizationRequestScope,
+} from "./organization-request-scope";
+import {
   clearLiffSession,
   LIFF_ENTRY_REFERENCE_KEY,
   LIFF_RECOVERY_EPOCH_KEY,
@@ -101,12 +107,67 @@ export function clearAuth(
 export async function authFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
-  options: { emitUnauthorized?: boolean } = {},
+  options: {
+    emitUnauthorized?: boolean;
+    requestScope?: OrganizationRequestScope | null;
+  } = {},
 ): Promise<Response> {
+  const scope =
+    options.requestScope === undefined
+      ? captureOrganizationRequestScope(input)
+      : options.requestScope;
+  const callerSignal =
+    init?.signal ??
+    (typeof Request !== "undefined" && input instanceof Request
+      ? input.signal
+      : undefined);
+  const checkCurrent = () => {
+    assertOrganizationRequestScope(scope);
+    callerSignal?.throwIfAborted();
+  };
+  checkCurrent();
+  const { signal, dispose } = organizationRequestSignal(scope, callerSignal);
   const headers = new Headers(init?.headers);
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(input, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, headers, signal });
+    checkCurrent();
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+  // Fetch may have resolved headers before a switch, or an adapter may ignore
+  // abort. Guard buffered body completion as well as headers before callers
+  // publish downloads or other consumer side effects. Streaming response.body
+  // deliberately remains unchanged until it has a separate lifecycle contract.
+  if (scope) {
+    for (const reader of [
+      "json",
+      "text",
+      "blob",
+      "arrayBuffer",
+      "formData",
+    ] as const) {
+      const read = response[reader];
+      if (typeof read !== "function") continue;
+      Object.defineProperty(response, reader, {
+        configurable: true,
+        value: async () => {
+          try {
+            checkCurrent();
+            const data = await read.call(response);
+            checkCurrent();
+            return data;
+          } finally {
+            dispose();
+          }
+        },
+      });
+    }
+  }
+  if (!response.ok || response.status === 204) dispose();
   if (
     response.status === 401 &&
     options.emitUnauthorized !== false &&

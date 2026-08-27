@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api.app.persistence.database.scope import (
     set_authentication_user_organization_scope,
     set_authentication_user_scope,
+    set_organization_scope,
 )
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
@@ -41,6 +42,35 @@ class AuthenticationRepository:
 
     async def set_authentication_context_scope(self, user_id: UUID, organization_id: UUID) -> None:
         await set_authentication_user_organization_scope(self.session, user_id, organization_id)
+
+    async def set_organization_scope(self, organization_id: UUID) -> None:
+        await set_organization_scope(self.session, organization_id)
+
+    async def effective_organization_access(
+        self, user_id: UUID
+    ) -> list[tuple[OrganizationMembership, Organization]]:
+        """Discover own memberships, then verify each grant in exact auth scope.
+
+        Authentication callers supply a verified user. Leaves auth-user scope;
+        tenant request callers must restore their original organization scope.
+        """
+        await self.set_authentication_user_scope(user_id)
+        candidates = await self.memberships(user_id)
+        access = []
+        try:
+            for candidate in candidates:
+                await self.set_authentication_context_scope(user_id, candidate.organization_id)
+                membership = await self.get_effective_membership(user_id, candidate.organization_id)
+                organization = await self.get_organization(candidate.organization_id)
+                if (
+                    membership is not None
+                    and organization is not None
+                    and organization.status == "active"
+                ):
+                    access.append((membership, organization))
+            return access
+        finally:
+            await self.set_authentication_user_scope(user_id)
 
     async def get_user(self, user_id: UUID) -> User | None:
         return await self.session.get(User, user_id)

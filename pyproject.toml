@@ -2,7 +2,7 @@
 name = "strayhub"
 version = "0.1.0"
 description = "浪浪森友會志工日常照護回報與動物近期歷程"
-requires-python = ">=3.11"
+requires-python = "==3.12.*"
 dependencies = [
   "alembic>=1.13,<2",
   "argon2-cffi>=23.1,<26",

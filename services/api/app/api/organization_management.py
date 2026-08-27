@@ -16,8 +16,12 @@ from services.api.app.application.audit_service import AuditService
 from services.api.app.application.organization_management import OrganizationManagementService
 from services.api.app.domain.organization_timezone import validate_timezone
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
+from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership
 from services.api.app.persistence.models.shelter_area import ShelterArea
+from services.api.app.persistence.repositories.authentication_repository import (
+    AuthenticationRepository,
+)
 from services.api.app.persistence.repositories.organization_repository import OrganizationRepository
 from services.api.app.persistence.repositories.shelter_area_repository import ShelterAreaRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -337,7 +341,13 @@ async def _require_membership_admin_with_audit(
         raise
 
 
-@router.get("/v1/organizations")
+@router.get(
+    "/v1/organizations",
+    description=(
+        "Non-platform users see only active shelters with current effective membership/grant "
+        "access; listing does not switch the active tenant."
+    ),
+)
 async def list_organizations(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
@@ -346,8 +356,13 @@ async def list_organizations(
     if context.role == "PLATFORM_ADMIN" or context.platform_scope:
         organizations = await repository.list()
     elif context.organization_id is not None:
-        organization = await repository.get(context.organization_id)
-        organizations = [organization] if organization is not None else []
+        try:
+            access = await AuthenticationRepository(session).effective_organization_access(
+                context.user_id
+            )
+            organizations = [organization for _, organization in access]
+        finally:
+            await set_organization_scope(session, context.organization_id)
     else:
         organizations = []
     return {"items": [_response(value) for value in organizations]}

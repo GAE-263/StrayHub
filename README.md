@@ -12,57 +12,74 @@
 
 PostgreSQL 固定使用 `127.0.0.1:65432`，MinIO API 使用 `9000`，MinIO Console 使用 `9001`。這些值與 [`.env.example`](.env.example) 保持一致。
 
-## 快速啟動
+## 快速啟動：Normal Demo
 
 ```bash
 cp .env.example .env
-docker compose -f infra/local/docker-compose.yml up -d postgres minio
+uv sync --dev
+npm ci --prefix apps/web
+./scripts/demo.sh
+# 僅 bootstrap／驗證，不啟動服務：
+./scripts/demo.sh check
+```
+
+正常 demo 只建立毛小孩幸福聯盟協會（5 隻）、新北市新店區公立動物之家
+（犬，最多 60 隻）、新北市五股區公立動物之家（犬，最多 60 隻）。
+流程包含 Docker、Alembic、runtime-role 最小 grants、FurKids、MOA 匯入、
+共用觀察詞彙、demo 帳號與照片／QR 驗證；不執行測試 fixture seed。
+
+- 管理介面：[本機 Web](http://127.0.0.1:3001/login)
+- API：[healthz](http://127.0.0.1:8001/healthz)、[Swagger](http://127.0.0.1:8001/docs)
+- 三收容所管理員：`demo-furkids-admin`（三個明確 SHELTER_ADMIN memberships）。
+- 平台治理：`demo-platform-admin`（無 Shelter Membership）。
+- 單一收容所志工：`demo-furkids-volunteer`、`demo-xindian-volunteer`、
+  `demo-wugu-volunteer`；各自只有所屬收容所 membership/grant。
+- 上述帳號密碼皆為 `local-only-password`；僅供本機，無真實個資。
+
+已知既有限制：純平台帳號在 `strayhub_runtime` 連線下的登入組織清單為空，
+尚待獨立授權修正；三收容所展示請使用 membership-based `demo-furkids-admin`。
+詳細驗證與既有 DB 的未知 fixture 保留情況見下方資料流程文件。
+
+首次匯入需下載照片。MOA 暫時無法同步時，只有既有本機動物、來源、QR 與
+照片 checksum 均有效才會明確警告並沿用；沒有有效資料就停止，不假裝同步成功。
+即時來源可能少於 60 或已有較多歷史匯入，驗證命令回報實際數量，不自行刪除動物。
+
+JWT 未提供時，demo.sh 使用短期 process-local 金鑰；手動啟動請設定
+`AUTH_JWT_ACTIVE_PRIVATE_KEY`／`AUTH_JWT_ACTIVE_PUBLIC_KEY`，不可用於正式環境。
+
+## Test Fixtures：與 Demo 分開的資料庫
+
+ORG-A／ORG-B／ORG-DISABLED、`local-staff-a`、`local-volunteer-a` 等
+皆為測試 fixtures，不是正常 demo。先建立專用本機 DB，再明確指定：
+
+```bash
+export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub_test
+export STRAYHUB_TEST_DATABASE_URL=postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test
 uv run alembic upgrade head
-uv run python -m scripts.seed_local
-# 載入 T255 工作人員驗收用的固定 14 日 Timeline（需先完成 seed_local）
+uv run python -m scripts.configure_runtime_role --apply
+uv run python -m scripts.seed_test_fixtures
+# 可選的測試延伸：
 uv run python -m scripts.seed_t255_timeline
 ```
 
-若 `.env` 的 `AUTH_JWT_ACTIVE_PRIVATE_KEY` 與 `AUTH_JWT_ACTIVE_PUBLIC_KEY` 為空，請先產生本機限定金鑰並填入 `.env`；不可將這些金鑰用於正式環境：
+`scripts.seed_local` 保留相容性，但只屬於測試路徑。
+LINE、QR、E2E、auth、volunteer、isolation 與 AI 失敗降級測試請使用上述
+專用 DB；不要讓完整測試污染 demo DB。
+
+## 清理既有本機 Demo
+
+先備份並停止寫入者；以下命令只處理已知虛構 fixtures，不清空資料庫：
 
 ```bash
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/strayhub-private.pem
-openssl pkey -in /tmp/strayhub-private.pem -pubout -out /tmp/strayhub-public.pem
+uv run python -m scripts.cleanup_legacy_demo_fixtures       # 唯讀預覽
+uv run python -m scripts.cleanup_legacy_demo_fixtures --yes # 確認後才刪除
+uv run python -m scripts.verify_demo_data --photos
 ```
 
-把兩個檔案內容分別填入 `AUTH_JWT_ACTIVE_PRIVATE_KEY` 與 `AUTH_JWT_ACTIVE_PUBLIC_KEY`。Shell 直接展示可使用 `./scripts/demo.sh`，它會在環境變數未提供時使用短期 process-local 金鑰。
-
-## 啟動服務
-
-分別開啟三個終端機：
-
-```bash
-# FastAPI
-uv run python -m uvicorn services.api.app.main:app --reload --host 127.0.0.1 --port 8001
-
-# Next.js
-npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 3001
-
-# Worker
-uv run python -m services.worker.worker
-```
-
-- API health check：<http://127.0.0.1:8001/healthz>
-- 管理前端：<http://127.0.0.1:3001>
-- 管理登入頁：<http://127.0.0.1:3001/login>
-- Swagger：<http://127.0.0.1:8001/docs>
-- 本機資料帳號：`local-staff-a`、`local-volunteer-a`、`local-platform-admin`，密碼都是 `local-only-password`
-- 另一個租戶帳號：`local-staff-b`、`local-volunteer-b`
-
-`local-platform-admin` 是沒有 Shelter Membership 的平台級 `PLATFORM_ADMIN`，登入後可選擇並管理 `ORG-A`／`ORG-B`。
-
-Seed 只建立虛構的 `ORG-A`／`ORG-B`，兩邊可以使用相同 Shelter Number，供租戶隔離展示。完成測試後可安全移除這組資料：
-
-```bash
-uv run python -m scripts.reset_local --yes
-```
-
-登入管理前端後，Next.js 會將 `/v1/*` 轉發至 `127.0.0.1:8001/v1/*`，再依登入帳號的 Membership 或平台管理員授權設定 Active Shelter Context；管理首頁會自動導向第一隻動物的 Timeline。預設展示帳號是 `local-staff-a`／`local-only-password`。
+只允許 APP_ENV=local/test、loopback DB；拒絕 production/staging、遠端主機。
+ORG-A/B/DISABLED 以外的未知組織會保留並阻擋 exact-demo 驗證，需另行人工確認。
+保留三收容所、共用詞彙、平台設定與 MinIO 照片；不新增 migration、不改 RLS。
+完整盤點、帳號、清理與離線沿用規則見 [Demo/Test 資料流程](docs/demo/data-workflows.md)。
 
 ## LIFF HTTPS tunnel 與手機驗收
 
@@ -85,7 +102,7 @@ uv run python -m scripts.reset_local --yes
 ## 一鍵本機展示
 
 ```bash
-# 執行 Migration、Seed、US0～US3 與 AI 失敗降級 smoke，完成後啟動三個本機服務
+# 執行 Migration、runtime grants、三收容所資料與照片驗證，完成後啟動三個本機服務
 ./scripts/demo.sh
 
 # 只執行展示前驗證，不啟動長駐服務
@@ -123,7 +140,7 @@ Internet。腳本會以 `ngrok http --url "$NGROK_URL"` 啟動，若實際 tunne
 `https://liff.line.me/<LIFF_ID>`。不要再把 `/volunteer-entry?entry=...` 加到手機
 入口，否則 LINE 會將它與 Endpoint path 串接成重複路徑。
 
-展示流程會驗證收容所／帳號隔離、動物／QR 選擇、LINE Bot Draft／Report、Timeline 與 AI 服務中斷時人工回報仍可保存。`DEMO_SKIP_DOCKER=1` 可在服務已由其他 Compose project 啟動時略過 `docker compose up`。
+正常 demo 不建立 LINE fixture 或執行測試套件；完整隔離、LINE Bot、Timeline 與 AI 失敗降級驗證由獨立 test DB 執行。`DEMO_SKIP_DOCKER=1` 可在本機服務已啟動時略過 `docker compose up`。
 
 ## 品質命令
 

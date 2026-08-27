@@ -3,13 +3,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
+  animalAgeLabel,
+  animalSexLabel,
+  type SafeAnimalProfile,
+} from "../../lib/animal-profile";
+import styles from "../animal-management/animal-profile.module.css";
+import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../components/ui/card";
 
-type AnimalCandidate = {
+type AnimalCandidate = SafeAnimalProfile & {
   id: string;
   name: string;
   shelterNumber?: string | null;
@@ -70,12 +76,24 @@ export function AnimalConfirmationCard({
             <div className="animal-confirmation-details">
               <strong>{animal.name}</strong>
               <p>收容編號：{animal.shelterNumber ?? "未維護"}</p>
+              <p>
+                {animalSexLabel(animal.sex)} · {animal.breed ?? "品種未提供"} ·{" "}
+                {animalAgeLabel(animal)}
+              </p>
               {animal.cage && <p>犬舍／籠位：{animal.cage}</p>}
               {animal.area && <p>區域：{animal.area}</p>}
               {!animal.cage && !animal.area && <p>犬舍／區域：未維護</p>}
               <p>收容所：{animal.shelterName}</p>
             </div>
           </div>
+          {animal.care_guidance && (
+            <section className={styles.careWarning} aria-label="照護提醒">
+              <h3>
+                <span aria-hidden="true">⚠ </span>照護提醒
+              </h3>
+              <p>{animal.care_guidance}</p>
+            </section>
+          )}
           <div className="animal-confirmation-actions">
             <Button
               type="button"

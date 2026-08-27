@@ -33,6 +33,10 @@ class ActiveShelterContextService:
         user = await self.repository.get_user(session.user_id)
         if user is None or user.status != "active":
             raise DomainError("invalid_session", "使用者無效", 401)
+        if user.platform_role != "PLATFORM_ADMIN":
+            # The incoming request is scoped to A. Inspect only this authenticated
+            # user's access to B before enabling any B tenant read/write capability.
+            await self.repository.set_authentication_context_scope(user.id, organization_id)
         organization = await self.repository.get_organization(organization_id)
         if organization is None or organization.status != "active":
             raise DomainError("organization_access_denied", "無法存取此收容所資料", 404)
@@ -45,6 +49,9 @@ class ActiveShelterContextService:
             if membership is None or organization is None or organization.status != "active":
                 raise DomainError("organization_access_denied", "無法存取此收容所資料", 404)
         previous_organization_id = session.active_organization_id
+        # Scope, session and audit belong to the caller's single transaction.
+        # Never flush the target audit under the old organization scope.
+        await self.repository.set_organization_scope(organization_id)
         session.active_organization_id = organization_id
         if self.audit is not None:
             await self.audit.record(

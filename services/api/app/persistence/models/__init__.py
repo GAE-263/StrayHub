@@ -3,6 +3,7 @@
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AICallLog, AIObservation
 from services.api.app.persistence.models.animal import Animal
+from services.api.app.persistence.models.animal_external_source import AnimalExternalSource
 from services.api.app.persistence.models.audit import AuditRecord
 from services.api.app.persistence.models.care_report import (
     CareReport,
@@ -54,6 +55,7 @@ __all__ = [
     "AIObservation",
     "AICallLog",
     "Animal",
+    "AnimalExternalSource",
     "AnimalQrCode",
     "AuditRecord",
     "CareReport",

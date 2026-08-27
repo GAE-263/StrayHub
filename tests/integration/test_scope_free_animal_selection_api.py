@@ -29,6 +29,10 @@ async def test_scope_free_qr_resolve_and_confirm_endpoints_issue_bound_token(
         shelter_number="QR-001",
         current_photo_key=None,
         status="active",
+        sex="female",
+        breed="藏獒",
+        care_guidance="請依現場安排餵食",
+        behavior_notes="僅管理端可見",
     )
     candidate = AnimalCandidate(animal=animal, area=None)
 
@@ -69,6 +73,12 @@ async def test_scope_free_qr_resolve_and_confirm_endpoints_issue_bound_token(
 
     assert resolved.id == animal_id
     assert confirmed.id == animal_id
+    assert resolved.sex == "female"
+    assert resolved.breed == "藏獒"
+    assert confirmed.care_guidance == "請依現場安排餵食"
+    assert "behavior_notes" not in resolved.model_dump()
+    assert "behavior_notes" not in confirmed.model_dump()
+    assert "medical_history" not in confirmed.model_dump()
     verify_animal_confirmation_token(
         confirmed.confirmation_token,
         user_id=user_id,

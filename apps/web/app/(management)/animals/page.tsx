@@ -17,15 +17,11 @@ import { Input } from "../../../components/ui/input";
 import { Select } from "../../../components/ui/select";
 import { Table } from "../../../components/ui/table";
 import { buildAnimalsQuery } from "../management-query";
-
-type Animal = {
-  id: string;
-  name: string;
-  shelter_number: string;
-  status: string;
-  area_name: string | null;
-  area_type: string | null;
-};
+import {
+  animalSexLabel,
+  type ManagementAnimal as Animal,
+} from "../../../lib/animal-profile";
+import styles from "../../../features/animal-management/animal-profile.module.css";
 
 type ListResponse = {
   items: Animal[];
@@ -107,7 +103,7 @@ export default function AnimalsPage() {
         <div>
           <span className="eyebrow">ANIMAL DIRECTORY</span>
           <h1 id="animals-title">動物檔案</h1>
-          <p>搜尋名稱、收容編號與 Cage／Area，進入完整照護歷程。</p>
+          <p>搜尋名稱、收容編號與籠舍／區域，進入完整照護歷程。</p>
         </div>
       </div>
       <section className="ui-card ui-card-padded">
@@ -177,7 +173,7 @@ export default function AnimalsPage() {
               <tr>
                 <th>名稱</th>
                 <th>收容編號</th>
-                <th>Cage／Area</th>
+                <th>籠舍／區域</th>
                 <th>狀態</th>
                 <th>操作</th>
               </tr>
@@ -186,12 +182,29 @@ export default function AnimalsPage() {
               {data.items.map((animal) => (
                 <tr key={animal.id}>
                   <td>
-                    <Link className="text-link" href={`/animals/${animal.id}`}>
-                      {animal.name}
-                    </Link>
+                    <div className={styles.directoryIdentity}>
+                      {animal.photo_url && (
+                        <img
+                          src={animal.photo_url}
+                          alt={`${animal.name} 的照片`}
+                        />
+                      )}
+                      <div>
+                        <Link
+                          className="text-link"
+                          href={`/animals/${animal.id}`}
+                        >
+                          {animal.name}
+                        </Link>
+                        <small>
+                          {animal.breed ?? "品種未提供"} ·{" "}
+                          {animalSexLabel(animal.sex)}
+                        </small>
+                      </div>
+                    </div>
                   </td>
                   <td>{animal.shelter_number}</td>
-                  <td>{animal.area_name ?? "未分配"}</td>
+                  <td>{animal.area_path ?? animal.area_name ?? "未分配"}</td>
                   <td>
                     <Badge>{statusLabel(animal.status)}</Badge>
                   </td>

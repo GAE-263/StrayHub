@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from botocore.exceptions import ClientError
 from services.api.app.infrastructure.storage.gcs import GcsStorageAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.infrastructure.storage.ports import ObjectMetadata, ObjectScope
@@ -9,6 +10,17 @@ from services.api.app.infrastructure.storage.ports import ObjectMetadata, Object
 class FakeS3:
     def __init__(self) -> None:
         self.objects = {}
+        self.buckets: set[str] = set()
+
+    def head_bucket(self, **kwargs):
+        if kwargs["Bucket"] not in self.buckets:
+            raise ClientError(
+                {"Error": {"Code": "NoSuchBucket", "Message": "missing"}},
+                "HeadBucket",
+            )
+
+    def create_bucket(self, **kwargs):
+        self.buckets.add(kwargs["Bucket"])
 
     def put_object(self, **kwargs):
         self.objects[(kwargs["Bucket"], kwargs["Key"])] = kwargs["Body"]
@@ -59,6 +71,8 @@ async def test_minio_and_gcs_share_scope_and_signed_url_contract() -> None:
     minio = MinioStorageAdapter(client=FakeS3(), bucket="private")
     gcs = GcsStorageAdapter(client=FakeGcsClient(), bucket="private")
 
+    await minio.ensure_bucket()
+    await minio.ensure_bucket()
     await minio.put(scope=scope, key="photo", data=b"data", metadata=metadata)
     await gcs.put(scope=scope, key="photo", data=b"data", metadata=metadata)
     assert await minio.get(scope=scope, key="photo") == b"data"

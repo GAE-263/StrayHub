@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError
 
 from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.storage.ports import ObjectMetadata, ObjectScope, StoredObject
@@ -23,6 +24,16 @@ class MinioStorageAdapter:
     @staticmethod
     def _scoped_key(scope: ObjectScope, key: str) -> str:
         return f"organizations/{scope.organization_id}/{key.lstrip('/')}"
+
+    async def ensure_bucket(self) -> None:
+        """Idempotently bootstrap the configured private bucket for local/demo use."""
+        try:
+            self.client.head_bucket(Bucket=self.bucket)
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code not in {"404", "NoSuchBucket", "NotFound"}:
+                raise
+            self.client.create_bucket(Bucket=self.bucket)
 
     async def put(
         self, *, scope: ObjectScope, key: str, data: bytes, metadata: ObjectMetadata

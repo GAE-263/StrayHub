@@ -18,12 +18,13 @@ fi
 
 echo "[T224] Migration"
 uv run alembic upgrade head
+uv run python -m scripts.configure_runtime_role --apply
 
 echo "[T224] Empty database bootstrap／reversible migration"
 uv run pytest tests/integration/test_empty_database_bootstrap.py -q
 
 echo "[T224] Fictional seed"
-uv run python -m scripts.seed_local
+uv run python -m scripts.seed_test_fixtures
 
 echo "[T218-T221] Full local flow／isolation／failure／adapter contracts"
 uv run pytest \
@@ -78,4 +79,4 @@ else
   done <<< "$dockerfiles"
 fi
 
-echo "Local complete verification gate passed. Seed data remains available in ORG-A／ORG-B."
+echo "Local verification passed. ORG-A／ORG-B are test fixtures only; normal demo uses demo.sh."

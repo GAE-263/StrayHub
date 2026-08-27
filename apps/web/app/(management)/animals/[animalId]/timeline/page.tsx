@@ -24,12 +24,16 @@ export default function AnimalTimelinePage({ params }: Props) {
   const [error, setError] = useState("");
   const [range, setRange] = useState({ start: "", end: "" });
   const latestRequest = useRef(0);
+  const pendingRequest = useRef<AbortController | null>(null);
 
   const loadTimeline = useCallback(
     async (
       nextRange: { start: string; end: string } = { start: "", end: "" },
     ) => {
       const requestId = ++latestRequest.current;
+      pendingRequest.current?.abort();
+      const controller = new AbortController();
+      pendingRequest.current = controller;
       setLoading(true);
       setError("");
       const query = buildTimelineQuery(nextRange);
@@ -37,17 +41,20 @@ export default function AnimalTimelinePage({ params }: Props) {
         const suffix = query.toString() ? `?${query.toString()}` : "";
         const response = await authFetch(
           `/v1/animals/${animalId}/timeline${suffix}`,
+          { signal: controller.signal },
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = (await response.json()) as { days: ApiDay[] };
-        if (requestId === latestRequest.current) setDays(mapDays(data.days));
+        if (!controller.signal.aborted && requestId === latestRequest.current)
+          setDays(mapDays(data.days));
       } catch (requestError) {
-        if (requestId === latestRequest.current)
+        if (!controller.signal.aborted && requestId === latestRequest.current)
           setError(
             requestError instanceof Error ? requestError.message : "無法載入",
           );
       } finally {
-        if (requestId === latestRequest.current) setLoading(false);
+        if (!controller.signal.aborted && requestId === latestRequest.current)
+          setLoading(false);
       }
     },
     [animalId],
@@ -55,6 +62,10 @@ export default function AnimalTimelinePage({ params }: Props) {
 
   useEffect(() => {
     void loadTimeline({ start: "", end: "" });
+    return () => {
+      latestRequest.current += 1;
+      pendingRequest.current?.abort();
+    };
   }, [loadTimeline]);
 
   const changeDate = (date: string) => {

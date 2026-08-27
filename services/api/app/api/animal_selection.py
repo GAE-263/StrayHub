@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -20,6 +21,7 @@ from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
+from services.api.app.domain.animal_profile import AnimalSex
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.database.scope import (
     set_authentication_user_organization_scope,
@@ -44,6 +46,12 @@ class AnimalCandidateResponse(BaseModel):
     area: str | None = None
     organization_id: UUID
     can_report: bool
+    sex: AnimalSex = "unknown"
+    breed: str | None = None
+    birth_date: date | None = None
+    birth_date_estimated: bool = False
+    age_description: str | None = None
+    care_guidance: str | None = None
 
 
 class AnimalConfirmationResponse(AnimalCandidateResponse):
@@ -99,6 +107,12 @@ async def _candidate(
         area=area.name if area is not None and area.area_type != "cage" else None,
         organization_id=organization_id,
         can_report=animal.status == "active",
+        sex=getattr(animal, "sex", None) or "unknown",
+        breed=getattr(animal, "breed", None),
+        birth_date=getattr(animal, "birth_date", None),
+        birth_date_estimated=getattr(animal, "birth_date_estimated", None) or False,
+        age_description=getattr(animal, "age_description", None),
+        care_guidance=getattr(animal, "care_guidance", None),
     )
 
 

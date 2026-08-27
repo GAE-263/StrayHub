@@ -16,7 +16,9 @@ test.describe("管理工作台 Shell", () => {
     await expect(
       page.getByRole("heading", { name: "管理工作台總覽" }),
     ).toBeVisible();
-    await expect(page.getByText("ORG-A")).toBeVisible();
+    await expect(page.getByLabel("目前收容所", { exact: true })).toHaveText(
+      "浪浪森友會 A",
+    );
     await expect(
       page.getByRole("link", { name: "動物檔案", exact: true }),
     ).toBeVisible();
@@ -194,7 +196,64 @@ test.describe("管理工作台 Shell", () => {
     await page.goto("/");
     await page.getByLabel("切換目前收容所").selectOption("org-b");
     await expect(page.getByText("無法切換目前收容所")).toBeVisible();
+    await expect(page.getByLabel("切換目前收容所")).toHaveValue("org-a");
     await page.getByRole("button", { name: "登出管理工作台" }).click();
     await expect(page).toHaveURL(/\/login$/);
+  });
+
+  test("authorized switch replaces animal rows while an old tenant query is pending", async ({
+    page,
+  }) => {
+    await page.unroute("**/v1/**");
+    await mockManagementApi(page, {
+      organizations: ["a", "b"].map((suffix) => ({
+        id: `org-${suffix}`,
+        code: `ORG-${suffix.toUpperCase()}`,
+        name: `收容所 ${suffix.toUpperCase()}`,
+        role: "STAFF",
+        status: "active",
+        timezone: "Asia/Taipei",
+        timezone_version: 1,
+      })),
+      animals: (_params, org) => ({
+        items: [
+          {
+            id: `animal-${org}`,
+            name: `動物 ${org}`,
+            shelter_number: `${org}-001`,
+            organization_id: org,
+            status: "active",
+          },
+        ],
+        page: 1,
+        page_size: 20,
+        total: 1,
+      }),
+      animalDelay: (params) => (params.get("query") === "slow" ? 500 : 0),
+    });
+    await page.goto("/animals");
+    await expect(
+      page.getByRole("link", { name: "動物 org-a", exact: true }),
+    ).toBeVisible();
+    const pending = page.waitForRequest(
+      (request) => new URL(request.url()).searchParams.get("query") === "slow",
+    );
+    await page.getByRole("textbox", { name: "搜尋", exact: true }).fill("slow");
+    await pending;
+    await page.getByLabel("切換目前收容所").selectOption("org-b");
+    await expect(page.getByLabel("切換目前收容所")).toHaveValue("org-b");
+    await expect(
+      page.getByRole("link", { name: "動物 org-b", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "動物 org-a", exact: true }),
+    ).toHaveCount(0);
+    await page.getByLabel("切換目前收容所").selectOption("org-a");
+    await expect(
+      page.getByRole("link", { name: "動物 org-a", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "動物 org-b", exact: true }),
+    ).toHaveCount(0);
   });
 });

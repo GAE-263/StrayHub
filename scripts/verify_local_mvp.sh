@@ -17,7 +17,7 @@ echo "[MVP] migration"
 uv run alembic upgrade head
 
 echo "[MVP] fictional seed"
-uv run python -m scripts.seed_local
+uv run python -m scripts.seed_test_fixtures
 
 echo "[MVP] PostgreSQL bootstrap／isolation／vertical flow／failure degradation"
 uv run pytest \
@@ -48,4 +48,4 @@ npm --prefix apps/web run typecheck
 echo "[MVP] generated contract types"
 npm --prefix packages/contracts run check
 
-echo "Local MVP gate passed. Seed data remains available in ORG-A／ORG-B for demonstration."
+echo "Local MVP gate passed. ORG-A／ORG-B are test fixtures only; normal demo uses demo.sh."

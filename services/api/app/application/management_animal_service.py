@@ -3,11 +3,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.media_access import MediaAccessService
+from services.api.app.domain.animal_profile import (
+    AnimalProfile,
+    AnimalProfileUpdate,
+    profile_values,
+)
+from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.medical_care import CareReminderSeries
 from services.api.app.persistence.models.shelter_area import ShelterArea
@@ -21,6 +29,7 @@ class ManagementAnimalService:
     @staticmethod
     def payload(animal: Animal, area: ShelterArea | None) -> dict:
         return {
+            **AnimalProfile(**profile_values(animal)).model_dump(mode="json"),
             "id": str(animal.id),
             "organization_id": str(animal.organization_id),
             "name": animal.name,
@@ -31,6 +40,32 @@ class ManagementAnimalService:
             "area_name": area.name if area else None,
             "area_type": area.area_type if area else None,
         }
+
+    async def _read_payload(self, animal: Animal, area: ShelterArea | None) -> dict:
+        payload = self.payload(animal, area)
+        payload["photo_url"] = None
+        payload["area_path"] = area.name if area else None
+        if area is not None and getattr(area, "parent_id", None):
+            parent_name = await self.session.scalar(
+                select(ShelterArea.name).where(
+                    ShelterArea.id == area.parent_id,
+                    ShelterArea.organization_id == self.organization_id,
+                )
+            )
+            if parent_name:
+                payload["area_path"] = f"{parent_name} / {area.name}"
+        if animal.current_photo_key:
+            try:
+                payload["photo_url"] = await MediaAccessService(
+                    MinioStorageAdapter(), self.organization_id
+                ).signed_url(
+                    media_organization_id=animal.organization_id,
+                    object_key=animal.current_photo_key,
+                    expires_seconds=300,
+                )
+            except Exception:
+                pass  # An unavailable photo must not block the profile.
+        return payload
 
     async def list(
         self,
@@ -65,7 +100,7 @@ class ManagementAnimalService:
             .limit(page_size)
         )
         return {
-            "items": [self.payload(animal, area) for animal, area in rows.all()],
+            "items": [await self._read_payload(animal, area) for animal, area in rows.all()],
             "page": page,
             "page_size": page_size,
             "total": int(total or 0),
@@ -87,7 +122,46 @@ class ManagementAnimalService:
         if pair is None:
             raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
         animal, area = pair
-        return {"animal": self.payload(animal, area)}
+        return {"animal": await self._read_payload(animal, area)}
+
+    async def update_profile(
+        self, animal_id: UUID, *, changes: AnimalProfileUpdate, actor_user_id: UUID
+    ) -> dict:
+        animal = (
+            await self.session.execute(
+                select(Animal)
+                .where(
+                    Animal.id == animal_id,
+                    Animal.organization_id == self.organization_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if animal is None:
+            raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+        before = AnimalProfile(**profile_values(animal))
+        try:
+            after = AnimalProfile(**(before.model_dump() | changes.model_dump(exclude_unset=True)))
+        except ValidationError as exc:
+            raise DomainError(
+                "invalid_animal_profile", "出生日期不得晚於入園日期；估計出生日期需填寫日期", 422
+            ) from exc
+        if before != after:
+            for field, value in after.model_dump().items():
+                setattr(animal, field, value)
+            await AuditService(self.session).record(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="animal.profile_updated",
+                resource_type="Animal",
+                resource_id=animal.id,
+                source_channel="api",
+                before=before.model_dump(mode="json"),
+                after=after.model_dump(mode="json"),
+            )
+        result = await self.get(animal_id)
+        await self.session.commit()
+        return result
 
     async def update_status(
         self, animal_id: UUID, *, status: str, reason: str, actor_user_id: UUID

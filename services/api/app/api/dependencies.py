@@ -12,6 +12,7 @@ from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.persistence.database.engine import get_session
 from services.api.app.persistence.database.scope import (
+    set_authentication_user_organization_scope,
     set_authentication_user_scope,
     set_organization_scope,
     set_platform_scope,
@@ -216,6 +217,10 @@ async def _load_request_context(
     membership_id = None
     role = user.platform_role or ""
     if organization_id is not None:
+        if not platform_scope:
+            # Volunteer grants are visible only for this exact authenticated
+            # user/organization pair, not the broad membership-discovery scope.
+            await set_authentication_user_organization_scope(session, user.id, organization_id)
         organization = await repository.get_organization(organization_id)
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)

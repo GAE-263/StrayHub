@@ -26,6 +26,7 @@ import {
   type AnimalQrPayload,
 } from "../../../lib/animal-qr-payload";
 import { authFetch } from "../../../lib/auth";
+import type { SafeAnimalProfile } from "../../../lib/animal-profile";
 import {
   isLiffScannerAvailable,
   scanAnimalQr,
@@ -35,7 +36,7 @@ import {
   closeLiffWindow,
 } from "../../../lib/liff-line-handoff";
 
-type AnimalCandidate = {
+type AnimalCandidate = SafeAnimalProfile & {
   id: string;
   name: string;
   shelter_number: string | null;
@@ -771,6 +772,12 @@ export default function AnimalConfirmationPage() {
             area: candidate.animal.area,
             shelterName: candidate.shelterName,
             canReport: candidate.animal.can_report,
+            sex: candidate.animal.sex,
+            breed: candidate.animal.breed,
+            birth_date: candidate.animal.birth_date,
+            birth_date_estimated: candidate.animal.birth_date_estimated,
+            age_description: candidate.animal.age_description,
+            care_guidance: candidate.animal.care_guidance,
           }}
           busy={phase === "confirming-animal" || phase === "creating-handoff"}
           onConfirm={() => void confirmAnimalAndCreateHandoff()}
