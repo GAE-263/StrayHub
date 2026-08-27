@@ -81,16 +81,24 @@ def load_definition(path: Path, *, environ: Mapping[str, str] | None = None) -> 
                 raise ValueError("Rich Menu URI 必須使用有效的 HTTPS host")
             query = parse_qs(parsed.query, keep_blank_values=True)
             entry_values = query.get("entry", [])
+            view_values = query.get("view", [])
             path_segments = parsed.path.split("/")
+            valid_query = (
+                not query
+                or (
+                    set(query) == {"entry"}
+                    and len(entry_values) == 1
+                    and ENTRY_REFERENCE_PATTERN.fullmatch(entry_values[0]) is not None
+                )
+                or (set(query) == {"view"} and view_values == ["status"])
+            )
             if (
                 path_segments != expected_liff_path
                 or parsed.fragment
-                or set(query) != {"entry"}
-                or len(entry_values) != 1
-                or not ENTRY_REFERENCE_PATTERN.fullmatch(entry_values[0])
+                or not valid_query
                 or parsed.port not in {None, 443}
             ):
-                raise ValueError("Rich Menu URI 必須導向含 entry 的 canonical LIFF endpoint")
+                raise ValueError("Rich Menu URI 必須導向 canonical LIFF endpoint")
     return document
 
 

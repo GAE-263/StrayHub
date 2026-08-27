@@ -1,21 +1,22 @@
 version: 1
 name: local-volunteer-care
+liff_url_reference: ${LIFF_BASE_URL}
 actions:
-  - label: 我要報名志工
+  - label: 志工報名
+    type: uri
+    uri: ${LIFF_BASE_URL}
+  - label: 領養媒合
     type: postback
-    data: action=start_volunteer_application
-  - label: 開始照護回報
+    data: action=adoption_placeholder
+  - label: 照護回報
     type: postback
     data: action=start_care_report
+  - label: 我的申請
+    type: uri
+    uri: ${LIFF_BASE_URL}?view=status
   - label: 掃描 QR Code
     type: uri
     uri: ${LIFF_BASE_URL}?entry=${SHELTER_ENTRY_REFERENCE}
-  - label: 今日照護毛孩
-    type: postback
-    data: action=list_reportable_animals
   - label: 繼續未完成回報
     type: postback
     data: action=resume_draft
-  - label: 聯絡工作人員
-    type: postback
-    data: action=contact_staff
