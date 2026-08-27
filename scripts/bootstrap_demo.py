@@ -51,7 +51,10 @@ async def bootstrap():
             flush=True,
         )
         sync[code] = await import_or_reuse(code)
-    print("[Demo] Shared vocabulary and minimum demo accounts", flush=True)
+    print(
+        "[Demo] Shared vocabulary, minimum demo accounts, and three volunteer policies",
+        flush=True,
+    )
     await seed_accounts()
     return {"sync": sync, "verified": await verify(photos=True)}
 
