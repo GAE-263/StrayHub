@@ -39,6 +39,9 @@ async def seed():
         if set(orgs) != set(DEMO_SHELTERS):
             raise RuntimeError("seed_all_three_shelters_before_accounts")
         for organization in orgs.values():
+            organization.service_area = "新北市"
+            if not organization.address:
+                organization.address = "新北市（示範資料）"
             await set_organization_scope(session, organization.id)
             policy = await session.scalar(
                 select(OrganizationVolunteerAccessPolicy).where(

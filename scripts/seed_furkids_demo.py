@@ -643,6 +643,9 @@ async def seed(
             organization.name = ORGANIZATION_NAME
             organization.status = "active"
             organization.timezone = TIMEZONE_NAME
+            organization.service_area = "新北市"
+            if not organization.address:
+                organization.address = "新北市（示範資料）"
             admin, volunteer, membership = await _seed_identity(session, organization)
             areas = await _seed_areas(session, organization)
             animals: dict[str, Animal] = {}
