@@ -519,27 +519,83 @@ async def test_mutations_validate_response_before_commit(
     assert session.commits == 0
 
 
-@pytest.mark.parametrize("operation", ["submit", "withdraw"])
-def test_organization_target_mutations_are_rejected_by_entry_only_request_models(
-    operation: str,
+def test_withdraw_request_accepts_organization_or_entry_target() -> None:
+    organization = api.VolunteerApplicationWithdrawRequest(
+        id_token="synthetic-token",
+        organization_id=ORG_A,
+        shelter_entry_reference=None,
+        expected_version=1,
+    )
+    entry = api.VolunteerApplicationWithdrawRequest(
+        id_token="synthetic-token",
+        organization_id=None,
+        shelter_entry_reference=VALID_REFERENCE,
+        expected_version=1,
+    )
+
+    assert isinstance(organization.target, OrganizationTarget)
+    assert isinstance(entry.target, EntryTarget)
+
+
+@pytest.mark.asyncio
+async def test_organization_target_withdraw_uses_same_target_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict = {}
+
+    class _Session:
+        committed = False
+
+        async def commit(self) -> None:
+            self.committed = True
+
+    class _Verifier:
+        async def verify(self, _token: str) -> str:
+            return "verified-line-user"
+
+    class _Service:
+        async def withdraw(self, **kwargs) -> VolunteerStatusResult:
+            captured.update(kwargs)
+            return _status_result("withdrawn")
+
+    async def resolve_target(*_args, **_kwargs):
+        return _Service(), None, "verified-line-user"
+
+    monkeypatch.setattr(api, "_service_for_target", resolve_target)
+    session = _Session()
+    application_id = uuid4()
+    payload = api.VolunteerApplicationWithdrawRequest(
+        id_token="synthetic-token",
+        organization_id=ORG_A,
+        expected_version=4,
+    )
+
+    response = await api.withdraw_volunteer_application(
+        application_id, payload, session, _Verifier()
+    )
+
+    assert response.effective_status == "withdrawn"
+    assert captured["organization_id"] == ORG_A
+    assert captured["entry_reference_id"] is None
+    assert captured["application_id"] == application_id
+    assert captured["expected_version"] == 4
+    assert session.committed is True
+
+
+@pytest.mark.parametrize(
+    ("organization_id", "shelter_entry_reference"),
+    ((None, None), (ORG_A, VALID_REFERENCE)),
+)
+def test_withdraw_request_rejects_missing_or_ambiguous_target(
+    organization_id: UUID | None, shelter_entry_reference: str | None
 ) -> None:
     with pytest.raises(ValidationError):
-        if operation == "submit":
-            api.VolunteerApplicationCreateRequest(
-                id_token="synthetic-token",
-                organization_id=ORG_A,
-                shelter_entry_reference=None,
-                client_request_id=uuid4(),
-                consent_acknowledged=True,
-                service_dates=[date.today()],
-            )
-        else:
-            api.VolunteerApplicationWithdrawRequest(
-                id_token="synthetic-token",
-                organization_id=ORG_A,
-                shelter_entry_reference=None,
-                expected_version=1,
-            )
+        api.VolunteerApplicationWithdrawRequest(
+            id_token="synthetic-token",
+            organization_id=organization_id,
+            shelter_entry_reference=shelter_entry_reference,
+            expected_version=1,
+        )
 
 
 @pytest.mark.asyncio

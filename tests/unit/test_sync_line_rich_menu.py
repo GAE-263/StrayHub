@@ -13,7 +13,7 @@ liff_url_reference: ${LIFF_BASE_URL}
 actions:
   - label: 開啟志工入口
     type: uri
-    uri: ${LIFF_BASE_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}
+    uri: ${LIFF_BASE_URL}?entry=${SHELTER_ENTRY_REFERENCE}
 """,
         encoding="utf-8",
     )
@@ -28,8 +28,7 @@ actions:
 
     assert document["liff_url_reference"] == "https://liff.line.me/123-test"
     assert document["actions"][0]["uri"] == (
-        "https://liff.line.me/123-test/volunteer-entry?"
-        "entry=opaque-entry-reference-0123456789abcdef-extra"
+        "https://liff.line.me/123-test?entry=opaque-entry-reference-0123456789abcdef-extra"
     )
 
 
@@ -60,7 +59,7 @@ name: test
 actions:
   - label: 開啟志工入口
     type: uri
-    uri: ${LIFF_BASE_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}
+    uri: ${LIFF_BASE_URL}?entry=${SHELTER_ENTRY_REFERENCE}
 """,
         encoding="utf-8",
     )
@@ -85,7 +84,7 @@ name: test
 actions:
   - label: 開啟志工入口
     type: uri
-    uri: ${LIFF_BASE_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}
+    uri: ${LIFF_BASE_URL}?entry=${SHELTER_ENTRY_REFERENCE}
 """,
         encoding="utf-8",
     )
@@ -127,13 +126,13 @@ actions:
         "https://liff.line.me/attacker/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
         "https://liff.line.me/wrong-route",
         "https://liff.line.me/volunteer-entry",
-        "https://liff.line.me/test/volunteer-entry?entry=short",
-        "https://liff.line.me/test/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra&entry=second",
-        "https://liff.line.me/test/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra#fragment",
+        "https://liff.line.me/test?entry=short",
+        "https://liff.line.me/test?entry=opaque-entry-reference-0123456789abcdef-extra&entry=second",
+        "https://liff.line.me/test?entry=opaque-entry-reference-0123456789abcdef-extra#fragment",
         "https://liff.line.me/test//volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
         "https://liff.line.me/test/volunteer-entry/?entry=opaque-entry-reference-0123456789abcdef-extra",
-        "https://liff.line.me:0/test/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
-        "https://liff.line.me:444/test/volunteer-entry?entry=opaque-entry-reference-0123456789abcdef-extra",
+        "https://liff.line.me:0/test?entry=opaque-entry-reference-0123456789abcdef-extra",
+        "https://liff.line.me:444/test?entry=opaque-entry-reference-0123456789abcdef-extra",
     ],
 )
 def test_load_definition_rejects_invalid_volunteer_entry_uri(tmp_path: Path, uri: str) -> None:
@@ -166,7 +165,7 @@ async def test_publish_rejects_missing_image_before_any_remote_publish(
                     {
                         "label": "開啟志工入口",
                         "type": "uri",
-                        "uri": "https://liff.line.me/test/volunteer-entry?entry=opaque-entry",
+                        "uri": "https://liff.line.me/test?entry=opaque-entry",
                     }
                 ],
             },

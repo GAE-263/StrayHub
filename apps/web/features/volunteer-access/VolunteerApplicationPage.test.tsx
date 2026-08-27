@@ -14,6 +14,118 @@ import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("VolunteerApplicationPage", () => {
+  it("loads trusted organization status and submits the organization target", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "00000000-0000-4000-8000-000000000051",
+          name: "新北市新店區公立動物之家",
+          applications_enabled: true,
+          insurance_required: false,
+        },
+        application: null,
+        grant: null,
+        effective_status: "none",
+        next_actions: ["apply"],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          idToken="id-token"
+          organizationId="00000000-0000-4000-8000-000000000051"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("申請成為");
+    expect(container.textContent).toContain("新北市新店區公立動物之家");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      id_token: "id-token",
+      organization_id: "00000000-0000-4000-8000-000000000051",
+    });
+    expect(fetchMock.mock.calls[0][1].body).not.toContain(
+      "shelter_entry_reference",
+    );
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("clears organization-scoped status and service dates when the target changes", async () => {
+    const statusFor = (id: string, name: string) => ({
+      organization: {
+        id,
+        name,
+        applications_enabled: true,
+        insurance_required: false,
+      },
+      application: null,
+      grant: null,
+      effective_status: "none",
+      next_actions: ["apply"],
+    });
+    const fetchMock = vi.fn().mockImplementation(async (_url, options) => {
+      const target = JSON.parse(options.body).organization_id as string;
+      return {
+        ok: true,
+        json: async () =>
+          target.endsWith("51")
+            ? statusFor(target, "新店動物之家")
+            : statusFor(target, "五股動物之家"),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const renderTarget = async (organizationId: string) => {
+      await act(async () => {
+        root.render(
+          <VolunteerApplicationPage
+            idToken="id-token"
+            organizationId={organizationId}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
+    await renderTarget("00000000-0000-4000-8000-000000000051");
+    await act(async () => {
+      container
+        .querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.click();
+    });
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.checked,
+    ).toBe(true);
+
+    await renderTarget("00000000-0000-4000-8000-000000000058");
+
+    expect(container.textContent).toContain("五股動物之家");
+    expect(container.textContent).not.toContain("新店動物之家");
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.checked,
+    ).toBe(false);
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
   it("collects required applicant details before submitting the LIFF application", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

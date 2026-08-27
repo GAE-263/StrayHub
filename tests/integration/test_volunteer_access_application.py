@@ -226,6 +226,38 @@ async def test_submit_atomically_creates_identity_binding_and_pending_without_me
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "organization_code",
+    ("FURKIDS-ASIA", "MOA-SHELTER-51", "MOA-SHELTER-58"),
+)
+async def test_fresh_line_identity_submits_pending_by_demo_organization_target(
+    organization_code: str,
+) -> None:
+    repository = _Repository()
+    identities = _IdentityRepository()
+    service = VolunteerAccessService(repository, identities, _Verifier())
+
+    result = await service.submit(
+        id_token=f"local-id-token:new-{organization_code.lower()}",
+        entry_reference_id=None,
+        organization_id=repository.organization_id,
+        client_request_id=uuid4(),
+        consent_acknowledged=True,
+        now=datetime.now(timezone.utc),
+    )
+
+    assert result.created is True
+    assert result.status.effective_status == "pending"
+    assert result.status.application is not None
+    assert result.status.application.organization_id == repository.organization_id
+    assert result.status.application.source_channel == "liff"
+    assert identities.binding is not None
+    assert not any(
+        value.__class__.__name__ == "OrganizationMembership" for value in identities.users
+    )
+
+
+@pytest.mark.asyncio
 async def test_disabled_entry_blocks_new_submit_but_status_remains_available() -> None:
     repository = _Repository(enabled=False)
     identities = _IdentityRepository()

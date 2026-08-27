@@ -188,3 +188,12 @@ async def test_demo_accounts_are_idempotent_and_volunteers_are_single_tenant(
             )
             == 0
         )
+        assert (
+            await session.scalar(
+                text("""SELECT count(*) FROM organization_volunteer_access_policies p
+            JOIN organizations o ON o.id=p.organization_id WHERE o.code IN
+            ('FURKIDS-ASIA','MOA-SHELTER-51','MOA-SHELTER-58')
+            AND p.applications_enabled""")
+            )
+            == 3
+        )
