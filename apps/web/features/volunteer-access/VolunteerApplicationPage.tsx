@@ -25,6 +25,8 @@ import {
 type SharedProps = {
   idToken: string;
   initialStatus?: VolunteerStatus | null;
+  onReselect?: () => void;
+  onReturnToLine?: () => void;
 };
 
 type Props = SharedProps &
@@ -36,8 +38,8 @@ type Props = SharedProps &
 const STATUS_COPY: Record<string, { title: string; detail: string }> = {
   none: { title: "成為志工", detail: "送出報名後，由收容所管理員進行審核。" },
   pending: {
-    title: "等待收容所審核",
-    detail: "你的報名已送出，審核前不會取得照護資料。",
+    title: "申請已送出",
+    detail: "審核中；審核前不會取得照護資料。",
   },
   rejected: {
     title: "本次報名未通過",
@@ -90,8 +92,15 @@ function formatServiceDateParts(value: string): {
   };
 }
 
+function maskPhone(value: string): string {
+  const compact = value.replace(/\s/g, "");
+  return compact.length >= 7
+    ? `${compact.slice(0, 4)}•••${compact.slice(-3)}`
+    : "••••••••";
+}
+
 export function VolunteerApplicationPage(props: Props) {
-  const { idToken, initialStatus = null } = props;
+  const { idToken, initialStatus = null, onReselect, onReturnToLine } = props;
   const organizationId = props.organizationId;
   const shelterEntryReference = props.shelterEntryReference;
   const targetPayload = useMemo(
@@ -118,6 +127,7 @@ export function VolunteerApplicationPage(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const [reviewing, setReviewing] = useState(false);
   const serviceDateOptions = useMemo(() => {
     const options: string[] = [];
     const today = new Date();
@@ -143,6 +153,7 @@ export function VolunteerApplicationPage(props: Props) {
     setSelectedServiceDates([]);
     setWithdrawOpen(false);
     setToast("");
+    setReviewing(false);
     if (initialStatus !== null) {
       return () => {
         active = false;
@@ -213,6 +224,7 @@ export function VolunteerApplicationPage(props: Props) {
         }),
       });
       setStatus(await readStatus(response));
+      setReviewing(false);
     } catch (reason) {
       setError(safeVolunteerError((reason as { code?: string })?.code));
     } finally {
@@ -250,13 +262,11 @@ export function VolunteerApplicationPage(props: Props) {
 
   const effectiveStatus = status?.effective_status ?? "none";
   const copy = STATUS_COPY[effectiveStatus] ?? STATUS_COPY.none;
-  const canApply = [
-    "none",
-    "rejected",
-    "withdrawn",
-    "expired",
-    "revoked",
-  ].includes(effectiveStatus);
+  const canApply =
+    status !== null &&
+    ["none", "rejected", "withdrawn", "expired", "revoked"].includes(
+      effectiveStatus,
+    );
   const insuranceRequired = status?.organization.insurance_required === true;
   const submitDisabled =
     !consent ||
@@ -272,6 +282,11 @@ export function VolunteerApplicationPage(props: Props) {
         <span className="eyebrow">申請成為</span>
         <h1>{status?.organization.name ?? "志工報名"}</h1>
         <p>志工</p>
+        {status?.organization.address ? (
+          <p className="volunteer-organization-address">
+            {status.organization.address}
+          </p>
+        ) : null}
       </header>
       {loading ? (
         <p role="status" aria-live="polite">
@@ -315,7 +330,9 @@ export function VolunteerApplicationPage(props: Props) {
                 ) : null}
               </dl>
             ) : null}
-            {canApply && status?.organization.applications_enabled !== false ? (
+            {canApply &&
+            status?.organization.applications_enabled !== false &&
+            !reviewing ? (
               <div className="volunteer-application-actions">
                 <div className="volunteer-application-fields">
                   <label htmlFor="applicant-name">
@@ -422,25 +439,89 @@ export function VolunteerApplicationPage(props: Props) {
                 <Button
                   type="button"
                   disabled={submitDisabled}
-                  onClick={submit}
+                  onClick={() => setReviewing(true)}
                 >
-                  {submitting
-                    ? "送出中…"
-                    : effectiveStatus === "none"
-                      ? "立即報名"
-                      : "再次報名"}
+                  檢查申請資料
                 </Button>
               </div>
             ) : null}
-            {effectiveStatus === "pending" ? (
-              <Button
-                variant="secondary"
-                type="button"
-                disabled={submitting}
-                onClick={() => setWithdrawOpen(true)}
+            {canApply && reviewing ? (
+              <section
+                className="volunteer-application-review"
+                aria-label="確認申請資料"
               >
-                撤回報名
-              </Button>
+                <div>
+                  <span className="eyebrow">送出前確認</span>
+                  <h2>確認志工申請</h2>
+                  <p>資料只會提供給你選擇的收容所審核。</p>
+                </div>
+                <dl className="volunteer-grant-summary">
+                  <div>
+                    <dt>申請收容所</dt>
+                    <dd>{status?.organization.name}</dd>
+                  </div>
+                  <div>
+                    <dt>姓名</dt>
+                    <dd>{applicantName.trim()}</dd>
+                  </div>
+                  <div>
+                    <dt>手機號碼</dt>
+                    <dd>{maskPhone(phoneNumber)}</dd>
+                  </div>
+                  <div>
+                    <dt>服務日期</dt>
+                    <dd>
+                      {selectedServiceDates.map(formatServiceDate).join("、")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>資料使用同意</dt>
+                    <dd>已確認</dd>
+                  </div>
+                </dl>
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => void submit()}
+                >
+                  {submitting ? "送出中…" : "送出志工申請"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setReviewing(false)}
+                >
+                  返回修改
+                </Button>
+              </section>
+            ) : null}
+            {effectiveStatus === "pending" ? (
+              <div className="volunteer-application-actions">
+                <Alert>
+                  申請已送出，目前由 {status?.organization.name} 審核中。
+                </Alert>
+                <Button type="button" onClick={() => window.location.reload()}>
+                  查看申請狀態
+                </Button>
+                {onReturnToLine ? (
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={onReturnToLine}
+                  >
+                    返回 LINE
+                  </Button>
+                ) : null}
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setWithdrawOpen(true)}
+                >
+                  撤回報名
+                </Button>
+              </div>
             ) : null}
             {effectiveStatus === "active" ? (
               <a
@@ -454,9 +535,26 @@ export function VolunteerApplicationPage(props: Props) {
         </Card>
       )}
       {error ? (
-        <Alert className="volunteer-application-error" role="alert">
-          {error}
-        </Alert>
+        <div className="volunteer-application-actions">
+          <Alert className="volunteer-application-error" role="alert">
+            {error}
+          </Alert>
+          {onReselect ? (
+            <Button variant="secondary" type="button" onClick={onReselect}>
+              重新選擇地區與收容所
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {onReselect && !loading ? (
+        <Button
+          className="volunteer-change-target"
+          variant="secondary"
+          type="button"
+          onClick={onReselect}
+        >
+          選擇其他收容所
+        </Button>
       ) : null}
       <Dialog
         open={withdrawOpen}
