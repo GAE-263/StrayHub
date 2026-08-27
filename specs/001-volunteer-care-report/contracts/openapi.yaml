@@ -3930,20 +3930,40 @@ components:
               pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationWithdrawRequest:
       type: object
-      required: [id_token, shelter_entry_reference, expected_version]
+      required: [id_token, expected_version]
       additionalProperties: false
       properties:
         id_token:
           type: string
           minLength: 1
+        organization_id:
+          type: [string, 'null']
+          format: uuid
         shelter_entry_reference:
-          type: string
+          type: [string, 'null']
           minLength: 32
           maxLength: 512
           pattern: '^[A-Za-z0-9._~-]+$'
         expected_version:
           type: integer
           minimum: 1
+      oneOf:
+        - required: [organization_id]
+          properties:
+            organization_id:
+              type: string
+              format: uuid
+            shelter_entry_reference:
+              type: 'null'
+        - required: [shelter_entry_reference]
+          properties:
+            organization_id:
+              type: 'null'
+            shelter_entry_reference:
+              type: string
+              minLength: 32
+              maxLength: 512
+              pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationStatusResponse:
       type: object
       required: [organization, effective_status, next_actions]

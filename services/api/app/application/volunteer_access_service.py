@@ -440,12 +440,17 @@ class VolunteerAccessService:
         self,
         *,
         id_token: str,
-        entry_reference_id: UUID,
+        entry_reference_id: UUID | None,
         verified_line_user_id: str | None = None,
+        organization_id: UUID | None = None,
         application_id: UUID,
         expected_version: int,
         now: datetime | None = None,
     ) -> VolunteerStatusResult:
+        if (entry_reference_id is None) == (organization_id is None):
+            raise DomainError("volunteer_target_required", "志工申請目標無效", 422)
+        if organization_id is not None and organization_id != self.repository.organization_id:
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
         line_user_id = (
             verified_line_user_id
             if verified_line_user_id is not None

@@ -1,12 +1,15 @@
 version: 1
 name: local-volunteer-care
 actions:
+  - label: 我要報名志工
+    type: postback
+    data: action=start_volunteer_application
   - label: 開始照護回報
     type: postback
     data: action=start_care_report
   - label: 掃描 QR Code
     type: uri
-    uri: ${LIFF_BASE_URL}/volunteer-entry?entry=${SHELTER_ENTRY_REFERENCE}
+    uri: ${LIFF_BASE_URL}?entry=${SHELTER_ENTRY_REFERENCE}
   - label: 今日照護毛孩
     type: postback
     data: action=list_reportable_animals

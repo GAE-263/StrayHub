@@ -22,11 +22,16 @@ import {
   type VolunteerStatus,
 } from "./volunteerAccess";
 
-type Props = {
+type SharedProps = {
   idToken: string;
-  shelterEntryReference: string;
   initialStatus?: VolunteerStatus | null;
 };
+
+type Props = SharedProps &
+  (
+    | { organizationId: string; shelterEntryReference?: never }
+    | { organizationId?: never; shelterEntryReference: string }
+  );
 
 const STATUS_COPY: Record<string, { title: string; detail: string }> = {
   none: { title: "成為志工", detail: "送出報名後，由收容所管理員進行審核。" },
@@ -85,11 +90,20 @@ function formatServiceDateParts(value: string): {
   };
 }
 
-export function VolunteerApplicationPage({
-  idToken,
-  shelterEntryReference,
-  initialStatus = null,
-}: Props) {
+export function VolunteerApplicationPage(props: Props) {
+  const { idToken, initialStatus = null } = props;
+  const organizationId = props.organizationId;
+  const shelterEntryReference = props.shelterEntryReference;
+  const targetPayload = useMemo(
+    () =>
+      organizationId
+        ? { organization_id: organizationId }
+        : { shelter_entry_reference: shelterEntryReference },
+    [organizationId, shelterEntryReference],
+  );
+  const targetKey = organizationId
+    ? `organization:${organizationId}`
+    : `entry:${shelterEntryReference}`;
   const [status, setStatus] = useState<VolunteerStatus | null>(initialStatus);
   const [loading, setLoading] = useState(initialStatus === null);
   const [submitting, setSubmitting] = useState(false);
@@ -117,19 +131,36 @@ export function VolunteerApplicationPage({
   }, []);
 
   useEffect(() => {
-    if (initialStatus !== null) return;
-    if (!idToken || !shelterEntryReference) {
+    let active = true;
+    setStatus(initialStatus);
+    setLoading(initialStatus === null);
+    setError(null);
+    setApplicantName("");
+    setPhoneNumber("");
+    setInsuranceIdentity("");
+    setConsent(false);
+    setInsuranceConsent(false);
+    setSelectedServiceDates([]);
+    setWithdrawOpen(false);
+    setToast("");
+    if (initialStatus !== null) {
+      return () => {
+        active = false;
+      };
+    }
+    if (!idToken || (!organizationId && !shelterEntryReference)) {
       setError("請從收容所提供的 LINE／LIFF 志工入口開啟此頁面。");
       setLoading(false);
-      return;
+      return () => {
+        active = false;
+      };
     }
-    let active = true;
     fetch("/v1/volunteer-applications/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id_token: idToken,
-        shelter_entry_reference: shelterEntryReference,
+        ...targetPayload,
       }),
     })
       .then(readStatus)
@@ -139,7 +170,14 @@ export function VolunteerApplicationPage({
     return () => {
       active = false;
     };
-  }, [idToken, initialStatus, shelterEntryReference]);
+  }, [
+    idToken,
+    initialStatus,
+    organizationId,
+    shelterEntryReference,
+    targetKey,
+    targetPayload,
+  ]);
 
   async function submit() {
     const insuranceRequired = status?.organization.insurance_required === true;
@@ -160,7 +198,7 @@ export function VolunteerApplicationPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id_token: idToken,
-          shelter_entry_reference: shelterEntryReference,
+          ...targetPayload,
           applicant_name: applicantName.trim(),
           phone_number: phoneNumber.trim(),
           ...(insuranceRequired
@@ -194,7 +232,7 @@ export function VolunteerApplicationPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id_token: idToken,
-            shelter_entry_reference: shelterEntryReference,
+            ...targetPayload,
             expected_version: status.application.version,
           }),
         },
@@ -231,10 +269,9 @@ export function VolunteerApplicationPage({
   return (
     <main className="volunteer-application-page">
       <header className="volunteer-application-heading">
-        <span className="eyebrow">
-          {status?.organization.name ?? "StrayHub"}
-        </span>
-        <h1>志工報名</h1>
+        <span className="eyebrow">申請成為</span>
+        <h1>{status?.organization.name ?? "志工報名"}</h1>
+        <p>志工</p>
       </header>
       {loading ? (
         <p role="status" aria-live="polite">
@@ -251,6 +288,10 @@ export function VolunteerApplicationPage({
               <Alert className="volunteer-application-reason">
                 {status.application.decision_reason}
               </Alert>
+            ) : null}
+            {status?.organization.applications_enabled === false &&
+            effectiveStatus !== "pending" ? (
+              <Alert>此收容所目前暫停接受新申請。</Alert>
             ) : null}
             {status?.grant ? (
               <dl className="volunteer-grant-summary">

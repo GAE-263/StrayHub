@@ -46,7 +46,7 @@ def load_definition(path: Path, *, environ: Mapping[str, str] | None = None) -> 
         or liff_base.fragment
     ):
         raise ValueError("LIFF_BASE_URL 必須是 canonical HTTPS LIFF URL")
-    expected_liff_path = ["", liff_base_segments[1], "volunteer-entry"]
+    expected_liff_path = ["", liff_base_segments[1]]
     actions = document.get("actions")
     if not isinstance(actions, list) or not 1 <= len(actions) <= 20:
         raise ValueError("Rich Menu 必須包含 1～20 個 action")
@@ -90,7 +90,7 @@ def load_definition(path: Path, *, environ: Mapping[str, str] | None = None) -> 
                 or not ENTRY_REFERENCE_PATTERN.fullmatch(entry_values[0])
                 or parsed.port not in {None, 443}
             ):
-                raise ValueError("Rich Menu URI 必須導向含 entry 的 volunteer-entry")
+                raise ValueError("Rich Menu URI 必須導向含 entry 的 canonical LIFF endpoint")
     return document
 
 

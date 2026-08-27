@@ -44,12 +44,20 @@ from services.api.app.persistence.repositories.care_report_draft_repository impo
 )
 from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
+from services.api.app.persistence.repositories.organization_repository import OrganizationRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
     ReportableScopeRepository,
 )
 from sqlalchemy import select
 
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
+
+VOLUNTEER_APPLICATION_ORGANIZATION_CODES = (
+    "FURKIDS-ASIA",
+    "MOA-SHELTER-51",
+    "MOA-SHELTER-58",
+)
+VOLUNTEER_APPLICATION_COMMAND = "我要報名志工"
 
 
 async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID]:
@@ -86,6 +94,65 @@ def _postback(label: str, data: str, *, display_text: str | None = None) -> dict
             "displayText": display_text or label,
         },
     }
+
+
+def _volunteer_application_liff_url(organization_id: UUID) -> str:
+    query = urlencode({"organization_id": str(organization_id)})
+    return f"https://liff.line.me/{get_settings().liff_id}?{query}"
+
+
+def _volunteer_application_selection_message(
+    organizations: list[tuple[UUID, str, str, str | None, bool]],
+) -> dict:
+    by_code = {row[1]: row for row in organizations}
+    items = []
+    for code in VOLUNTEER_APPLICATION_ORGANIZATION_CODES:
+        row = by_code.get(code)
+        if row is None:
+            continue
+        organization_id, _code, name, _service_area, _insurance_required = row
+        items.append(
+            {
+                "type": "action",
+                "action": {
+                    "type": "uri",
+                    "label": name[:20],
+                    "uri": _volunteer_application_liff_url(organization_id),
+                },
+            }
+        )
+    return {
+        "type": "text",
+        "text": "請選擇想申請志工的收容所。",
+        "quickReply": {"items": items},
+    }
+
+
+async def _handle_public_volunteer_application_entry(
+    session,
+    line: LineMessagingPort,
+    event: dict,
+) -> bool:
+    is_text_command = (
+        event.get("type") == "message"
+        and event.get("message", {}).get("type") == "text"
+        and event.get("message", {}).get("text", "").strip() == VOLUNTEER_APPLICATION_COMMAND
+    )
+    postback_values = (
+        parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
+        if event.get("type") == "postback"
+        else {}
+    )
+    is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
+    if not is_text_command and not is_postback_command:
+        return False
+    organizations = await OrganizationRepository(session).list_public_volunteer_organizations()
+    message = _volunteer_application_selection_message(organizations)
+    if not message["quickReply"]["items"]:
+        await _reply(line, event, [_text("目前沒有開放志工申請的收容所。")])
+        return True
+    await _reply(line, event, [message])
+    return True
 
 
 async def _animal_confirmation_messages(session, animal, organization_id: UUID) -> list[dict]:
@@ -587,6 +654,10 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    if await _handle_public_volunteer_application_entry(session, line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     user_id, organization_id, membership_id = await _resolve_context(
                         session, line_user_id
                     )

@@ -168,28 +168,6 @@ class VolunteerIdentityRequest(BaseModel):
         )
 
 
-class VolunteerEntryIdentityRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id_token: str = Field(min_length=1)
-    shelter_entry_reference: str = Field(
-        min_length=32,
-        max_length=512,
-        pattern=r"^[A-Za-z0-9._~-]+$",
-    )
-
-    @model_validator(mode="after")
-    def validate_entry_target(self) -> VolunteerEntryIdentityRequest:
-        try:
-            build_volunteer_target(
-                organization_id=None,
-                shelter_entry_reference=self.shelter_entry_reference,
-            )
-        except DomainError as exc:
-            raise ValueError(exc.code) from exc
-        return self
-
-
 class VolunteerApplicationCreateRequest(VolunteerIdentityRequest):
     applicant_name: str = Field(min_length=1, max_length=200)
     phone_number: str = Field(min_length=1, max_length=50)
@@ -206,7 +184,7 @@ class VolunteerApplicationCreateRequest(VolunteerIdentityRequest):
         return self
 
 
-class VolunteerApplicationWithdrawRequest(VolunteerEntryIdentityRequest):
+class VolunteerApplicationWithdrawRequest(VolunteerIdentityRequest):
     expected_version: int = Field(ge=1)
 
 
@@ -743,10 +721,6 @@ async def _service_for_target(
     return service, reference_id, verified_line_user_id
 
 
-def _legacy_entry_reference(payload: VolunteerEntryIdentityRequest) -> str:
-    return payload.shelter_entry_reference
-
-
 def _response(result: VolunteerStatusResult) -> VolunteerApplicationStatusResponse:
     return VolunteerApplicationStatusResponse.model_validate(
         {
@@ -864,12 +838,17 @@ async def withdraw_volunteer_application(
 ) -> VolunteerApplicationStatusResponse:
     try:
         verified_line_user_id = await verifier.verify(payload.id_token)
-        entry_reference = _legacy_entry_reference(payload)
-        service, reference_id = await _service_for_entry(session, entry_reference, verifier)
+        service, reference_id, verified_line_user_id = await _service_for_target(
+            session,
+            payload,
+            verifier,
+            verified_line_user_id,
+        )
         result = await service.withdraw(
             id_token=payload.id_token,
             entry_reference_id=reference_id,
             verified_line_user_id=verified_line_user_id,
+            organization_id=payload.organization_id,
             application_id=applicationId,
             expected_version=payload.expected_version,
         )
