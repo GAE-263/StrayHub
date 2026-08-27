@@ -22,12 +22,13 @@ describe("ApplicationBatchWorkbench", () => {
           version: 1,
         }))}
         matchingCount={1200}
+        defaultGrantDurationHours={168}
         filter={{ status: "pending", unassigned: true }}
         onViewApplicant={() => undefined}
       />,
     );
     expect(html).toContain("目前篩選結果全部 1,200 筆");
-    expect(html).toContain("共同授權期限");
+    expect(html).toContain("共同期限覆寫");
     expect(html).toContain("逐筆結果");
     expect(html).toContain("ui-checkbox");
     expect(html).toContain("ui-input");
@@ -83,6 +84,7 @@ describe("ApplicationBatchWorkbench", () => {
             },
           ]}
           matchingCount={1}
+          defaultGrantDurationHours={168}
           filter={{ status: "pending", unassigned: true }}
           onSubmit={onSubmit}
           onLoadItems={onLoadItems}
@@ -162,6 +164,7 @@ describe("ApplicationBatchWorkbench", () => {
             },
           ]}
           matchingCount={1}
+          defaultGrantDurationHours={168}
           filter={{ status: "pending", service_date: "2026-08-25" }}
           onSubmit={vi.fn().mockResolvedValue({
             id: "batch-a",
@@ -211,5 +214,30 @@ describe("ApplicationBatchWorkbench", () => {
       expect.objectContaining({ id: "batch-a", status: "completed" }),
     );
     await act(async () => root.unmount());
+  });
+
+  it("previews grant dates from the selected service date and policy", () => {
+    const html = renderToStaticMarkup(
+      <ApplicationBatchWorkbench
+        applications={[
+          {
+            id: "app-a",
+            display_name: "志工 A",
+            status: "pending",
+            version: 1,
+          },
+        ]}
+        matchingCount={1}
+        defaultGrantDurationHours={336}
+        filter={{ status: "pending", service_date: "2026-09-10" }}
+      />,
+    );
+
+    expect(html).toContain("服務日期");
+    expect(html).toContain("2026-09-10");
+    expect(html).toContain("預設授權期限");
+    expect(html).toContain("14 天");
+    expect(html).toContain("2026-09-24");
+    expect(html).toContain("後端會以服務日期與政策重新計算");
   });
 });

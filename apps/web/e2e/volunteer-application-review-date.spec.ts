@@ -40,6 +40,8 @@ test("review page opens the nearest pending service date and preserves it in exp
       body = { organization_id: "org-a" };
     } else if (url.pathname === "/v1/organizations") {
       body = { items: [{ id: "org-a", code: "ORG-A", name: "收容所 A" }] };
+    } else if (url.pathname.endsWith("/volunteer-access-policy")) {
+      body = { default_grant_duration_hours: 168 };
     } else if (
       url.pathname.endsWith("/volunteer-applications/application-a/pii-reveal")
     ) {
@@ -135,6 +137,7 @@ test("review page opens the nearest pending service date and preserves it in exp
 
   await expect(page.locator('input[type="date"]')).toHaveValue(nextDate);
   await expect(page.getByText("LINE 志工")).toBeVisible();
+  await expect(page.getByText("7 天", { exact: true })).toBeVisible();
   await expect(
     page.getByText(`目前顯示 ${nextDate} 的待審核申請`, { exact: true }),
   ).toBeVisible();

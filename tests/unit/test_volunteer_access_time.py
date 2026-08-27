@@ -1,9 +1,13 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.domain.volunteer_access import (
+    DEFAULT_GRANT_DURATION_HOURS,
+    effective_grant_duration_hours,
+    grant_period_for_service_date,
     normalize_reason,
     request_fingerprint,
     snapshot_policy,
@@ -23,6 +27,31 @@ def test_grant_period_uses_half_open_utc_interval_and_finite_expiry() -> None:
         validate_grant_period(NOW, NOW)
     with pytest.raises(DomainError, match="UTC"):
         validate_grant_period(NOW.replace(tzinfo=None), NOW)
+
+
+@pytest.mark.parametrize(
+    ("duration_hours", "expected_expiry"),
+    [
+        (168, datetime(2026, 9, 16, 16, 0, tzinfo=timezone.utc)),
+        (336, datetime(2026, 9, 23, 16, 0, tzinfo=timezone.utc)),
+    ],
+)
+def test_grant_period_starts_at_taiwan_service_date_and_uses_policy_duration(
+    duration_hours: int, expected_expiry: datetime
+) -> None:
+    valid_from, expires_at = grant_period_for_service_date(
+        date(2026, 9, 10),
+        timezone_name="Asia/Taipei",
+        duration_hours=duration_hours,
+    )
+
+    assert valid_from == datetime(2026, 9, 9, 16, 0, tzinfo=timezone.utc)
+    assert expires_at == expected_expiry
+
+
+def test_effective_policy_duration_defaults_to_seven_days_but_preserves_explicit_value() -> None:
+    assert effective_grant_duration_hours(SimpleNamespace()) == DEFAULT_GRANT_DURATION_HOURS == 168
+    assert effective_grant_duration_hours(SimpleNamespace(default_grant_duration_hours=336)) == 336
 
 
 def test_immediate_expiry_requires_explicit_confirmation() -> None:

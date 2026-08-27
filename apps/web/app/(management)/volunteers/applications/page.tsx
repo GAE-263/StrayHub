@@ -64,6 +64,9 @@ export default function VolunteerApplicationsPage() {
     [],
   );
   const [matchingCount, setMatchingCount] = useState(0);
+  const [defaultGrantDurationHours, setDefaultGrantDurationHours] = useState<
+    number | null
+  >(null);
   const [serviceDate, setServiceDate] = useState(todayLocalDate);
   const [unassigned, setUnassigned] = useState(false);
   const [submittedFrom, setSubmittedFrom] = useState(defaultSubmittedFrom);
@@ -134,10 +137,30 @@ export default function VolunteerApplicationsPage() {
     }
   }
 
+  async function loadPolicy(id: string) {
+    const response = await authFetch(
+      `/v1/organizations/${id}/volunteer-access-policy`,
+    );
+    if (!response.ok) throw new Error("無法載入志工授權設定");
+    const value = (await response.json()) as {
+      default_grant_duration_hours: number;
+    };
+    if (
+      !Number.isInteger(value.default_grant_duration_hours) ||
+      value.default_grant_duration_hours <= 0
+    ) {
+      throw new Error("志工授權設定無效");
+    }
+    setDefaultGrantDurationHours(value.default_grant_duration_hours);
+  }
+
   useEffect(() => {
     const id = window.sessionStorage.getItem("active_organization_id") ?? "";
     setOrganizationId(id);
     if (!id) return;
+    void loadPolicy(id).catch((error) =>
+      setLoadError(error instanceof Error ? error.message : "載入失敗"),
+    );
     const today = todayLocalDate();
     void loadApplications(id, submittedFrom, submittedTo, today)
       .then((value) => {
@@ -314,37 +337,42 @@ export default function VolunteerApplicationsPage() {
               : "")}
         </p>
       </form>
-      <ApplicationBatchWorkbench
-        key={`${serviceDate}:${unassigned}:${submittedFrom}:${submittedTo}`}
-        applications={loading ? [] : applications}
-        loading={loading}
-        matchingCount={loading ? 0 : matchingCount}
-        filter={{
-          status: "pending",
-          ...(unassigned
-            ? { unassigned: true }
-            : { service_date: serviceDate }),
-          ...(submittedFrom
-            ? { submitted_from: new Date(submittedFrom).toISOString() }
-            : {}),
-          ...(submittedTo
-            ? { submitted_to: new Date(submittedTo).toISOString() }
-            : {}),
-        }}
-        onSubmit={createBatch}
-        onLoadItems={loadItems}
-        onLoadBatch={loadBatch}
-        onBatchTerminalSuccess={() => {
-          void loadApplications(
-            organizationId,
-            submittedFrom,
-            submittedTo,
-            serviceDate,
-            unassigned,
-          );
-        }}
-        onViewApplicant={setDetailApplicationId}
-      />
+      {defaultGrantDurationHours === null ? (
+        <p role="status">載入志工授權設定中…</p>
+      ) : (
+        <ApplicationBatchWorkbench
+          key={`${serviceDate}:${unassigned}:${submittedFrom}:${submittedTo}`}
+          applications={loading ? [] : applications}
+          loading={loading}
+          matchingCount={loading ? 0 : matchingCount}
+          defaultGrantDurationHours={defaultGrantDurationHours}
+          filter={{
+            status: "pending",
+            ...(unassigned
+              ? { unassigned: true }
+              : { service_date: serviceDate }),
+            ...(submittedFrom
+              ? { submitted_from: new Date(submittedFrom).toISOString() }
+              : {}),
+            ...(submittedTo
+              ? { submitted_to: new Date(submittedTo).toISOString() }
+              : {}),
+          }}
+          onSubmit={createBatch}
+          onLoadItems={loadItems}
+          onLoadBatch={loadBatch}
+          onBatchTerminalSuccess={() => {
+            void loadApplications(
+              organizationId,
+              submittedFrom,
+              submittedTo,
+              serviceDate,
+              unassigned,
+            );
+          }}
+          onViewApplicant={setDetailApplicationId}
+        />
+      )}
       <VolunteerApplicantDetail
         organizationId={organizationId}
         applicationId={detailApplicationId}

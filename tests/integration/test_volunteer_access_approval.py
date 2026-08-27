@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -99,6 +99,7 @@ async def test_approval_atomically_projects_finite_membership_grant_and_outbox()
         expected_version=1,
         decision="approve",
         actor_user_id=uuid4(),
+        valid_from=now,
         now=now,
     )
 
@@ -169,6 +170,10 @@ async def _cleanup_approval_fixture(connection, *, organization_ids, user_ids):
         organization_ids,
     )
     await connection.execute(
+        "DELETE FROM volunteer_application_service_dates WHERE organization_id = ANY($1::uuid[])",
+        organization_ids,
+    )
+    await connection.execute(
         "DELETE FROM organization_memberships WHERE organization_id = ANY($1::uuid[])",
         organization_ids,
     )
@@ -196,6 +201,74 @@ def _real_approval_service(session, organization_id):
 
 
 @pytest.mark.asyncio
+async def test_real_approval_uses_service_date_and_seven_day_policy() -> None:
+    connection = await asyncpg.connect(os.environ["STRAYHUB_TEST_DATABASE_URL"])
+    engine = create_async_engine(os.environ["DATABASE_URL"])
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    organization_id = uuid4()
+    user_id = uuid4()
+    actor_user_id = uuid4()
+    application_id = uuid4()
+    service_date_id = uuid4()
+    selected_service_date = date(2026, 9, 10)
+    now = datetime(2026, 9, 12, 4, 0, tzinfo=timezone.utc)
+    try:
+        await _seed_pending_application(
+            connection,
+            organization_id=organization_id,
+            user_id=user_id,
+            actor_user_id=actor_user_id,
+            application_id=application_id,
+            now=now,
+        )
+        await connection.execute(
+            """UPDATE organization_volunteer_access_policies
+               SET default_grant_duration_hours = 168
+               WHERE organization_id = $1""",
+            organization_id,
+        )
+        await connection.execute(
+            """INSERT INTO volunteer_application_service_dates
+               (id, organization_id, application_id, service_date, status, version,
+                created_at, updated_at)
+               VALUES ($1, $2, $3, $4, 'pending', 1, $5, $5)""",
+            service_date_id,
+            organization_id,
+            application_id,
+            selected_service_date,
+            now,
+        )
+
+        async with sessions() as session:
+            _, membership, grant = await _real_approval_service(
+                session, organization_id
+            ).decide_application(
+                application_id=application_id,
+                expected_version=1,
+                decision="approve",
+                actor_user_id=actor_user_id,
+                service_date=selected_service_date,
+                now=now,
+            )
+            await session.commit()
+
+        expected_start = datetime(2026, 9, 9, 16, 0, tzinfo=timezone.utc)
+        expected_expiry = datetime(2026, 9, 16, 16, 0, tzinfo=timezone.utc)
+        assert membership is not None and grant is not None
+        assert membership.valid_from == grant.valid_from == expected_start
+        assert membership.expires_at == grant.expires_at == expected_expiry
+        assert grant.duration_hours_used == 168
+    finally:
+        await _cleanup_approval_fixture(
+            connection,
+            organization_ids=[organization_id],
+            user_ids=[user_id, actor_user_id],
+        )
+        await engine.dispose()
+        await connection.close()
+
+
+@pytest.mark.asyncio
 async def test_parallel_duplicate_approval_creates_one_membership_and_one_grant() -> None:
     database_url = os.environ["STRAYHUB_TEST_DATABASE_URL"]
     connection = await asyncpg.connect(database_url)
@@ -219,6 +292,7 @@ async def test_parallel_duplicate_approval_creates_one_membership_and_one_grant(
                 expected_version=1,
                 decision="approve",
                 actor_user_id=actor_user_id,
+                valid_from=now,
                 now=now,
             )
             first_staged.set()
@@ -238,6 +312,7 @@ async def test_parallel_duplicate_approval_creates_one_membership_and_one_grant(
                     expected_version=1,
                     decision="approve",
                     actor_user_id=actor_user_id,
+                    valid_from=now,
                     now=now,
                 )
             await session.rollback()

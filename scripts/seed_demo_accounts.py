@@ -52,9 +52,11 @@ async def seed():
                 policy = OrganizationVolunteerAccessPolicy(
                     organization_id=organization.id,
                     applications_enabled=True,
+                    default_grant_duration_hours=168,
                 )
                 session.add(policy)
             policy.applications_enabled = True
+            policy.default_grant_duration_hours = 168
             await session.flush()
         await set_platform_scope(session)
         admin = await session.scalar(select(User).where(User.username == "demo-furkids-admin"))

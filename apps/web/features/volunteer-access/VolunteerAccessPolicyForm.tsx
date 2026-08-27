@@ -24,7 +24,9 @@ export function VolunteerAccessPolicyForm({
   onSave?: (value: VolunteerAccessPolicy) => Promise<void> | void;
 }) {
   const [enabled, setEnabled] = useState(policy.applications_enabled);
-  const [duration, setDuration] = useState(policy.default_grant_duration_hours);
+  const [durationDays, setDurationDays] = useState(
+    policy.default_grant_duration_hours / 24,
+  );
   const [dailyLimit, setDailyLimit] = useState(policy.daily_application_limit);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -32,8 +34,8 @@ export function VolunteerAccessPolicyForm({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (duration <= 0) {
-      setError("預設授權期限必須大於 0 小時");
+    if (!Number.isInteger(durationDays) || durationDays <= 0) {
+      setError("預設授權期限必須是大於 0 的整數天數");
       return;
     }
     if (dailyLimit <= 0) {
@@ -46,7 +48,7 @@ export function VolunteerAccessPolicyForm({
       await onSave?.({
         ...policy,
         applications_enabled: enabled,
-        default_grant_duration_hours: duration,
+        default_grant_duration_hours: durationDays * 24,
         daily_application_limit: dailyLimit,
       });
       setToast("設定已儲存，只影響後續建立的授權。");
@@ -70,14 +72,15 @@ export function VolunteerAccessPolicyForm({
         開放志工新申請
       </label>
       <Field>
-        <label htmlFor="policy-duration">預設授權期限（小時）</label>
+        <label htmlFor="policy-duration">預設授權期限（天）</label>
         <Input
           id="policy-duration"
           type="number"
           min={1}
-          value={duration}
+          step={1}
+          value={durationDays}
           disabled={busy}
-          onChange={(event) => setDuration(Number(event.target.value))}
+          onChange={(event) => setDurationDays(Number(event.target.value))}
         />
       </Field>
       <Field>

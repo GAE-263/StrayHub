@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
+from services.api.app.domain.organization_timezone import local_day_range
 
 DEFAULT_GRANT_DURATION_HOURS = 168
 MAX_SERVICE_DATE_DAYS_AHEAD = 14
@@ -67,6 +68,34 @@ def validate_grant_period(
                 422,
             )
     return valid_from, expires_at
+
+
+def effective_grant_duration_hours(policy: Any) -> int:
+    """Return one authoritative policy duration, with legacy-safe fallback."""
+
+    duration_hours = getattr(policy, "default_grant_duration_hours", None)
+    if duration_hours is None:
+        return DEFAULT_GRANT_DURATION_HOURS
+    if duration_hours <= 0:
+        raise DomainError("invalid_policy_duration", "預設授權期限必須大於 0", 422)
+    return duration_hours
+
+
+def grant_period_for_service_date(
+    service_date: date,
+    *,
+    timezone_name: str,
+    duration_hours: int,
+) -> tuple[datetime, datetime]:
+    """Anchor a finite grant at the organization's local service-day midnight."""
+
+    if duration_hours <= 0:
+        raise DomainError("invalid_policy_duration", "預設授權期限必須大於 0", 422)
+    valid_from, _ = local_day_range(service_date, timezone_name)
+    return validate_grant_period(
+        valid_from,
+        valid_from + timedelta(hours=duration_hours),
+    )
 
 
 def validate_service_date_selection(service_dates: list[date], *, today: date) -> list[date]:

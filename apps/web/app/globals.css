@@ -2322,6 +2322,28 @@ dialog.ui-sheet[open] {
 .volunteer-decision-panel .batch-period-fields {
   margin-top: 14px;
 }
+.batch-period-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 8px;
+  padding: 12px;
+}
+.batch-period-preview div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+.batch-period-preview dt {
+  color: var(--muted);
+}
+.batch-period-preview dd {
+  font-weight: 700;
+  margin: 0;
+  text-align: right;
+}
 .volunteer-decision-panel .batch-period-fields {
   border: 0;
   margin-inline: 0;

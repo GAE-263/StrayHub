@@ -189,6 +189,8 @@ test("all-filtered selection preserves the full 1,200 target snapshot", async ({
       body = { organization_id: "org-a" };
     } else if (url.pathname === "/v1/organizations") {
       body = { items: [{ id: "org-a", code: "ORG-A", name: "收容所 A" }] };
+    } else if (url.pathname.endsWith("/volunteer-access-policy")) {
+      body = { default_grant_duration_hours: 168 };
     } else if (url.pathname.endsWith("/volunteer-applications")) {
       body = {
         items: Array.from({ length: 100 }, (_, index) => ({
@@ -232,7 +234,7 @@ test("all-filtered selection preserves the full 1,200 target snapshot", async ({
   const expectedServiceDate = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
   }).format(new Date());
-  expect(submittedSelection).toEqual({
+  expect(submittedSelection).toMatchObject({
     mode: "all_filtered",
     filter: { status: "pending", service_date: expectedServiceDate },
   });
