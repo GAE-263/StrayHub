@@ -27,6 +27,7 @@ type SharedProps = {
   initialStatus?: VolunteerStatus | null;
   onReselect?: () => void;
   onReturnToLine?: () => void;
+  onViewStatus?: () => void;
 };
 
 type Props = SharedProps &
@@ -100,7 +101,13 @@ function maskPhone(value: string): string {
 }
 
 export function VolunteerApplicationPage(props: Props) {
-  const { idToken, initialStatus = null, onReselect, onReturnToLine } = props;
+  const {
+    idToken,
+    initialStatus = null,
+    onReselect,
+    onReturnToLine,
+    onViewStatus,
+  } = props;
   const organizationId = props.organizationId;
   const shelterEntryReference = props.shelterEntryReference;
   const targetPayload = useMemo(
@@ -501,7 +508,12 @@ export function VolunteerApplicationPage(props: Props) {
                 <Alert>
                   申請已送出，目前由 {status?.organization.name} 審核中。
                 </Alert>
-                <Button type="button" onClick={() => window.location.reload()}>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    onViewStatus ? onViewStatus() : window.location.reload()
+                  }
+                >
                   查看申請狀態
                 </Button>
                 {onReturnToLine ? (

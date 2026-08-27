@@ -226,6 +226,46 @@ describe("VolunteerApplicationPage", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uses the explicit status transition instead of reloading a pending application", async () => {
+    const onViewStatus = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          initialStatus={{
+            organization: {
+              id: "org-a",
+              name: "收容所 A",
+              applications_enabled: true,
+              insurance_required: false,
+            },
+            application: { id: "app-a", status: "pending", version: 1 },
+            grant: null,
+            effective_status: "pending",
+            next_actions: ["wait", "withdraw"],
+          }}
+          idToken="id-token"
+          organizationId="org-a"
+          onViewStatus={onViewStatus}
+        />,
+      );
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent?.trim() === "查看申請狀態")
+        ?.click();
+    });
+
+    expect(onViewStatus).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it("requires confirmation before withdrawal and shows a success toast", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

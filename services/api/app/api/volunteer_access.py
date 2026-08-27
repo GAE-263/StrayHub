@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
@@ -25,6 +26,7 @@ from services.api.app.application.volunteer_access_service import (
     VolunteerAccessService,
     VolunteerApplicationDetailResult,
     VolunteerStatusResult,
+    effective_application_status,
 )
 from services.api.app.application.volunteer_batch_service import VolunteerBatchService
 from services.api.app.application.volunteer_notification_service import (
@@ -55,9 +57,11 @@ from services.api.app.infrastructure.security.pii_reveal_audit import (
     CommittedPiiRevealAuditor,
     TransactionalPiiCollectionAuditor,
 )
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import (
     set_organization_scope,
+    set_platform_scope,
     set_platform_support_scope,
 )
 from services.api.app.persistence.repositories.authentication_repository import (
@@ -82,6 +86,7 @@ router = APIRouter(
         503: {"model": ErrorResponse},
     },
 )
+logger = get_logger(__name__)
 
 ApplicationStatus = Literal["pending", "approved", "rejected", "withdrawn"]
 EffectiveAccessStatus = Literal[
@@ -104,6 +109,13 @@ NextAction = Literal[
     "contact_shelter",
     "return_to_line",
 ]
+
+
+def _log_volunteer_status(event: str, **metadata: int | bool) -> None:
+    if get_settings().app_env != "local":
+        return
+    fields = " ".join(f"{key}={str(value).lower()}" for key, value in metadata.items())
+    logger.info("[volunteer-status] %s%s", event, f" {fields}" if fields else "")
 
 
 def require_volunteer_management(
@@ -252,6 +264,36 @@ class VolunteerApplicationStatusResponse(BaseModel):
     grant: VolunteerGrantSummaryResponse | None = None
     effective_status: EffectiveAccessStatus
     next_actions: list[NextAction]
+
+
+class VolunteerOwnStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id_token: str = Field(min_length=1)
+
+
+class VolunteerOwnOrganizationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    address: str | None
+
+
+class VolunteerOwnApplicationStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    organization: VolunteerOwnOrganizationResponse
+    application: VolunteerApplicationResponse
+    service_dates: list[VolunteerApplicationServiceDate]
+    grant: VolunteerGrantSummaryResponse | None = None
+    effective_status: EffectiveAccessStatus
+
+
+class VolunteerOwnStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[VolunteerOwnApplicationStatusResponse]
 
 
 class VolunteerServiceDateAvailabilityResponse(BaseModel):
@@ -777,6 +819,106 @@ async def resolve_volunteer_application_status(
     except SQLAlchemyError as exc:
         raise DomainError("dependency_unavailable", "志工申請狀態暫時無法使用", 503) from exc
     return _response(result)
+
+
+@router.post(
+    "/v1/volunteer-applications/self-status",
+    response_model=VolunteerOwnStatusResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    openapi_extra={"security": []},
+)
+async def list_own_volunteer_application_statuses(
+    payload: VolunteerOwnStatusRequest,
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+    verifier: LineIdentityVerifierPort = Depends(get_line_identity_verifier),  # noqa: B008
+) -> VolunteerOwnStatusResponse:
+    """Return only the verified LINE identity's organization-scoped history."""
+
+    _log_volunteer_status("request", organization_filter_present=False)
+    try:
+        line_user_id = await verifier.verify(payload.id_token)
+        identities = AuthenticationRepository(session)
+        binding = await identities.get_line_binding(line_user_id)
+        if binding is None:
+            _log_volunteer_status("authenticated", user_resolved=False)
+            _log_volunteer_status(
+                "response_200",
+                applications=0,
+                pending=0,
+                approved=0,
+                rejected=0,
+                withdrawn=0,
+            )
+            return VolunteerOwnStatusResponse(items=[])
+        _log_volunteer_status("authenticated", user_resolved=True)
+
+        await set_platform_scope(session)
+        organizations = [
+            (organization.id, organization.name, organization.address)
+            for organization in await OrganizationRepository(session).list()
+        ]
+        items: list[VolunteerOwnApplicationStatusResponse] = []
+        for organization_id, organization_name, organization_address in organizations:
+            await set_organization_scope(session, organization_id)
+            repository = VolunteerAccessRepository(session, organization_id)
+            for application in await repository.applications_for_user(binding.user_id):
+                detail = await repository.application_detail(application.id)
+                if detail is None:
+                    continue
+                _, service_dates = detail
+                grant = await repository.grant_for_application(application.id)
+                effective_status, _ = effective_application_status(application, grant)
+                items.append(
+                    VolunteerOwnApplicationStatusResponse(
+                        organization=VolunteerOwnOrganizationResponse(
+                            id=organization_id,
+                            name=organization_name,
+                            address=organization_address,
+                        ),
+                        application=VolunteerApplicationResponse.model_validate(
+                            _application_dict(application)
+                        ),
+                        service_dates=[
+                            VolunteerApplicationServiceDate(
+                                service_date=service_date.service_date,
+                                status=service_date.status,
+                                decided_at=service_date.decided_at,
+                                decision_reason=service_date.decision_reason,
+                                version=service_date.version,
+                            )
+                            for service_date in service_dates
+                        ],
+                        grant=None
+                        if grant is None
+                        else VolunteerGrantSummaryResponse.model_validate(
+                            grant, from_attributes=True
+                        ),
+                        effective_status=effective_status,
+                    )
+                )
+        items.sort(
+            key=lambda item: (item.application.submitted_at, item.application.id),
+            reverse=True,
+        )
+        categories = Counter(item.application.status for item in items)
+        _log_volunteer_status(
+            "response_200",
+            applications=len(items),
+            pending=categories["pending"],
+            approved=categories["approved"],
+            rejected=categories["rejected"],
+            withdrawn=categories["withdrawn"],
+        )
+        return VolunteerOwnStatusResponse(items=items)
+    except SQLAlchemyError as exc:
+        raise DomainError(
+            "dependency_unavailable",
+            "志工申請狀態暫時無法使用",
+            503,
+        ) from exc
 
 
 @router.post(

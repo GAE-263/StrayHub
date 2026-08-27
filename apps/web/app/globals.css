@@ -1920,6 +1920,32 @@ dialog.ui-sheet[open] {
   font-size: 13px;
   font-weight: 800;
 }
+.volunteer-status-page {
+  gap: 18px;
+}
+.volunteer-status-card[data-focused="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.volunteer-status-card-title {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+.volunteer-status-badge {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--primary);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+.volunteer-status-card .ui-card-content {
+  display: grid;
+  gap: 16px;
+}
 .volunteer-directory-list .ui-button {
   min-height: 44px;
   width: 100%;

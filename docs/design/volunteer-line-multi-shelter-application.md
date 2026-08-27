@@ -4,7 +4,8 @@
 
 正式入口只有一個 LINE Bot 與一個 Volunteer LIFF endpoint：
 `/volunteer-application`。Rich Menu 的「志工報名」直接開啟 canonical LIFF URL，
-不列舉縣市或收容所；「照護回報」維持既有流程，「我的申請」開啟同一 LIFF，
+不列舉縣市或收容所；「照護回報」維持既有流程，「我的申請」以
+`?view=status` 開啟同一 LIFF，
 「領養媒合」目前由公開 postback action 回覆「功能準備中」，不包含媒合邏輯。
 
 Volunteer LIFF 負責以下動態流程：
@@ -52,7 +53,57 @@ pending application
 ```
 
 application、PII、服務日期、membership 與 grant 由 organization scope 和 PostgreSQL
-RLS 隔離。「我的申請」也必須先選取組織，不存在全域志工狀態。
+RLS 隔離。「我的申請」可列出本人各組織紀錄，但每筆狀態仍獨立屬於其組織，
+不存在全域志工狀態。
+
+## Shared LIFF entry intent
+
+前端以單一 parser 解析 direct query 與 LINE primary redirect 暫存的 `liff.state`：
+
+- 無 `view` 或 `view=application`：地區 → 收容所 → 報名。
+- `view=status`：直接顯示「我的志工申請」，不先進入報名 picker。
+- `organization_id`：application mode 安全預選；status mode 只將該組織卡片置頂，
+  不作為授權憑證。
+- `shelter_entry_reference`（以及既有 URL alias `entry`）：保留實體／外部入口。
+
+direct query 的有效 `view` 優先於 `liff.state`。target 在兩處衝突時不任選其一，
+而是清除預選並讓使用者安全重選；不接受 full URL 或過長的 optional state。
+parser 不會導向 query 指定的 URL，也不會在 `liff.init()` 完成前改寫 `liff.*` 參數。
+
+成功解析的 status intent 與 identity/data state 分開保存。若 LINE primary redirect 的
+`liff.state` 在 secondary redirect 被消耗，前端會用五分鐘內、只含 validated status
+與 optional organization focus 的 `sessionStorage` handoff 在 remount 時恢復 intent；
+`liff.init()` 與 identity ready 後才以 `history.replaceState` 正規化成
+`/volunteer-application?view=status`，隨即清除 handoff。這不會產生 full-page redirect、
+history spam 或登入迴圈，也不複製 raw `liff.state`／entry reference。status → application
+只允許由「前往志工報名」明確觸發。
+
+「我的申請」透過已驗證的 LINE identity 讀取本人紀錄，後端逐組織套用既有 tenant
+scope/RLS，回傳的每一筆卡片仍是 organization-scoped，不會合併成全域志工身分。
+空清單明確顯示「目前沒有志工申請紀錄」，由使用者自行選擇前往報名或返回 LINE；
+API 錯誤不會默默落回報名流程。pending 只顯示申請與服務日期；approved 的授權期間
+使用既有 grant 儲存的 `valid_from`／`expires_at`，不以目前 policy 重新推算歷史資料。
+
+### 本機實機診斷
+
+本機 Next.js development console 使用 `[volunteer-liff]`，依序應看到：
+
+```text
+parsed-intent view=status
+liff-init:ready
+identity:ready
+status-fetch:success applicationCount=<n>
+render-mode view=status dataState=empty|ready
+```
+
+FastAPI 在 `APP_ENV=local` 時使用 `[volunteer-status]`，只記錄 binding 是否存在、申請
+總數與 status 類別計數。兩側都不記錄 token、raw LINE user ID、姓名、電話、PII、
+Authorization header、raw entry reference 或完整 `liff.state`。
+
+實機重測時保留瀏覽器 console 與 API terminal 中上述兩組事件。正常流程不應出現
+`view-transition from=status to=application`；唯一正常例外是使用者按下「前往志工報名」，
+此時 reason 必須為 `user_action`。若 secondary redirect 暫時移除 query，應看到
+`reason=secondary_redirect_restore` 的 application → status 恢復事件。
 
 ## Demo、本機身分與狀態清除
 
