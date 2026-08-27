@@ -87,6 +87,7 @@ router = APIRouter(
     },
 )
 logger = get_logger(__name__)
+VOLUNTEER_OWN_STATUS_LIMIT = 5
 
 ApplicationStatus = Literal["pending", "approved", "rejected", "withdrawn"]
 EffectiveAccessStatus = Literal[
@@ -864,7 +865,10 @@ async def list_own_volunteer_application_statuses(
         for organization_id, organization_name, organization_address in organizations:
             await set_organization_scope(session, organization_id)
             repository = VolunteerAccessRepository(session, organization_id)
-            for application in await repository.applications_for_user(binding.user_id):
+            for application in await repository.applications_for_user(
+                binding.user_id,
+                limit=VOLUNTEER_OWN_STATUS_LIMIT,
+            ):
                 detail = await repository.application_detail(application.id)
                 if detail is None:
                     continue
@@ -903,6 +907,7 @@ async def list_own_volunteer_application_statuses(
             key=lambda item: (item.application.submitted_at, item.application.id),
             reverse=True,
         )
+        items = items[:VOLUNTEER_OWN_STATUS_LIMIT]
         categories = Counter(item.application.status for item in items)
         _log_volunteer_status(
             "response_200",

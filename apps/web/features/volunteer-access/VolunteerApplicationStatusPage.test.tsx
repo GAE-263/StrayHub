@@ -57,6 +57,7 @@ describe("VolunteerApplicationStatusPage", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response([])));
     await render();
     expect(host.textContent).toContain("我的志工申請");
+    expect(host.textContent).toContain("只顯示最近 5 筆申請");
     expect(host.textContent).toContain("目前沒有志工申請紀錄");
     [...host.querySelectorAll("button")]
       .find((button) => button.textContent?.includes("前往志工報名"))

@@ -140,7 +140,7 @@ export function VolunteerApplicationStatusPage({
       <header className="volunteer-application-heading">
         <span className="eyebrow">LINE 志工服務</span>
         <h1>我的志工申請</h1>
-        <p>每間收容所的申請與授權狀態分開顯示。</p>
+        <p>只顯示最近 5 筆申請；每間收容所的申請與授權狀態分開顯示。</p>
       </header>
 
       {!orderedItems && !error ? (

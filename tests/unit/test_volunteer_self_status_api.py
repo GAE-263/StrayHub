@@ -115,8 +115,8 @@ async def test_self_status_reads_each_organization_with_existing_scope_and_user_
         def __init__(self, _session, organization_id) -> None:
             self.organization_id = organization_id
 
-        async def applications_for_user(self, received_user_id):
-            requested_users.append((self.organization_id, received_user_id))
+        async def applications_for_user(self, received_user_id, *, limit):
+            requested_users.append((self.organization_id, received_user_id, limit))
             return [applications[self.organization_id]]
 
         async def application_detail(self, application_id):
@@ -164,10 +164,83 @@ async def test_self_status_reads_each_organization_with_existing_scope_and_user_
         ("organization", org_a),
         ("organization", org_b),
     ]
-    assert requested_users == [(org_a, user_id), (org_b, user_id)]
+    assert requested_users == [(org_a, user_id, 5), (org_b, user_id, 5)]
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "authenticated user_resolved=true" in messages
     assert "response_200 applications=2 pending=1 approved=1" in messages
     assert str(user_id) not in messages
     assert str(org_a) not in messages
     assert str(org_b) not in messages
+
+
+@pytest.mark.asyncio
+async def test_self_status_returns_only_the_five_most_recent_applications(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    organization_id = uuid4()
+    now = datetime.now(timezone.utc)
+    applications = [
+        SimpleNamespace(
+            id=uuid4(),
+            organization_id=organization_id,
+            user_id=user_id,
+            status="pending",
+            submitted_at=now - timedelta(days=offset),
+            decided_at=None,
+            decision_reason=None,
+            version=1,
+        )
+        for offset in range(7)
+    ]
+
+    class _Identities:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def get_line_binding(self, _line_user_id: str):
+            return SimpleNamespace(user_id=user_id)
+
+    class _Organizations:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def list(self):
+            return [SimpleNamespace(id=organization_id, name="Shelter", address=None)]
+
+    class _Repository:
+        def __init__(self, _session, received_organization_id) -> None:
+            assert received_organization_id == organization_id
+
+        async def applications_for_user(self, received_user_id, *, limit):
+            assert received_user_id == user_id
+            assert limit == 5
+            # Return more than requested to verify the endpoint's global cap too.
+            return list(reversed(applications))
+
+        async def application_detail(self, application_id):
+            application = next(item for item in applications if item.id == application_id)
+            return application, []
+
+        async def grant_for_application(self, _application_id):
+            return None
+
+    async def noop_scope(*_args, **_kwargs) -> None:
+        pass
+
+    monkeypatch.setattr(api, "AuthenticationRepository", _Identities)
+    monkeypatch.setattr(api, "OrganizationRepository", _Organizations)
+    monkeypatch.setattr(api, "VolunteerAccessRepository", _Repository)
+    monkeypatch.setattr(api, "set_platform_scope", noop_scope)
+    monkeypatch.setattr(api, "set_organization_scope", noop_scope)
+
+    response = await api.list_own_volunteer_application_statuses(
+        api.VolunteerOwnStatusRequest(id_token="synthetic-token"),
+        object(),
+        _Verifier(),
+    )
+
+    assert len(response.items) == 5
+    assert [item.application.id for item in response.items] == [
+        application.id for application in applications[:5]
+    ]
