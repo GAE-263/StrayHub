@@ -1,0 +1,82 @@
+pid nginx.pid;
+error_log logs/error.log notice;
+
+events {}
+
+http {
+    access_log logs/access.log;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        "" close;
+    }
+
+    map $http_x_forwarded_proto $forwarded_proto {
+        default $http_x_forwarded_proto;
+        "" $scheme;
+    }
+
+    upstream strayhub_api {
+        server 127.0.0.1:__API_PORT__;
+    }
+
+    upstream strayhub_web {
+        server 127.0.0.1:__WEB_PORT__;
+    }
+
+    server {
+        listen 127.0.0.1:__NGINX_PORT__;
+        server_name localhost;
+
+        location = /healthz {
+            proxy_pass http://strayhub_api;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        }
+
+        # No URI suffix on proxy_pass: FastAPI receives the complete /v1/... path.
+        location ^~ /v1/ {
+            proxy_pass http://strayhub_api;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        }
+
+        location = /volunteer-application {
+            proxy_pass http://strayhub_web;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $forwarded_proto;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+        }
+
+        # Next.js assets and webpack HMR must never fall through to FastAPI.
+        location ^~ /_next/ {
+            proxy_pass http://strayhub_web;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $forwarded_proto;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+        }
+
+        location / {
+            proxy_pass http://strayhub_web;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $forwarded_proto;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+        }
+    }
+}

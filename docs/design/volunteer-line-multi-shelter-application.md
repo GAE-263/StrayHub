@@ -68,3 +68,17 @@ grant 或既有 application 的新身分；使用合成姓名與電話。status 
 
 前端以 organization key 重建 application component；返回並選取另一收容所時會清除
 可信組織資料、policy、服務日期、表單、submit、error 與 pending state，避免跨目標殘留。
+
+## 本機 LINE／LIFF 實機驗證
+
+`./scripts/test_line_local.sh` 驗證已由 `./scripts/demo.sh` 啟動的 API `8001` 與 Web
+`3001`，按需啟動 host nginx `8082`，再以一條具名 ngrok tunnel 公開同一 origin。
+nginx 保留 `/v1/*` 送 FastAPI，其他路徑送 Next.js；`/_next/*` 明確屬於 Web 並支援
+WebSocket Upgrade，因此 HMR 不會誤送 FastAPI。瀏覽器的相對 `/v1` 也直接經 nginx
+到 API，不需要 wildcard CORS。
+
+helper 從 ngrok inspection API 依 tunnel name 解析 HTTPS URL，不解析 terminal UI；只
+管理自己的 nginx/ngrok PID。它僅列出 LINE Developers 應填的 webhook、LIFF Endpoint、
+`API_BASE_URL` 與不含 scheme 的 `LINE_DEMO_WEB_ORIGIN_HOST`，不會寫入 env、同步 Rich
+Menu 或變更 LINE credentials。這個 local topology 用來先驗證未來單一來源 routing
+模型，本項目不包含任何 GCP 部署或資源變更。
