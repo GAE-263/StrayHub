@@ -296,15 +296,42 @@ setting `current_photo_key`; MediaAsset records processed MIME, checksum and
 `exif_removed=true`. Existing signed-URL APIs expose images through current tenant
 authorization, without a new public API contract.
 
+Before requesting official image bytes, the importer batch-loads the existing
+AnimalExternalSource mappings, Animals and MediaAssets. `reuse_local` is allowed
+only when `photo_source_checksum` and `photo_object_key` are present and internally
+consistent, `Animal.current_photo_key` still equals that importer key, the matching
+MediaAsset is `processed`, the tenant-scoped MinIO object exists, and SHA-256 of the
+stored object equals `MediaAsset.checksum`. A non-null key by itself is never enough.
+The storage GET is intentional local validation; a repeated run avoids the official
+image host but still detects missing/corrupt local bytes.
+
+`photo_source_checksum` hashes the original validated official bytes and selects
+the source-version object key. `MediaAsset.checksum` hashes sanitized/processed
+bytes actually stored in MinIO. EXIF removal or re-encoding can make these values
+different, so the importer never compares them directly.
+
+The previous and current normalized `source_snapshot.album_file` locators are
+compared. A changed locator requires a new official download because it is evidence
+the image may have changed. An unchanged locator is only a version signal; local
+validation is still mandatory. `animal_update` / `source_updated_at` is shared with
+unrelated profile changes and is not a reliable image revision signal, so changing
+only the timestamp does not force a photo download. Neither field is trusted alone.
+
 - First valid image: create MediaAsset and set primary photo.
-- Same source bytes: refetch to verify source checksum, reuse existing MediaAsset
-  and storage bytes after checksum verification; no unnecessary PUT/re-upload.
+- Same locator plus verified importer-owned local bytes: skip the official download,
+  reuse the existing MediaAsset/object, and perform no MinIO PUT.
 - Changed bytes: new deterministic version, new MediaAsset; replace importer-owned
   primary photo only after successful processing/storage. Keep previous version.
-- Missing/invalid/failed image: retain last valid primary (or null on first import),
-  report image failure; Animal may still import. Never fabricate a photo key.
-- Primary photo changed manually away from the last importer key: preserve it.
+- Changed source locator: download and validate; a byte change creates a new key.
+- Missing official locator: retain an existing valid local primary; otherwise remain
+  without a photo. A temporarily blank source never deletes the last valid image.
+- Invalid/failed required download: retain the last valid primary (or null on first
+  import), report image failure; Animal may still import. Never fabricate a key.
+- Primary photo changed manually away from the last importer key: preserve it and
+  skip remote importer-photo maintenance/download.
 - Missing/corrupt stored object: repair from validated official bytes; verify again.
+- Missing/unprocessed MediaAsset or processed-checksum mismatch: do not trust the
+  untracked object; download, sanitize and repair through the normal media path.
 
 Database and object storage are not a distributed transaction. A subsequent DB
 rollback can leave an unreferenced deterministic object; it does not point an Animal
@@ -313,8 +340,10 @@ policy. Such cleanup is not part of Item 1.
 
 ## Transactions, QR and failures
 
-`scripts/import_moa_shelter_animals.py` fetches/normalizes/downloads before beginning
-the write transaction. `MoaImportService.run(...)` requires a caller-owned transaction.
+`scripts/import_moa_shelter_animals.py` fetches/normalizes, plans photo actions in a
+short read transaction, downloads only `download_required` / `repair_local` records,
+then begins the write transaction. `MoaImportService.run(...)` requires a caller-owned
+transaction.
 It locks `moa-import:<organization code>` using PostgreSQL advisory transaction lock,
 bootstraps only that Organization through the existing operator platform boundary,
 then switches to organization scope for every Animal/mapping/media/QR query/write.
@@ -328,10 +357,14 @@ reactivated and do not get a new QR. No raw token or signed URL is logged.
 Animal creation/profile/photo updates use existing system AuditService records.
 
 Summary includes fetched/eligible/requested/selected counts; created/updated/unchanged
-Animals; total currently unavailable mappings; downloaded/reused/updated/failed
-images; created/reused QR; normalization/image/record errors. `images_updated`
-includes first ingestion; `images_downloaded` includes unchanged source downloads.
-`animals_unchanged` ignores metadata heartbeat writes. Dry-run counts are plans.
+Animals; total currently unavailable mappings; `images_remote_requests`,
+`images_skipped_remote`, reused/updated/repaired/failed/manual-preserved images;
+created/reused QR; normalization/image/record errors. `images_downloaded` remains a
+compatibility count matching `images_remote_requests`: one logical official-image
+fetch per selected record (HTTP retry attempts are internal). `images_updated`
+includes first ingestion. `animals_unchanged` ignores metadata heartbeat writes.
+Dry-run performs DB/MinIO validation but makes no remote image request or write;
+remote-request counters describe the plan.
 Exit 0 = no reported errors; 2 = completed with per-record/image/normalization errors;
 1 = fatal fetch/validation/DB/storage-bootstrap failure. Errors are sanitized codes,
 not raw SQL, exception payloads, QR tokens or credentials.

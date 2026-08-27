@@ -3,6 +3,7 @@ from io import BytesIO
 import httpx
 import pytest
 from PIL import Image
+from services.api.app.application.moa_import_service import PhotoAction, PhotoPlan
 from services.api.app.domain.moa_import import normalize, select_records
 from services.api.app.infrastructure.moa_open_data import (
     MoaOpenDataClient,
@@ -182,3 +183,46 @@ async def test_oversized_response_is_bounded():
     ) as http:
         with pytest.raises(ValueError, match="source_response_too_large"):
             await MoaOpenDataClient(http)._get(record()["album_file"], image=True, max_bytes=4)
+
+
+async def test_photo_download_batch_only_requests_planned_remote_actions():
+    from services.api.app.application.moa_import_service import MoaImportService
+
+    batch = select_records(
+        [record(1), record(2), record(3), record(4)],
+        shelter=record()["shelter_name"],
+        kind="dog",
+        limit=60,
+    )
+    plans = {
+        "1": PhotoPlan(PhotoAction.REUSE_LOCAL, "verified_local_photo"),
+        "2": PhotoPlan(PhotoAction.DOWNLOAD_REQUIRED, "source_locator_changed"),
+        "3": PhotoPlan(PhotoAction.REPAIR_LOCAL, "missing_object"),
+        "4": PhotoPlan(PhotoAction.MANUAL_PHOTO_PRESERVED, "manual"),
+    }
+
+    class Client:
+        def __init__(self):
+            self.urls = []
+
+        async def fetch_photo(self, url):
+            self.urls.append(url)
+            return decode_photo(jpeg(), declared_type="image/jpeg")
+
+    client = Client()
+    result = await MoaImportService.download_photos(batch, client, plans)
+
+    assert set(result) == {"2", "3"}
+    assert len(client.urls) == 2
+
+    outage_client = Client()
+
+    async def fail_if_called(_url):
+        raise AssertionError("valid local photos must not contact the image source")
+
+    outage_client.fetch_photo = fail_if_called
+    all_local = {
+        row.external_id: PhotoPlan(PhotoAction.REUSE_LOCAL, "verified_local_photo")
+        for row in batch.selected
+    }
+    assert await MoaImportService.download_photos(batch, outage_client, all_local) == {}

@@ -65,7 +65,10 @@ shared vocabulary → exact organization/photo/QR verification → services.
 Runtime setup grants only the existing SIU identity-table contract; no RLS changes.
 
 The first run downloads approved FurKids photos and official MOA images. FurKids
-reuses valid existing bytes. MOA always attempts live synchronization; on failure,
+reuses valid existing bytes. On later runs, MOA validates importer ownership,
+processed MediaAsset metadata and the actual tenant-scoped MinIO checksum before
+skipping unchanged official image downloads; name-enrichment detail requests remain
+separate live requests. MOA always attempts live metadata synchronization; on failure,
 bootstrap warns and continues **only** if existing tenant-bound animals, source
 mappings, active QR and every local photo checksum verify successfully. It does
 not claim a fresh sync succeeded. Without valid local data it fails clearly.

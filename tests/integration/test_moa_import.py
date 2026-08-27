@@ -7,7 +7,11 @@ from uuid import uuid4
 
 import pytest
 from PIL import Image
-from services.api.app.application.moa_import_service import MoaImportService, organization_identity
+from services.api.app.application.moa_import_service import (
+    MoaImportService,
+    PhotoAction,
+    organization_identity,
+)
 from services.api.app.domain.moa_import import select_records
 from services.api.app.infrastructure.moa_open_data import decode_photo
 from services.api.app.infrastructure.storage.memory import InMemoryStorageFake
@@ -84,6 +88,12 @@ async def execute(fixture, records, *, limit=60, images=None, dry_run=False):
     )
 
 
+async def plan(fixture, records):
+    session, storage, _ = fixture
+    batch = select_records(records, shelter="測試收容所", kind="dog", limit=60)
+    return await MoaImportService(session, storage).plan_photos(batch=batch)
+
+
 async def test_idempotent_updates_images_qr_and_manual_fields(fixture):
     session, storage, shelter_id = fixture
     data = rows(shelter_id)
@@ -120,6 +130,170 @@ async def test_idempotent_updates_images_qr_and_manual_fields(fixture):
         with Image.open(BytesIO(value)) as image:
             assert image.format == "JPEG" and not image.getexif()
         assert metadata.exif_removed and metadata.content_type == "image/jpeg"
+
+
+async def test_valid_unchanged_local_photo_plans_reuse_without_remote_request(fixture):
+    _, _, shelter_id = fixture
+    data = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/a.jpg")
+    await execute(fixture, data, images={"1": photo()})
+
+    result = await plan(fixture, data)
+
+    assert result["1"].action is PhotoAction.REUSE_LOCAL
+    session, storage, _ = fixture
+    batch = select_records(data, shelter="測試收容所", kind="dog", limit=60)
+    second = await MoaImportService(session, storage).run(
+        batch=batch,
+        shelter="測試收容所",
+        limit=60,
+        photos={},
+        photo_plans=result,
+    )
+    assert second["images_remote_requests"] == 0
+    assert second["images_skipped_remote"] == second["images_reused"] == 1
+    assert second["images_updated"] == second["images_repaired"] == 0
+    assert await session.scalar(select(func.count()).select_from(MediaAsset)) == 1
+    timestamp_only = await plan(
+        fixture,
+        rows(shelter_id, ids=(1,), animal_update="2026/08/26", album_file=data[0]["album_file"]),
+    )
+    no_source = await plan(fixture, rows(shelter_id, ids=(1,), album_file=""))
+    assert timestamp_only["1"].action is PhotoAction.REUSE_LOCAL
+    assert no_source["1"].action is PhotoAction.REUSE_LOCAL
+
+
+async def test_source_url_change_requires_remote_request(fixture):
+    session, storage, shelter_id = fixture
+    original = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/a.jpg")
+    await execute(fixture, original, images={"1": photo()})
+
+    changed = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/b.jpg")
+    result = await plan(fixture, changed)
+
+    assert result["1"].action is PhotoAction.DOWNLOAD_REQUIRED
+    assert result["1"].reason == "source_locator_changed"
+    batch = select_records(changed, shelter="測試收容所", kind="dog", limit=60)
+    summary = await MoaImportService(session, storage).run(
+        batch=batch,
+        shelter="測試收容所",
+        limit=60,
+        photos={"1": photo("blue")},
+        photo_plans=result,
+    )
+    assert summary["images_remote_requests"] == summary["images_updated"] == 1
+    mapping = await session.scalar(select(AnimalExternalSource))
+    assert mapping.source_snapshot["album_file"].endswith("/b.jpg")
+
+
+@pytest.mark.parametrize("damage", ["missing_object", "checksum_mismatch", "missing_asset"])
+async def test_invalid_local_photo_plans_repair(fixture, damage):
+    session, storage, shelter_id = fixture
+    data = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/a.jpg")
+    await execute(fixture, data, images={"1": photo()})
+    mapping = await session.scalar(select(AnimalExternalSource))
+    asset = await session.scalar(select(MediaAsset))
+    storage_key = (mapping.organization_id, mapping.photo_object_key)
+    if damage == "missing_object":
+        storage._objects.pop(storage_key)
+    elif damage == "checksum_mismatch":
+        _, metadata = storage._objects[storage_key]
+        storage._objects[storage_key] = (b"corrupt", metadata)
+    else:
+        await session.delete(asset)
+        await session.flush()
+
+    result = await plan(fixture, data)
+
+    assert result["1"].action is PhotoAction.REPAIR_LOCAL
+    assert result["1"].reason == damage
+    batch = select_records(data, shelter="測試收容所", kind="dog", limit=60)
+    summary = await MoaImportService(session, storage).run(
+        batch=batch,
+        shelter="測試收容所",
+        limit=60,
+        photos={"1": photo()},
+        photo_plans=result,
+    )
+    assert summary["images_remote_requests"] == summary["images_repaired"] == 1
+    assert summary["image_failures"] == 0
+    assert (await plan(fixture, data))["1"].action is PhotoAction.REUSE_LOCAL
+
+
+async def test_required_repair_source_outage_reports_failure_without_new_photo_key(fixture):
+    session, storage, shelter_id = fixture
+    data = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/a.jpg")
+    await execute(fixture, data, images={"1": photo()})
+    animal = await session.scalar(select(Animal))
+    previous_key = animal.current_photo_key
+    storage._objects.pop((animal.organization_id, previous_key))
+    plans = await plan(fixture, data)
+    batch = select_records(data, shelter="測試收容所", kind="dog", limit=60)
+
+    summary = await MoaImportService(session, storage).run(
+        batch=batch,
+        shelter="測試收容所",
+        limit=60,
+        photos={"1": "image_fetch_failed"},
+        photo_plans=plans,
+    )
+
+    assert plans["1"].action is PhotoAction.REPAIR_LOCAL
+    assert summary["images_remote_requests"] == summary["image_failures"] == 1
+    assert summary["images_repaired"] == 0
+    assert animal.current_photo_key == previous_key
+
+
+async def test_manager_photo_skips_remote_maintenance_and_missing_source_is_retained(fixture):
+    session, _, shelter_id = fixture
+    data = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/a.jpg")
+    await execute(fixture, data, images={"1": photo()})
+    animal = await session.scalar(select(Animal))
+    animal.current_photo_key = "manually-managed/photo.jpg"
+    await session.flush()
+
+    manual = await plan(
+        fixture,
+        rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/b.jpg"),
+    )
+    missing = await plan(fixture, rows(shelter_id, ids=(1,), album_file=""))
+
+    assert manual["1"].action is PhotoAction.MANUAL_PHOTO_PRESERVED
+    assert missing["1"].action is PhotoAction.MANUAL_PHOTO_PRESERVED
+    batch = select_records(
+        rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/b.jpg"),
+        shelter="測試收容所",
+        kind="dog",
+        limit=60,
+    )
+    summary = await MoaImportService(session, fixture[1]).run(
+        batch=batch,
+        shelter="測試收容所",
+        limit=60,
+        photos={},
+        photo_plans=manual,
+    )
+    assert summary["images_remote_requests"] == 0
+    assert summary["images_preserved_manual"] == 1
+    assert animal.current_photo_key == "manually-managed/photo.jpg"
+
+
+async def test_dry_run_reports_plan_without_remote_or_storage_writes(fixture):
+    session, storage, shelter_id = fixture
+    data = rows(shelter_id, ids=(1,), album_file="https://www.pet.gov.tw/upload/pic/a.jpg")
+    batch = select_records(data, shelter="測試收容所", kind="dog", limit=60)
+    plans = await MoaImportService(session, storage).plan_photos(batch=batch)
+
+    result = await MoaImportService(session, storage).run(
+        batch=batch,
+        shelter="測試收容所",
+        limit=60,
+        photo_plans=plans,
+        dry_run=True,
+    )
+
+    assert result["images_remote_requests"] == 1
+    assert result["images_skipped_remote"] == 0
+    assert not storage._objects
 
 
 async def test_presence_uses_full_set_not_selected_window(fixture):

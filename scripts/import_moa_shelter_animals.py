@@ -24,23 +24,38 @@ async def run(args):
             )
             names = await client.fetch_names(batch)
             name_detail_requests = client.name_detail_requests
-            photos = None if args.dry_run else await MoaImportService.download_photos(batch, client)
-        stage = "database_or_storage"
-        storage = MinioStorageAdapter()
-        if not args.dry_run:
-            await storage.ensure_bucket()
-        async with session_factory() as session, session.begin():
-            if args.dry_run:
-                await session.execute(text("SET TRANSACTION READ ONLY"))
-            summary = await MoaImportService(session, storage).run(
-                batch=batch,
-                shelter=args.shelter,
-                limit=args.limit,
-                photos=photos,
-                names=names,
-                name_detail_requests=name_detail_requests,
-                dry_run=args.dry_run,
-            )
+            stage = "database_or_storage"
+            storage = MinioStorageAdapter()
+            if not args.dry_run:
+                await storage.ensure_bucket()
+            async with session_factory() as planning_session, planning_session.begin():
+                if args.dry_run:
+                    await planning_session.execute(text("SET TRANSACTION READ ONLY"))
+                photo_plans = await MoaImportService(planning_session, storage).plan_photos(
+                    batch=batch
+                )
+                if args.dry_run:
+                    summary = await MoaImportService(planning_session, storage).run(
+                        batch=batch,
+                        shelter=args.shelter,
+                        limit=args.limit,
+                        names=names,
+                        name_detail_requests=name_detail_requests,
+                        photo_plans=photo_plans,
+                        dry_run=True,
+                    )
+            if not args.dry_run:
+                photos = await MoaImportService.download_photos(batch, client, photo_plans)
+                async with session_factory() as session, session.begin():
+                    summary = await MoaImportService(session, storage).run(
+                        batch=batch,
+                        shelter=args.shelter,
+                        limit=args.limit,
+                        photos=photos,
+                        names=names,
+                        name_detail_requests=name_detail_requests,
+                        photo_plans=photo_plans,
+                    )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 2 if summary["errors"] else 0
     except Exception as exc:

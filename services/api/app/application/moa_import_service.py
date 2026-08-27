@@ -6,7 +6,9 @@ import asyncio
 import hashlib
 import json
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import StrEnum
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import func, select, text
@@ -33,13 +35,31 @@ def organization_identity(shelter_id: str):
     return uuid5(NAMESPACE_URL, f"strayhub:{SOURCE}:shelter:{shelter_id}"), code
 
 
+class PhotoAction(StrEnum):
+    REUSE_LOCAL = "reuse_local"
+    DOWNLOAD_REQUIRED = "download_required"
+    REPAIR_LOCAL = "repair_local"
+    MANUAL_PHOTO_PRESERVED = "manual_photo_preserved"
+    MISSING_IMAGE = "missing_image"
+
+
+@dataclass(frozen=True)
+class PhotoPlan:
+    action: PhotoAction
+    reason: str
+
+
 class MoaImportService:
     def __init__(self, session: AsyncSession, storage: ObjectStoragePort):
         self.session = session
         self.storage = storage
 
     @staticmethod
-    async def download_photos(batch: MoaBatch, client: MoaOpenDataClient):
+    async def download_photos(
+        batch: MoaBatch,
+        client: MoaOpenDataClient,
+        plans: dict[str, PhotoPlan] | None = None,
+    ):
         semaphore = asyncio.Semaphore(3)
 
         async def download(record):
@@ -51,7 +71,143 @@ class MoaImportService:
                 except ValueError as exc:
                     return record.external_id, str(exc)
 
-        return dict(await asyncio.gather(*(download(row) for row in batch.selected)))
+        selected = (
+            batch.selected
+            if plans is None
+            else tuple(
+                row
+                for row in batch.selected
+                if plans[row.external_id].action
+                in {PhotoAction.DOWNLOAD_REQUIRED, PhotoAction.REPAIR_LOCAL}
+            )
+        )
+        return dict(await asyncio.gather(*(download(row) for row in selected)))
+
+    async def plan_photos(self, *, batch: MoaBatch) -> dict[str, PhotoPlan]:
+        """Batch-load metadata, then validate importer-owned local bytes before reuse."""
+        org_id, code = organization_identity(batch.shelter_id)
+        await set_platform_scope(self.session)
+        organization = await self.session.scalar(
+            select(Organization).where(Organization.code == code)
+        )
+        if organization is None:
+            return {
+                row.external_id: PhotoPlan(
+                    PhotoAction.DOWNLOAD_REQUIRED if row.image_url else PhotoAction.MISSING_IMAGE,
+                    "new_import" if row.image_url else "source_image_missing",
+                )
+                for row in batch.selected
+            }
+        if organization.id != org_id:
+            raise ValueError("organization_code_collision")
+        await set_organization_scope(self.session, org_id)
+        mappings = list(
+            (
+                await self.session.scalars(
+                    select(AnimalExternalSource).where(
+                        AnimalExternalSource.organization_id == org_id,
+                        AnimalExternalSource.source == SOURCE,
+                        AnimalExternalSource.external_id.in_(
+                            row.external_id for row in batch.selected
+                        ),
+                    )
+                )
+            ).all()
+        )
+        by_external_id = {row.external_id: row for row in mappings}
+        animal_ids = [row.animal_id for row in mappings]
+        animals = (
+            list(
+                (
+                    await self.session.scalars(
+                        select(Animal).where(
+                            Animal.organization_id == org_id, Animal.id.in_(animal_ids)
+                        )
+                    )
+                ).all()
+            )
+            if animal_ids
+            else []
+        )
+        by_animal_id = {row.id: row for row in animals}
+        object_keys = [row.photo_object_key for row in mappings if row.photo_object_key]
+        assets = (
+            list(
+                (
+                    await self.session.scalars(
+                        select(MediaAsset).where(
+                            MediaAsset.organization_id == org_id,
+                            MediaAsset.object_key.in_(object_keys),
+                        )
+                    )
+                ).all()
+            )
+            if object_keys
+            else []
+        )
+        by_object_key = {row.object_key: row for row in assets}
+        plans: dict[str, PhotoPlan] = {}
+        for record in batch.selected:
+            mapping = by_external_id.get(record.external_id)
+            animal = by_animal_id.get(mapping.animal_id) if mapping else None
+            if mapping and animal and animal.current_photo_key:
+                if animal.current_photo_key != mapping.photo_object_key:
+                    plans[record.external_id] = PhotoPlan(
+                        PhotoAction.MANUAL_PHOTO_PRESERVED, "current_photo_not_importer_owned"
+                    )
+                    continue
+            if not record.image_url:
+                invalid = await self._local_photo_problem(org_id, mapping, animal, by_object_key)
+                plans[record.external_id] = PhotoPlan(
+                    PhotoAction.REUSE_LOCAL if invalid is None else PhotoAction.MISSING_IMAGE,
+                    "source_image_missing_local_retained"
+                    if invalid is None
+                    else "source_image_missing",
+                )
+                continue
+            if mapping is None or animal is None:
+                plans[record.external_id] = PhotoPlan(PhotoAction.DOWNLOAD_REQUIRED, "new_import")
+                continue
+            previous_locator = mapping.source_snapshot.get("album_file")
+            if previous_locator != record.image_url:
+                plans[record.external_id] = PhotoPlan(
+                    PhotoAction.DOWNLOAD_REQUIRED, "source_locator_changed"
+                )
+                continue
+            invalid = await self._local_photo_problem(org_id, mapping, animal, by_object_key)
+            plans[record.external_id] = (
+                PhotoPlan(PhotoAction.REUSE_LOCAL, "verified_local_photo")
+                if invalid is None
+                else PhotoPlan(PhotoAction.REPAIR_LOCAL, invalid)
+            )
+        return plans
+
+    async def _local_photo_problem(self, org_id, mapping, animal, assets_by_key):
+        if mapping is None or animal is None:
+            return "metadata_incomplete"
+        checksum = mapping.photo_source_checksum
+        key = mapping.photo_object_key
+        if (
+            not checksum
+            or len(checksum) != 64
+            or any(character not in "0123456789abcdef" for character in checksum.lower())
+            or not key
+            or animal.current_photo_key != key
+            or f"/{checksum}/" not in key
+        ):
+            return "metadata_incomplete"
+        asset = assets_by_key.get(key)
+        if asset is None:
+            return "missing_asset"
+        if asset.status != "processed" or not asset.checksum:
+            return "asset_not_processed"
+        try:
+            stored = await self.storage.get(scope=ObjectScope(org_id), key=key)
+        except Exception:
+            return "missing_object"
+        if hashlib.sha256(stored).hexdigest() != asset.checksum:
+            return "checksum_mismatch"
+        return None
 
     async def run(
         self,
@@ -62,6 +218,7 @@ class MoaImportService:
         photos: dict[str, MoaPhoto | str] | None = None,
         names: dict[str, MoaNameObservation] | None = None,
         name_detail_requests: int = 0,
+        photo_plans: dict[str, PhotoPlan] | None = None,
         dry_run: bool = False,
     ):
         if not self.session.in_transaction():
@@ -77,8 +234,11 @@ class MoaImportService:
                     "animals_unchanged",
                     "source_unavailable",
                     "images_downloaded",
+                    "images_remote_requests",
+                    "images_skipped_remote",
                     "images_reused",
                     "images_updated",
+                    "images_repaired",
                     "image_failures",
                     "qr_created",
                     "qr_reused",
@@ -182,6 +342,9 @@ class MoaImportService:
                     if changed
                     else "animals_unchanged"
                 ] += 1
+                plan = (photo_plans or {}).get(record.external_id)
+                if plan:
+                    self._count_photo_plan(counts, plan, dry_run=True)
                 continue
             # Flush presence before SAVEPOINT, then isolate a malformed/conflicting animal.
             try:
@@ -193,6 +356,7 @@ class MoaImportService:
                         now,
                         (photos or {}).get(record.external_id, "missing_image"),
                         observation,
+                        (photo_plans or {}).get(record.external_id),
                     )
                 counts.update(result[0])
                 summary["errors"].extend(result[1])
@@ -209,10 +373,21 @@ class MoaImportService:
         await self.session.flush()
         summary.update(counts)
         if dry_run:
-            summary["image_plan"] = (
-                "fetch/decode/checksum; reuse unchanged, ingest changed; no downloads in dry-run"
-            )
+            summary["image_plan"] = "local validation only; remote images are not downloaded"
         return summary
+
+    @staticmethod
+    def _count_photo_plan(counts, plan, *, dry_run=False):
+        if plan.action in {PhotoAction.DOWNLOAD_REQUIRED, PhotoAction.REPAIR_LOCAL}:
+            counts["images_remote_requests"] += 1
+            if not dry_run:
+                counts["images_downloaded"] += 1
+        else:
+            counts["images_skipped_remote"] += 1
+        if plan.action is PhotoAction.REUSE_LOCAL:
+            counts["images_reused"] += 1
+        elif plan.action is PhotoAction.MANUAL_PHOTO_PRESERVED:
+            counts["images_preserved_manual"] += 1
 
     async def _legacy_name_owned(self, org_id, record, mapping, animal):
         if mapping.source != SOURCE or animal.name != record.fields["name"]:
@@ -329,7 +504,7 @@ class MoaImportService:
             raise ValueError("source_snapshot_too_large")
         return current, snapshot, counts, errors
 
-    async def _record(self, org_id, record, mapping, now, photo, observation):
+    async def _record(self, org_id, record, mapping, now, photo, observation, photo_plan=None):
         counts, errors = Counter(), []
         created = mapping is None
         if created:
@@ -375,14 +550,34 @@ class MoaImportService:
         mapping.source_snapshot = snapshot
         mapping.last_imported_at = mapping.last_seen_at = now
         mapping.source_status = "present"
-        if isinstance(photo, str):
+        if photo_plan is None:
+            photo_plan = PhotoPlan(
+                PhotoAction.MISSING_IMAGE
+                if photo == "missing_image"
+                else PhotoAction.DOWNLOAD_REQUIRED,
+                "legacy_call",
+            )
+        if (
+            animal.current_photo_key
+            and animal.current_photo_key != mapping.photo_object_key
+            and photo_plan.action in {PhotoAction.DOWNLOAD_REQUIRED, PhotoAction.REPAIR_LOCAL}
+        ):
+            # Keep this check in the write path as defense in depth for callers that
+            # did not use the planner, or for a concurrent manager photo change.
+            photo_plan = PhotoPlan(
+                PhotoAction.MANUAL_PHOTO_PRESERVED, "current_photo_not_importer_owned"
+            )
+        self._count_photo_plan(counts, photo_plan)
+        if photo_plan.action in {
+            PhotoAction.REUSE_LOCAL,
+            PhotoAction.MANUAL_PHOTO_PRESERVED,
+            PhotoAction.MISSING_IMAGE,
+        }:
+            pass
+        elif isinstance(photo, str):
             counts["image_failures"] += 1
             errors.append({"stage": "image", "external_id": record.external_id, "code": photo})
-        elif animal.current_photo_key and animal.current_photo_key != mapping.photo_object_key:
-            counts["images_preserved_manual"] += 1
-            counts["images_downloaded"] += 1
         else:
-            counts["images_downloaded"] += 1
             try:
                 key, reused = await self._photo(org_id, record.external_id, photo)
             except Exception:
@@ -397,7 +592,10 @@ class MoaImportService:
             else:
                 mapping.photo_source_checksum = photo.source_checksum
                 mapping.photo_object_key = animal.current_photo_key = key
-                counts["images_reused" if reused else "images_updated"] += 1
+                if photo_plan.action is PhotoAction.REPAIR_LOCAL:
+                    counts["images_repaired"] += 1
+                else:
+                    counts["images_reused" if reused else "images_updated"] += 1
         changed = before != fields or previous_photo != animal.current_photo_key
         counts[
             "animals_created" if created else "animals_updated" if changed else "animals_unchanged"
