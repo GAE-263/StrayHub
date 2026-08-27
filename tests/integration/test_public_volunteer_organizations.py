@@ -8,15 +8,15 @@ from services.api.app.persistence.repositories.organization_repository import Or
 
 
 class _ProjectionResult:
-    def __init__(self, rows: list[tuple[UUID, str, str, str | None, bool]]) -> None:
+    def __init__(self, rows: list[tuple[UUID, str, str | None, str | None]]) -> None:
         self.rows = rows
 
-    def all(self) -> list[tuple[UUID, str, str, str | None, bool]]:
+    def all(self) -> list[tuple[UUID, str, str | None, str | None]]:
         return self.rows
 
 
 class _Session:
-    def __init__(self, rows: list[tuple[UUID, str, str, str | None, bool]]) -> None:
+    def __init__(self, rows: list[tuple[UUID, str, str | None, str | None]]) -> None:
         self.rows = rows
         self.statements = []
         self.events = []
@@ -34,8 +34,8 @@ async def test_public_directory_projects_active_enabled_organizations_in_stable_
     first_id = uuid4()
     second_id = uuid4()
     rows = [
-        (first_id, "ORG-ALPHA", "Alpha Shelter", "north", False),
-        (second_id, "ORG-BETA", "Beta Shelter", None, True),
+        (first_id, "Alpha Shelter", "新北市甲路", "新北市"),
+        (second_id, "Beta Shelter", "臺北市乙路", "台北市"),
     ]
     session = _Session(rows)
     scopes: list[object] = []
@@ -58,7 +58,7 @@ async def test_public_directory_projects_active_enabled_organizations_in_stable_
     sql = str(session.statements[0])
     assert "organizations" in sql
     assert "organization_volunteer_access_policies" in sql
-    assert "ORDER BY organizations.name, organizations.code, organizations.id" in sql
+    assert "ORDER BY organizations.service_area, organizations.name, organizations.id" in sql
     assert "organization_memberships" not in sql
     assert "volunteer_applications" not in sql
 
@@ -74,17 +74,47 @@ async def test_public_directory_route_is_unauthenticated_and_returns_only_public
             pass
 
         async def list_public_volunteer_organizations(self):
-            return [(organization_id, "ORG-PUBLIC", "Public Shelter", "east", True)]
+            return [(organization_id, "Public Shelter", "新北市甲路", "新北市")]
 
     monkeypatch.setattr(api, "OrganizationRepository", _Repository)
     response = await api.list_public_volunteer_organizations(object())
 
-    assert [item.model_dump() for item in response] == [
-        {
-            "id": organization_id,
-            "code": "ORG-PUBLIC",
-            "name": "Public Shelter",
-            "service_area": "east",
-            "insurance_required": True,
-        }
+    assert response.model_dump() == {
+        "regions": [
+            {
+                "name": "新北市",
+                "organizations": [
+                    {"id": organization_id, "name": "Public Shelter", "address": "新北市甲路"}
+                ],
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_public_directory_adds_canonical_taipei_dynamically_and_omits_unknown_regions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    new_taipei_id = uuid4()
+    taipei_id = uuid4()
+
+    class _Repository:
+        def __init__(self, _session) -> None:
+            pass
+
+        async def list_public_volunteer_organizations(self):
+            return [
+                (new_taipei_id, "New Taipei Shelter", None, "新北市"),
+                (taipei_id, "Taipei Shelter", None, "台北市"),
+                (uuid4(), "Unstructured Shelter", None, "北部"),
+            ]
+
+    monkeypatch.setattr(api, "OrganizationRepository", _Repository)
+
+    response = await api.list_public_volunteer_organizations(object())
+
+    assert [region.name for region in response.regions] == ["臺北市", "新北市"]
+    assert [item.id for region in response.regions for item in region.organizations] == [
+        taipei_id,
+        new_taipei_id,
     ]

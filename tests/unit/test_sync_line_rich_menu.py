@@ -32,6 +32,29 @@ actions:
     )
 
 
+@pytest.mark.parametrize(
+    "uri",
+    ["https://liff.line.me/test", "https://liff.line.me/test?view=status"],
+)
+def test_load_definition_accepts_general_and_status_shared_liff_urls(
+    tmp_path: Path, uri: str
+) -> None:
+    config = tmp_path / "rich-menu.yaml"
+    config.write_text(
+        f"""version: 1
+name: test
+liff_url_reference: https://liff.line.me/test
+actions:
+  - label: 志工報名
+    type: uri
+    uri: {uri}
+""",
+        encoding="utf-8",
+    )
+
+    assert load_definition(config, environ={})["actions"][0]["uri"] == uri
+
+
 def test_load_definition_fails_fast_for_unresolved_placeholder(tmp_path: Path) -> None:
     config = tmp_path / "rich-menu.yaml"
     config.write_text(

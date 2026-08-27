@@ -12,6 +12,15 @@ def test_normal_demo_never_seeds_test_universe():
     assert "pytest" not in script
 
 
+def test_three_shelter_demo_exposes_only_dynamic_new_taipei_region() -> None:
+    accounts = Path("scripts/seed_demo_accounts.py").read_text()
+    furkids = Path("scripts/seed_furkids_demo.py").read_text()
+
+    assert 'organization.service_area = "新北市"' in accounts
+    assert 'organization.service_area = "新北市"' in furkids
+    assert "DailyReportableScope" not in accounts
+
+
 @pytest.mark.parametrize("environment", ["production", "staging", "prod", "demo", ""])
 def test_demo_guard_denies_nonlocal_environments(environment):
     from scripts.local_demo import require_local_demo

@@ -195,7 +195,12 @@ describe("VolunteerApplicationPage", () => {
     });
     await act(async () => {
       Array.from(container.querySelectorAll("button"))
-        .find((item) => item.textContent?.trim() === "立即報名")
+        .find((item) => item.textContent?.trim() === "檢查申請資料")
+        ?.click();
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent?.trim() === "送出志工申請")
         ?.click();
       await Promise.resolve();
     });
@@ -352,10 +357,10 @@ describe("VolunteerApplicationPage", () => {
   });
 
   it.each([
-    ["none", "立即報名"],
-    ["pending", "等待收容所審核"],
+    ["none", "檢查申請資料"],
+    ["pending", "申請已送出"],
     ["rejected", "再次報名"],
-    ["withdrawn", "再次報名"],
+    ["withdrawn", "檢查申請資料"],
     ["expired", "授權已到期"],
   ])(
     "renders Traditional Chinese state %s without protected content",

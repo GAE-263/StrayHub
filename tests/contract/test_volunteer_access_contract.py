@@ -280,15 +280,12 @@ def test_public_volunteer_organization_directory_and_identity_schema_are_canonic
         ("shelter_entry_reference",),
     }
     public = schemas["PublicVolunteerOrganization"]
-    assert public["required"] == ["id", "code", "name", "service_area", "insurance_required"]
+    assert public["required"] == ["id", "name", "address"]
+    assert set(public["properties"]) == {"id", "name", "address"}
+    directory = schemas["PublicVolunteerDirectory"]
+    assert directory["required"] == ["regions"]
+    assert directory["additionalProperties"] is False
     assert public["additionalProperties"] is False
-    assert set(public["properties"]) == {
-        "id",
-        "code",
-        "name",
-        "service_area",
-        "insurance_required",
-    }
 
 
 def test_entry_reference_contract_matches_runtime_target_constraints() -> None:
