@@ -80,6 +80,36 @@ it("guards an old JSON body that finishes after switching away and back", async 
   await expect(json).rejects.toMatchObject({ name: "AbortError" });
 });
 
+it.each(["text", "blob", "arrayBuffer", "formData"] as const)(
+  "guards a late %s body and prevents its consumer side effect",
+  async (reader) => {
+    activateOrganizationRequests("org-a");
+    let resolve!: (value: unknown) => void;
+    const response = {
+      ok: true,
+      status: 200,
+      [reader]: () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    } as unknown as Response;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const guarded = await authFetch("/v1/management/animals/animal-a/export");
+    let consumed = false;
+    const body = (guarded[reader] as () => Promise<unknown>)().then((value) => {
+      consumed = true;
+      return value;
+    });
+    pauseOrganizationRequests();
+    activateOrganizationRequests("org-b");
+    resolve("late org-a body");
+
+    await expect(body).rejects.toMatchObject({ name: "AbortError" });
+    expect(consumed).toBe(false);
+  },
+);
+
 it("keeps caller abort behavior for medical history filters", async () => {
   activateOrganizationRequests("org-a");
   const controller = new AbortController();

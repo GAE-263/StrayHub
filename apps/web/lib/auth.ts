@@ -139,19 +139,33 @@ export async function authFetch(
     throw error;
   }
   // Fetch may have resolved headers before a switch, or an adapter may ignore
-  // abort. Guard body completion as well as headers before callers set state.
-  if (scope && typeof response.json === "function") {
-    const json = response.json.bind(response);
-    response.json = async () => {
-      try {
-        checkCurrent();
-        const data = await json();
-        checkCurrent();
-        return data;
-      } finally {
-        dispose();
-      }
-    };
+  // abort. Guard buffered body completion as well as headers before callers
+  // publish downloads or other consumer side effects. Streaming response.body
+  // deliberately remains unchanged until it has a separate lifecycle contract.
+  if (scope) {
+    for (const reader of [
+      "json",
+      "text",
+      "blob",
+      "arrayBuffer",
+      "formData",
+    ] as const) {
+      const read = response[reader];
+      if (typeof read !== "function") continue;
+      Object.defineProperty(response, reader, {
+        configurable: true,
+        value: async () => {
+          try {
+            checkCurrent();
+            const data = await read.call(response);
+            checkCurrent();
+            return data;
+          } finally {
+            dispose();
+          }
+        },
+      });
+    }
   }
   if (!response.ok || response.status === 204) dispose();
   if (
