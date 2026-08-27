@@ -60,6 +60,8 @@ describe("volunteer application review date", () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/volunteer-access-policy"))
+          return response({ default_grant_duration_hours: 168 });
         if (url.pathname.endsWith("/volunteer-decision-batches")) {
           return response({
             id: "batch-a",
@@ -197,6 +199,8 @@ describe("volunteer application review date", () => {
     const requestedDates: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/volunteer-access-policy"))
+        return response({ default_grant_duration_hours: 168 });
       requestedDates.push(url.searchParams.get("service_date") ?? "");
       return response({
         items: [],
@@ -242,6 +246,8 @@ describe("volunteer application review date", () => {
     const nextDate = dateFromTestClock(1);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/volunteer-access-policy"))
+        return response({ default_grant_duration_hours: 168 });
       const selectedDate = url.searchParams.get("service_date");
       if (selectedDate === nextDate) {
         return response({
@@ -285,7 +291,7 @@ describe("volunteer application review date", () => {
       (container.querySelector('input[type="date"]') as HTMLInputElement).value,
     ).toBe(nextDate);
     expect(container.textContent).toContain("LINE 志工");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("does not let an older date response replace the current list", async () => {
@@ -296,6 +302,8 @@ describe("volunteer application review date", () => {
     });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/volunteer-access-policy"))
+        return response({ default_grant_duration_hours: 168 });
       if (url.searchParams.get("service_date") === today) return todayResponse;
       return response({
         items: [
@@ -364,6 +372,8 @@ describe("volunteer application review date", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/volunteer-access-policy"))
+          return response({ default_grant_duration_hours: 168 });
         if (url.searchParams.get("service_date") === today)
           return todayResponse;
         return response({
@@ -417,6 +427,8 @@ describe("volunteer application review date", () => {
     const today = dateFromTestClock();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/volunteer-access-policy"))
+        return response({ default_grant_duration_hours: 168 });
       if (url.searchParams.get("service_date") === today) {
         return response({
           items: [
@@ -473,8 +485,11 @@ describe("volunteer application review date", () => {
     const today = dateFromTestClock();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        response({
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/volunteer-access-policy"))
+          return response({ default_grant_duration_hours: 168 });
+        return response({
           items: [
             {
               id: "old",
@@ -486,8 +501,8 @@ describe("volunteer application review date", () => {
           matching_count: 1,
           next_cursor: null,
           available_service_dates: [{ service_date: today, pending_count: 1 }],
-        }),
-      ),
+        });
+      }),
     );
     vi.stubGlobal("React", React);
     window.sessionStorage.setItem("access_token", "local-token");

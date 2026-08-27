@@ -103,7 +103,7 @@
 
 **驗收情境**：
 
-1. **Given** ORG-A 管理員核准 pending 報名且未調整期限，**When** 決策成功，**Then** 建立或啟用 ORG-A VOLUNTEER Membership，有效期自核准時間開始至 ORG-A 當時預設授權期限後結束；ORG-A 尚未修改設定時為 7 個完整 24 小時。
+1. **Given** ORG-A 管理員核准指定服務日期的 pending 報名且未調整期限，**When** 決策成功，**Then** 建立或啟用 ORG-A VOLUNTEER Membership，有效期自該服務日期的 organization 當地午夜開始，至 ORG-A 決策批次建立時所快照的預設授權期限後結束；ORG-A 尚未修改設定時為 7 個完整 24 小時。
 2. **Given** 管理員在核准前調整期限，**When** 決策成功，**Then** Membership 使用明確的開始與到期時間，且到期時間必須晚於開始時間。
 3. **Given** 志工的 ORG-A Membership 已生效且尚未到期，**When** 從 ORG-A 專屬入口進入，**Then** 可以建立 ORG-A Active Shelter Context，並看到目前收容所與授權到期資訊。
 4. **Given** 志工具有 ORG-A 與 ORG-B 的有效 Membership，**When** 從其中一個收容所入口進入，**Then** 只建立該收容所 context，不混用另一收容所的授權或資料。
@@ -175,7 +175,7 @@
 - **FR-005**：志工 MUST 能在 pending 階段撤回自己的報名；已核准、已拒絕或已撤回報名不得被修改，但可依規則建立新的後續申請。
 - **FR-006**：只有目前 organization 的 SHELTER_ADMIN 與已由平台明確授予該角色的 PLATFORM_ADMIN 能查看、核准、拒絕、調整或撤銷志工授權；PLATFORM_ADMIN 每次支援 MUST 指定單一目標 organization 並提供支援原因，所有讀取與異動 MUST 限於該目標且留下平台管理 Audit Log。STAFF、VOLUNTEER 與其他 organization 管理員 MUST 被拒絕，系統 MUST NOT 提供跨 organization 混合名單。
 - **FR-007**：管理員 MUST 能依狀態與報名時間檢視自己收容所的申請，並選取單筆、部分或目前篩選結果的全部 pending 申請執行批次決策。「目前篩選結果全部」MUST 鎖定管理員確認當下所有符合條件的 pending 申請識別集合，不受分頁或 500 筆內部分段上限限制，且 MUST NOT 納入確認後才符合條件的申請。
-- **FR-008**：每個 organization MUST 有大於 0 且有限的預設志工授權期限，初始值為 7 個完整 24 小時；新 organization 的建立作業 MUST 同時建立此初始政策，任一部分失敗時不得留下缺少政策的 organization。目前 organization 的授權管理員 MUST 能調整此預設，變更只適用於變更後建立的核准決策並留下 Audit Log。批次核准 MUST 依決策建立時的 organization 預設期限預填，允許整批套用共同期限，並允許在送出前為個別申請覆寫開始與到期時間。
+- **FR-008**：每個 organization MUST 有大於 0 且有限的預設志工授權期限，初始值為 7 個完整 24 小時；新 organization 的建立作業 MUST 同時建立此初始政策，任一部分失敗時不得留下缺少政策的 organization。目前 organization 的授權管理員 MUST 能調整此預設，變更只適用於變更後建立的核准決策並留下 Audit Log。指定服務日期的批次核准 MUST 以服務日期作為預設開始、依決策批次建立時的 organization 預設期限計算到期，並允許在送出前明確覆寫開始與到期時間。
 - **FR-009**：每筆核准授權 MUST 有明確開始與到期時間，且到期時間 MUST 晚於開始時間；系統 MUST NOT 建立無期限志工 Membership。
 - **FR-010**：核准 MUST 建立或啟用該 organization 的 VOLUNTEER Membership，並將其連結至來源報名與核准決策；不得提升為 STAFF、SHELTER_ADMIN 或 PLATFORM_ADMIN。
 - **FR-011**：拒絕與撤銷 MUST 要求管理員提供原因；核准、拒絕、撤銷與期限變更 MUST 向管理員顯示提交前確認摘要。
@@ -215,7 +215,7 @@
 - **SC-002**：管理員能在 5 分鐘內完成 100 位 pending 報名者的篩選、全選、共同期限設定、個別覆寫、確認與結果檢查。
 - **SC-003**：在重複點擊、網路重送與並行提交測試中，同一 LINE 身分的重複使用者／綁定，以及同一志工／organization 的重複未結案報名與重複 Membership 數量均為 0。
 - **SC-004**：pending、rejected、withdrawn、revoked、expired、尚未開始及跨收容所案例取得狗狗、草稿、回報或管理資料的成功率為 0%；有效授權案例的正確 organization 命中率為 100%。
-- **SC-005**：未調整期限的核准案例有 100% 取得自核准時間起算、符合該 organization 決策建立時預設期限的授權；新 organization 在建立完成時即有 7 個完整 24 小時的初始政策，缺少政策的成功建立案例數為 0，且所有核准 Membership 的有限到期時間完整率為 100%。
+- **SC-005**：未調整期限的核准案例有 100% 取得自服務日期起算、符合該 organization 決策建立時預設期限的授權；新 organization 在建立完成時即有 7 個完整 24 小時的初始政策，缺少政策的成功建立案例數為 0，且所有核准 Membership 的有限到期時間完整率為 100%。
 - **SC-006**：到期、撤銷、收容所停用或使用者停用後，下一個受保護操作的拒絕率立即達 100%；即使沒有後續 request，1 分鐘後該 organization 可繼續使用的舊 Session/context 數量仍為 0，其他有效 organization 被誤清除的案例數為 0。
 - **SC-007**：批次處理 100 位申請者時，每位都有明確成功、失敗或衝突結果；重試失敗項目不會重做已成功項目，錯誤覆寫較新決策的案例數為 0。
 - **SC-008**：申請、撤回、核准、拒絕、期限調整、到期、撤銷與重新授權的 Audit Log 覆蓋率為 100%，且每筆可追溯至 organization、actor、來源申請及前後狀態。

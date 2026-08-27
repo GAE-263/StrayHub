@@ -51,6 +51,8 @@ from sqlalchemy import select
 
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
 
+VOLUNTEER_APPLICATION_COMMAND = "我要報名志工"
+
 
 async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID]:
     identity = LineWebhookRepository(session)
@@ -86,6 +88,58 @@ def _postback(label: str, data: str, *, display_text: str | None = None) -> dict
             "displayText": display_text or label,
         },
     }
+
+
+def _volunteer_application_liff_url() -> str:
+    return f"https://liff.line.me/{get_settings().liff_id}"
+
+
+def _volunteer_application_entry_message() -> dict:
+    return {
+        "type": "text",
+        "text": "請在志工報名頁選擇地區與想服務的收容所。",
+        "quickReply": {
+            "items": [
+                {
+                    "type": "action",
+                    "action": {
+                        "type": "uri",
+                        "label": "開啟志工報名",
+                        "uri": _volunteer_application_liff_url(),
+                    },
+                }
+            ]
+        },
+    }
+
+
+async def _handle_public_volunteer_application_entry(
+    session,
+    line: LineMessagingPort,
+    event: dict,
+) -> bool:
+    is_text_command = (
+        event.get("type") == "message"
+        and event.get("message", {}).get("type") == "text"
+        and event.get("message", {}).get("text", "").strip() == VOLUNTEER_APPLICATION_COMMAND
+    )
+    postback_values = (
+        parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
+        if event.get("type") == "postback"
+        else {}
+    )
+    is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
+    if postback_values.get("action", [""])[0] == "adoption_placeholder":
+        await _reply(
+            line,
+            event,
+            [_text("領養媒合功能準備中，之後會在這裡提供可領養動物與媒合流程。")],
+        )
+        return True
+    if not is_text_command and not is_postback_command:
+        return False
+    await _reply(line, event, [_volunteer_application_entry_message()])
+    return True
 
 
 async def _animal_confirmation_messages(session, animal, organization_id: UUID) -> list[dict]:
@@ -587,6 +641,10 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    if await _handle_public_volunteer_application_entry(session, line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     user_id, organization_id, membership_id = await _resolve_context(
                         session, line_user_id
                     )

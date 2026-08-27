@@ -14,6 +14,118 @@ import { VolunteerApplicationPage } from "./VolunteerApplicationPage";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("VolunteerApplicationPage", () => {
+  it("loads trusted organization status and submits the organization target", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        organization: {
+          id: "00000000-0000-4000-8000-000000000051",
+          name: "新北市新店區公立動物之家",
+          applications_enabled: true,
+          insurance_required: false,
+        },
+        application: null,
+        grant: null,
+        effective_status: "none",
+        next_actions: ["apply"],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          idToken="id-token"
+          organizationId="00000000-0000-4000-8000-000000000051"
+        />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("申請成為");
+    expect(container.textContent).toContain("新北市新店區公立動物之家");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      id_token: "id-token",
+      organization_id: "00000000-0000-4000-8000-000000000051",
+    });
+    expect(fetchMock.mock.calls[0][1].body).not.toContain(
+      "shelter_entry_reference",
+    );
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("clears organization-scoped status and service dates when the target changes", async () => {
+    const statusFor = (id: string, name: string) => ({
+      organization: {
+        id,
+        name,
+        applications_enabled: true,
+        insurance_required: false,
+      },
+      application: null,
+      grant: null,
+      effective_status: "none",
+      next_actions: ["apply"],
+    });
+    const fetchMock = vi.fn().mockImplementation(async (_url, options) => {
+      const target = JSON.parse(options.body).organization_id as string;
+      return {
+        ok: true,
+        json: async () =>
+          target.endsWith("51")
+            ? statusFor(target, "新店動物之家")
+            : statusFor(target, "五股動物之家"),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const renderTarget = async (organizationId: string) => {
+      await act(async () => {
+        root.render(
+          <VolunteerApplicationPage
+            idToken="id-token"
+            organizationId={organizationId}
+          />,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
+    await renderTarget("00000000-0000-4000-8000-000000000051");
+    await act(async () => {
+      container
+        .querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.click();
+    });
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.checked,
+    ).toBe(true);
+
+    await renderTarget("00000000-0000-4000-8000-000000000058");
+
+    expect(container.textContent).toContain("五股動物之家");
+    expect(container.textContent).not.toContain("新店動物之家");
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label^="服務日期"]')
+        ?.checked,
+    ).toBe(false);
+
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
   it("collects required applicant details before submitting the LIFF application", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -83,7 +195,12 @@ describe("VolunteerApplicationPage", () => {
     });
     await act(async () => {
       Array.from(container.querySelectorAll("button"))
-        .find((item) => item.textContent?.trim() === "立即報名")
+        .find((item) => item.textContent?.trim() === "檢查申請資料")
+        ?.click();
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent?.trim() === "送出志工申請")
         ?.click();
       await Promise.resolve();
     });
@@ -107,6 +224,46 @@ describe("VolunteerApplicationPage", () => {
     await act(async () => root.unmount());
     container.remove();
     vi.unstubAllGlobals();
+  });
+
+  it("uses the explicit status transition instead of reloading a pending application", async () => {
+    const onViewStatus = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <VolunteerApplicationPage
+          initialStatus={{
+            organization: {
+              id: "org-a",
+              name: "收容所 A",
+              applications_enabled: true,
+              insurance_required: false,
+            },
+            application: { id: "app-a", status: "pending", version: 1 },
+            grant: null,
+            effective_status: "pending",
+            next_actions: ["wait", "withdraw"],
+          }}
+          idToken="id-token"
+          organizationId="org-a"
+          onViewStatus={onViewStatus}
+        />,
+      );
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((item) => item.textContent?.trim() === "查看申請狀態")
+        ?.click();
+    });
+
+    expect(onViewStatus).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    container.remove();
   });
 
   it("requires confirmation before withdrawal and shows a success toast", async () => {
@@ -240,10 +397,10 @@ describe("VolunteerApplicationPage", () => {
   });
 
   it.each([
-    ["none", "立即報名"],
-    ["pending", "等待收容所審核"],
+    ["none", "檢查申請資料"],
+    ["pending", "申請已送出"],
     ["rejected", "再次報名"],
-    ["withdrawn", "再次報名"],
+    ["withdrawn", "檢查申請資料"],
     ["expired", "授權已到期"],
   ])(
     "renders Traditional Chinese state %s without protected content",

@@ -38,14 +38,13 @@ class OrganizationRepository:
 
     async def list_public_volunteer_organizations(
         self,
-    ) -> list[tuple[UUID, str, str, str | None, bool]]:
+    ) -> list[tuple[UUID, str, str | None, str | None]]:
         statement = (
             select(
                 Organization.id,
-                Organization.code,
                 Organization.name,
+                Organization.address,
                 Organization.service_area,
-                OrganizationVolunteerAccessPolicy.insurance_required,
             )
             .join(
                 OrganizationVolunteerAccessPolicy,
@@ -55,11 +54,11 @@ class OrganizationRepository:
                 Organization.status == "active",
                 OrganizationVolunteerAccessPolicy.applications_enabled.is_(True),
             )
-            .order_by(Organization.name, Organization.code, Organization.id)
+            .order_by(Organization.service_area, Organization.name, Organization.id)
         )
         await set_public_volunteer_directory_scope(self.session)
         result = await self.session.execute(statement)
-        return [(row[0], row[1], row[2], row[3], row[4]) for row in result.all()]
+        return [(row[0], row[1], row[2], row[3]) for row in result.all()]
 
     async def add(self, value: T) -> T:
         self.session.add(value)

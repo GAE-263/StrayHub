@@ -46,7 +46,7 @@ def load_definition(path: Path, *, environ: Mapping[str, str] | None = None) -> 
         or liff_base.fragment
     ):
         raise ValueError("LIFF_BASE_URL 必須是 canonical HTTPS LIFF URL")
-    expected_liff_path = ["", liff_base_segments[1], "volunteer-entry"]
+    expected_liff_path = ["", liff_base_segments[1]]
     actions = document.get("actions")
     if not isinstance(actions, list) or not 1 <= len(actions) <= 20:
         raise ValueError("Rich Menu 必須包含 1～20 個 action")
@@ -81,16 +81,24 @@ def load_definition(path: Path, *, environ: Mapping[str, str] | None = None) -> 
                 raise ValueError("Rich Menu URI 必須使用有效的 HTTPS host")
             query = parse_qs(parsed.query, keep_blank_values=True)
             entry_values = query.get("entry", [])
+            view_values = query.get("view", [])
             path_segments = parsed.path.split("/")
+            valid_query = (
+                not query
+                or (
+                    set(query) == {"entry"}
+                    and len(entry_values) == 1
+                    and ENTRY_REFERENCE_PATTERN.fullmatch(entry_values[0]) is not None
+                )
+                or (set(query) == {"view"} and view_values == ["status"])
+            )
             if (
                 path_segments != expected_liff_path
                 or parsed.fragment
-                or set(query) != {"entry"}
-                or len(entry_values) != 1
-                or not ENTRY_REFERENCE_PATTERN.fullmatch(entry_values[0])
+                or not valid_query
                 or parsed.port not in {None, 443}
             ):
-                raise ValueError("Rich Menu URI 必須導向含 entry 的 volunteer-entry")
+                raise ValueError("Rich Menu URI 必須導向 canonical LIFF endpoint")
     return document
 
 

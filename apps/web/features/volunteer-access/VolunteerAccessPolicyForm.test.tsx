@@ -21,11 +21,12 @@ const policy = {
 };
 
 describe("VolunteerAccessPolicyForm", () => {
-  it("shows 168-hour initial policy and non-retroactive warning", () => {
+  it("shows the seven-day initial policy and non-retroactive warning", () => {
     const html = renderToStaticMarkup(
       <VolunteerAccessPolicyForm policy={policy} />,
     );
-    expect(html).toContain("168");
+    expect(html).toContain("預設授權期限（天）");
+    expect(html).toContain('value="7"');
     expect(html).toContain("只影響後續建立的授權");
     expect(html).toContain("ui-checkbox");
     expect(html).toContain("ui-field");
@@ -67,6 +68,19 @@ describe("VolunteerAccessPolicyForm", () => {
       "設定已儲存",
     );
     expect(onSave).toHaveBeenCalledTimes(2);
+    expect(onSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({ default_grant_duration_hours: 168 }),
+    );
     await act(async () => root.unmount());
+  });
+
+  it("preserves an explicit fourteen-day policy", () => {
+    const html = renderToStaticMarkup(
+      <VolunteerAccessPolicyForm
+        policy={{ ...policy, default_grant_duration_hours: 336 }}
+      />,
+    );
+
+    expect(html).toContain('value="14"');
   });
 });

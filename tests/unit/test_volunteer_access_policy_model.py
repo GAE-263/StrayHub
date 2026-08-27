@@ -21,3 +21,13 @@ def test_policy_can_be_constructed_with_insurance_requirement_omitted_or_enabled
 
     assert omitted.organization_id is not None
     assert enabled.insurance_required is True
+
+
+def test_policy_duration_defaults_to_seven_days_in_python_and_database() -> None:
+    column = OrganizationVolunteerAccessPolicy.__table__.c.default_grant_duration_hours
+
+    assert column.nullable is False
+    assert column.default is not None
+    assert column.default.arg == 168
+    assert column.server_default is not None
+    assert str(column.server_default.arg) == "168"

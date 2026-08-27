@@ -22,17 +22,25 @@ import {
   type VolunteerStatus,
 } from "./volunteerAccess";
 
-type Props = {
+type SharedProps = {
   idToken: string;
-  shelterEntryReference: string;
   initialStatus?: VolunteerStatus | null;
+  onReselect?: () => void;
+  onReturnToLine?: () => void;
+  onViewStatus?: () => void;
 };
+
+type Props = SharedProps &
+  (
+    | { organizationId: string; shelterEntryReference?: never }
+    | { organizationId?: never; shelterEntryReference: string }
+  );
 
 const STATUS_COPY: Record<string, { title: string; detail: string }> = {
   none: { title: "成為志工", detail: "送出報名後，由收容所管理員進行審核。" },
   pending: {
-    title: "等待收容所審核",
-    detail: "你的報名已送出，審核前不會取得照護資料。",
+    title: "申請已送出",
+    detail: "審核中；審核前不會取得照護資料。",
   },
   rejected: {
     title: "本次報名未通過",
@@ -85,11 +93,33 @@ function formatServiceDateParts(value: string): {
   };
 }
 
-export function VolunteerApplicationPage({
-  idToken,
-  shelterEntryReference,
-  initialStatus = null,
-}: Props) {
+function maskPhone(value: string): string {
+  const compact = value.replace(/\s/g, "");
+  return compact.length >= 7
+    ? `${compact.slice(0, 4)}•••${compact.slice(-3)}`
+    : "••••••••";
+}
+
+export function VolunteerApplicationPage(props: Props) {
+  const {
+    idToken,
+    initialStatus = null,
+    onReselect,
+    onReturnToLine,
+    onViewStatus,
+  } = props;
+  const organizationId = props.organizationId;
+  const shelterEntryReference = props.shelterEntryReference;
+  const targetPayload = useMemo(
+    () =>
+      organizationId
+        ? { organization_id: organizationId }
+        : { shelter_entry_reference: shelterEntryReference },
+    [organizationId, shelterEntryReference],
+  );
+  const targetKey = organizationId
+    ? `organization:${organizationId}`
+    : `entry:${shelterEntryReference}`;
   const [status, setStatus] = useState<VolunteerStatus | null>(initialStatus);
   const [loading, setLoading] = useState(initialStatus === null);
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +134,7 @@ export function VolunteerApplicationPage({
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const [reviewing, setReviewing] = useState(false);
   const serviceDateOptions = useMemo(() => {
     const options: string[] = [];
     const today = new Date();
@@ -117,19 +148,37 @@ export function VolunteerApplicationPage({
   }, []);
 
   useEffect(() => {
-    if (initialStatus !== null) return;
-    if (!idToken || !shelterEntryReference) {
+    let active = true;
+    setStatus(initialStatus);
+    setLoading(initialStatus === null);
+    setError(null);
+    setApplicantName("");
+    setPhoneNumber("");
+    setInsuranceIdentity("");
+    setConsent(false);
+    setInsuranceConsent(false);
+    setSelectedServiceDates([]);
+    setWithdrawOpen(false);
+    setToast("");
+    setReviewing(false);
+    if (initialStatus !== null) {
+      return () => {
+        active = false;
+      };
+    }
+    if (!idToken || (!organizationId && !shelterEntryReference)) {
       setError("請從收容所提供的 LINE／LIFF 志工入口開啟此頁面。");
       setLoading(false);
-      return;
+      return () => {
+        active = false;
+      };
     }
-    let active = true;
     fetch("/v1/volunteer-applications/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id_token: idToken,
-        shelter_entry_reference: shelterEntryReference,
+        ...targetPayload,
       }),
     })
       .then(readStatus)
@@ -139,7 +188,14 @@ export function VolunteerApplicationPage({
     return () => {
       active = false;
     };
-  }, [idToken, initialStatus, shelterEntryReference]);
+  }, [
+    idToken,
+    initialStatus,
+    organizationId,
+    shelterEntryReference,
+    targetKey,
+    targetPayload,
+  ]);
 
   async function submit() {
     const insuranceRequired = status?.organization.insurance_required === true;
@@ -160,7 +216,7 @@ export function VolunteerApplicationPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id_token: idToken,
-          shelter_entry_reference: shelterEntryReference,
+          ...targetPayload,
           applicant_name: applicantName.trim(),
           phone_number: phoneNumber.trim(),
           ...(insuranceRequired
@@ -175,6 +231,7 @@ export function VolunteerApplicationPage({
         }),
       });
       setStatus(await readStatus(response));
+      setReviewing(false);
     } catch (reason) {
       setError(safeVolunteerError((reason as { code?: string })?.code));
     } finally {
@@ -194,7 +251,7 @@ export function VolunteerApplicationPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id_token: idToken,
-            shelter_entry_reference: shelterEntryReference,
+            ...targetPayload,
             expected_version: status.application.version,
           }),
         },
@@ -212,13 +269,11 @@ export function VolunteerApplicationPage({
 
   const effectiveStatus = status?.effective_status ?? "none";
   const copy = STATUS_COPY[effectiveStatus] ?? STATUS_COPY.none;
-  const canApply = [
-    "none",
-    "rejected",
-    "withdrawn",
-    "expired",
-    "revoked",
-  ].includes(effectiveStatus);
+  const canApply =
+    status !== null &&
+    ["none", "rejected", "withdrawn", "expired", "revoked"].includes(
+      effectiveStatus,
+    );
   const insuranceRequired = status?.organization.insurance_required === true;
   const submitDisabled =
     !consent ||
@@ -231,10 +286,14 @@ export function VolunteerApplicationPage({
   return (
     <main className="volunteer-application-page">
       <header className="volunteer-application-heading">
-        <span className="eyebrow">
-          {status?.organization.name ?? "StrayHub"}
-        </span>
-        <h1>志工報名</h1>
+        <span className="eyebrow">申請成為</span>
+        <h1>{status?.organization.name ?? "志工報名"}</h1>
+        <p>志工</p>
+        {status?.organization.address ? (
+          <p className="volunteer-organization-address">
+            {status.organization.address}
+          </p>
+        ) : null}
       </header>
       {loading ? (
         <p role="status" aria-live="polite">
@@ -251,6 +310,10 @@ export function VolunteerApplicationPage({
               <Alert className="volunteer-application-reason">
                 {status.application.decision_reason}
               </Alert>
+            ) : null}
+            {status?.organization.applications_enabled === false &&
+            effectiveStatus !== "pending" ? (
+              <Alert>此收容所目前暫停接受新申請。</Alert>
             ) : null}
             {status?.grant ? (
               <dl className="volunteer-grant-summary">
@@ -274,7 +337,9 @@ export function VolunteerApplicationPage({
                 ) : null}
               </dl>
             ) : null}
-            {canApply && status?.organization.applications_enabled !== false ? (
+            {canApply &&
+            status?.organization.applications_enabled !== false &&
+            !reviewing ? (
               <div className="volunteer-application-actions">
                 <div className="volunteer-application-fields">
                   <label htmlFor="applicant-name">
@@ -381,25 +446,94 @@ export function VolunteerApplicationPage({
                 <Button
                   type="button"
                   disabled={submitDisabled}
-                  onClick={submit}
+                  onClick={() => setReviewing(true)}
                 >
-                  {submitting
-                    ? "送出中…"
-                    : effectiveStatus === "none"
-                      ? "立即報名"
-                      : "再次報名"}
+                  檢查申請資料
                 </Button>
               </div>
             ) : null}
-            {effectiveStatus === "pending" ? (
-              <Button
-                variant="secondary"
-                type="button"
-                disabled={submitting}
-                onClick={() => setWithdrawOpen(true)}
+            {canApply && reviewing ? (
+              <section
+                className="volunteer-application-review"
+                aria-label="確認申請資料"
               >
-                撤回報名
-              </Button>
+                <div>
+                  <span className="eyebrow">送出前確認</span>
+                  <h2>確認志工申請</h2>
+                  <p>資料只會提供給你選擇的收容所審核。</p>
+                </div>
+                <dl className="volunteer-grant-summary">
+                  <div>
+                    <dt>申請收容所</dt>
+                    <dd>{status?.organization.name}</dd>
+                  </div>
+                  <div>
+                    <dt>姓名</dt>
+                    <dd>{applicantName.trim()}</dd>
+                  </div>
+                  <div>
+                    <dt>手機號碼</dt>
+                    <dd>{maskPhone(phoneNumber)}</dd>
+                  </div>
+                  <div>
+                    <dt>服務日期</dt>
+                    <dd>
+                      {selectedServiceDates.map(formatServiceDate).join("、")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>資料使用同意</dt>
+                    <dd>已確認</dd>
+                  </div>
+                </dl>
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => void submit()}
+                >
+                  {submitting ? "送出中…" : "送出志工申請"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setReviewing(false)}
+                >
+                  返回修改
+                </Button>
+              </section>
+            ) : null}
+            {effectiveStatus === "pending" ? (
+              <div className="volunteer-application-actions">
+                <Alert>
+                  申請已送出，目前由 {status?.organization.name} 審核中。
+                </Alert>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    onViewStatus ? onViewStatus() : window.location.reload()
+                  }
+                >
+                  查看申請狀態
+                </Button>
+                {onReturnToLine ? (
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={onReturnToLine}
+                  >
+                    返回 LINE
+                  </Button>
+                ) : null}
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setWithdrawOpen(true)}
+                >
+                  撤回報名
+                </Button>
+              </div>
             ) : null}
             {effectiveStatus === "active" ? (
               <a
@@ -413,9 +547,26 @@ export function VolunteerApplicationPage({
         </Card>
       )}
       {error ? (
-        <Alert className="volunteer-application-error" role="alert">
-          {error}
-        </Alert>
+        <div className="volunteer-application-actions">
+          <Alert className="volunteer-application-error" role="alert">
+            {error}
+          </Alert>
+          {onReselect ? (
+            <Button variant="secondary" type="button" onClick={onReselect}>
+              重新選擇地區與收容所
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {onReselect && !loading ? (
+        <Button
+          className="volunteer-change-target"
+          variant="secondary"
+          type="button"
+          onClick={onReselect}
+        >
+          選擇其他收容所
+        </Button>
       ) : null}
       <Dialog
         open={withdrawOpen}

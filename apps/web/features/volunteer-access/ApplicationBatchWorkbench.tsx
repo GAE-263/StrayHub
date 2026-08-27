@@ -53,9 +53,30 @@ function utcValue(localValue: string): string | null {
   return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
 }
 
+export function grantDatePreview(
+  serviceDate: string,
+  durationHours: number,
+): { start: string; expiry: string } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate) || durationHours <= 0)
+    return null;
+  const start = new Date(`${serviceDate}T00:00:00Z`);
+  const expiry = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+  return {
+    start: start.toISOString().slice(0, 10),
+    expiry: expiry.toISOString().slice(0, 10),
+  };
+}
+
+function durationLabel(durationHours: number): string {
+  return durationHours % 24 === 0
+    ? `${durationHours / 24} 天`
+    : `${durationHours} 小時`;
+}
+
 export function ApplicationBatchWorkbench({
   applications,
   matchingCount,
+  defaultGrantDurationHours,
   loading = false,
   filter,
   onSubmit,
@@ -66,6 +87,7 @@ export function ApplicationBatchWorkbench({
 }: {
   applications: Application[];
   matchingCount: number;
+  defaultGrantDurationHours: number;
   loading?: boolean;
   filter:
     | {
@@ -104,6 +126,10 @@ export function ApplicationBatchWorkbench({
   const operationId = useRef<string | null>(null);
   const terminalNotifiedBatch = useRef<string | null>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const derivedPeriod = grantDatePreview(
+    filter.service_date ?? "",
+    defaultGrantDurationHours,
+  );
 
   function decisionItems(ids: Set<string>) {
     return applications
@@ -410,12 +436,41 @@ export function ApplicationBatchWorkbench({
                 </label>
               ) : null}
             </div>
+            {decision === "approve" ? (
+              derivedPeriod ? (
+                <>
+                  <dl className="batch-period-preview">
+                    <div>
+                      <dt>服務日期</dt>
+                      <dd>{filter.service_date}</dd>
+                    </div>
+                    <div>
+                      <dt>授權開始</dt>
+                      <dd>{derivedPeriod.start}</dd>
+                    </div>
+                    <div>
+                      <dt>預設授權期限</dt>
+                      <dd>{durationLabel(defaultGrantDurationHours)}</dd>
+                    </div>
+                    <div>
+                      <dt>授權到期</dt>
+                      <dd>{derivedPeriod.expiry}</dd>
+                    </div>
+                  </dl>
+                  <p className="policy-note">
+                    此處為預覽；後端會以服務日期與政策重新計算實際授權期限。
+                  </p>
+                </>
+              ) : (
+                <Alert role="status">
+                  此歷史申請沒有服務日期；核准前請明確填寫開始時間。
+                </Alert>
+              )
+            ) : null}
             <fieldset className="batch-period-fields">
-              <legend>
-                共同授權期限（留白則使用批次建立時的收容所政策快照）
-              </legend>
+              <legend>共同期限覆寫（留白則由服務日期與政策自動計算）</legend>
               <label>
-                開始時間
+                覆寫開始時間
                 <Input
                   type="datetime-local"
                   value={defaultValidFrom}
@@ -423,7 +478,7 @@ export function ApplicationBatchWorkbench({
                 />
               </label>
               <label>
-                到期時間
+                覆寫到期時間
                 <Input
                   type="datetime-local"
                   value={defaultExpiresAt}

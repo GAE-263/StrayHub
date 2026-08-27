@@ -245,6 +245,7 @@ def test_application_router_and_payloads_match_canonical_contract() -> None:
     }
     assert set(VolunteerApplicationWithdrawRequest.model_fields) == {
         "id_token",
+        "organization_id",
         "shelter_entry_reference",
         "expected_version",
     }
@@ -279,15 +280,12 @@ def test_public_volunteer_organization_directory_and_identity_schema_are_canonic
         ("shelter_entry_reference",),
     }
     public = schemas["PublicVolunteerOrganization"]
-    assert public["required"] == ["id", "code", "name", "service_area", "insurance_required"]
+    assert public["required"] == ["id", "name", "address"]
+    assert set(public["properties"]) == {"id", "name", "address"}
+    directory = schemas["PublicVolunteerDirectory"]
+    assert directory["required"] == ["regions"]
+    assert directory["additionalProperties"] is False
     assert public["additionalProperties"] is False
-    assert set(public["properties"]) == {
-        "id",
-        "code",
-        "name",
-        "service_area",
-        "insurance_required",
-    }
 
 
 def test_entry_reference_contract_matches_runtime_target_constraints() -> None:
@@ -336,16 +334,16 @@ def test_submit_request_contract_supports_exactly_one_target_and_profile_fields(
     } <= set(schema["properties"])
 
     withdraw_schema = schemas["VolunteerApplicationWithdrawRequest"]
-    assert withdraw_schema["required"] == [
-        "id_token",
-        "shelter_entry_reference",
-        "expected_version",
-    ]
-    assert "organization_id" not in withdraw_schema["properties"]
-    assert "oneOf" not in withdraw_schema
+    assert withdraw_schema["required"] == ["id_token", "expected_version"]
+    assert "organization_id" in withdraw_schema["properties"]
+    assert len(withdraw_schema["oneOf"]) == 2
+    assert {tuple(branch["required"]) for branch in withdraw_schema["oneOf"]} == {
+        ("organization_id",),
+        ("shelter_entry_reference",),
+    }
 
 
-def test_runtime_openapi_submit_schema_supports_target_and_withdraw_stays_entry_only() -> None:
+def test_runtime_openapi_submit_and_withdraw_support_exactly_one_target() -> None:
     schemas = app.openapi()["components"]["schemas"]
     submit_schema = schemas["VolunteerApplicationCreateRequest"]
     assert "organization_id" in submit_schema["properties"]
@@ -353,9 +351,9 @@ def test_runtime_openapi_submit_schema_supports_target_and_withdraw_stays_entry_
     assert len(submit_schema["oneOf"]) == 2
 
     withdraw_schema = schemas["VolunteerApplicationWithdrawRequest"]
-    assert "organization_id" not in withdraw_schema["properties"]
-    assert "shelter_entry_reference" in withdraw_schema["required"]
-    assert "oneOf" not in withdraw_schema
+    assert "organization_id" in withdraw_schema["properties"]
+    assert "shelter_entry_reference" in withdraw_schema["properties"]
+    assert len(withdraw_schema["oneOf"]) == 2
 
 
 def test_runtime_openapi_identity_schema_declares_exactly_one_target() -> None:

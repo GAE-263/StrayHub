@@ -805,13 +805,18 @@ describe("volunteer entry LIFF bootstrap", () => {
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await act(async () => {
-      buttonNamed("立即報名")?.dispatchEvent(
+      buttonNamed("檢查申請資料")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await act(async () => {
+      buttonNamed("送出志工申請")?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(view.textContent).toContain("等待收容所審核");
+    expect(view.textContent).toContain("申請已送出");
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const statusCall = fetchMock.mock.calls.find(
       ([url]) => url === "/v1/volunteer-applications/status",

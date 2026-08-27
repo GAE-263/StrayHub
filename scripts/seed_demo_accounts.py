@@ -12,6 +12,7 @@ from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
+    OrganizationVolunteerAccessPolicy,
     VolunteerAccessGrant,
     VolunteerApplication,
 )
@@ -37,6 +38,27 @@ async def seed():
         }
         if set(orgs) != set(DEMO_SHELTERS):
             raise RuntimeError("seed_all_three_shelters_before_accounts")
+        for organization in orgs.values():
+            organization.service_area = "新北市"
+            if not organization.address:
+                organization.address = "新北市（示範資料）"
+            await set_organization_scope(session, organization.id)
+            policy = await session.scalar(
+                select(OrganizationVolunteerAccessPolicy).where(
+                    OrganizationVolunteerAccessPolicy.organization_id == organization.id
+                )
+            )
+            if policy is None:
+                policy = OrganizationVolunteerAccessPolicy(
+                    organization_id=organization.id,
+                    applications_enabled=True,
+                    default_grant_duration_hours=168,
+                )
+                session.add(policy)
+            policy.applications_enabled = True
+            policy.default_grant_duration_hours = 168
+            await session.flush()
+        await set_platform_scope(session)
         admin = await session.scalar(select(User).where(User.username == "demo-furkids-admin"))
         if admin is None:
             raise RuntimeError("furkids_admin_required")
@@ -137,6 +159,7 @@ async def seed():
             "accounts": 5,
             "management_shelters": list(DEMO_SHELTERS),
             "volunteer_access": "one shelter per volunteer",
+            "volunteer_application_policies": {code: "enabled" for code in DEMO_SHELTERS},
             "daily_scopes_created": 0,
         }
 

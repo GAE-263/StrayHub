@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from services.api.app.api.errors import DomainError
 from services.api.app.domain.volunteer_access import (
+    effective_grant_duration_hours,
     request_fingerprint,
     validate_grant_period,
 )
@@ -150,7 +151,7 @@ class VolunteerBatchService:
             if policy_getter is not None:
                 policy = await policy_getter()
                 policy_version = policy.version
-                policy_duration = policy.default_grant_duration_hours
+                policy_duration = effective_grant_duration_hours(policy)
 
         filter_snapshot = {
             key: value.isoformat() if isinstance(value, (date, datetime)) else value

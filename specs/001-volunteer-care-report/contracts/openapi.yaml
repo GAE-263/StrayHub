@@ -1395,9 +1395,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PublicVolunteerOrganization'
+                $ref: '#/components/schemas/PublicVolunteerDirectory'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /v1/volunteer-applications/status:
@@ -3930,20 +3928,40 @@ components:
               pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationWithdrawRequest:
       type: object
-      required: [id_token, shelter_entry_reference, expected_version]
+      required: [id_token, expected_version]
       additionalProperties: false
       properties:
         id_token:
           type: string
           minLength: 1
+        organization_id:
+          type: [string, 'null']
+          format: uuid
         shelter_entry_reference:
-          type: string
+          type: [string, 'null']
           minLength: 32
           maxLength: 512
           pattern: '^[A-Za-z0-9._~-]+$'
         expected_version:
           type: integer
           minimum: 1
+      oneOf:
+        - required: [organization_id]
+          properties:
+            organization_id:
+              type: string
+              format: uuid
+            shelter_entry_reference:
+              type: 'null'
+        - required: [shelter_entry_reference]
+          properties:
+            organization_id:
+              type: 'null'
+            shelter_entry_reference:
+              type: string
+              minLength: 32
+              maxLength: 512
+              pattern: '^[A-Za-z0-9._~-]+$'
     VolunteerApplicationStatusResponse:
       type: object
       required: [organization, effective_status, next_actions]
@@ -3967,13 +3985,15 @@ components:
             enum: [apply, wait, withdraw, enter_care, reapply, contact_shelter, return_to_line]
     PublicOrganization:
       type: object
-      required: [id, name, applications_enabled, insurance_required]
+      required: [id, name, address, applications_enabled, insurance_required]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+        address:
+          type: [string, 'null']
         applications_enabled:
           type: boolean
           description: false 只阻止新申請；既有 applicant 仍可讀取 own status
@@ -3981,20 +4001,36 @@ components:
           type: boolean
     PublicVolunteerOrganization:
       type: object
-      required: [id, code, name, service_area, insurance_required]
+      required: [id, name, address]
       additionalProperties: false
       properties:
         id:
           type: string
           format: uuid
-        code:
-          type: string
         name:
           type: string
-        service_area:
+        address:
           type: [string, 'null']
-        insurance_required:
-          type: boolean
+    PublicVolunteerRegion:
+      type: object
+      required: [name, organizations]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicVolunteerOrganization'
+    PublicVolunteerDirectory:
+      type: object
+      required: [regions]
+      additionalProperties: false
+      properties:
+        regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicVolunteerRegion'
     VolunteerApplication:
       type: object
       required: [id, organization_id, display_name, status, submitted_at, version]

@@ -16,6 +16,8 @@ from services.api.app.application.volunteer_notification_service import (
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
 from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import (
+    effective_grant_duration_hours,
+    grant_period_for_service_date,
     normalize_reason,
     snapshot_policy,
     transition_application,
@@ -47,6 +49,7 @@ class PublicOrganizationResult:
     name: str
     applications_enabled: bool
     insurance_required: bool
+    address: str | None = None
 
 
 @dataclass(frozen=True)
@@ -239,6 +242,7 @@ class VolunteerAccessService:
         return PublicOrganizationResult(
             id=organization.id,
             name=organization.name,
+            address=getattr(organization, "address", None),
             applications_enabled=policy.applications_enabled,
             insurance_required=policy.insurance_required,
         )
@@ -440,12 +444,17 @@ class VolunteerAccessService:
         self,
         *,
         id_token: str,
-        entry_reference_id: UUID,
+        entry_reference_id: UUID | None,
         verified_line_user_id: str | None = None,
+        organization_id: UUID | None = None,
         application_id: UUID,
         expected_version: int,
         now: datetime | None = None,
     ) -> VolunteerStatusResult:
+        if (entry_reference_id is None) == (organization_id is None):
+            raise DomainError("volunteer_target_required", "志工申請目標無效", 422)
+        if organization_id is not None and organization_id != self.repository.organization_id:
+            raise DomainError("organization_scope_mismatch", "收容所資料範圍不符", 404)
         line_user_id = (
             verified_line_user_id
             if verified_line_user_id is not None
@@ -630,11 +639,30 @@ class VolunteerAccessService:
         elif decision == "approve":
             transition_application(application.status, "approve")
             policy = await self.repository.policy()
+            effective_duration_hours = effective_grant_duration_hours(policy)
             policy_snapshot = snapshot_policy(
                 version=policy_version_used or policy.version,
-                duration_hours=duration_hours_used or policy.default_grant_duration_hours,
+                duration_hours=duration_hours_used or effective_duration_hours,
             )
-            start = valid_from or clock
+            if valid_from is not None:
+                start = valid_from
+            elif service_date is not None:
+                organization = await self.identities.get_organization(
+                    self.repository.organization_id
+                )
+                if organization is None:
+                    raise DomainError("organization_not_found", "找不到收容所", 404)
+                start, _ = grant_period_for_service_date(
+                    service_date,
+                    timezone_name=organization.timezone,
+                    duration_hours=policy_snapshot["duration_hours_used"],
+                )
+            else:
+                raise DomainError(
+                    "service_date_required_for_approval",
+                    "核准志工申請必須指定服務日期或開始時間",
+                    422,
+                )
             end = expires_at or start + timedelta(hours=policy_snapshot["duration_hours_used"])
             start, end = validate_grant_period(start, end)
             membership = await self.identities.get_membership(

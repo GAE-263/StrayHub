@@ -22,21 +22,17 @@ def test_public_response_has_exactly_the_minimum_directory_fields() -> None:
 
     assert set(response_model.model_fields) == {
         "id",
-        "code",
         "name",
-        "service_area",
-        "insurance_required",
+        "address",
     }
 
     with pytest.raises(ValidationError):
         response_model.model_validate(
             {
                 "id": uuid4(),
-                "code": "ORG-SYNTHETIC",
                 "name": "Synthetic Shelter",
-                "service_area": None,
-                "insurance_required": False,
-                "address": "must-not-leak",
+                "address": "public address",
+                "code": "must-not-leak",
                 "contact": "must-not-leak",
                 "status": "active",
                 "membership": {},
@@ -66,10 +62,10 @@ def test_public_repository_contract_is_a_narrow_projection_without_private_table
 
     assert "select(" in source
     assert "Organization.id," in source
-    assert "OrganizationVolunteerAccessPolicy.insurance_required" in source
+    assert "Organization.address," in source
     assert 'Organization.status == "active"' in source
     assert "OrganizationVolunteerAccessPolicy.applications_enabled.is_(True)" in source
-    assert "order_by(Organization.name, Organization.code, Organization.id)" in source
+    assert "order_by(Organization.service_area, Organization.name, Organization.id)" in source
     assert "OrganizationMembership" not in source
     assert "VolunteerApplication" not in source
     assert "Animal" not in source

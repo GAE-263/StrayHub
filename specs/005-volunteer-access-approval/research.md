@@ -214,7 +214,8 @@ API 與 UI 永遠從 CRM Application/Membership/Grant 顯示正式結果，不�
 **決策**：
 
 - DB 與 API date-time 使用 UTC-aware timestamp／RFC 3339；UI 以台灣時區顯示完整日期時間與剩餘期限。
-- 新 organization policy 初始為 168 小時；未覆寫的核准使用 decision 建立時所快照的 organization policy duration，自 approval commit time 起算，不是第 7 個曆日午夜。policy 更新只影響後續 decision。
+- 新 organization policy 初始為 168 小時（管理 UI 顯示 7 天）；未覆寫的日期型申請使用 decision batch 建立時所快照的 organization policy duration，自所選服務日期的 organization 當地午夜起算。policy 更新只影響後續建立的 decision batch，不回寫既有 grant。
+- 一份申請可包含多個獨立審核的服務日期；第一個核准日期建立該 application 唯一的 grant，後續日期只更新日期審核狀態，不另建或延長 grant。沒有服務日期的歷史申請若要核准，管理員必須明確提供開始時間。
 - `expires_at` 必須嚴格大於 `valid_from`；縮短到 `now` 或以前需 `confirm_immediate_expiry=true`，並走立即失效流程。
 - Application 與 Grant response 帶 integer `version`；mutation 必須帶 expected version。
 - 409 表示 stale version／同一 operation payload 不一致；422 表示日期或原因 validation；404/403 避免資源存在性洩漏。

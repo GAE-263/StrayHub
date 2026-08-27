@@ -83,21 +83,62 @@ ORG-A/B/DISABLED 以外的未知組織會保留並阻擋 exact-demo 驗證，需
 
 ## LIFF HTTPS tunnel 與手機驗收
 
-正式 LIFF／手機測試不可使用 `localhost`、fake LIFF ID 或單一 tunnel 同時承載 Web 與 API。完整流程與遮罩後證據格式見 [`specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md`](specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md)。
+正式 LIFF／手機測試不可使用 `localhost` 或 fake LIFF ID。本機實機流程使用 nginx
+把 Web 與 API 收斂為一個 origin，再以一條 tunnel 公開；完整流程與遮罩後證據格式見
+[`specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md`](specs/004-volunteer-entry-route-isolation/validation/controlled-line-evidence.md)。
+
+志工申請使用一個 LINE Bot 與一個 LIFF App。LIFF Console 的唯一 Endpoint URL
+設為 Web tunnel 的 `/volunteer-application`；Rich Menu 的「志工報名」直接開啟
+canonical `https://liff.line.me/<LIFF_ID>`，地區與收容所由 LIFF 的動態公開目錄選擇。
+外部 shelter-specific link 仍可用 `organization_id` 預選；它只是公開申請目標，後端
+仍會檢查 active organization 與 enabled policy，只有管理員核准後建立的
+membership/grant 才是授權。
+
+實體 QR、海報、外部網站或收容所櫃台入口保留
+`https://liff.line.me/<LIFF_ID>?entry=<opaque-reference>`，由相同 Endpoint 轉入既有
+`shelter_entry_reference` 流程。正常 Bot 選擇不需要也不 seed entry reference。
 
 1. 先在本機啟動 FastAPI `127.0.0.1:8001` 與 Next.js `127.0.0.1:3001`。
-2. 建立兩條獨立的HTTPS tunnel：Web→`3001`、API→`8001`。可使用：
+2. `test_line_local.sh` 按需啟動 host nginx `127.0.0.1:8082`：`/healthz`、`/v1/*`
+   保留原 path 送 FastAPI，其餘（含 `/_next/*` 與 HMR WebSocket）送 Next.js。
+3. 一條 ngrok tunnel 只公開 nginx `8082`。瀏覽器使用相對 `/v1`，nginx 直接送 API，
+   不需要 wildcard CORS，也不會把 `/_next/webpack-hmr` 誤送 FastAPI。
+4. 將輸出的 public origin 設為 Next.js server runtime `API_BASE_URL`，將 LIFF Console
+   取得的 LIFF ID 設為 `LIFF_ID`，並把不含 scheme 的 public host 設為
+   `LINE_DEMO_WEB_ORIGIN_HOST`；這些不是 `NEXT_PUBLIC_*` client fallback。
+5. 在同一 LINE Login channel 的 LIFF Console 設定 public origin 的
+   `/volunteer-application` Endpoint 並啟用 `openid` scope。Rich Menu 的實體入口使用
+   `https://liff.line.me/<LIFF_ID>?entry=<opaque-reference>`，由
+   `sync_line_rich_menu.py` dry-run 驗證。
+6. 使用受控LINE帳號執行controlled evidence中的Case A–D；raw ID token、raw entry reference、LINE user ID、Secret與protected data不得寫入Git、issue、terminal transcript或截圖。
 
-   ```bash
-   cloudflared tunnel --url http://127.0.0.1:3001
-   cloudflared tunnel --url http://127.0.0.1:8001
-   ```
+### 驗證既有本機 Stack 的 LINE Bot／LIFF 實機入口
 
-   或在受控環境使用兩個獨立的`ngrok http 3001`／`ngrok http 8001` process。
+先以 `./scripts/demo.sh` 啟動既有 API 與 Web，再執行：
 
-3. 將API tunnel origin設定為Next.js server runtime的`API_BASE_URL`，將LIFF Console取得的LIFF ID設定為`LIFF_ID`，再重新啟動Next.js；兩者不是`NEXT_PUBLIC_*` client fallback。
-4. 在同一LINE Login channel的LIFF Console設定HTTPS Web tunnel `/volunteer-entry` Endpoint並啟用`openid` scope。Rich Menu則使用`https://liff.line.me/<LIFF_ID>/volunteer-entry?entry=<opaque-reference>`，由`sync_line_rich_menu.py` dry-run驗證。
-5. 使用受控LINE帳號執行controlled evidence中的Case A–D；raw ID token、raw entry reference、LINE user ID、Secret與protected data不得寫入Git、issue、terminal transcript或截圖。
+```bash
+./scripts/test_line_local.sh --print-env # 只印非機密解析結果
+./scripts/test_line_local.sh --no-tunnel # 檢查 env、routes 與既有服務
+./scripts/test_line_local.sh             # 啟動 nginx + 一條 ngrok tunnel
+./scripts/test_line_local.sh stop        # 只停止本 helper 擁有的 nginx/ngrok
+```
+
+資料流共用一個 HTTPS origin：
+
+```text
+LINE Platform → ngrok → nginx → FastAPI /v1/line/webhook
+Phone LINE → LIFF → ngrok → nginx → Next.js
+Browser relative /v1 → nginx → FastAPI
+```
+
+nginx config 位於 `infra/local/nginx/line-local.conf.template`，只在實機測試時由 helper
+render 到暫存目錄，不改變一般 `demo.sh`。ngrok URL 產生後，Next.js 必須以輸出的
+`API_BASE_URL`、`LIFF_ID` 與不含 scheme 的 `LINE_DEMO_WEB_ORIGIN_HOST` 重新啟動；
+修改目前 shell 或 `.env` 不會改變已啟動 process。helper 不會自動改 `.env`、LINE
+Developers 設定或 Rich Menu，也不會停掉不屬於它的 nginx/ngrok。
+
+這個 local topology 刻意模擬未來可能採用的 GCP nginx single-origin routing，但本項目
+沒有實作、部署或變更任何 GCP 資源。
 
 ## 一鍵本機展示
 
@@ -111,7 +152,7 @@ ORG-A/B/DISABLED 以外的未知組織會保留並阻擋 exact-demo 驗證，需
 
 ### 一鍵 LINE／LIFF 手機 Demo
 
-`scripts/demo-line.sh` 會依序啟動 FastAPI、Next.js、Web tunnel，
+`scripts/demo-line.sh` 是既有的保留網址 LIFF-only 流程，會依序啟動 FastAPI、Next.js、Web tunnel，
 並輸出 LIFF Endpoint 與手機入口。請先在 `.env` 填入真實受控測試值：
 
 ```dotenv
@@ -131,14 +172,37 @@ START_WORKER=1
 腳本使用 ngrok 的保留網址；先在 ngrok 建立或保留固定 HTTPS 網址，並完成本機
 authtoken 設定，再將該網址設為 `NGROK_URL`。腳本只會公開 Web tunnel；Next.js 的
 `/v1` server-side proxy 會使用本機 FastAPI 作為 `API_BASE_URL`，因此 API 不會直接公開到
-Internet。腳本會以 `ngrok http --url "$NGROK_URL"` 啟動，若實際 tunnel URL 不符合設定就會失敗，
+Internet；它不涵蓋 LINE Platform webhook。需要同時驗證 Bot webhook 與 LIFF 時，使用
+上方 `test_line_local.sh` 的 nginx single-origin 流程。腳本會以
+`ngrok http --url "$NGROK_URL"` 啟動，若實際 tunnel URL 不符合設定就會失敗，
 避免輸出會在重啟後變動的 LIFF Endpoint。腳本不會替你修改 LINE Developers Console；請將輸出的
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 
-目前單一收容所 Demo 會把 `entry` query 放在 `LIFF Endpoint`，手機入口只使用
-`https://liff.line.me/<LIFF_ID>`。不要再把 `/volunteer-entry?entry=...` 加到手機
-入口，否則 LINE 會將它與 Endpoint path 串接成重複路徑。
+LIFF Endpoint 固定為 `/volunteer-application`，動態 target 放在 canonical LIFF
+入口的 query：Bot 使用 `organization_id`，實體／外部入口使用 `entry`。不要把
+Endpoint path 再附加到 `https://liff.line.me/<LIFF_ID>`，否則 LINE 會與 Console
+Endpoint path 串接成重複路徑。
+
+本機可使用既有 fake LINE verifier 安全模擬全新身分，不需 seed User、membership、
+grant 或 application。先從 `GET /v1/public/volunteer-organizations` 取得 demo 組織 UUID，
+再以不含真實個資的 token 與資料呼叫 status／submit：
+
+```json
+{
+  "id_token": "local-id-token:demo-new-applicant-xindian",
+  "organization_id": "<XINDIAN_ORGANIZATION_UUID>",
+  "applicant_name": "本機測試志工",
+  "phone_number": "0900000000",
+  "client_request_id": "<NEW_UUID>",
+  "consent_acknowledged": true,
+  "service_dates": ["<TODAY_OR_NEXT_13_DAYS>"]
+}
+```
+
+status 不建立身分；首次成功 submit 會依現有 service 建立 applicant `User` 與
+`LineUserBinding`，申請保持 pending。未來若公開連結需要更強的來源綁定，可另加
+短效 signed Bot application context（user + organization + purpose + expiry）；V1 不實作。
 
 正常 demo 不建立 LINE fixture 或執行測試套件；完整隔離、LINE Bot、Timeline 與 AI 失敗降級驗證由獨立 test DB 執行。`DEMO_SKIP_DOCKER=1` 可在本機服務已啟動時略過 `docker compose up`。
 
