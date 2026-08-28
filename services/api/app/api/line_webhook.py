@@ -19,6 +19,7 @@ from services.api.app.application.line_draft_conversation import (
 )
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
+from services.api.app.application.line_menu_actions import MENU_PLACEHOLDER_ACTIONS
 from services.api.app.application.line_message_presenter import quick_reply_for_options
 from services.api.app.application.line_webhook_session import LineWebhookSessionService
 from services.api.app.application.media_access import MediaAccessService
@@ -111,6 +112,37 @@ def _volunteer_application_entry_message() -> dict:
             ]
         },
     }
+
+
+async def _handle_menu_action(
+    line: LineMessagingPort,
+    event: dict,
+) -> bool:
+    """處理角色選單的 postback。
+
+    必須在 _resolve_context 之前跑：選單對所有加好友的人都看得到，包含尚未
+    綁定的使用者。而且這些 action 不帶 draft_token，若落到 _handle_postback
+    會撞上照護回報草稿的檢查，回覆「缺少回報草稿識別」。
+    """
+    if event.get("type") != "postback":
+        return False
+    action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
+        "action", [""]
+    )[0]
+    if action == "start_binding":
+        # 目前沒有專屬的綁定 LIFF 頁；工作人員綁定走 scripts/bind_line_account.py，
+        # 志工走報名流程。實際入口待產品決定後接上。
+        await _reply(
+            line,
+            event,
+            [_text("身分綁定功能準備中。若你要報名志工，請點選單的志工報名或輸入「我要報名志工」。")],
+        )
+        return True
+    placeholder = MENU_PLACEHOLDER_ACTIONS.get(action)
+    if placeholder is None:
+        return False
+    await _reply(line, event, [_text(placeholder)])
+    return True
 
 
 async def _handle_public_volunteer_application_entry(
@@ -651,6 +683,10 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    if await _handle_menu_action(line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     if await _handle_public_volunteer_application_entry(session, line, event):
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
