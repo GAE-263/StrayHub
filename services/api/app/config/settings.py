@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     line_login_channel_id: str = ""
     line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
+    # 依角色 Rich Menu 的 richMenuId（由 scripts/sync_line_role_menus.py --apply 產生後填入）。
+    # 任一有值時，綁定成功會依角色 link 對應選單；全空則此功能為 no-op。
+    line_rich_menu_default_id: str = ""
+    line_rich_menu_volunteer_id: str = ""
+    line_rich_menu_adopter_id: str = ""
+    line_rich_menu_staff_id: str = ""
     animal_confirmation_secret: str = "local-animal-confirmation-secret"
     auth_jwt_issuer: str = "strayhub-local"
     auth_jwt_audience: str = "strayhub-api"

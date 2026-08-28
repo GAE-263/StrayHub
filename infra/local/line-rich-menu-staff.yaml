@@ -1,0 +1,20 @@
+# 工作人員選單（本輪做較完整框架）。
+# 重點：讓工作人員透過 LINE 輸入/管理所有動物資訊，
+# 表單流程參考 paw-village 的 addAnimal / updateAnimal。
+version: 1
+role: staff
+name: strayhub-staff
+chatBarText: 工作人員
+actions:
+  - label: 新增動物
+    type: postback
+    data: action=staff_create_animal
+  - label: 更新健康紀錄
+    type: postback
+    data: action=staff_update_health
+  - label: 動物清單
+    type: postback
+    data: action=staff_animal_list
+  - label: 變更動物狀態
+    type: postback
+    data: action=staff_change_status

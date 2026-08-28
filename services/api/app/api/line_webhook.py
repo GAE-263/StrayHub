@@ -283,7 +283,12 @@ async def _reply_next_step(
     organization_id: UUID,
     draft,
     raw_token: str,
+    lead: list[dict] | None = None,
 ) -> None:
+    # A LINE reply token is single-use and short-lived, so a message that has to
+    # precede the next step is passed in here and sent in the same reply call
+    # rather than in a second reply that LINE would reject.
+    lead_messages = lead or []
     state = DraftState(draft.current_step)
     if state in {
         DraftState.ANSWERING_COMPLETION,
@@ -308,13 +313,14 @@ async def _reply_next_step(
         await _reply(
             line,
             event,
-            [answer_message],
+            [*lead_messages, answer_message],
         )
     elif state == DraftState.AWAITING_MEDIA:
         await _reply(
             line,
             event,
             [
+                *lead_messages,
                 _text("可以傳送一張或多張照片；若要略過，請按下略過照片。"),
                 {
                     "type": "template",
@@ -335,6 +341,7 @@ async def _reply_next_step(
             line,
             event,
             [
+                *lead_messages,
                 _text("心得可直接輸入；若沒有補充，請按下略過心得。"),
                 {
                     "type": "template",
@@ -364,6 +371,7 @@ async def _reply_next_step(
             line,
             event,
             [
+                *lead_messages,
                 _text("回報摘要：\n" + "\n".join(summary_lines) + "\n\n確認送出前仍可修改。"),
                 {
                     "type": "template",
@@ -393,6 +401,8 @@ async def _reply_next_step(
                 },
             ],
         )
+    elif lead_messages:
+        await _reply(line, event, lead_messages)
 
 
 async def _handle_postback(
@@ -512,7 +522,6 @@ async def _handle_postback(
                 animal_id=animal.id,
             )
             message = f"已確認 {animal.name}，現在開始照護回報。"
-        await _reply(line, event, [_text(message)])
         await _reply_next_step(
             session,
             line,
@@ -520,6 +529,7 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token=raw_token,
+            lead=[_text(message)],
         )
         return None
     if action == "resume_draft" and not token:
@@ -529,7 +539,6 @@ async def _handle_postback(
         if draft is None:
             await _reply(line, event, [_text("目前沒有可繼續的回報。")])
             return None
-        await _reply(line, event, [_text("已恢復未完成回報，請繼續回答目前問題。")])
         await _reply_next_step(
             session,
             line,
@@ -537,6 +546,7 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token="",
+            lead=[_text("已恢復未完成回報，請繼續回答目前問題。")],
         )
         return None
     if not token and action not in {
@@ -733,7 +743,15 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         if error.code in {"line_binding_required", "shelter_context_required"}
                         else error.message
                     )
-                    await _reply(line, event, [_text(message)])
+                    # When the failure came from the LINE API itself the reply
+                    # token is already spent or invalid; replying again would
+                    # raise a second time, escape this handler and roll back the
+                    # event claim, making LINE redeliver the event.
+                    if error.code != "line_api_unavailable":
+                        try:
+                            await _reply(line, event, [_text(message)])
+                        except DomainError:
+                            pass
                     results.append(
                         {"webhook_event_id": event_id, "status": "rejected", "reason": error.code}
                     )

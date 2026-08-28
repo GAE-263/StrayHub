@@ -1,0 +1,13 @@
+# 未綁定使用者的預設選單：任何加好友的人都看得到。
+# 只提供「看基本資訊」與「綁定」，綁定後由後端依角色換成對應選單。
+version: 1
+role: default
+name: strayhub-default
+chatBarText: 收容所資訊
+actions:
+  - label: 收容所基本資訊
+    type: postback
+    data: action=shelter_info
+  - label: 綁定身分
+    type: postback
+    data: action=start_binding

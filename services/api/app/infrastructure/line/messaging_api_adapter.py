@@ -5,6 +5,9 @@ import httpx
 from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.line_messaging import LineImageContent
 from services.api.app.config.settings import get_settings
+from services.api.app.observability.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class LineMessagingApiAdapter:
@@ -20,22 +23,39 @@ class LineMessagingApiAdapter:
         return {"Authorization": f"Bearer {self.access_token}"}
 
     @staticmethod
-    def _raise_for_status(response) -> None:
+    def _raise_for_status(response, operation: str = "line_api") -> None:
         try:
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            # The caller only ever sees a generic 503, so the actual reason LINE
+            # gave (invalid reply token, expired access token, rate limit) has to
+            # be recorded here or it is lost. The response body carries no
+            # credentials; the access token travels in the request header.
+            status = getattr(response, "status_code", None)
+            try:
+                body = response.text[:500]
+            except Exception:  # pragma: no cover - defensive
+                body = "<unreadable>"
+            logger.error(
+                "LINE API rejected %s: status=%s body=%s",
+                operation,
+                status,
+                body,
+            )
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
     async def _post(self, url: str, **kwargs):
         try:
             return await self.client.post(url, **kwargs)
         except httpx.HTTPError as exc:
+            logger.error("LINE API POST transport failure: %s", type(exc).__name__)
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
     async def _get(self, url: str, **kwargs):
         try:
             return await self.client.get(url, **kwargs)
         except httpx.HTTPError as exc:
+            logger.error("LINE API GET transport failure: %s", type(exc).__name__)
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
     async def reply(self, *, reply_token: str, messages: list[dict]) -> None:
@@ -44,7 +64,7 @@ class LineMessagingApiAdapter:
             headers=self._headers,
             json={"replyToken": reply_token, "messages": messages},
         )
-        self._raise_for_status(response)
+        self._raise_for_status(response, "reply")
 
     async def push(self, *, to_user_id: str, messages: list[dict]) -> None:
         response = await self._post(
@@ -52,14 +72,14 @@ class LineMessagingApiAdapter:
             headers={**self._headers, "Content-Type": "application/json"},
             json={"to": to_user_id, "messages": messages},
         )
-        self._raise_for_status(response)
+        self._raise_for_status(response, "push")
 
     async def get_image_content(self, *, message_id: str) -> LineImageContent:
         response = await self._get(
             f"{self.data_base}/v2/bot/message/{message_id}/content",
             headers=self._headers,
         )
-        self._raise_for_status(response)
+        self._raise_for_status(response, "get_image_content")
         return LineImageContent(
             message_id=message_id,
             content=response.content,
@@ -77,7 +97,7 @@ class LineMessagingApiAdapter:
             headers={**self._headers, "Content-Type": "application/json"},
             json=rich_menu,
         )
-        self._raise_for_status(response)
+        self._raise_for_status(response, "create_rich_menu")
         return response.json()["richMenuId"]
 
     async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
@@ -86,7 +106,7 @@ class LineMessagingApiAdapter:
             headers={**self._headers, "Content-Type": "image/png"},
             content=content,
         )
-        self._raise_for_status(response)
+        self._raise_for_status(response, "upload_rich_menu_image")
 
     async def link_rich_menu(self, *, rich_menu_id: str, user_id: str | None = None) -> None:
         path = (
@@ -95,4 +115,4 @@ class LineMessagingApiAdapter:
             else f"/v2/bot/user/all/richmenu/{rich_menu_id}"
         )
         response = await self._post(f"{self.api_base}{path}", headers=self._headers)
-        self._raise_for_status(response)
+        self._raise_for_status(response, "link_rich_menu")

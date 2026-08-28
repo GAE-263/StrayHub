@@ -1,0 +1,12 @@
+# 志工選單（先做框架，內容後續補）。
+version: 1
+role: volunteer
+name: strayhub-volunteer
+chatBarText: 志工選單
+actions:
+  - label: 散步回報
+    type: postback
+    data: action=walk_report
+  - label: 志工報到
+    type: postback
+    data: action=volunteer_checkin

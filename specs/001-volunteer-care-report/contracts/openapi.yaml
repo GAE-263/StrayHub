@@ -1025,6 +1025,25 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+    post:
+      tags: [Management Animals]
+      operationId: createManagementAnimal
+      description: 工作人員以 LINE/LIFF 新增收容動物（multipart：payload JSON + photo）。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/LineStaffAnimalCreateRequest" }
+      responses:
+        "200":
+          description: 已建立動物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineStaffAnimalCreateResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/management/animals/{animalId}:
     get:
       tags: [Management Animals]
@@ -1084,6 +1103,29 @@ paths:
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /v1/management/animals/{animalId}/health-records:
+    post:
+      tags: [Management Animals]
+      operationId: createManagementAnimalHealthRecord
+      description: 工作人員以 LINE/LIFF 更新健康紀錄（multipart：payload JSON + 選填 photo）。
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/LineStaffHealthRecordRequest" }
+      responses:
+        "200":
+          description: 已建立健康紀錄
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineStaffHealthRecordResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/management/reports:
     get:
       tags: [Management Reports]
@@ -2596,6 +2638,34 @@ components:
       properties:
         animal: { $ref: "#/components/schemas/ManagementAnimal" }
         suspended_series_count: { type: integer, minimum: 0 }
+    LineStaffAnimalCreateRequest:
+      type: object
+      required: [payload, photo]
+      properties:
+        payload:
+          type: string
+          description: JSON 字串；結構見 docs/staff-animal-line-input.md（CREATE_ANIMAL）。
+        photo: { type: string, format: binary }
+    LineStaffAnimalCreateResponse:
+      type: object
+      required: [success, animalId]
+      properties:
+        success: { type: boolean }
+        animalId: { type: string, format: uuid }
+    LineStaffHealthRecordRequest:
+      type: object
+      required: [payload]
+      properties:
+        payload:
+          type: string
+          description: JSON 字串；結構見 docs/staff-animal-line-input.md（UPDATE_ANIMAL_HEALTH）。
+        photo: { type: string, format: binary }
+    LineStaffHealthRecordResponse:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean }
+        recordId: { type: string, format: uuid }
     ManagementReport:
       type: object
       required:

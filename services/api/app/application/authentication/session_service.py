@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.line_rich_menu_routing import RichMenuRoutingService
 from services.api.app.application.ports.authentication import (
     AccessTokenPort,
     LineIdentityVerifierPort,
@@ -35,6 +36,7 @@ class SessionService:
         access_token: AccessTokenPort,
         line_verifier: LineIdentityVerifierPort | None = None,
         entry_resolver: VolunteerEntryResolverPort | None = None,
+        rich_menu_router: RichMenuRoutingService | None = None,
         refresh_ttl_seconds: int = 604800,
         access_ttl_seconds: int = 900,
     ) -> None:
@@ -43,6 +45,7 @@ class SessionService:
         self.access_token = access_token
         self.line_verifier = line_verifier
         self.entry_resolver = entry_resolver
+        self.rich_menu_router = rich_menu_router
         self.refresh_ttl_seconds = refresh_ttl_seconds
         self.access_ttl_seconds = access_ttl_seconds
 
@@ -222,7 +225,21 @@ class SessionService:
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
         )
         await self.repository.add(session)
-        return await self._issue_session(user.id, session)
+        issued = await self._issue_session(user.id, session)
+        await self._link_role_rich_menu(line_user_id, memberships[0].role)
+        return issued
+
+    async def _link_role_rich_menu(self, line_user_id: str, role: str | None) -> None:
+        """Best-effort：依角色綁定對應 Rich Menu；失敗不影響身分綁定結果。"""
+        if self.rich_menu_router is None:
+            return
+        try:
+            await self.rich_menu_router.link_for_user(
+                line_user_id=line_user_id, role=role
+            )
+        except Exception:
+            # 選單切換為非關鍵操作（LINE API 可能暫時不可用）；綁定已成功即回傳。
+            return
 
     async def exchange_line_identity(self, *, id_token: str, shelter_entry_reference: str) -> dict:
         if self.line_verifier is None or self.entry_resolver is None:

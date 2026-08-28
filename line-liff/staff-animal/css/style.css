@@ -1,0 +1,50 @@
+/* ============================================================
+   童趣溫馨手繪風 (Cozy Playroom & Hand-drawn Flat Style)
+   全站統一視覺基礎設定。Tailwind的utility class涵蓋不到的部分寫在這裡。
+   ============================================================ */
+
+html,
+body {
+  /* 手機瀏覽器(尤其iOS Safari/LINE內建瀏覽器)預設會有奇怪的橡皮筋捲動效果，
+     鎖定 overscroll-behavior 讓操作手感更像原生App */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent; /* 拿掉手機點擊時的灰色閃爍 */
+  background-color: #FAF6EE; /* 護眼奶霜奶油色，絕不使用純白 */
+  font-family: "Noto Sans TC", "Fredoka", sans-serif;
+}
+
+/* 圓體大標統一套用 Fredoka（中文字元會自動 fallback 到 Noto Sans TC） */
+h1, h2, h3, h4, h5, h6,
+button,
+.font-fredoka {
+  font-family: "Fredoka", "Noto Sans TC", sans-serif;
+}
+
+/* 讓內容不要被 iPhone 瀏海/底部手勢列擋住(LIFF全螢幕模式下特別重要) */
+.safe-area-padding {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 拍照/選圖區塊：固定的正方形預覽框，不管有沒有選照片版面都不會跳動 */
+.photo-picker-box {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: 320px;
+}
+
+/* 隱藏原生 file input 的預設外觀，改成蓋在自訂按鈕上面(視覺上按鈕還是漂亮的貼紙感按鈕) */
+input[type="file"] {
+  display: none;
+}
+
+/* 下拉選單的箭頭在部分瀏覽器會是預設灰色系統樣式，統一改成暖棕色系 */
+select {
+  color: #716053;
+}
+
+/* 選取文字/輸入框游標也統一走暖色系，維持風格延續性 */
+::selection {
+  background-color: #FFD79A;
+  color: #716053;
+}
