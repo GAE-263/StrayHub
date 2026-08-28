@@ -39,12 +39,12 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
     assert os.access(script, os.X_OK)
     text = script.read_text(encoding="utf-8")
     for required in (
-        "TUNNEL_PROVIDER",
+        "NGROK_URL",
         "LIFF_ID",
         "SHELTER_ENTRY_REFERENCE",
         "API_BASE_URL",
-        "cloudflared",
         "ngrok",
+        'ngrok http "$port" --url "$NGROK_URL"',
         "volunteer-entry?entry=",
         "trap cleanup EXIT INT TERM",
         'API_BASE_URL="http://${API_HOST}:${API_PORT}"',
@@ -61,6 +61,8 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
             assert required
         else:
             assert required in text
+    assert "TUNNEL_PROVIDER" not in text
+    assert "cloudflared" not in text
     assert 'start_tunnel "API"' not in text
     assert "API tunnel:" not in text
     assert 'LIFF_URL="https://liff.line.me/${LIFF_ID}"' in text
