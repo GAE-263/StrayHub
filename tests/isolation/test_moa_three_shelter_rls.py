@@ -33,7 +33,26 @@ async def test_six_directions_four_resources_and_reused_runtime_connection():
                     )
                 ).all()
             )
+            inventory = {
+                code: {
+                    table: await connection.scalar(
+                        text(f"SELECT count(*) FROM {table} WHERE organization_id=:org"),
+                        {"org": organization_id},
+                    )
+                    for table in TABLES
+                }
+                for code, organization_id in organizations.items()
+            }
         assert set(organizations) == set(CODES)
+        assert inventory["FURKIDS-ASIA"] == {
+            "animals": 5,
+            "animal_external_sources": 0,
+            "media_assets": 5,
+            "animal_qr_codes": 5,
+        }
+        for code in ("MOA-SHELTER-51", "MOA-SHELTER-58"):
+            assert inventory[code]["animals"] > 0
+            assert len(set(inventory[code].values())) == 1
         first_pid = None
         for code in (*CODES, CODES[0]):
             async with engine.connect() as connection, connection.begin():
@@ -66,13 +85,7 @@ async def test_six_directions_four_resources_and_reused_runtime_connection():
                         .scalars()
                         .all()
                     )
-                    expected = (
-                        0
-                        if code == "FURKIDS-ASIA" and table == "animal_external_sources"
-                        else 5
-                        if code == "FURKIDS-ASIA"
-                        else 60
-                    )
+                    expected = inventory[code][table]
                     assert len(rows) == expected, (code, table, len(rows))
                     assert set(rows) <= {organizations[code]}
                     for foreign in CODES:

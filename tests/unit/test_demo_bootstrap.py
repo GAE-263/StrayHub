@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,37 @@ def test_normal_demo_never_seeds_test_universe():
     assert "scripts.bootstrap_demo" in script
     assert "scripts.configure_runtime_role --apply" in script
     assert "pytest" not in script
+
+
+def test_demo_cli_documents_and_rejects_modes() -> None:
+    help_result = subprocess.run(
+        ["bash", "scripts/demo.sh", "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert help_result.returncode == 0
+    assert "check|refresh|serve" in help_result.stdout
+    assert "沿用已驗證" in help_result.stdout
+    assert "強制同步最新 MOA" in help_result.stdout
+
+    invalid_result = subprocess.run(
+        ["bash", "scripts/demo.sh", "invalid-mode"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert invalid_result.returncode == 2
+    assert "check|refresh|serve" in invalid_result.stderr
+
+
+def test_demo_cli_keeps_default_check_and_refresh_semantics() -> None:
+    script = Path("scripts/demo.sh").read_text()
+
+    assert 'MODE="${1:-serve}"' in script
+    assert 'if [[ "$MODE" == "check" ]]' in script
+    assert 'if [[ "$MODE" == "refresh" ]]' in script
+    assert "scripts.bootstrap_demo --refresh" in script
 
 
 def test_three_shelter_demo_exposes_only_dynamic_new_taipei_region() -> None:
@@ -69,32 +101,128 @@ def test_cleanup_targets_only_known_codes_and_usernames():
     assert not any("%" in name for name in names)
 
 
-async def test_moa_failure_reuses_only_verified_existing_data():
+async def test_valid_local_moa_data_skips_live_import():
     from scripts.bootstrap_demo import import_or_reuse
 
-    calls = []
+    import_calls = []
 
-    async def failed_import(**kwargs):
-        return 1
+    async def forbidden_import(**kwargs):
+        import_calls.append(kwargs)
+        raise AssertionError("valid local data must not contact MOA")
 
     async def valid_existing(code):
-        calls.append(code)
-        return {"animals": 60, "valid": True}
+        return {"animals": 60, "valid": True, "photos_checked": True}
 
     result = await import_or_reuse(
-        "MOA-SHELTER-51", run_import=failed_import, verify=valid_existing
+        "MOA-SHELTER-51", run_import=forbidden_import, verify=valid_existing
     )
-    assert result["sync"] == "reused_existing" and calls == ["MOA-SHELTER-51"]
+    assert result["sync"] == "reused_existing"
+    assert import_calls == []
 
 
-async def test_moa_failure_without_valid_data_stops():
+async def test_invalid_local_moa_data_imports_and_requires_final_verification():
+    from scripts.bootstrap_demo import import_or_reuse
+
+    verification_results = iter(
+        [
+            {"animals": 12, "valid": False, "photos_checked": True},
+            {"animals": 60, "valid": True, "photos_checked": True},
+        ]
+    )
+    import_calls = []
+
+    async def successful_import(**kwargs):
+        import_calls.append(kwargs)
+        return 0
+
+    async def verify(_code):
+        return next(verification_results)
+
+    result = await import_or_reuse("MOA-SHELTER-51", run_import=successful_import, verify=verify)
+
+    assert result["sync"] == "completed"
+    assert len(import_calls) == 1
+
+
+async def test_forced_refresh_imports_even_with_valid_local_data():
+    from scripts.bootstrap_demo import import_or_reuse
+
+    import_calls = []
+
+    async def successful_import(**kwargs):
+        import_calls.append(kwargs)
+        return 0
+
+    async def valid_existing(_code):
+        return {"animals": 60, "valid": True, "photos_checked": True}
+
+    result = await import_or_reuse(
+        "MOA-SHELTER-58",
+        refresh=True,
+        run_import=successful_import,
+        verify=valid_existing,
+    )
+
+    assert result["sync"] == "completed"
+    assert len(import_calls) == 1
+
+
+async def test_normal_startup_is_network_independent_with_valid_local_data():
+    from scripts.bootstrap_demo import import_or_reuse
+
+    async def unavailable_network(**_kwargs):
+        raise ConnectionError("MOA unavailable")
+
+    async def valid_existing(_code):
+        return {"animals": 60, "valid": True, "photos_checked": True}
+
+    result = await import_or_reuse(
+        "MOA-SHELTER-51",
+        run_import=unavailable_network,
+        verify=valid_existing,
+    )
+
+    assert result["sync"] == "reused_existing"
+
+
+async def test_broken_photo_dataset_uses_import_repair_path():
+    from scripts.bootstrap_demo import import_or_reuse
+
+    verification_results = iter(
+        [
+            {"animals": 60, "valid": False, "photos_checked": True},
+            {"animals": 60, "valid": True, "photos_checked": True},
+        ]
+    )
+    imported = False
+
+    async def repair_import(**_kwargs):
+        nonlocal imported
+        imported = True
+        return 0
+
+    async def verify(_code):
+        return next(verification_results)
+
+    result = await import_or_reuse("MOA-SHELTER-58", run_import=repair_import, verify=verify)
+
+    assert imported is True
+    assert result["sync"] == "completed"
+
+
+async def test_explicit_refresh_failure_is_nonzero_with_verified_data_available():
     from scripts.bootstrap_demo import import_or_reuse
 
     async def failed_import(**kwargs):
         return 1
 
-    async def invalid_existing(code):
-        return {"animals": 0, "valid": False}
+    async def valid_existing(_code):
+        return {"animals": 60, "valid": True, "photos_checked": True}
 
-    with pytest.raises(RuntimeError, match="no_valid_local_dataset"):
-        await import_or_reuse("MOA-SHELTER-58", run_import=failed_import, verify=invalid_existing)
+    with pytest.raises(RuntimeError, match="refresh_failed:MOA-SHELTER-58"):
+        await import_or_reuse(
+            "MOA-SHELTER-58",
+            refresh=True,
+            run_import=failed_import,
+            verify=valid_existing,
+        )

@@ -50,6 +50,7 @@ No real PII, no extra shelter organizations, no cross-shelter volunteer grants.
 ```bash
 ./scripts/demo.sh          # bootstrap, verify, start API / Web / Worker
 ./scripts/demo.sh check    # same data bootstrap and verification, no servers
+./scripts/demo.sh refresh  # force official MOA sync, verify, then start services
 uv run python -m scripts.verify_demo_data --photos
 ```
 
@@ -60,20 +61,30 @@ and loopback MinIO are accepted. No cloud credentials/deployment are involved.
 DATABASE_URL, MINIO_BUCKET, API_PORT and WEB_PORT for a fresh-machine simulation.
 
 Order: local safety check → Docker → existing Alembic head → runtime-role setup →
-FurKids → generic MOA importer (Xindian dog/60, Wugu dog/60) → demo accounts and
-shared vocabulary → exact organization/photo/QR verification → services.
+FurKids → verified-local MOA reuse or repair (Xindian dog/60, Wugu dog/60) → demo
+accounts and shared vocabulary → exact organization/photo/QR verification → services.
 Runtime setup grants only the existing SIU identity-table contract; no RLS changes.
 
-The first run downloads approved FurKids photos and official MOA images. FurKids
-reuses valid existing bytes. On later runs, MOA validates importer ownership,
-processed MediaAsset metadata and the actual tenant-scoped MinIO checksum before
-skipping unchanged official image downloads; name-enrichment detail requests remain
-separate live requests. MOA always attempts live metadata synchronization; on failure,
-bootstrap warns and continues **only** if existing tenant-bound animals, source
-mappings, active QR and every local photo checksum verify successfully. It does
-not claim a fresh sync succeeded. Without valid local data it fails clearly.
-Importer semantics remain unchanged: prior imports are not pruned to force 60;
-actual counts differing from the requested 60 are reported as warnings.
+The first run downloads approved FurKids photos and official MOA images automatically.
+FurKids reuses valid existing bytes. On later normal runs, each MOA shelter first uses
+the existing strongest photo verifier: active organization, tenant-bound animals,
+external source mappings, active QR, processed MediaAsset metadata, MinIO object bytes
+and checksum must all pass. A valid dataset is reused without MOA metadata or official
+name-detail requests. An incomplete DB or missing/corrupt MinIO object takes the live
+import/repair path and must pass the same verifier afterward.
+
+Normal startup freshness therefore means a valid local three-shelter snapshot, not the
+latest MOA public feed. `./scripts/demo.sh refresh` explicitly requests freshness: it
+always runs metadata and official name enrichment, while the importer still skips
+remote image downloads for unchanged valid local photos. A failed explicit refresh is
+never presented as success and exits nonzero, while stating whether verified local data
+remains available. Importer semantics remain unchanged: prior imports are not pruned to
+force 60; actual counts differing from the requested 60 are reported as warnings.
+
+The Compose `minio-data` volume persists across normal restarts and `docker compose down`,
+so verified media can be reused even when MOA is unavailable. `docker compose down -v`
+destroys that cache; the next bootstrap detects the missing objects and downloads or
+repairs them instead of silently trusting database rows.
 
 ## Test Fixtures (separate database)
 

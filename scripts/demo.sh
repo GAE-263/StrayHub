@@ -16,17 +16,19 @@ export WEB_HOST="${WEB_HOST:-127.0.0.1}"
 export WEB_PORT="${WEB_PORT:-3001}"
 
 case "$MODE" in
-  check|serve) ;;
+  check|refresh|serve) ;;
   --help|-h)
-    echo "用法：$0 [check|serve]"
+    echo "用法：$0 [check|refresh|serve]"
     echo "正常 demo：FurKids 5、新店犬最多 60、五股犬最多 60；不建立 ORG-A／ORG-B。"
-    echo "check 只 bootstrap/驗證；serve（預設）另啟動 FastAPI／Next.js／Worker。"
+    echo "serve（預設）沿用已驗證的 PostgreSQL／MinIO 資料並啟動服務。"
+    echo "check 沿用已驗證資料，只 bootstrap／驗證，不啟動服務。"
+    echo "refresh 強制同步最新 MOA 資料、驗證後再啟動服務；同步失敗會以非零結束。"
     echo "舊 fixtures 請先預覽：uv run python -m scripts.cleanup_legacy_demo_fixtures；--yes 才刪除。"
     echo "測試 fixtures 請使用獨立 DB：uv run python -m scripts.seed_test_fixtures"
     exit 0
     ;;
   *)
-    echo "用法：$0 [check|serve]" >&2
+    echo "用法：$0 [check|refresh|serve]" >&2
     exit 2
     ;;
 esac
@@ -81,7 +83,11 @@ uv run alembic upgrade head
 uv run python -m scripts.configure_runtime_role --apply
 
 echo "[Demo] Three-shelter data bootstrap (no test fixtures)"
-uv run python -m scripts.bootstrap_demo
+if [[ "$MODE" == "refresh" ]]; then
+  uv run python -m scripts.bootstrap_demo --refresh
+else
+  uv run python -m scripts.bootstrap_demo
+fi
 
 echo "[Demo] PASS"
 echo "Three-shelter manager: demo-furkids-admin / local-only-password"
