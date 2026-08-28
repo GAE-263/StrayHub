@@ -21,11 +21,13 @@ npm ci --prefix apps/web
 ./scripts/demo.sh
 # 僅 bootstrap／驗證，不啟動服務：
 ./scripts/demo.sh check
+# 強制同步最新官方 MOA 資料，驗證後啟動服務：
+./scripts/demo.sh refresh
 ```
 
 正常 demo 只建立毛小孩幸福聯盟協會（5 隻）、新北市新店區公立動物之家
 （犬，最多 60 隻）、新北市五股區公立動物之家（犬，最多 60 隻）。
-流程包含 Docker、Alembic、runtime-role 最小 grants、FurKids、MOA 匯入、
+流程包含 Docker、Alembic、runtime-role 最小 grants、FurKids、MOA 資料確認、
 共用觀察詞彙、demo 帳號與照片／QR 驗證；不執行測試 fixture seed。
 
 - 管理介面：[本機 Web](http://127.0.0.1:3001/login)
@@ -40,9 +42,19 @@ npm ci --prefix apps/web
 尚待獨立授權修正；三收容所展示請使用 membership-based `demo-furkids-admin`。
 詳細驗證與既有 DB 的未知 fixture 保留情況見下方資料流程文件。
 
-首次匯入需下載照片。MOA 暫時無法同步時，只有既有本機動物、來源、QR 與
-照片 checksum 均有效才會明確警告並沿用；沒有有效資料就停止，不假裝同步成功。
-即時來源可能少於 60 或已有較多歷史匯入，驗證命令回報實際數量，不自行刪除動物。
+正常 `demo.sh`／`demo.sh check` 先完整驗證 PostgreSQL 與 MinIO 中的 MOA
+動物、來源、QR、MediaAsset、物件存在性與照片 checksum；資料有效就直接沿用，
+不呼叫 MOA API，也不執行名稱 enrichment。資料缺少或照片損壞時才會自動 live sync
+並再次驗證，因此 fresh DB／fresh MinIO 不需要額外手動步驟。
+
+正常啟動保證的是有效的本機三收容所 snapshot，不保證最新官方資料；需要 freshness 時
+使用 `./scripts/demo.sh refresh`。refresh 仍沿用 importer 的未變更照片重用規則，但會執行
+MOA metadata 與官方名稱同步；若同步失敗，即使既有資料仍可驗證，也會明確回報並以非零
+結束。即時來源可能少於 60 或已有較多歷史匯入，驗證命令回報實際數量，不自行刪除動物。
+
+Compose 的 `minio-data` volume 會跨一般 demo 重啟與 `docker compose down` 保留，這是後續
+啟動能重用照片的前提。執行 `docker compose down -v` 會刪除 cached media，下一次 bootstrap
+會因照片驗證失敗而重新下載／修復。
 
 JWT 未提供時，demo.sh 使用短期 process-local 金鑰；手動啟動請設定
 `AUTH_JWT_ACTIVE_PRIVATE_KEY`／`AUTH_JWT_ACTIVE_PUBLIC_KEY`，不可用於正式環境。
@@ -148,6 +160,9 @@ Developers 設定或 Rich Menu，也不會停掉不屬於它的 nginx/ngrok。
 
 # 只執行展示前驗證，不啟動長駐服務
 ./scripts/demo.sh check
+
+# 強制抓取最新官方 MOA 資料、完成驗證後啟動長駐服務
+./scripts/demo.sh refresh
 ```
 
 ### 一鍵 LINE／LIFF 手機 Demo
