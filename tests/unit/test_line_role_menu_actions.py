@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from services.api.app.api import line_webhook
 from services.api.app.application.line_menu_actions import MENU_PLACEHOLDER_ACTIONS
 from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
+
+# 這些 action 由 webhook 自行處理，不在 MENU_PLACEHOLDER_ACTIONS 裡。
+WEBHOOK_HANDLED_ACTIONS = {
+    "start_binding",
+    "start_volunteer_application",
+    "adoption_placeholder",
+}
 
 
 def _postback_event(data: str) -> dict:
@@ -51,13 +60,31 @@ async def test_non_postback_events_are_ignored() -> None:
     assert line.replies == []
 
 
-def test_default_menu_actions_are_all_wired() -> None:
-    """default 選單是所有加好友的人第一個看到的，兩顆按鈕都必須有處理。"""
+@pytest.mark.parametrize(
+    "path", sorted(Path("infra/local").glob("line-rich-menu-*.yaml")), ids=lambda p: p.stem
+)
+def test_every_configured_menu_action_has_a_handler(path: Path) -> None:
+    """選單項目沒接處理者的話，postback 會掉進照護回報流程回「缺少回報草稿識別」。
+
+    寫死清單會在改選單時失效，所以直接讀 yaml 比對。
+    """
     import yaml
 
-    document = yaml.safe_load(open("infra/local/line-rich-menu-default.yaml", encoding="utf-8"))
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for item in document["actions"]:
+        action = item["data"].split("action=", 1)[1].split("&")[0]
+        assert action in MENU_PLACEHOLDER_ACTIONS or action in WEBHOOK_HANDLED_ACTIONS, (
+            f"{path.name} 的 {action} 沒有任何處理者"
+        )
+
+
+def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
+    """一進來就分成志工／領養兩條路；綁定不是獨立按鈕（報名時會隱含建立）。"""
+    import yaml
+
+    document = yaml.safe_load(
+        Path("infra/local/line-rich-menu-default.yaml").read_text(encoding="utf-8")
+    )
     actions = [item["data"].split("action=", 1)[1] for item in document["actions"]]
 
-    assert actions == ["shelter_info", "start_binding"]
-    for action in actions:
-        assert action in MENU_PLACEHOLDER_ACTIONS or action == "start_binding"
+    assert actions == ["start_volunteer_application", "adoption_placeholder"]

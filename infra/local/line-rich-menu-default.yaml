@@ -1,13 +1,17 @@
-# 未綁定使用者的預設選單：任何加好友的人都看得到。
-# 只提供「看基本資訊」與「綁定」，綁定後由後端依角色換成對應選單。
+# 預設選單：任何加好友的人都看得到（含尚未綁定者）。
+#
+# 分成「志工服務」與「領養流程」兩條入口，內容待實作。
+# 綁定不再是獨立按鈕：走志工報名時後端會自動建立 User 與 LineUserBinding
+# （volunteer_access_service 的 get_or_create_line_applicant），
+# 使用者不需要先「綁定」再做事。
 version: 1
 role: default
 name: strayhub-default
-chatBarText: 收容所資訊
+chatBarText: 浪浪森友島
 actions:
-  - label: 收容所基本資訊
+  - label: 志工服務
     type: postback
-    data: action=shelter_info
-  - label: 綁定身分
+    data: action=start_volunteer_application
+  - label: 領養流程
     type: postback
-    data: action=start_binding
+    data: action=adoption_placeholder
