@@ -11,6 +11,7 @@
     "test:a11y": "vitest run --environment jsdom",
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list",
+    "test:e2e:critical": "playwright test e2e/login-home.spec.ts e2e/management-context-switch.spec.ts e2e/volunteer-core.spec.ts e2e/care-agenda.spec.ts",
     "test:e2e:tooling": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test e2e/tooling-smoke.spec.ts",
     "test:e2e:liff": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test e2e/liff-route-isolation.spec.ts",
     "test:e2e:p0": "playwright test e2e/management-shell.spec.ts e2e/volunteer-core.spec.ts e2e/management-core.spec.ts e2e/state-feedback.spec.ts e2e/login-home.spec.ts e2e/volunteer-access-approval.spec.ts e2e/p0-responsive.spec.ts e2e/p0-keyboard.spec.ts",
