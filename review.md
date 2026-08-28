@@ -341,3 +341,60 @@ deployment workflow files changed after Phase 2.
 - `actionlint` — not run because it is not installed; tooling was not reinstalled.
 
 Durable verification evidence: [`docs/verification/ci-refactor-verification.md`](docs/verification/ci-refactor-verification.md).
+
+## Production Config Fail-Fast
+
+Status: READY. Scope cleanup: PASS. Non-local API startup now aggregates missing, placeholder, loopback, and known
+local-default configuration errors without including secret values. Worker and migration startup use
+the same policy with a database-only process profile because those processes do not consume the API's
+LINE, JWT, PII, MinIO, or AI configuration.
+
+Scope: Runtime configuration hardening only; no authentication redesign, RLS/tenant change, database
+schema change, deployment, or secret generation.
+
+Scope cleanup: PASS. The previously introduced LINE feature-toggle expansion was removed and deferred.
+Authentication, webhook, volunteer identity, and LINE verifier runtime behavior remain at baseline.
+
+Files changed: `services/api/app/config/settings.py`, worker session bootstrap, Alembic bootstrap, GCP
+demo migration env wiring, `.env.example`, `README.md`, `review.md`, and focused config tests.
+
+Validation policy: `local` keeps repository development defaults; explicit `test`/`testing` permits
+deterministic fixtures; every other environment validates before traffic, jobs, or migrations. API
+requires safe DB, active MinIO, auth/JWT, confirmation signing, non-local PII, existing LINE runtime
+credentials, and any selected external AI provider. Worker/migration require their safe DB only.
+Errors are deterministic and field-name-only.
+
+Local behavior: unchanged. `./scripts/demo.sh check` passes with local PostgreSQL, MinIO, generated
+demo JWT material, local PII material, and fake/local LINE behavior.
+
+Non-local behavior: missing active JWT keys, unsafe key references/issuer, local/empty PII config,
+loopback/development DB or MinIO config, fake LINE/LIFF config, local confirmation secret, or incomplete
+external AI config exits immediately. Mock AI remains credential-free.
+
+Tests: focused config/auth/LINE/security/IaC tests pass (49 tests); full backend passes on a fresh,
+migrated disposable PostgreSQL database (970 passed, 2 expected skips); repository-wide Ruff lint and
+format checks, Terraform format check, and `git diff --check` pass. Manual API probes confirm local and
+safe synthetic production imports exit zero, while unsafe production import exits non-zero. Unsafe
+production Worker and Alembic probes also exit non-zero before opening a database connection.
+
+Deployment compatibility: current GCP demo config is NOT ready for the API policy. Before deploying:
+
+1. configure the runtime storage actually used by the API by setting `MINIO_ENDPOINT`,
+   `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` to non-local values, or separately implement/select the
+   already-present GCS adapter in a future storage task;
+2. set safe `LINE_CHANNEL_ID` and `LIFF_ID` values required by the existing runtime;
+3. replace `AUTH_JWT_ISSUER`, `AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE`, and
+   `AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE` local defaults;
+4. verify the injected `DATABASE_URL` is non-loopback and does not use repository development
+   credentials.
+
+The worker and migration job are compatible with the new process-specific policy once their injected
+`DATABASE_URL` passes the same DB checks. Terraform now explicitly marks the migration job as
+`APP_ENV=gcp-demo` so it cannot silently use local behavior.
+
+Open issues: GCP config advertises GCS but API runtime consumers remain directly wired to MinIO; backend
+selection is intentionally outside this configuration-hardening task. A separate deferred task must
+design any future LINE integration feature toggle, including webhook response semantics, verifier and
+LIFF behavior, volunteer fallback behavior, and management UI implications. No migration is required.
+
+Deployment compatibility: NOT READY. Migration: NONE.

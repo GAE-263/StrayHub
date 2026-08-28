@@ -59,6 +59,34 @@ Compose 的 `minio-data` volume 會跨一般 demo 重啟與 `docker compose down
 JWT 未提供時，demo.sh 使用短期 process-local 金鑰；手動啟動請設定
 `AUTH_JWT_ACTIVE_PRIVATE_KEY`／`AUTH_JWT_ACTIVE_PUBLIC_KEY`，不可用於正式環境。
 
+## 非本機設定安全檢查
+
+`APP_ENV=local` 保留 `.env.example` 的 loopback、fake LINE、local MinIO 與 demo 金鑰
+便利設定；明確的 `test`／`testing` 也允許測試自行注入的 deterministic 值。其他所有環境
+會在 API 接受流量前集中檢查設定，Worker 與 Alembic 則在連線資料庫前檢查其必要的
+`DATABASE_URL`。錯誤會一次列出欄位名稱與原因，不會輸出 secret 內容。
+
+API 的非本機必要設定包括遠端 PostgreSQL、目前實際使用的 MinIO backend、JWT active
+signing/verification keys 與安全 key references、animal confirmation secret，以及支援的非本機
+PII provider（目前為 GCP KMS），以及既有 runtime 所需的 LINE channel、token 與 LIFF ID。
+`AI_PROVIDER=mock` 不需要 API key；選擇其他 provider 時才需要安全的 `AI_ENDPOINT`、
+`AI_API_KEY` 與 model name。GCS 欄位目前只供顯式注入的 GCS adapter 使用，尚不是 API
+runtime storage selector，因此不會僅因欄位存在就被全域要求。
+
+非本機會拒絕空值、已知 repository local/fake defaults、`fake-`／`local-only-` prefixes，
+以及 `changeme`、`change-me`、`example`、`test-secret`、`dev-secret`、`dummy`、
+`placeholder`、`minioadmin` 等明確 placeholder。資料庫、MinIO 與外部 AI endpoint 也不可使用
+loopback host；private/internal hostname 仍可使用。典型失敗格式如下：
+
+```text
+Unsafe non-local configuration (production):
+- AUTH_JWT_ACTIVE_PRIVATE_KEY is missing
+- MINIO_ACCESS_KEY uses a placeholder
+```
+
+在建立或更新非本機部署前，請從部署平台的 secret/config 注入所有必要值；不要把真實值
+加入 `.env.example` 或版本庫。
+
 ## Test Fixtures：與 Demo 分開的資料庫
 
 ORG-A／ORG-B／ORG-DISABLED、`local-staff-a`、`local-volunteer-a` 等

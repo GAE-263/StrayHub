@@ -1,9 +1,9 @@
 """Async Alembic environment shared by local and Demo migrations."""
 
 import asyncio
-import os
 
 from alembic import context
+from services.api.app.config.settings import Settings
 from services.api.app.persistence import models  # noqa: F401
 from services.api.app.persistence.database.base import Base
 from sqlalchemy import Column, MetaData, PrimaryKeyConstraint, String, Table, inspect, pool, text
@@ -11,9 +11,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
-database_url = os.getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+settings = Settings().validate_runtime_safety(process="migration")
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 

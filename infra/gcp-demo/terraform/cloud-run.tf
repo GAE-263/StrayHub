@@ -212,6 +212,11 @@ resource "google_cloud_run_v2_job" "migration" {
         args    = ["upgrade", "head"]
 
         env {
+          name  = "APP_ENV"
+          value = "gcp-demo"
+        }
+
+        env {
           name = "DATABASE_URL"
           value_source {
             secret_key_ref {
