@@ -93,6 +93,16 @@ async def apply(by_role: dict[str, dict], image_dir: Path) -> dict[str, str]:
     adapter = LineMessagingApiAdapter()
     result: dict[str, str] = {}
     try:
+        # LINE 沒有「更新 rich menu」的 API，只能重建。這裡先刪掉本框架管理的同名
+        # 選單，否則每次 --apply 都會在 channel 上多留一組同名孤兒（尤其是中途失敗時）。
+        managed_names = {
+            document.get("name", f"strayhub-{role}") for role, document in by_role.items()
+        }
+        for existing in await adapter.list_rich_menus():
+            if existing.get("name") in managed_names:
+                print(f"[清理] 刪除既有選單 {existing['richMenuId']}（{existing.get('name')}）")
+                await adapter.delete_rich_menu(rich_menu_id=existing["richMenuId"])
+
         for role, document in by_role.items():
             image_path = image_dir / f"{role}.png"
             if not image_path.is_file():

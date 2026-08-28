@@ -58,6 +58,13 @@ class LineMessagingApiAdapter:
             logger.error("LINE API GET transport failure: %s", type(exc).__name__)
             raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
 
+    async def _delete(self, url: str, **kwargs):
+        try:
+            return await self.client.delete(url, **kwargs)
+        except httpx.HTTPError as exc:
+            logger.error("LINE API DELETE transport failure: %s", type(exc).__name__)
+            raise DomainError("line_api_unavailable", "LINE 服務暫時無法使用", 503) from exc
+
     async def reply(self, *, reply_token: str, messages: list[dict]) -> None:
         response = await self._post(
             f"{self.api_base}/v2/bot/message/reply",
@@ -90,6 +97,18 @@ class LineMessagingApiAdapter:
         if not rich_menu.get("size") or not rich_menu.get("areas"):
             raise ValueError("rich menu must contain size and areas")
 
+    async def list_rich_menus(self) -> list[dict]:
+        """回傳這個 channel 上所有已建立的 rich menu。"""
+        response = await self._get(f"{self.api_base}/v2/bot/richmenu/list", headers=self._headers)
+        self._raise_for_status(response, "list_rich_menus")
+        return response.json().get("richmenus", [])
+
+    async def delete_rich_menu(self, *, rich_menu_id: str) -> None:
+        response = await self._delete(
+            f"{self.api_base}/v2/bot/richmenu/{rich_menu_id}", headers=self._headers
+        )
+        self._raise_for_status(response, "delete_rich_menu")
+
     async def create_rich_menu(self, *, rich_menu: dict) -> str:
         await self.validate_rich_menu(rich_menu=rich_menu)
         response = await self._post(
@@ -101,8 +120,9 @@ class LineMessagingApiAdapter:
         return response.json()["richMenuId"]
 
     async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
+        # 圖片上傳走 data endpoint（api-data.line.me）；api.line.me 對此路徑回 404。
         response = await self._post(
-            f"{self.api_base}/v2/bot/richmenu/{rich_menu_id}/content",
+            f"{self.data_base}/v2/bot/richmenu/{rich_menu_id}/content",
             headers={**self._headers, "Content-Type": "image/png"},
             content=content,
         )
