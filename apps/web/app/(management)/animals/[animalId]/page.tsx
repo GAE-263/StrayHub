@@ -17,6 +17,7 @@ import { AnimalTodaySummary } from "../../../../features/medical-care/AnimalToda
 import { Toast } from "../../../../components/ui/toast";
 import { AnimalCareQrCard } from "../../../../features/animal-management/AnimalCareQrCard";
 import { AnimalBasicProfile } from "../../../../features/animal-management/AnimalBasicProfile";
+import { AdoptionProfileFormDialog } from "../../../../features/adoption/AdoptionProfileFormDialog";
 import type { ManagementAnimal as Animal } from "../../../../lib/animal-profile";
 
 type Props = { params: Promise<{ animalId: string }> };
@@ -25,6 +26,7 @@ export default function AnimalProfilePage({ params }: Props) {
   const { animalId } = use(params);
   const [animal, setAnimal] = useState<Animal | null>(null);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [todaySummary, setTodaySummary] = useState({
     hasActivity: false,
     pending: 0,
@@ -34,6 +36,7 @@ export default function AnimalProfilePage({ params }: Props) {
       "no_activity" | "events_no_todos" | "pending" | "overdue" | undefined,
   });
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [adoptionProfileOpen, setAdoptionProfileOpen] = useState(false);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -58,7 +61,7 @@ export default function AnimalProfilePage({ params }: Props) {
           );
       });
     return () => controller.abort();
-  }, [animalId]);
+  }, [animalId, reloadKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -133,6 +136,8 @@ export default function AnimalProfilePage({ params }: Props) {
         <LoadingState title="正在載入動物檔案…" />
       </div>
     );
+
+  const temperament = animal.temperament ?? [];
 
   return (
     <section
@@ -234,14 +239,33 @@ export default function AnimalProfilePage({ params }: Props) {
                 </span>
                 <span aria-hidden="true">→</span>
               </Link>
+              <Link
+                className="animal-profile-action"
+                href="/adoption-inquiries"
+              >
+                <span>
+                  <strong>領養意願收件匣</strong>
+                  <small>這隻動物收到的領養意願</small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
             </nav>
-            <Button
-              className="animal-profile-reminder-action"
-              type="button"
-              onClick={() => setReminderOpen(true)}
-            >
-              ＋ 建立照護提醒
-            </Button>
+            <div className="animal-profile-workbench-actions">
+              <Button
+                className="animal-profile-reminder-action"
+                type="button"
+                onClick={() => setReminderOpen(true)}
+              >
+                ＋ 建立照護提醒
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setAdoptionProfileOpen(true)}
+              >
+                編輯領養資料
+              </Button>
+            </div>
           </Card>
         </div>
         <Card
@@ -273,6 +297,31 @@ export default function AnimalProfilePage({ params }: Props) {
               <dt>照片</dt>
               <dd>{animal.photo_key ? "已建檔" : "尚未建檔"}</dd>
             </div>
+            <div>
+              <dt>領養媒合</dt>
+              <dd>
+                <Badge
+                  className={
+                    animal.is_adoptable
+                      ? "adoption-status adoption-status-open"
+                      : "adoption-status"
+                  }
+                >
+                  {animal.is_adoptable ? "開放領養中" : "未開放領養"}
+                </Badge>
+                {animal.size || animal.energy || temperament.length
+                  ? " · " +
+                    [
+                      animal.breed,
+                      animal.size && `體型：${animal.size}`,
+                      animal.energy && `活動力：${animal.energy}`,
+                      temperament.length && `個性：${temperament.join("、")}`,
+                    ]
+                      .filter(Boolean)
+                      .join("，")
+                  : ""}
+              </dd>
+            </div>
           </dl>
         </Card>
         <AnimalCareQrCard
@@ -291,6 +340,25 @@ export default function AnimalProfilePage({ params }: Props) {
         animalId={animal.id}
         onClose={() => setReminderOpen(false)}
         onSaved={setToast}
+      />
+      <AdoptionProfileFormDialog
+        open={adoptionProfileOpen}
+        animalId={animal.id}
+        initial={{
+          species: animal.species ?? null,
+          breed: animal.breed ?? null,
+          size: animal.size ?? null,
+          energy: animal.energy ?? null,
+          temperament,
+          is_adoptable: animal.is_adoptable ?? false,
+          adoption_notes: animal.adoption_notes ?? null,
+        }}
+        onClose={() => setAdoptionProfileOpen(false)}
+        onSaved={(message) => {
+          setToast(message);
+          setAdoptionProfileOpen(false);
+          setReloadKey((value) => value + 1);
+        }}
       />
       {toast ? (
         <Toast messageKey={toast} onClose={() => setToast("")}>

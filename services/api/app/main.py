@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy.exc import SQLAlchemyError
 
+from services.api.app.api.adoption_inbox import router as adoption_inbox_router
 from services.api.app.api.ai_observations import router as ai_observations_router
 from services.api.app.api.animal_selection import router as animal_selection_router
 from services.api.app.api.animal_timeline import router as animal_timeline_router
@@ -19,6 +20,7 @@ from services.api.app.api.errors import (
     request_validation_error_handler,
     sqlalchemy_error_handler,
 )
+from services.api.app.api.growth_diary import router as growth_diary_router
 from services.api.app.api.line_binding import router as line_binding_router
 from services.api.app.api.line_drafts import router as line_drafts_router
 from services.api.app.api.line_webhook import router as line_webhook_router
@@ -92,6 +94,8 @@ app.include_router(volunteer_access_router)
 app.include_router(medical_records_router)
 app.include_router(care_reminders_router)
 app.include_router(assigned_care_router)
+app.include_router(adoption_inbox_router)
+app.include_router(growth_diary_router)
 
 
 @app.get("/healthz", tags=["Health"], openapi_extra={"security": []})

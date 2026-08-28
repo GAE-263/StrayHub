@@ -28,6 +28,7 @@ tags:
   - name: Management Workbench
   - name: Management Animals
   - name: Management Reports
+  - name: Management Adoption Inquiries
   - name: Management Settings
   - name: Management Audit
   - name: LINE Bot
@@ -1163,6 +1164,95 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/animals/{animalId}/adoption-profile:
+    patch:
+      tags: [Management Animals]
+      operationId: updateManagementAnimalAdoptionProfile
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: "#/components/schemas/AnimalAdoptionProfileUpdateRequest" }
+      responses:
+        "200":
+          description: 更新後的動物領養檔案
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagementAnimalResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /v1/management/adoption-inquiries:
+    get:
+      tags: [Management Adoption Inquiries]
+      operationId: listManagementAdoptionInquiries
+      parameters:
+        - { name: from_date, in: query, schema: { type: string, format: date } }
+        - { name: to_date, in: query, schema: { type: string, format: date } }
+        - { name: animal_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 領養意願收件匣
+          content:
+            application/json:
+              schema:
+                {
+                  $ref: "#/components/schemas/ManagementAdoptionInquiryListResponse",
+                }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/adoption-inquiries/{inquiryId}:
+    get:
+      tags: [Management Adoption Inquiries]
+      operationId: getManagementAdoptionInquiry
+      parameters:
+        - $ref: "#/components/parameters/InquiryId"
+      responses:
+        "200":
+          description: 領養意願明細
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ManagementAdoptionInquiryResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/management/adoption-inquiries/{inquiryId}/status:
+    patch:
+      tags: [Management Adoption Inquiries]
+      operationId: updateManagementAdoptionInquiryStatus
+      parameters:
+        - $ref: "#/components/parameters/InquiryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "#/components/schemas/ManagementAdoptionInquiryStatusUpdateRequest",
+              }
+      responses:
+        "200":
+          description: 更新後的領養意願狀態
+          content:
+            application/json:
+              schema:
+                { $ref: "#/components/schemas/ManagementAdoptionInquiryResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/management/reportable-scopes:
     get:
@@ -2309,6 +2399,13 @@ components:
         required: true,
         schema: { type: string, format: uuid },
       }
+    InquiryId:
+      {
+        name: inquiryId,
+        in: path,
+        required: true,
+        schema: { type: string, format: uuid },
+      }
     OptionId:
       {
         name: optionId,
@@ -2567,11 +2664,27 @@ components:
         area_name: { type: [string, "null"] }
         area_type: { type: [string, "null"] }
         area_path: { type: [string, "null"], default: null }
+        species: { type: [string, "null"] }
+        size: { type: [string, "null"] }
+        energy: { type: [string, "null"] }
+        temperament: { type: array, items: { type: string } }
+        is_adoptable: { type: boolean }
+        adoption_notes: { type: [string, "null"] }
     ManagementAnimalResponse:
       type: object
       required: [animal]
       properties:
         animal: { $ref: "#/components/schemas/ManagementAnimal" }
+    AnimalAdoptionProfileUpdateRequest:
+      type: object
+      properties:
+        species: { type: [string, "null"], maxLength: 60 }
+        breed: { type: [string, "null"], maxLength: 120 }
+        size: { type: [string, "null"], maxLength: 30 }
+        energy: { type: [string, "null"], maxLength: 30 }
+        temperament: { type: array, items: { type: string }, default: [] }
+        is_adoptable: { type: boolean, default: false }
+        adoption_notes: { type: [string, "null"], maxLength: 2000 }
     ManagementAnimalListResponse:
       type: object
       required: [items, page, page_size, total]
@@ -2646,6 +2759,59 @@ components:
       required: [reason]
       properties:
         reason: { type: string, minLength: 1, maxLength: 500 }
+    ManagementAdoptionInquiry:
+      type: object
+      required:
+        [
+          id,
+          organization_id,
+          path,
+          target_animal_id,
+          animal_name_snapshot,
+          answers,
+          phone_number,
+          status,
+          submitted_at,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        path: { type: string, enum: [specific_animal, recommend_me] }
+        target_animal_id: { type: string, format: uuid }
+        animal_name: { type: [string, "null"] }
+        animal_name_snapshot: { type: string }
+        shelter_number_snapshot: { type: [string, "null"] }
+        answers: { type: object, additionalProperties: true }
+        match_scores_snapshot:
+          { type: [object, "null"], additionalProperties: true }
+        phone_number: { type: string }
+        status: { type: string, enum: [new, contacted, in_review, closed] }
+        submitted_at: { type: string, format: date-time }
+        staff_notes: { type: [string, "null"] }
+        status_updated_at: { type: [string, "null"], format: date-time }
+    ManagementAdoptionInquiryListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ManagementAdoptionInquiry" },
+          }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    ManagementAdoptionInquiryResponse:
+      type: object
+      required: [inquiry]
+      properties:
+        inquiry: { $ref: "#/components/schemas/ManagementAdoptionInquiry" }
+    ManagementAdoptionInquiryStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, minLength: 1, maxLength: 30 }
+        staff_notes: { type: [string, "null"], maxLength: 2000 }
     ManagementReportableScope:
       type: object
       required: [id, organization_id, starts_at, ends_at, status]
@@ -3101,6 +3267,7 @@ components:
           { type: string, format: password, minLength: 1 }
         address: { type: string }
         service_area: { type: string }
+        region: { type: string, enum: [north, central, south, east] }
         contact: { type: string }
     InitialAdminCreateRequest:
       type: object
@@ -3114,6 +3281,7 @@ components:
         name: { type: string }
         address: { type: string }
         service_area: { type: string }
+        region: { type: string, enum: [north, central, south, east] }
         contact: { type: string }
         status: { type: string, enum: [pending_setup, active, suspended] }
         timezone: { type: string }

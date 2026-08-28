@@ -11,6 +11,7 @@ class MockLineAdapter:
         self.push_failure_mode = push_failure_mode
         self.images: dict[str, LineImageContent] = {}
         self.rich_menus: list[dict] = []
+        self.linked_menus: list[tuple[str, str | None]] = []
 
     async def push(self, *, to_user_id: str, messages: list[dict]) -> None:
         if self.push_failure_mode == "transient":
@@ -34,10 +35,13 @@ class MockLineAdapter:
         self.rich_menus.append(rich_menu)
         return f"mock-rich-menu-{len(self.rich_menus)}"
 
-    async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
+    async def upload_rich_menu_image(
+        self, *, rich_menu_id: str, content: bytes, content_type: str = "image/png"
+    ) -> None:
         if not content:
             raise ValueError("rich menu image is empty")
 
     async def link_rich_menu(self, *, rich_menu_id: str, user_id: str | None = None) -> None:
         if not rich_menu_id:
             raise ValueError("rich menu id is required")
+        self.linked_menus.append((rich_menu_id, user_id))

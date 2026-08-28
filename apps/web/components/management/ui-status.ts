@@ -59,6 +59,10 @@ const VALUE_LABELS: Record<string, string> = {
   "ai-failed": "AI 暫時無法使用",
   "needs-review": "需要人工覆核",
   pending: "等待處理",
+  new: "新申請",
+  contacted: "已聯絡",
+  in_review: "審核中",
+  closed: "已結案",
 };
 
 export function statusLabel(value: string | null | undefined) {

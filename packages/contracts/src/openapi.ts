@@ -979,6 +979,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/management/animals/{animalId}/adoption-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateManagementAnimalAdoptionProfile"];
+        trace?: never;
+    };
+    "/v1/management/adoption-inquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listManagementAdoptionInquiries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/adoption-inquiries/{inquiryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementAdoptionInquiry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/adoption-inquiries/{inquiryId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateManagementAdoptionInquiryStatus"];
+        trace?: never;
+    };
     "/v1/management/reportable-scopes": {
         parameters: {
             query?: never;
@@ -1904,9 +1968,26 @@ export interface components {
             area_type: string | null;
             /** @default null */
             area_path: string | null;
+            species?: string | null;
+            size?: string | null;
+            energy?: string | null;
+            temperament?: string[];
+            is_adoptable?: boolean;
+            adoption_notes?: string | null;
         };
         ManagementAnimalResponse: {
             animal: components["schemas"]["ManagementAnimal"];
+        };
+        AnimalAdoptionProfileUpdateRequest: {
+            species?: string | null;
+            breed?: string | null;
+            size?: string | null;
+            energy?: string | null;
+            /** @default [] */
+            temperament: string[];
+            /** @default false */
+            is_adoptable: boolean;
+            adoption_notes?: string | null;
         };
         ManagementAnimalListResponse: {
             items: components["schemas"]["ManagementAnimal"][];
@@ -1958,6 +2039,46 @@ export interface components {
         };
         ManagementArchiveRequest: {
             reason: string;
+        };
+        ManagementAdoptionInquiry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** @enum {string} */
+            path: "specific_animal" | "recommend_me";
+            /** Format: uuid */
+            target_animal_id: string;
+            animal_name?: string | null;
+            animal_name_snapshot: string;
+            shelter_number_snapshot?: string | null;
+            answers: {
+                [key: string]: unknown;
+            };
+            match_scores_snapshot?: {
+                [key: string]: unknown;
+            } | null;
+            phone_number: string;
+            /** @enum {string} */
+            status: "new" | "contacted" | "in_review" | "closed";
+            /** Format: date-time */
+            submitted_at: string;
+            staff_notes?: string | null;
+            /** Format: date-time */
+            status_updated_at?: string | null;
+        };
+        ManagementAdoptionInquiryListResponse: {
+            items: components["schemas"]["ManagementAdoptionInquiry"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        ManagementAdoptionInquiryResponse: {
+            inquiry: components["schemas"]["ManagementAdoptionInquiry"];
+        };
+        ManagementAdoptionInquiryStatusUpdateRequest: {
+            status: string;
+            staff_notes?: string | null;
         };
         ManagementReportableScope: {
             /** Format: uuid */
@@ -2300,6 +2421,8 @@ export interface components {
             initial_admin_temporary_password: string;
             address?: string;
             service_area?: string;
+            /** @enum {string} */
+            region?: "north" | "central" | "south" | "east";
             contact?: string;
         };
         InitialAdminCreateRequest: {
@@ -2311,6 +2434,8 @@ export interface components {
             name?: string;
             address?: string;
             service_area?: string;
+            /** @enum {string} */
+            region?: "north" | "central" | "south" | "east";
             contact?: string;
             /** @enum {string} */
             status?: "pending_setup" | "active" | "suspended";
@@ -3671,6 +3796,7 @@ export interface components {
         DraftId: string;
         MediaId: string;
         ReportId: string;
+        InquiryId: string;
         OptionId: string;
         ObservationId: string;
         ScopeId: string;
@@ -5433,6 +5559,124 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    updateManagementAnimalAdoptionProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnimalAdoptionProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新後的動物領養檔案 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAnimalResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    listManagementAdoptionInquiries: {
+        parameters: {
+            query?: {
+                from_date?: string;
+                to_date?: string;
+                animal_id?: string;
+                status?: string;
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 領養意願收件匣 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAdoptionInquiryListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getManagementAdoptionInquiry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inquiryId: components["parameters"]["InquiryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 領養意願明細 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAdoptionInquiryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateManagementAdoptionInquiryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inquiryId: components["parameters"]["InquiryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagementAdoptionInquiryStatusUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新後的領養意願狀態 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAdoptionInquiryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
         };
     };

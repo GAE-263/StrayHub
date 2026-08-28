@@ -36,8 +36,16 @@ type Shelter = {
   code: string;
   name: string;
   status: "pending_setup" | "active" | "suspended";
+  region?: "north" | "central" | "south" | "east" | null;
   timezone: string;
   timezone_version: number;
+};
+
+const regionLabels: Record<"north" | "central" | "south" | "east", string> = {
+  north: "北區",
+  central: "中區",
+  south: "南區",
+  east: "東區",
 };
 
 type Membership = {
@@ -180,6 +188,7 @@ export default function SheltersManagementPage() {
   const [confirmingChange, setConfirmingChange] = useState(false);
   const [areaName, setAreaName] = useState("");
   const [areaType, setAreaType] = useState<Area["area_type"]>("area");
+  const [regionDraft, setRegionDraft] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [toastMessage, setToastMessage] = useState<ToastMessage | null>(null);
@@ -271,6 +280,10 @@ export default function SheltersManagementPage() {
   useEffect(() => {
     void loadShelters().catch((error: Error) => setErrorMessage(error.message));
   }, [loadShelters]);
+
+  useEffect(() => {
+    setRegionDraft(selectedShelter?.region ?? "");
+  }, [selectedShelter]);
 
   useEffect(() => {
     void request<CurrentUser>("/v1/auth/me")
@@ -390,6 +403,16 @@ export default function SheltersManagementPage() {
       body: JSON.stringify({ status: "active" }),
     });
     setMessage("收容所已啟用。");
+    await loadShelters(selectedShelterId);
+  };
+
+  const updateRegion = async () => {
+    if (!selectedShelterId) return;
+    await request<Shelter>(`/v1/organizations/${selectedShelterId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ region: regionDraft || null }),
+    });
+    setMessage("收容所地區已更新。");
     await loadShelters(selectedShelterId);
   };
 
@@ -671,6 +694,39 @@ export default function SheltersManagementPage() {
                 {submittingAction ? "處理中…" : "啟用收容所"}
               </Button>
             )}
+          {canManageOrganizations && selectedShelter && (
+            <Field>
+              <label htmlFor="shelter-region">
+                地區（供領養媒合地區選單使用）
+              </label>
+              <div className="membership-actions">
+                <Select
+                  id="shelter-region"
+                  value={regionDraft}
+                  onChange={(event) => setRegionDraft(event.target.value)}
+                  disabled={submittingAction}
+                >
+                  <option value="">未設定</option>
+                  {Object.entries(regionLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    submittingAction ||
+                    regionDraft === (selectedShelter.region ?? "")
+                  }
+                  onClick={() => void runAction(updateRegion)}
+                >
+                  {submittingAction ? "處理中…" : "儲存地區"}
+                </Button>
+              </div>
+            </Field>
+          )}
           {canManageOrganizations && (
             <form onSubmit={(event) => void submit(event, createShelter)}>
               <h3>建立收容所</h3>

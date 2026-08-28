@@ -516,6 +516,25 @@ summary:focus-visible {
   margin: 0 0 24px;
   padding: 0;
 }
+.growth-diary-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.growth-diary-list .list-card {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+.growth-diary-photo {
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  height: 72px;
+  object-fit: cover;
+  width: 72px;
+}
 .area-item {
   align-items: center;
   grid-template-columns: minmax(0, 1fr) auto;

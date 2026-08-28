@@ -80,10 +80,17 @@ class LineMessagingApiAdapter:
         self._raise_for_status(response)
         return response.json()["richMenuId"]
 
-    async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
+    async def upload_rich_menu_image(
+        self, *, rich_menu_id: str, content: bytes, content_type: str = "image/png"
+    ) -> None:
+        # Rich menu image content, like message image content, is served from
+        # the separate "data" API host, not the main api.line.me host. LINE
+        # accepts either PNG or JPEG — JPEG compresses photographic/gradient
+        # artwork (as opposed to this project's own flat placeholder PNGs)
+        # far enough below the 1MB limit to matter in practice.
         response = await self._post(
-            f"{self.api_base}/v2/bot/richmenu/{rich_menu_id}/content",
-            headers={**self._headers, "Content-Type": "image/png"},
+            f"{self.data_base}/v2/bot/richmenu/{rich_menu_id}/content",
+            headers={**self._headers, "Content-Type": content_type},
             content=content,
         )
         self._raise_for_status(response)

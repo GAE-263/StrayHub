@@ -15,6 +15,10 @@ def test_management_routes_are_registered_as_a_single_api_surface() -> None:
         "/v1/management/qr-codes",
         "/v1/management/audit",
         "/v1/management/ai-review",
+        "/v1/management/adoption-inquiries",
+        "/v1/management/adoption-inquiries/{inquiry_id}",
+        "/v1/management/adoption-inquiries/{inquiry_id}/status",
+        "/v1/management/animals/{animal_id}/adoption-profile",
     } <= paths
 
 

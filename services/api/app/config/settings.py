@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     line_login_channel_id: str = ""
     line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
+    line_rich_menu_default_id: str | None = None
+    line_rich_menu_region_select_id: str | None = None
+    line_rich_menu_path_select_id: str | None = None
+    line_rich_menu_volunteer_id: str | None = None
     animal_confirmation_secret: str = "local-animal-confirmation-secret"
     auth_jwt_issuer: str = "strayhub-local"
     auth_jwt_audience: str = "strayhub-api"

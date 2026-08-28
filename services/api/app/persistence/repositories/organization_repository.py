@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.database.scope import set_public_volunteer_directory_scope
+from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
@@ -59,6 +60,42 @@ class OrganizationRepository:
         await set_public_volunteer_directory_scope(self.session)
         result = await self.session.execute(statement)
         return [(row[0], row[1], row[2], row[3]) for row in result.all()]
+
+    async def list_with_adoptable_animals(self) -> list[Organization]:
+        """Cross-organization by design: a prospective adopter must be able to
+        pick a shelter before any Organization scope is known. Only exposes
+        organization identity, never animal or membership data."""
+        result = await self.session.execute(
+            select(Organization)
+            .join(Animal, Animal.organization_id == Organization.id)
+            .where(
+                Organization.status == "active",
+                Animal.is_adoptable.is_(True),
+                Animal.status == "active",
+            )
+            .distinct()
+            .order_by(Organization.name)
+        )
+        return list(result.scalars())
+
+    async def list_with_adoptable_animals_by_region(
+        self, region: str
+    ) -> list[tuple[Organization, int]]:
+        """Region-filtered shelter list with adoptable-animal counts, for the
+        Flex Message shelter carousel shown after a region rich-menu tap."""
+        result = await self.session.execute(
+            select(Organization, func.count(Animal.id))
+            .join(Animal, Animal.organization_id == Organization.id)
+            .where(
+                Organization.status == "active",
+                Organization.region == region,
+                Animal.is_adoptable.is_(True),
+                Animal.status == "active",
+            )
+            .group_by(Organization.id)
+            .order_by(Organization.name)
+        )
+        return [(organization, count) for organization, count in result.all()]
 
     async def add(self, value: T) -> T:
         self.session.add(value)

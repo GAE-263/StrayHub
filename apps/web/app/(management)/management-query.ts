@@ -35,6 +35,22 @@ export function buildReportsQuery({
   return params;
 }
 
+export function buildAdoptionInquiriesQuery({
+  fromDate,
+  toDate,
+  status,
+}: {
+  fromDate: string;
+  toDate: string;
+  status: string;
+}) {
+  const params = new URLSearchParams({ page: "1", page_size: "50" });
+  if (fromDate) params.set("from_date", fromDate);
+  if (toDate) params.set("to_date", toDate);
+  if (status) params.set("status", status);
+  return params;
+}
+
 export function buildTimelineQuery(range: { start: string; end: string }) {
   const query = new URLSearchParams();
   if (range.start) query.set("start_date", range.start);

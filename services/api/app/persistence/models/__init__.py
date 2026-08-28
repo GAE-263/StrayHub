@@ -1,5 +1,7 @@
 """SQLAlchemy persistence models."""
 
+from services.api.app.persistence.models.adoption_draft import AdoptionDraft
+from services.api.app.persistence.models.adoption_inquiry import AdoptionInquiry
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AICallLog, AIObservation
 from services.api.app.persistence.models.animal import Animal
@@ -14,6 +16,7 @@ from services.api.app.persistence.models.care_report import (
 )
 from services.api.app.persistence.models.care_report_draft import CareReportDraft, DraftMediaAsset
 from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
+from services.api.app.persistence.models.growth_diary import GrowthDiaryDraft, GrowthDiaryEntry
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     LineWebhookEvent,
@@ -51,6 +54,8 @@ from services.api.app.persistence.models.volunteer_access import (
 )
 
 __all__ = [
+    "AdoptionDraft",
+    "AdoptionInquiry",
     "AIProcessingJob",
     "AIObservation",
     "AICallLog",
@@ -65,6 +70,8 @@ __all__ = [
     "CareReportMedia",
     "DailyReportableScope",
     "DraftMediaAsset",
+    "GrowthDiaryDraft",
+    "GrowthDiaryEntry",
     "MediaAsset",
     "LineUserBinding",
     "LineWebhookEvent",

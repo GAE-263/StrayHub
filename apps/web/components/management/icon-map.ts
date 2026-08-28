@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   ChevronDown,
   ChevronRight,
   Edit3,
@@ -8,6 +9,7 @@ import {
   Eye,
   FileSearch,
   HelpCircle,
+  Heart,
   History,
   KeyRound,
   CalendarDays,
@@ -42,6 +44,8 @@ export const iconMap = {
   audit: FileSearch,
   access: KeyRound,
   calendar: CalendarDays,
+  adoption: Heart,
+  diary: BookOpen,
 } as const;
 
 export type IconName = keyof typeof iconMap;
