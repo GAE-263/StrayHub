@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -22,6 +23,7 @@ from services.api.app.persistence.repositories.authentication_repository import 
     AuthenticationRepository,
 )
 
+logger = logging.getLogger(__name__)
 
 def _refresh_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -239,6 +241,13 @@ class SessionService:
             )
         except Exception:
             # 選單切換為非關鍵操作（LINE API 可能暫時不可用）；綁定已成功即回傳。
+            # 但一定要留下紀錄：最常見的原因是 .env 的 richMenuId 在重跑
+            # sync_line_role_menus.py --apply 之後過期，靜默吞掉會讓人查錯方向。
+            logger.warning(
+                "linking rich menu failed; menu unchanged (role=%s)",
+                role,
+                exc_info=True,
+            )
             return
 
     async def exchange_line_identity(self, *, id_token: str, shelter_entry_reference: str) -> dict:

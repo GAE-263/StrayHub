@@ -10,13 +10,34 @@ from services.api.app.observability.logging import get_logger
 logger = get_logger(__name__)
 
 
+_shared_client: httpx.AsyncClient | None = None
+
+
+def shared_line_client() -> httpx.AsyncClient:
+    """整個 process 共用一個 LINE HTTP client（連線池可重用，且只需關閉一次）。"""
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(timeout=10)
+    return _shared_client
+
+
+async def close_shared_line_client() -> None:
+    """由 app lifespan／一次性腳本在結束時呼叫。"""
+    global _shared_client
+    if _shared_client is not None and not _shared_client.is_closed:
+        await _shared_client.aclose()
+    _shared_client = None
+
+
 class LineMessagingApiAdapter:
     def __init__(self, *, client: httpx.AsyncClient | None = None) -> None:
         settings = get_settings()
         self.access_token = settings.line_channel_access_token
         self.api_base = "https://api.line.me"
         self.data_base = "https://api-data.line.me"
-        self.client = client or httpx.AsyncClient(timeout=10)
+        # 這個 adapter 在 per-request 的 DI 與 webhook handler 裡都會被建立，
+        # 每次自建 AsyncClient 會漏掉一整個連線池（沒有人會去 close 它）。
+        self.client = client or shared_line_client()
 
     @property
     def _headers(self) -> dict[str, str]:

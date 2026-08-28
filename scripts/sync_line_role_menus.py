@@ -88,6 +88,7 @@ def discover_definitions() -> dict[str, dict]:
 async def apply(by_role: dict[str, dict], image_dir: Path) -> dict[str, str]:
     from services.api.app.infrastructure.line.messaging_api_adapter import (
         LineMessagingApiAdapter,
+        close_shared_line_client,
     )
 
     adapter = LineMessagingApiAdapter()
@@ -119,14 +120,55 @@ async def apply(by_role: dict[str, dict], image_dir: Path) -> dict[str, str]:
         if "default" in result:
             await adapter.link_rich_menu(rich_menu_id=result["default"])
     finally:
-        await adapter.client.aclose()
+        await close_shared_line_client()
     return result
+
+
+ENV_KEYS = {
+    "default": "LINE_RICH_MENU_DEFAULT_ID",
+    "volunteer": "LINE_RICH_MENU_VOLUNTEER_ID",
+    "adopter": "LINE_RICH_MENU_ADOPTER_ID",
+    "staff": "LINE_RICH_MENU_STAFF_ID",
+}
+
+
+def write_env(mapping: dict[str, str], env_path: Path) -> list[str]:
+    """把新的 richMenuId 寫回 .env。
+
+    LINE 沒有更新 rich menu 的 API，每次 --apply 都會產生全新的 id。若 .env
+    沒跟著更新，RichMenuRoutingService 會拿著已刪除的 id 去 link，LINE 回 4xx
+    而綁定流程把它當 best-effort 吞掉 —— 選單靜默地不會切換。
+    """
+    if not env_path.is_file():
+        return []
+    updated = []
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    pending = {ENV_KEYS[role]: rid for role, rid in mapping.items() if role in ENV_KEYS}
+    out = []
+    for line in lines:
+        key = line.split("=", 1)[0].strip() if "=" in line else None
+        if key in pending:
+            out.append(f"{key}={pending.pop(key)}")
+            updated.append(key)
+        else:
+            out.append(line)
+    for key, value in pending.items():
+        out.append(f"{key}={value}")
+        updated.append(key)
+    env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return updated
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--image-dir", type=Path, default=Path("infra/local/rich-menu-images"))
+    parser.add_argument(
+        "--env-file", type=Path, default=Path(".env"), help="要回寫 richMenuId 的 .env"
+    )
+    parser.add_argument(
+        "--no-write-env", action="store_true", help="不要把新的 richMenuId 寫回 .env"
+    )
     args = parser.parse_args()
 
     by_role = discover_definitions()
@@ -146,6 +188,16 @@ def main() -> None:
     print("角色 -> richMenuId：")
     for role, rid in mapping.items():
         print(f"  {role}: {rid}")
+
+    if args.no_write_env:
+        print(f"\n[!] 未回寫 {args.env_file}；舊的 richMenuId 已失效，選單切換會靜默失效。")
+        return
+    updated = write_env(mapping, args.env_file)
+    if updated:
+        print(f"\n[env] 已更新 {args.env_file}：{', '.join(updated)}")
+        print("    API 的 get_settings() 有 lru_cache，需重啟才會生效。")
+    else:
+        print(f"\n[!] 找不到 {args.env_file}，richMenuId 請自行填入設定。")
 
 
 if __name__ == "__main__":
