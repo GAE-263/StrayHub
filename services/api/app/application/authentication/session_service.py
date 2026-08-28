@@ -313,6 +313,8 @@ class SessionService:
         )
         await self.repository.add(session)
         issued = await self._issue_session(user.id, session)
+        # 志工是走 entry 交換身分，不經過 /v1/line/bind，先前這條路徑不會切選單。
+        await self._link_role_rich_menu(line_user_id, "VOLUNTEER")
         return {
             "state": "ACTIVE",
             **issued,
