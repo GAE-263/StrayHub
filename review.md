@@ -398,3 +398,23 @@ design any future LINE integration feature toggle, including webhook response se
 LIFF behavior, volunteer fallback behavior, and management UI implications. No migration is required.
 
 Deployment compatibility: NOT READY. Migration: NONE.
+
+## Deployment Source-of-Truth Cleanup
+
+Canonical target: GCE single VM with nginx and Docker Compose running Next.js, FastAPI, Worker,
+PostgreSQL, and MinIO; Secret Manager and Cloud KMS remain managed dependencies, while GCS is backup
+only.
+
+Current status: inventory and migration plan complete; canonical GCE/Compose, production nginx,
+backup/restore, preflight, and systemd artifacts do not exist yet.
+
+Legacy architecture: `infra/gcp-demo` and its Terraform, Cloud Run, Cloud SQL, runtime GCS, scripts,
+CI workflow, contract tests, and documentation remain referenced and must stay transitional.
+
+Migration strategy: Phase A inventory, Phase B canonical artifacts, Phase C production-like local
+verification, Phase D managed-service wiring, Phase E real GCE acceptance, then Phase F legacy removal.
+
+Immediate next phase: design and separately review Phase B production Compose/nginx/preflight/runtime
+config/persistence/backup/restore artifacts.
+
+Deletion allowed now: NO.

@@ -1,0 +1,398 @@
+# Deployment Source-of-Truth Cleanup Plan
+
+Status: inventory and migration planning only  
+Canonical decision date: 2026-08-29  
+Deletion authorized by this plan: **NO**
+
+This plan records the repository transition from the legacy GCP Demo design to the canonical
+single-VM design. It does not provision infrastructure, rewrite Terraform, change application
+behavior, or authorize removal of existing deployment assets.
+
+## Canonical deployment
+
+The deployment source of truth is **GCE single VM + nginx + Docker Compose**.
+
+```text
+Internet
+   │
+   ▼
+nginx :80/:443
+   ├─ /        → Next.js
+   └─ /v1/*    → FastAPI
+
+private Docker network
+   ├─ FastAPI
+   ├─ Worker
+   ├─ PostgreSQL
+   └─ MinIO
+```
+
+Managed GCP services have narrowly defined supporting roles:
+
+```text
+Secret Manager → runtime secrets
+Cloud KMS      → PII encryption
+GCS            → backup target only
+```
+
+Canonical statements:
+
+- PostgreSQL and MinIO run on the GCE VM under production Compose.
+- MinIO is the canonical runtime media store.
+- GCS is not canonical runtime media storage; it is the off-VM backup target.
+- Cloud Run and Cloud SQL are not canonical runtime services.
+- Terraform remains transitional until managed-service ownership is split from legacy application
+  resources and replacement validation exists.
+- No legacy asset may be removed merely because this architecture has been selected.
+
+## Current deployment inventory
+
+Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
+`UNKNOWN`.
+
+| Path | Purpose | Current architecture | Referenced by | Runtime critical? | Proposed status |
+| --- | --- | --- | --- | --- | --- |
+| `infra/local/docker-compose.yml` | Local PostgreSQL and MinIO | Local Compose | `demo.sh`, local verification, contract tests | Local only | KEEP_CANONICAL |
+| `infra/local/init-minio.sh` | Local MinIO bucket bootstrap | Local Compose | Local MinIO workflow | Local only | KEEP_CANONICAL |
+| `infra/local/nginx/line-local.conf.template` | Single-origin local LINE/LIFF proxy | Local host nginx | `test_line_local.sh`, README, contract tests | Local LINE validation | KEEP_TRANSITIONAL |
+| `scripts/test_line_local.sh` | Renders and validates the local nginx topology | Local host processes | README and contract tests | Local LINE validation | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/Dockerfile.api` | FastAPI production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests, verification docs | Image build gate | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/Dockerfile.worker` | Worker production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/Dockerfile.web` | Standalone Next.js image | Cloud Run-oriented port 8080 | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/deploy-gate.sh` | Full quality, Terraform, secret-scan, image gate | GCP Demo | gate evidence and IaC tests | Current deployment gate | REPLACE |
+| `infra/gcp-demo/apply.sh` | Terraform plan/review/apply | Full legacy GCP stack | Manual sequence only | Legacy deployment only | REPLACE |
+| `infra/gcp-demo/migrate.sh` | Executes Cloud Run migration job | Cloud Run + Cloud SQL | `apply.sh` sequence | Legacy deployment only | REMOVE_LATER |
+| `infra/gcp-demo/seed-demo.sh` | Executes Cloud Run seed job | Cloud Run + Cloud SQL | `apply.sh` sequence | Legacy deployment only | REMOVE_LATER |
+| `infra/gcp-demo/sync-line.sh` | Executes Cloud Run LINE sync job | Cloud Run job | `apply.sh` sequence | Legacy deployment only | REMOVE_LATER |
+| `infra/gcp-demo/line-rich-menu.yaml` | Versioned LINE menu input | GCP Demo path | Terraform output and docs | Product operations | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/project.md` | Declares Cloud Run/Cloud SQL/GCS runtime | Legacy GCP Demo | README/spec history | Documentation only | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/gate-evidence.md` | Historical pre-deployment evidence | Legacy GCP Demo | `apply.sh` and reviewers | Evidence only | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/deployment-evidence.md` | Unfinished Cloud Run deployment evidence | Legacy GCP Demo | smoke test | Evidence contract | KEEP_TRANSITIONAL |
+| `infra/gcp-demo/terraform/main.tf` | Provider, backend, APIs, Secret data refs | Mixed managed/Cloud Run/Cloud SQL | workflows, gate, IaC tests | Current Terraform validation | REPLACE |
+| `infra/gcp-demo/terraform/cloud-run.tf` | Web/API/Worker services and migration job | Cloud Run | outputs, IAM, tests, docs | Legacy application IaC | REMOVE_LATER |
+| `infra/gcp-demo/terraform/cloud-sql.tf` | VPC peering and Cloud SQL | Cloud SQL | outputs, IAM, tests | Legacy database IaC | REMOVE_LATER |
+| `infra/gcp-demo/terraform/storage.tf` | GCS runtime bucket, runtime IAM, signed URLs | Runtime GCS | API/Worker service accounts, tests | Current Terraform validation | REPLACE |
+| `infra/gcp-demo/terraform/iam.tf` | Runtime SAs, roles, KMS, Secret Manager, GitHub OIDC | Mixed | all Terraform runtime resources | Managed-service access | REPLACE |
+| `infra/gcp-demo/terraform/observability.tf` | Artifact Registry, logs, Cloud Run error metric | Mixed | outputs and CI image plan | Supporting services | REPLACE |
+| `infra/gcp-demo/terraform/variables.tf` | Inputs for Cloud Run, Cloud SQL, GCS, secrets | Mixed | all Terraform files | Current Terraform validation | REPLACE |
+| `infra/gcp-demo/terraform/outputs.tf` | Cloud Run/SQL/GCS/registry outputs | Legacy GCP Demo | operators and tests | Legacy operations | REPLACE |
+| `.github/workflows/demo-build.yml` | Terraform validation, secret scan, three image builds | GCP Demo | GitHub path filters | Current deployment gate | REPLACE |
+| `.github/workflows/ci.yml` | Primary backend/frontend/contracts/E2E CI | General CI with Terraform setup | Required checks | Yes | KEEP_TRANSITIONAL |
+| `tests/contract/test_gcp_iac_contract.py` | Requires exact Terraform/Cloud Run file shape | GCP Demo | Full `pytest`; forces Terraform CLI in primary CI | Current test gate | REPLACE |
+| `tests/integration/test_gcp_demo_smoke.py` | Checks unfinished deployment evidence | GCP Demo | Full `pytest` | Evidence contract | REPLACE |
+| `services/api/app/infrastructure/storage/minio.py` | Runtime S3-compatible object storage | Actual API runtime | Media, animals, LINE images, scripts | Yes | KEEP_CANONICAL |
+| `services/api/app/infrastructure/storage/gcs.py` | Injectable GCS adapter | Adapter contract only | Contract tests; no runtime factory | No current runtime | UNKNOWN |
+| `services/api/app/config/settings.py` | Runtime config and non-local fail-fast policy | Shared API/Worker/Alembic config | All runtime processes | Yes | KEEP_CANONICAL |
+| `.env.example` | Local-only environment template | Local development | README and developers | Local only | KEEP_CANONICAL |
+| `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
+| `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
+
+There are currently no production Compose, GCE provisioning, production nginx, backup, restore, or
+systemd artifacts. Local Terraform cache content under `.terraform/` is generated tooling state, not a
+versioned deployment source of truth.
+
+## Terraform coupling and future ownership
+
+Terraform must not be deleted as one unit. Its current files mix resources that remain useful with
+resources that contradict the canonical runtime.
+
+| Resource group | Current role | GCE decision |
+| --- | --- | --- |
+| Cloud Run Web/API/Worker | Application runtime | Legacy only; remove after GCE acceptance |
+| Cloud Run migration job | Alembic execution | Replace with a controlled Compose/VM migration command |
+| Cloud Run public IAM | Public application ingress | Replace with GCE firewall/nginx/TLS design |
+| Cloud SQL instance/database/users | Runtime PostgreSQL | Legacy only; canonical DB runs on VM |
+| Private Service Access networking | Cloud SQL connectivity | Replace; assess whether any VPC resource can be reused before state changes |
+| GCS bucket/versioning | Runtime object storage | Retain concept, change ownership contract to backup-only |
+| GCS runtime objectAdmin/signed-URL IAM | API/Worker runtime access | Replace with least-privilege backup/restore identity |
+| Existing KMS CryptoKey IAM binding | API PII encryption | Retain capability; rebind to the GCE VM runtime identity |
+| Secret Manager data refs/IAM | Runtime secret access | Retain capability; redesign injection for the VM identity |
+| Runtime service accounts | Per-Cloud-Run identities | Replace with explicit GCE VM/deployer/backup identities |
+| GitHub OIDC | CI identity | Potentially retain; scope to the future image/deployment flow |
+| Artifact Registry | Container storage | `UNKNOWN` until image delivery to GCE is selected |
+| Logging bucket | Central logs | `UNKNOWN`; Cloud Logging may remain useful but is not in the minimum target |
+| Cloud Run error metric | Cloud Run observability | Remove later or replace with GCE/nginx/container metrics |
+| Enabled GCP APIs | Broad legacy service set | Reduce only after retained Terraform responsibilities are known |
+| GCS Terraform backend | Remote Terraform state | Potentially retain for managed-service IaC |
+
+Before splitting or removing Terraform resources, operators must inventory remote state, decide the
+retained state boundary, and use reviewed state moves/imports/removal declarations. Removing source
+files without a state plan could destroy retained GCS, KMS IAM, Secret IAM, or identities on the next
+apply.
+
+## CI coupling
+
+Current ownership:
+
+- `.github/workflows/demo-build.yml` owns Terraform format/init/validate, secret scanning within
+  `infra/gcp-demo`, and builds all three existing Dockerfiles.
+- Primary `.github/workflows/ci.yml` installs Terraform because full `pytest` executes
+  `tests/contract/test_gcp_iac_contract.py`.
+- The IaC contract requires `cloud-run.tf`, Cloud Run resources, Cloud Run env injection, runtime GCS
+  IAM, and the exact `infra/gcp-demo` file shape.
+- Historical verification documentation records those commands and artifacts.
+
+Deleting legacy deployment files now would break both `demo-build.yml` and the primary Python job. It
+would also remove the only production-style image build gate before replacements exist.
+
+The future deployment gate should own:
+
+1. `docker compose config` for production Compose;
+2. nginx syntax and routing validation;
+3. API, Worker, and Web production image builds;
+4. secret scanning across canonical deployment assets;
+5. deployment/preflight script validation;
+6. migration command validation;
+7. backup and restore script validation; and
+8. retained managed-service Terraform format/init/validate.
+
+Terraform validation remains required until retained GCS/KMS/Secret Manager/IAM responsibilities and
+their replacement contracts are explicit. Only then should primary CI drop its Terraform dependency.
+
+## Runtime assumptions and mismatches
+
+Repository evidence confirms that runtime media storage is MinIO:
+
+- API media, animal selection, management animal photos, and LINE image handling directly construct
+  `MinioStorageAdapter`.
+- MOA import, demo seed, and demo verification scripts also construct `MinioStorageAdapter`.
+- `GcsStorageAdapter` is instantiated only in adapter/contract tests; there is no runtime storage
+  selector or factory that activates it.
+
+Current contradictions:
+
+| Area | Repository evidence | Canonical resolution |
+| --- | --- | --- |
+| Runtime media | Application directly uses MinIO | Keep MinIO in production Compose |
+| GCS role | Terraform grants API/Worker runtime object administration | Redesign GCS as backup-only |
+| API environment | Cloud Run injects GCS settings but not safe MinIO settings | GCE runtime contract must inject MinIO settings |
+| Database | Terraform provisions Cloud SQL | Run PostgreSQL in production Compose with persistent volume |
+| Runtime platform | Terraform deploys Cloud Run | Replace with GCE VM, Compose, nginx, and systemd supervision |
+| Worker | Legacy model is a Cloud Run service although the worker is a polling process | Run Worker as a private long-lived Compose service |
+| Migration | Cloud Run job executes Alembic | Use a reviewed one-shot Compose/VM migration command |
+| Ingress | Cloud Run URLs are emitted directly | nginx owns public HTTP/TLS and routes `/` and `/v1/*` |
+| Backup | GCS bucket exists but no backup/restore scripts exist | Add PostgreSQL and MinIO backup/restore workflow targeting GCS |
+
+The GCS adapter should not be repurposed automatically as a backup tool. Phase D must decide whether a
+dedicated backup client/CLI is safer than reusing application object-storage abstractions.
+
+## Future GCE repository structure
+
+The existing `infra/` environment convention should be extended, not bypassed:
+
+```text
+infra/
+├─ local/                         # keep local development assets
+├─ gce/                           # future canonical application deployment
+│  ├─ docker-compose.production.yml
+│  ├─ nginx/
+│  │  └─ strayhub.conf
+│  ├─ scripts/
+│  │  ├─ preflight.sh
+│  │  ├─ deploy.sh
+│  │  ├─ migrate.sh
+│  │  ├─ backup.sh
+│  │  └─ restore.sh
+│  ├─ systemd/
+│  │  └─ strayhub-compose.service
+│  └─ env/
+│     └─ production.env.example  # names and comments only; no credentials
+└─ gcp-managed/                   # possible retained managed-service IaC after state planning
+   └─ terraform/                  # GCS backup, KMS, Secret Manager/IAM, optional registry/logging
+```
+
+This is a recommended future shape, not authorization to create or rename it in this task. The final
+location of retained Terraform depends on a remote-state audit.
+
+## Production configuration contract dependency
+
+The future Compose/preflight flow must satisfy the existing fail-fast policy before traffic or work
+starts. It must not generate real values or commit a populated environment file.
+
+### Non-secret configuration
+
+| Setting | Purpose |
+| --- | --- |
+| `APP_ENV` | Explicit non-local environment; Phase C uses `gcp-demo` until naming cleanup is decided |
+| `MINIO_ENDPOINT` | Private Compose-network MinIO URL, not loopback from the API container |
+| `MINIO_BUCKET` | Runtime media bucket |
+| `LINE_CHANNEL_ID` | Existing LINE runtime identity configuration |
+| `LINE_LOGIN_CHANNEL_ID` | LINE Login channel when distinct |
+| `LIFF_ID` | LIFF application identifier |
+| `AUTH_JWT_ISSUER`, `AUTH_JWT_AUDIENCE` | Token verification contract |
+| JWT key references | Active/previous key identifiers, not key material |
+| `PII_ENCRYPTION_PROVIDER` | Must select the supported non-local KMS provider |
+| `PII_KMS_KEY_NAME` | Existing Cloud KMS CryptoKey resource name |
+| AI provider/model/version fields | Required only when an external AI provider is selected |
+
+### Secret configuration
+
+| Setting | Expected source |
+| --- | --- |
+| `DATABASE_URL` | Secret Manager/runtime secret injection |
+| `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | Secret Manager/runtime secret injection |
+| `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | Secret Manager/runtime secret injection |
+| JWT active private/public keys and optional previous public key | Secret Manager/runtime secret injection |
+| `ANIMAL_CONFIRMATION_SECRET` | Secret Manager/runtime secret injection |
+| `AI_API_KEY` | Only when an external AI provider is enabled |
+
+The production design must define how the VM identity reads Secret Manager without printing values,
+how root-readable runtime material is created/rotated, and how Compose receives it without committing
+`.env` or exposing secrets through command output. KMS access must be limited to the API process's VM
+identity boundary as far as the chosen GCE identity model allows.
+
+## Migration phases
+
+### Phase A — Inventory
+
+- Keep all current assets.
+- Adopt this document as the architecture decision and classification record.
+- Perform no deployment, deletion, Terraform state change, or product behavior change.
+
+### Phase B — Canonical GCE artifacts
+
+Plan and create in a later change:
+
+- production Compose with private networking and persistent PostgreSQL/MinIO volumes;
+- production nginx routing/TLS configuration;
+- preflight, deploy, migration, backup, and restore scripts;
+- a documented runtime environment contract; and
+- systemd boot/restart supervision.
+
+### Phase C — Production-like local verification
+
+Validate the future stack locally with `APP_ENV=gcp-demo`:
+
+- PostgreSQL, MinIO, FastAPI, Worker, Next.js, and nginx start together;
+- config fail-fast passes with synthetic safe values;
+- `/` routes to Next.js and `/v1/*` routes to FastAPI;
+- media persistence survives normal restarts; and
+- migrations and worker processing complete without public container ports.
+
+### Phase D — GCP managed-service wiring
+
+Validate Secret Manager injection, Cloud KMS PII operations, GCS backup, least-privilege IAM, and the
+retained Terraform state boundary. GCS runtime media behavior is not part of this phase.
+
+### Phase E — Real GCE deployment
+
+Verify VM boot, Compose startup, TLS, health checks, nginx routing, migrations, MinIO media, Worker,
+LINE webhook, LIFF, backup, and restore using controlled evidence without secrets.
+
+### Phase F — Legacy removal
+
+Only after GCE acceptance:
+
+- remove Cloud Run services and public IAM;
+- remove the Cloud Run migration job and Cloud Run-specific scripts;
+- retire Cloud SQL resources after data migration/rollback gates are complete;
+- update or archive obsolete deployment docs and evidence templates;
+- replace the CI deployment gate and IaC contract; and
+- retain only Terraform that still owns approved GCS/KMS/Secret Manager/IAM or other explicitly
+  accepted managed services.
+
+## Legacy removal gates
+
+No Cloud Run/Terraform application asset may be removed until every gate is checked:
+
+- [ ] GCE production Compose validated
+- [ ] nginx routing validated
+- [ ] production config fail-fast passes
+- [ ] DB migrations work
+- [ ] MinIO media works and persists across normal restart
+- [ ] Worker works
+- [ ] LINE webhook works
+- [ ] LIFF works
+- [ ] Secret Manager wiring works without secret disclosure
+- [ ] KMS works with the intended VM identity
+- [ ] GCS backup works
+- [ ] restore tested for PostgreSQL and MinIO
+- [ ] replacement CI deployment gate exists
+- [ ] Terraform remote state and retained-resource ownership reviewed
+- [ ] rollback procedure and acceptance owner recorded
+
+## Contradictory and legacy documentation
+
+No documentation is deleted in this phase.
+
+| File/section | Classification | Later action |
+| --- | --- | --- |
+| `README.md` — “GCP Demo 邊界” | Transitional/contradictory | Point to this plan; replace Cloud Run/Terraform-as-full-source wording after Phase B |
+| `README.md` — local nginx single-origin section | Transitional and directionally consistent | Keep local instructions; distinguish them from production nginx |
+| `infra/gcp-demo/project.md` — Service list and Terraform source | Legacy | Mark superseded after canonical artifacts exist; preserve until removal gates pass |
+| `infra/gcp-demo/deployment-evidence.md` | Legacy unfinished template | Archive or replace with GCE evidence template after Phase E |
+| `infra/gcp-demo/gate-evidence.md` | Historical | Preserve as immutable historical evidence; add a superseded pointer rather than rewriting history |
+| `docs/verification/ci-refactor-verification.md` — deployment gate | Historical/transitional | Preserve results; future verification should cite the replacement gate |
+| `specs/001-volunteer-care-report/contracts/gcp-demo.md` | Legacy contract | Supersede with GCE/managed-service contract after Phase B/D |
+| `specs/001-volunteer-care-report/contracts/object-storage.md` | Contradictory | Change “GCS runtime in GCP” to “MinIO runtime; GCS backup” in a separately reviewed spec update |
+| `specs/001-volunteer-care-report/plan.md` GCP/storage/deployment sections | Legacy design record | Preserve historical decision, then add an explicit superseding architecture note |
+| `specs/001-volunteer-care-report/quickstart.md` GCP Demo sections | Legacy operations | Replace Cloud Run/Cloud SQL/GCS runtime instructions after replacement tooling exists |
+| `specs/001-volunteer-care-report/tasks.md` Phase 11/12 | Historical task ledger | Do not rewrite completed history; link future GCE tasks separately |
+| `specs/004-volunteer-entry-route-isolation/tasks.md` T002 | Transitional Cloud Run reference | Update future deployment injection target without changing LIFF behavior |
+| `specs/005-volunteer-access-approval/pii-policy.md` Cloud Run SA wording | Contradictory identity wording | Replace with GCE VM/API identity wording after IAM design |
+| `volunteer_entry.md` Cloud Run proxy references | Historical work ledger | Preserve history; add a superseding deployment pointer if maintained |
+| `review.md` CI deferred items | Transitional and consistent | Keep history; use this plan for the immediate next phase |
+
+## Naming cleanup candidates
+
+Do not rename anything before reference and Terraform-state migration planning.
+
+| Current name | Why misleading | Proposed later name |
+| --- | --- | --- |
+| `infra/gcp-demo/` | Implies the legacy full GCP runtime is current | Split into `infra/gce/` and possibly `infra/gcp-managed/` |
+| `cloud-run.tf` | Names a non-canonical runtime | Remove after GCE acceptance |
+| `cloud-sql.tf` | Names a non-canonical database | Remove after DB migration/rollback acceptance |
+| `.github/workflows/demo-build.yml` | Gate is tied to GCP Demo, not canonical deployment | `deployment-build.yml` or `gce-deployment-gate.yml` |
+| `deploy-gate.sh` | Actually validates the legacy GCP Demo bundle | Replace with `infra/gce/scripts/preflight.sh` |
+| `strayhub-demo-*` image/resource names | “Demo” does not identify canonical environment | Decide environment-neutral production naming in Phase B |
+| `GCS_BUCKET` runtime wording/docs | Suggests runtime media ownership | Introduce backup-specific naming only with real backup implementation |
+
+## Risk assessment
+
+| Risk | Why it matters | Mitigation |
+| --- | --- | --- |
+| Deleting Cloud Run too early | Current CI, tests, evidence, and rollback path depend on it | Enforce all removal gates and retain assets through Phase E |
+| Removing Terraform wholesale | It still owns or references GCS, KMS IAM, Secret IAM, OIDC, registry, and logs | Split ownership only after remote-state audit and reviewed state moves |
+| Breaking CI deployment gate | Primary pytest and demo workflow require Terraform/Cloud Run files | Land replacement contracts and gates before deleting legacy ones |
+| MinIO volume loss | Runtime media is not reconstructable solely from DB metadata | Named volume, off-VM backup, restore drill, capacity/health monitoring |
+| PostgreSQL data loss | Single-VM DB is a critical single point of failure | Scheduled encrypted backups to GCS, retention, restore tests, disk monitoring |
+| Secret injection failure | Containers may fail startup or leak values during rendering | Preflight field-name checks, least privilege, redacted logs, rotation drill |
+| TLS/nginx error | Can break Web, API, webhook, LIFF, or forwarded-proto behavior | `nginx -t`, routing tests, certificate renewal test, safe headers/timeouts |
+| Single-VM failure | All runtime components share one host | Document RTO/RPO, VM/disk recovery, monitoring, tested rebuild procedure |
+| Migration ordering | New image may expect schema not yet applied | One-shot reviewed migration before traffic switch, backup and rollback gate |
+| Backup without restore proof | A successful upload does not prove recoverability | Automated integrity checks plus periodic disposable restore drill |
+| GCE identity over-privilege | One VM SA may collapse prior service boundaries | Use least privilege, separate backup/deployer identity where possible, audit KMS/SM access |
+| Terraform state drift | Partial manual cleanup can make future applies destructive | State inventory, refresh-only plan, explicit ownership and peer review |
+
+## Final target repository state
+
+Canonical application deployment:
+
+- GCE/Compose source under `infra/gce/`;
+- production nginx configuration;
+- deploy/preflight/migrate scripts;
+- systemd supervision;
+- PostgreSQL and MinIO persistent volumes; and
+- tested GCS backup/restore tooling.
+
+Retained managed-service IaC, if the state audit confirms value:
+
+- Secret Manager access plumbing;
+- Cloud KMS IAM;
+- GCS backup bucket and least-privilege backup identity;
+- IAM/OIDC needed by the accepted delivery flow; and
+- optional Artifact Registry/Cloud Logging only after explicit decisions.
+
+Removed only after the gates pass:
+
+- Cloud Run Web/API/Worker resources;
+- Cloud Run migration job and Cloud Run-only scripts;
+- Cloud SQL and private-service networking used only by it;
+- runtime GCS object-storage IAM and signed-URL bindings;
+- Cloud Run outputs/metrics/contracts; and
+- obsolete operational instructions that are not preserved as historical evidence.
+
+## Immediate next phase
+
+Phase B is next: design the production Compose, nginx, preflight, runtime env contract, persistence,
+backup, restore, and service supervision artifacts. No deletion is allowed now.
