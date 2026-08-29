@@ -42,7 +42,11 @@ def test_nginx_uses_a_pinned_image_and_read_only_config_mount() -> None:
     nginx = _compose()["services"]["nginx"]
 
     assert nginx["image"] == "nginx:1.27.5-alpine"
-    assert nginx["volumes"] == ["./nginx/strayhub.conf:/etc/nginx/conf.d/default.conf:ro"]
+    assert nginx["volumes"] == [
+        "./nginx/strayhub.conf:/etc/nginx/conf.d/default.conf:ro",
+        "${B4_LETSENCRYPT_DIR:?B4_LETSENCRYPT_DIR is required}:/etc/letsencrypt:ro",
+        "${B4_ACME_WEBROOT:?B4_ACME_WEBROOT is required}:/var/www/certbot:ro",
+    ]
     assert nginx["depends_on"]["api"]["condition"] == "service_healthy"
     assert nginx["depends_on"]["web"]["condition"] == "service_healthy"
 
@@ -77,7 +81,7 @@ def test_forwarded_headers_and_bounded_body_policy_are_configured() -> None:
     assert "proxy_set_header Host $http_host;" in config
     assert "proxy_set_header X-Real-IP $remote_addr;" in config
     assert "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;" in config
-    assert "proxy_set_header X-Forwarded-Proto $scheme;" in config
+    assert "proxy_set_header X-Forwarded-Proto https;" in config
     assert "client_max_body_size 1m;" in config
 
 

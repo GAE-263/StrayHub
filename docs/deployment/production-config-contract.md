@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B3 production-like runtime, ingress, and local recovery verified
+Status: Phase B4 TLS-ready runtime and local HTTPS edge verified
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -57,7 +57,9 @@ requires `AI_API_KEY`.
 | `B1_VERIFICATION_ONLY` | B1 preflight | Non-secret safety marker | Verification env; must be `true` | Not used in real deployment |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE` | Compose secret transport | Sensitive path, not key material | Ignored generated-file path | Protected staged file populated from Secret Manager |
 | `AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE` | Compose secret transport | Non-secret/sensitive path | Ignored generated-file path | Protected staged file populated from Secret Manager |
-| `B2_NGINX_HOST_PORT` | HTTP ingress verifier | Non-secret | Verification env; defaults to `8088` | Compose/firewall input until TLS ingress is defined |
+| `B4_HTTP_HOST_PORT`, `B4_HTTPS_HOST_PORT` | Edge verifier | Non-secret | Verification ports `8088`/`8443` | Host ports `80`/`443` |
+| `B4_LETSENCRYPT_DIR` | Certificate mount | Sensitive path | Ignored self-signed verification tree | Host `/etc/letsencrypt` |
+| `B4_ACME_WEBROOT` | HTTP-01 webroot | Non-secret path | Ignored verification directory | Protected host webroot |
 
 `POSTGRES_PASSWORD` belongs to the bootstrap/migration login and matches `DATABASE_MIGRATION_URL`.
 `POSTGRES_RUNTIME_PASSWORD` belongs to the non-superuser application login and matches
@@ -86,15 +88,15 @@ rotation, cleanup, and forbidden-use rules.
 
 ## Canonical commands
 
-All current ingress checks use the isolated project name `strayhub-b2-verify`; they do not address the normal local
-demo stack.
+The historical B2 ingress drill used `strayhub-b2-verify`. Current TLS ingress checks use the
+isolated project name `strayhub-b4-final`; neither addresses the normal local demo stack.
 
 Set the shared arguments for readability:
 
 ```bash
 COMPOSE_FILE=infra/gce/docker-compose.production.yml
 ENV_FILE=infra/gce/.env.production.example
-PROJECT=strayhub-b2-verify
+PROJECT=strayhub-b4-final
 ```
 
 Preflight and render the resolved model:
@@ -132,8 +134,9 @@ docker compose --project-name "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FIL
 Verify API health and the Web root only through nginx:
 
 ```bash
-curl --fail http://127.0.0.1:8088/healthz
-curl --fail http://127.0.0.1:8088/
+curl --head http://127.0.0.1:8088/
+curl --insecure --fail https://127.0.0.1:8443/healthz
+curl --insecure --fail https://127.0.0.1:8443/
 ```
 
 nginx is the only host-published service. API, Web, PostgreSQL, MinIO, Worker, and the MinIO console
@@ -155,17 +158,19 @@ docker compose --project-name "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FIL
 destroys them. In other words, `docker compose down -v` destroys verification data and must not be
 used as the normal stop command.
 
-## Phase B1 verification boundary
+## Phase B1-B4 verification boundary
 
 Included: Compose parsing, operator preflight, PostgreSQL/MinIO health, bucket bootstrap, one-shot
 Alembic, API fail-fast/startup/health, long-running Worker, Web startup, internal Web-to-API reach,
 safe MinIO write/read, and persistence across a normal down/up cycle.
 
-Phase B2 adds HTTP-only nginx single-origin routing without changing application behavior. Deferred:
-TLS, DNS, firewall policy, real GCE provisioning, systemd, live Secret Manager injection, functional
-KMS/PII verification, real LINE/LIFF calls, GCS backup, backup/restore scripts, legacy CI replacement,
-Terraform state migration, and removal of Cloud Run/Cloud SQL/runtime-GCS assets. GCS is backup-only
-in the target design and is not a dependency of this Compose runtime.
+Phase B2 adds nginx single-origin routing and Phase B4 adds the TLS-ready edge without changing
+application behavior. B4 only documents DNS/firewall/static-IP requirements. Deferred: real DNS,
+firewall mutation, public certificate issuance, real GCE provisioning, systemd, live Secret Manager
+injection, functional KMS/PII verification, real LINE/LIFF calls, live GCS backup transfer, backup
+scheduling, legacy CI replacement, Terraform state migration, and removal of Cloud Run/Cloud SQL/
+runtime-GCS assets. GCS is backup-only in the target design and is not a dependency of this Compose
+runtime.
 
 ## Phase B3 backup / restore contract
 
@@ -185,3 +190,12 @@ transactionally atomic. The production target remains a private, IAM-restricted 
 Phase D; live upload, retention enforcement, scheduling, and restore from GCS are not implemented.
 See `docs/deployment/backup-restore.md` for commands, manifest fields, retention proposal, and
 destructive-restore guards.
+
+## Phase B4 TLS edge contract
+
+nginx is the only service with host-published HTTP/HTTPS ports. It serves only the HTTP-01 challenge
+over plaintext, redirects every other HTTP request with 308, and terminates TLS before applying the
+unchanged B2 routing table. Verification uses runtime-generated ignored self-signed material;
+production uses host-level Certbot/Let's Encrypt state mounted read-only. No private TLS key belongs
+in Git or a container image. See `docs/deployment/tls-dns-firewall.md` for DNS, static-IP, firewall,
+renewal, failure, LINE/LIFF, trusted-proxy, and deferred-production requirements.

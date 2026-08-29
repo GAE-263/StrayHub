@@ -28,12 +28,15 @@ REFERENCE_ALLOWLIST = {
     ".gitignore",
     "docs/deployment/deployment-source-of-truth-plan.md",
     "docs/deployment/production-config-contract.md",
+    "docs/deployment/tls-dns-firewall.md",
     "infra/gce/.env.production.example",
     "infra/gce/scripts/generate-verification-jwt-keys.sh",
+    "infra/gce/scripts/generate-verification-tls-cert.sh",
     "infra/gce/scripts/preflight.sh",
     "infra/gce/verification/README.md",
     "review.md",
     "tests/contract/test_gce_production_compose_contract.py",
+    "tests/contract/test_gce_tls_edge_contract.py",
     "tests/contract/test_gce_verification_jwt_isolation.py",
 }
 

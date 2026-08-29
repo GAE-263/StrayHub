@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A inventory, Phase B1 runtime, Phase B2 ingress, and Phase B3 recovery verified
+Status: Phase A and Phase B1-B4 verified locally
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -103,6 +103,18 @@ policies/runtime-role safety, and two synthetic MinIO objects with matching SHA-
 shared manifest passed integrity verification. This proves local correctness, not off-VM durability:
 GCS transfer, IAM, retention enforcement, schedules, and restore from GCS remain Phase D work.
 
+## Phase B4 canonical network edge artifacts
+
+Phase B4 keeps nginx as the only public service, adds TLS termination and an HTTP-01 exception, and
+defines the reserved-static-IP, single-hostname, TCP 80/443 firewall, host-level Certbot, renewal,
+and failure contracts. Runtime-generated self-signed material proves the same mounts locally and is
+never a production trust source. No address, DNS record, firewall rule, or public certificate is
+created in this phase.
+
+The isolated `strayhub-b4-final` stack passed HTTP redirect, ACME webroot, HTTPS Web/API/LIFF,
+structural webhook, running nginx syntax, and public-port isolation checks. Its containers, network,
+and verification volumes were removed afterward. Real edge mutation remains deferred.
+
 ## Current deployment inventory
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
@@ -124,6 +136,7 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `infra/gce/scripts/backup-all.sh` and component scripts | One-shot PostgreSQL/MinIO backup and guarded restore | GCE single VM / Compose tools | B3 recovery drills and operator docs | Operations | KEEP_CANONICAL |
 | `infra/gce/backup/` | Tracked backup policy plus ignored generated staging | Local B3 / future GCS transfer layout | Backup scripts and contracts | Sensitive operations | KEEP_CANONICAL |
 | `docs/deployment/backup-restore.md` | Recovery, manifest, retention, and safety contract | GCE single VM / future backup-only GCS | Operators and contract tests | Operations | KEEP_CANONICAL |
+| `docs/deployment/tls-dns-firewall.md` | TLS, DNS, static-IP, firewall, and renewal contract | GCE single VM edge | Operators and contract tests | Yes | KEEP_CANONICAL |
 | `infra/gcp-demo/Dockerfile.api` | FastAPI production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests, verification docs | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.worker` | Worker production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.web` | Standalone Next.js image | Cloud Run-oriented port 8080 | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
@@ -155,8 +168,8 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
-Production Compose, its runtime contract, preflight, production HTTP nginx configuration, and local
-backup/restore verification artifacts now exist. GCE provisioning, TLS, live GCS transfer,
+Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, and local
+backup/restore verification artifacts now exist. GCE provisioning, live certificate issuance, live GCS transfer,
 scheduling, and systemd artifacts do not yet exist. Local Terraform cache content under
 `.terraform/` is generated tooling state, not a versioned deployment source of truth.
 
@@ -240,7 +253,7 @@ Current contradictions:
 | Worker | Legacy model is a Cloud Run service although the worker is a polling process | Run Worker as a private long-lived Compose service |
 | Migration | Cloud Run job executes Alembic | Use a reviewed one-shot Compose/VM migration command |
 | Ingress | Cloud Run URLs are emitted directly | nginx owns public HTTP/TLS and routes `/` and `/v1/*` |
-| Backup | GCS bucket exists but no backup/restore scripts exist | Add PostgreSQL and MinIO backup/restore workflow targeting GCS |
+| Backup | Local PostgreSQL/MinIO backup and restore are verified; live GCS transfer is absent | Add private GCS upload/IAM/retention and restore-from-GCS verification |
 
 The GCS adapter should not be repurposed automatically as a backup tool. Phase D must decide whether a
 dedicated backup client/CLI is safer than reusing application object-storage abstractions.
@@ -343,6 +356,8 @@ Status: verified locally with the isolated `strayhub-b3-verify` stack; durable G
 - Prove restore behavior in isolation before adding real schedules or cloud wiring.
 
 ### Phase B4 — TLS and network edge
+
+Status: verified locally with the isolated `strayhub-b4-final` stack; real edge changes deferred.
 
 - Define DNS, firewall, TLS certificate provisioning, and renewal.
 - Verify HTTPS redirects and forwarded-protocol behavior without changing application routes.
@@ -479,6 +494,6 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-After Phase B3 acceptance, Phase B4 owns DNS/firewall/TLS at the network edge. Phase C owns VM
+After Phase B4 acceptance, Phase C owns VM
 operations and replacement CI gates; Phase D owns live Secret Manager/KMS and backup-only GCS
 upload/IAM/retention/restore verification. No deletion is allowed now.

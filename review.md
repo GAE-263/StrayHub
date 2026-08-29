@@ -563,3 +563,25 @@ four weekly generations; monthly retention and all automated pruning remain defe
 staging is not durable/off-VM backup. Production readiness requires private GCS upload, IAM,
 retention, and restore-from-GCS verification in Phase D. Migration: NONE. Commit: included in the
 coherent Phase B3 deployment commit.
+
+## Phase B4 TLS / DNS / Firewall Edge
+
+Status: READY. Canonical policy is `docs/deployment/tls-dns-firewall.md`. nginx is the
+only service with published HTTP/HTTPS ports. Plain HTTP serves only the isolated HTTP-01 webroot and
+otherwise returns 308; HTTPS preserves the B2 Web, API, health, webhook, and LIFF route ownership.
+
+TLS model: host-level Certbot/Let's Encrypt with certificate name `strayhub`, read-only Certbot state
+and ACME webroot mounts, and a future successful-renewal nginx reload hook. Local verification uses
+an ignored runtime-generated self-signed certificate; no TLS key is committed or accepted for
+production. DNS uses one canonical hostname on a reserved static IP. Application firewall exposure
+is TCP 80/443 only; internal services remain private and SSH is restricted.
+
+No real DNS, firewall, certificate, GCE, systemd, Secret Manager, KMS, GCS, Terraform, CI, legacy,
+application, database, tenant/RLS, or LINE/LIFF state change is included. Migration: NONE. Commit:
+included in the coherent Phase B4 deployment commit.
+
+Verification: Compose render, preflight, and nginx syntax PASS. The isolated `strayhub-b4-final`
+stack returned HTTP 308, served the ACME probe exactly, returned HTTPS 200 for Web, health, public
+versioned API, and Volunteer LIFF, and returned the expected webhook GET 405. Only nginx published
+ports (verification 8088/8443); all internal services remained private. Focused B1/B2/B4/JWT
+contracts: 30 PASS. The isolated stack and volumes were removed after the drill.
