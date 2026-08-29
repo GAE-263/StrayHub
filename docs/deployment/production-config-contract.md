@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B1 production-like verification contract
+Status: Phase B2 production-like runtime and ingress verified
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -57,8 +57,7 @@ requires `AI_API_KEY`.
 | `B1_VERIFICATION_ONLY` | B1 preflight | Non-secret safety marker | Verification env; must be `true` | Not used in real deployment |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE` | Compose secret transport | Sensitive path, not key material | Ignored generated-file path | Protected staged file populated from Secret Manager |
 | `AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE` | Compose secret transport | Non-secret/sensitive path | Ignored generated-file path | Protected staged file populated from Secret Manager |
-| `B1_API_HOST_PORT` | Local verifier only | Non-secret | Verification env | Not used after nginx owns ingress |
-| `B1_WEB_HOST_PORT` | Local verifier only | Non-secret | Verification env | Not used after nginx owns ingress |
+| `B2_NGINX_HOST_PORT` | HTTP ingress verifier | Non-secret | Verification env; defaults to `8088` | Compose/firewall input until TLS ingress is defined |
 
 `POSTGRES_PASSWORD` belongs to the bootstrap/migration login and matches `DATABASE_MIGRATION_URL`.
 `POSTGRES_RUNTIME_PASSWORD` belongs to the non-superuser application login and matches
@@ -87,7 +86,7 @@ rotation, cleanup, and forbidden-use rules.
 
 ## Canonical commands
 
-All commands use the isolated project name `strayhub-b1-verify`; they do not address the normal local
+All current ingress checks use the isolated project name `strayhub-b2-verify`; they do not address the normal local
 demo stack.
 
 Set the shared arguments for readability:
@@ -95,7 +94,7 @@ Set the shared arguments for readability:
 ```bash
 COMPOSE_FILE=infra/gce/docker-compose.production.yml
 ENV_FILE=infra/gce/.env.production.example
-PROJECT=strayhub-b1-verify
+PROJECT=strayhub-b2-verify
 ```
 
 Preflight and render the resolved model:
@@ -130,16 +129,16 @@ Start the runtime:
 docker compose --project-name "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 ```
 
-Verify API health and Web-to-API network reachability:
+Verify API health and the Web root only through nginx:
 
 ```bash
-curl --fail http://127.0.0.1:18080/healthz
-docker compose --project-name "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-  exec -T web wget -qO- http://api:8080/healthz
+curl --fail http://127.0.0.1:8088/healthz
+curl --fail http://127.0.0.1:8088/
 ```
 
-The API and Web loopback bindings exist only for Phase B1 local verification. PostgreSQL, MinIO, and
-the MinIO console have no host port. Phase B2 will add nginx and own public routing.
+nginx is the only host-published service. API, Web, PostgreSQL, MinIO, Worker, and the MinIO console
+have no host port. See `docs/deployment/production-nginx-routing.md` for the complete HTTP route and
+proxy policy.
 
 Stop the isolated stack while preserving named volumes:
 
@@ -162,7 +161,8 @@ Included: Compose parsing, operator preflight, PostgreSQL/MinIO health, bucket b
 Alembic, API fail-fast/startup/health, long-running Worker, Web startup, internal Web-to-API reach,
 safe MinIO write/read, and persistence across a normal down/up cycle.
 
-Deferred to Phase B2 or later: nginx, TLS, real GCE provisioning, systemd, live Secret Manager
-injection, functional KMS/PII verification, real LINE/LIFF calls, GCS backup, backup/restore scripts,
-legacy CI replacement, Terraform state migration, and removal of Cloud Run/Cloud SQL/runtime-GCS
-assets. GCS is backup-only in the target design and is not a dependency of this Compose runtime.
+Phase B2 adds HTTP-only nginx single-origin routing without changing application behavior. Deferred:
+TLS, DNS, firewall policy, real GCE provisioning, systemd, live Secret Manager injection, functional
+KMS/PII verification, real LINE/LIFF calls, GCS backup, backup/restore scripts, legacy CI replacement,
+Terraform state migration, and removal of Cloud Run/Cloud SQL/runtime-GCS assets. GCS is backup-only
+in the target design and is not a dependency of this Compose runtime.

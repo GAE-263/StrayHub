@@ -5,15 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/infra/gce/docker-compose.production.yml"
 ENV_FILE="${1:-$ROOT_DIR/infra/gce/.env.production.example}"
 KEY_GENERATOR="$ROOT_DIR/infra/gce/scripts/generate-verification-jwt-keys.sh"
+NGINX_CONFIG="$ROOT_DIR/infra/gce/nginx/strayhub.conf"
 
 fail() {
-  echo "[Phase B1 preflight] FAIL: $*" >&2
+  echo "[Phase B2 preflight] FAIL: $*" >&2
   exit 1
 }
 
 command -v docker >/dev/null || fail "docker is required"
 [[ -f "$COMPOSE_FILE" ]] || fail "Compose file not found: $COMPOSE_FILE"
 [[ -f "$ENV_FILE" ]] || fail "environment file not found: $ENV_FILE"
+[[ -f "$NGINX_CONFIG" ]] || fail "nginx config not found: $NGINX_CONFIG"
 [[ -x "$KEY_GENERATOR" ]] || fail "verification JWT key generator is missing or not executable"
 
 required_vars=(
@@ -44,6 +46,7 @@ required_vars=(
   PII_ENCRYPTION_PROVIDER
   PII_KMS_KEY_NAME
   AI_PROVIDER
+  B2_NGINX_HOST_PORT
 )
 
 env_value() {
@@ -87,4 +90,16 @@ if grep -Eiq 'localhost|127\.0\.0\.1|strayhub:strayhub|(^|[^[:alnum:]])(changeme
 fi
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config --quiet
-echo "[Phase B1 preflight] PASS"
+nginx_image="$(
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config --images |
+    awk '/^nginx:/ {print; exit}'
+)"
+[[ -n "$nginx_image" ]] || fail "nginx image is missing from the rendered Compose model"
+
+docker run --rm \
+  --add-host api:127.0.0.1 \
+  --add-host web:127.0.0.1 \
+  --volume "$NGINX_CONFIG:/etc/nginx/conf.d/default.conf:ro" \
+  "$nginx_image" nginx -t >/dev/null || fail "nginx syntax validation failed"
+
+echo "[Phase B2 preflight] PASS"

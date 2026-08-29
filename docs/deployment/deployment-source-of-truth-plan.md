@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A inventory complete; Phase B1 runtime artifacts verified
+Status: Phase A inventory complete; Phase B1 runtime and Phase B2 HTTP ingress verified
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -56,12 +56,12 @@ Phase B1 establishes the production-like runtime boundary without deploying it t
 - one-shot migration through a tools-profile service that reuses the API image with
   `APP_ENV=gcp-demo` and internal PostgreSQL DNS.
 
-The Compose runtime contains PostgreSQL 16, MinIO, FastAPI, Worker, and Next.js. A short-lived
+The Compose application runtime contains PostgreSQL 16, MinIO, FastAPI, Worker, and Next.js. A short-lived
 `minio-bootstrap` service creates the private runtime bucket and then exits. A tools-profile
 `migration` service also exits after Alembic and is not part of normal startup. Neither is an
-additional long-running runtime. PostgreSQL and MinIO use named volumes, and only the API and Web
-receive loopback host bindings for isolated B1 verification. Those bindings are not the production
-ingress design. PostgreSQL initialization separates the schema-owning migration login from the
+additional application runtime. PostgreSQL and MinIO use named volumes. Phase B2 removes the B1
+API/Web verification bindings and makes nginx the only host-published service. PostgreSQL
+initialization separates the schema-owning migration login from the
 restricted runtime login that inherits the existing `strayhub_runtime` RLS permissions.
 
 Verification JWT material is ephemeral local/CI output: preflight generates or reuses a valid pair
@@ -78,6 +78,19 @@ and Web started; API health and Web-to-API internal DNS passed; a MinIO object a
 migration head survived a normal `down`/`up`; and the isolated containers, network, and volumes were
 then removed. No real GCP service or credential was used.
 
+## Phase B2 canonical HTTP ingress artifacts
+
+Phase B2 adds `infra/gce/nginx/strayhub.conf` and makes the pinned nginx container the only
+host-published service. `/healthz` and `/v1/*` retain their paths to `api:8080`; all other routes go
+to `web:8080`. The config uses Compose DNS only, forwards the standard host/client/protocol headers,
+and keeps MinIO and PostgreSQL private. The read-only mounted config passed `nginx -t` both in
+preflight and in the isolated running container.
+
+The isolated `strayhub-b2-verify` stack passed `/`, `/healthz`, the public versioned API,
+`/volunteer-application`, structural LINE webhook routing, and predictable unknown-path checks only
+through nginx. Its containers, network, and verification volumes were removed afterward. TLS, DNS,
+firewall policy, real GCE, and every legacy-removal gate remain deferred.
+
 ## Current deployment inventory
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
@@ -90,10 +103,12 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `infra/local/nginx/line-local.conf.template` | Single-origin local LINE/LIFF proxy | Local host nginx | `test_line_local.sh`, README, contract tests | Local LINE validation | KEEP_TRANSITIONAL |
 | `scripts/test_line_local.sh` | Renders and validates the local nginx topology | Local host processes | README and contract tests | Local LINE validation | KEEP_TRANSITIONAL |
 | `infra/gce/docker-compose.production.yml` | Canonical production-like application runtime | GCE single VM / Compose | B1 preflight, config contract, contract tests | Yes | KEEP_CANONICAL |
+| `infra/gce/nginx/strayhub.conf` | Canonical HTTP single-origin routing | GCE single VM / Compose | B2 preflight, routing contract tests | Yes | KEEP_CANONICAL |
 | `infra/gce/.env.production.example` | Synthetic non-local verification inputs | Phase B1 verification only | B1 preflight and Compose | Verification only | KEEP_CANONICAL |
 | `infra/gce/scripts/preflight.sh` | Operator input and Compose render checks | GCE single VM / Compose | B1 operations | Pre-start gate | KEEP_CANONICAL |
 | `infra/gce/verification/` | Runtime-generated, Git-ignored JWT material plus tracked policy README | Phase B1 verification only | Preflight and B1 env-selected API startup | Verification only | KEEP_CANONICAL |
 | `docs/deployment/production-config-contract.md` | Runtime field ownership and B1 operations | GCE single VM / Compose | Operators and contract tests | Yes | KEEP_CANONICAL |
+| `docs/deployment/production-nginx-routing.md` | Public/private boundary and HTTP route contract | GCE single VM / Compose | Operators and contract tests | Yes | KEEP_CANONICAL |
 | `infra/gcp-demo/Dockerfile.api` | FastAPI production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests, verification docs | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.worker` | Worker production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.web` | Standalone Next.js image | Cloud Run-oriented port 8080 | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
@@ -125,8 +140,8 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
-Production Compose, its runtime contract, and B1 preflight now exist. GCE provisioning, production
-nginx, backup, restore, and systemd artifacts do not yet exist. Local Terraform cache content under
+Production Compose, its runtime contract, preflight, and production HTTP nginx configuration now
+exist. GCE provisioning, TLS, backup, restore, and systemd artifacts do not yet exist. Local Terraform cache content under
 `.terraform/` is generated tooling state, not a versioned deployment source of truth.
 
 ## Terraform coupling and future ownership
@@ -295,12 +310,24 @@ identity boundary as far as the chosen GCE identity model allows.
 - Establish preflight and one-shot Alembic commands.
 - Verify the isolated stack without nginx, live cloud credentials, or application changes.
 
-### Phase B2 — Ingress and TLS
+### Phase B2 — HTTP single-origin ingress
+
+Status: verified with the isolated `strayhub-b2-verify` stack.
 
 - Add production nginx routing for `/` and `/v1/*`.
-- Define certificate provisioning/renewal and forwarded-header policy.
+- Configure the forwarded-header and bounded request-body policy.
 - Remove the B1-only API/Web loopback host bindings from the production ingress path.
 - Repeat routing, webhook, LIFF, upload-size, and health verification through nginx.
+
+### Phase B3 — Backup / restore design and verification
+
+- Design PostgreSQL and MinIO backup/restore workflows targeting backup-only GCS.
+- Prove restore behavior in isolation before adding real schedules or cloud wiring.
+
+### Phase B4 — TLS and network edge
+
+- Define DNS, firewall, TLS certificate provisioning, and renewal.
+- Verify HTTPS redirects and forwarded-protocol behavior without changing application routes.
 
 ### Phase C — VM operations and replacement gates
 
@@ -336,7 +363,7 @@ Only after GCE acceptance:
 No Cloud Run/Terraform application asset may be removed until every gate is checked:
 
 - [ ] GCE production Compose validated
-- [ ] nginx routing validated
+- [x] nginx routing validated in isolated Phase B2 HTTP verification
 - [ ] production config fail-fast passes
 - [ ] DB migrations work
 - [ ] MinIO media works and persists across normal restart
@@ -434,6 +461,7 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-After Phase B1 acceptance, Phase B2 adds nginx/TLS and validates the single-origin ingress boundary.
-Phase C owns VM operations and replacement CI gates; Phase D owns live Secret Manager/KMS and GCS
-backup work. No deletion is allowed now.
+After Phase B2 acceptance, Phase B3 designs and verifies PostgreSQL/MinIO backup and restore without
+adding live cloud wiring. Phase B4 owns DNS/firewall/TLS at the network edge; Phase C owns VM
+operations and replacement CI gates; Phase D owns live Secret Manager/KMS and backup-only GCS
+wiring. No deletion is allowed now.

@@ -31,7 +31,7 @@ def _compose() -> dict:
     return yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
 
 
-def test_phase_b1_has_the_five_canonical_runtime_services_only() -> None:
+def test_canonical_compose_has_runtime_services_and_bounded_helpers() -> None:
     services = _compose()["services"]
 
     assert {"postgres", "minio", "api", "worker", "web"} <= services.keys()
@@ -43,8 +43,8 @@ def test_phase_b1_has_the_five_canonical_runtime_services_only() -> None:
         "migration",
         "worker",
         "web",
+        "nginx",
     }
-    assert "nginx" not in services
     assert services["minio-bootstrap"]["restart"] == "no"
     assert services["migration"]["restart"] == "no"
     assert services["migration"]["profiles"] == ["tools"]
@@ -165,4 +165,4 @@ def test_migration_and_persistence_operations_are_documented() -> None:
     )
     assert "docker compose down` retains" in contract
     assert "docker compose down -v` destroys" in contract
-    assert "strayhub-b1-verify" in contract
+    assert "strayhub-b2-verify" in contract

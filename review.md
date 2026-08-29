@@ -506,3 +506,32 @@ preflight and Compose config PASS; isolated migration/API/Worker/Web/API-health/
 container mounts read-only into API only with effective `0600`/`0644`; focused contracts 33 PASS;
 repository secret scan without a PEM exception PASS; Ruff, format, and `git diff --check` PASS. The
 isolated Compose stack and volumes were removed after verification.
+
+## Phase B2 Production nginx Single-Origin Routing
+
+Status: READY. Canonical nginx config is `infra/gce/nginx/strayhub.conf`; routing policy is
+`docs/deployment/production-nginx-routing.md`. The pinned `nginx:1.27.5-alpine` service is the only
+host-published service, with synthetic HTTP ingress on configurable port `8088`. API, Web,
+PostgreSQL, MinIO, and Worker remain private on the Compose network.
+
+Routing: `/healthz` and `/v1/*` preserve their complete paths to `api:8080`; `/` and every other
+path go to `web:8080`. `/v1/line/webhook` is structurally compatible with the FastAPI router, and
+`/volunteer-application` remains a Next.js route. No LINE payload, external LINE call, LIFF logic,
+authentication behavior, application code, database schema, or tenant/RLS behavior changed.
+
+Proxy policy: upstreams use Compose DNS names only. nginx forwards `Host`, `X-Real-IP`,
+`X-Forwarded-For`, and `X-Forwarded-Proto`; has no HMR/dev route, MinIO route, PostgreSQL route, or
+loopback upstream; and mounts its config read-only. The temporary `1m` body limit matches the
+existing Next.js proxy limit. No explicit proxy timeout override was added.
+
+Verification: Compose render PASS; preflight PASS; `nginx -t` PASS in preflight and the running
+container; migration PASS; isolated PostgreSQL/MinIO/API/Web health and Worker runtime PASS. Through
+nginx only: `/` 200, `/healthz` 200, `/v1/public/volunteer-organizations` 200,
+`/volunteer-application` 200, `/v1/line/webhook` GET 405, and an unknown Web path 404. The LINE 405
+proves structural routing without sending a payload; access evidence retained the complete `/v1`
+paths. Focused B1/B2/JWT contracts: 23 PASS. The isolated containers, network, and volumes were
+removed.
+
+Deferred: TLS, DNS, firewall policy, real GCE provisioning, systemd, live Secret Manager wiring,
+functional KMS verification, GCS backup, backup/restore, legacy CI replacement, Terraform state
+migration, and legacy removal. Migration: NONE.
