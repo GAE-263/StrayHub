@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.pii import EncryptedPii, PiiContext
-from services.api.app.config.settings import Settings
+from services.api.app.config.settings import Settings, is_kms_crypto_key_name
 
 
 class GoogleCloudKmsClient(Protocol):
@@ -74,15 +74,7 @@ class GoogleCloudKmsPiiCipher:
 
     def __init__(self, key_name: str, client: GoogleCloudKmsClient) -> None:
         normalized_key_name = key_name.strip()
-        resource_parts = normalized_key_name.split("/")
-        if (
-            len(resource_parts) != 8
-            or resource_parts[0] != "projects"
-            or resource_parts[2] != "locations"
-            or resource_parts[4] != "keyRings"
-            or resource_parts[6] != "cryptoKeys"
-            or any(not component for component in resource_parts)
-        ):
+        if not is_kms_crypto_key_name(normalized_key_name):
             raise DomainError("pii_provider_unavailable", "個人資料加密服務尚未設定", 503)
         self.key_name = normalized_key_name
         self.client = client

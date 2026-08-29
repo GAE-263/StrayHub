@@ -72,6 +72,10 @@ def test_non_api_process_rejects_unsafe_database(process: str) -> None:
         ({"auth_jwt_active_private_key": None}, "AUTH_JWT_ACTIVE_PRIVATE_KEY"),
         ({"auth_jwt_active_public_key": "fake-jwt-key"}, "AUTH_JWT_ACTIVE_PUBLIC_KEY"),
         ({"pii_kms_key_name": None}, "PII_KMS_KEY_NAME"),
+        (
+            {"pii_kms_key_name": "projects/synthetic/locations/global/keyRings/pii"},
+            "PII_KMS_KEY_NAME",
+        ),
         ({"line_channel_secret": "fake-line-secret"}, "LINE_CHANNEL_SECRET"),
         ({"minio_access_key": "local-access-key"}, "MINIO_ACCESS_KEY"),
         (

@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B1-B4 and Phase D1 secret staging verified locally
+Status: Phase B1-B4 and Phase D1-D2 managed-service contracts verified locally
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -9,8 +9,9 @@ one private Compose network. The checked-in environment is synthetic verificatio
 preflight generates the JWT material after checkout under an ignored directory. Neither is a
 production credential source, and neither may be copied into a real deployment.
 
-Phase B1 does not fetch Secret Manager values or exercise Cloud KMS. The future sources below define
-the ownership boundary for those later integrations without implementing them now.
+Phase D1 defines protected Secret Manager staging. Phase D2 verifies the existing Cloud KMS PII
+adapter and production selection locally without using live GCP credentials. Real GCE acceptance and
+live managed-service calls remain deferred.
 
 ## Application configuration
 
@@ -34,8 +35,8 @@ the ownership boundary for those later integrations without implementing them no
 | `AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE` | API | Non-secret | Verification env identifier | Compose non-secret env/config |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY` | API | Secret | Runtime-generated, ignored Compose file secret | Secret Manager → staged private file |
 | `AUTH_JWT_ACTIVE_PUBLIC_KEY` | API | Secret | Runtime-generated, ignored Compose file secret | Secret Manager → staged public file |
-| `PII_ENCRYPTION_PROVIDER` | API | Non-secret | Verification env; `gcp-kms` | Compose non-secret env/config |
-| `PII_KMS_KEY_NAME` | API | Non-secret resource identifier | Structurally valid synthetic resource name | KMS resource reference |
+| `PII_ENCRYPTION_PROVIDER` | API | Non-secret | Verification env; `gcp-kms` | Compose non-secret env/config; fixed to `gcp-kms` |
+| `PII_KMS_KEY_NAME` | API | Non-secret resource identifier | Structurally valid synthetic resource name | Full environment-specific CryptoKey resource name |
 | `AI_PROVIDER` | API | Non-secret | Verification env; `mock` | Compose non-secret env/config |
 | `AI_API_KEY` | API when external AI is selected | Secret | Not set because Phase B1 uses mock AI | Secret Manager → optional staged `runtime.env` entry |
 
@@ -165,12 +166,12 @@ Alembic, API fail-fast/startup/health, long-running Worker, Web startup, interna
 safe MinIO write/read, and persistence across a normal down/up cycle.
 
 Phase B2 adds nginx single-origin routing and Phase B4 adds the TLS-ready edge without changing
-application behavior. B4 only documents DNS/firewall/static-IP requirements. Deferred: real DNS,
-firewall mutation, public certificate issuance, real GCE provisioning, systemd, live Secret Manager
-injection, functional KMS/PII verification, real LINE/LIFF calls, live GCS backup transfer, backup
-scheduling, legacy CI replacement, Terraform state migration, and removal of Cloud Run/Cloud SQL/
-runtime-GCS assets. GCS is backup-only in the target design and is not a dependency of this Compose
-runtime.
+application behavior. B4 only documents DNS/firewall/static-IP requirements. D1 verifies local
+Secret Manager staging and D2 verifies the existing KMS adapter, provider selection, failure policy,
+and configuration contracts with an injected client. Deferred: real DNS/firewall/certificate/GCE,
+systemd, live Secret Manager and KMS calls, real LINE/LIFF calls, D3 GCS transfer/retention/restore,
+legacy CI replacement, Terraform state migration, and removal of Cloud Run/Cloud SQL/runtime-GCS
+assets. GCS is backup-only in the target design and is not a dependency of this Compose runtime.
 
 ## Phase B3 backup / restore contract
 
@@ -213,3 +214,16 @@ paths only. Production preflight rejects `B1_VERIFICATION_ONLY=true`, repository
 missing fields, unsafe permissions, and invalid JWT pairs, then performs API/Worker/Migration
 fail-fast checks. See `docs/deployment/secret-manager.md` for inventory, naming, IAM, rotation,
 container-env risk, simulation, and commands.
+
+## Phase D2 Cloud KMS runtime contract
+
+Every non-local API selects the existing `gcp-kms` PII adapter. `PII_KMS_KEY_NAME` is a non-secret
+full CryptoKey resource name; Settings, the adapter, and production preflight reject malformed
+references. Compose supplies these two values only to API and contains no credential or key
+material. Worker, Migration, Web, nginx, PostgreSQL, and MinIO do not receive KMS configuration.
+
+The future GCE VM service account authenticates through Application Default Credentials and holds
+`roles/cloudkms.cryptoKeyEncrypterDecrypter` on the specific PII CryptoKey where practical. D2 makes
+no IAM or live KMS call. Mock-client tests verify authenticated encrypt/decrypt, returned key-version
+metadata, safe failures, and no non-local fallback. See `docs/deployment/cloud-kms.md` for the full
+resource, IAM, ADC, rotation, failure, and deferred live-acceptance contract.

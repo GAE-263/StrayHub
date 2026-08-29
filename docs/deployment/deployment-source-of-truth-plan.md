@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, and Phase D1 secret staging verified locally
+Status: Phase A, Phase B1-B4, and Phase D1-D2 managed-service wiring verified locally
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -126,6 +126,18 @@ Local D1 verification used synthetic source files and the same staging/permissio
 Staging, atomic rotation, production preflight, API startup/health, and Worker/Migration fail-fast
 checks passed. Live Secret Manager, IAM mutation, GCE identity, KMS operations, and GCS transfer
 remain deferred.
+
+## Phase D2 canonical Cloud KMS artifacts
+
+D2 retains the existing `PiiCipher` port and Google Cloud KMS adapter. Non-local settings select
+`gcp-kms`; production preflight and the adapter require a full environment-specific CryptoKey name.
+The API alone receives KMS configuration, and the client uses Application Default Credentials from
+the future GCE VM service account. No credential JSON or key material enters Compose.
+
+Injected-client tests prove encrypt/decrypt request shape, ciphertext/version handling, rotation
+compatibility, permission-denied and malformed-ciphertext failures, tenant/field authenticated data,
+and no local fallback. IAM is limited to `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the specific
+key where practical. Live KMS, IAM mutation, and real GCE identity acceptance remain deferred.
 
 ## Current deployment inventory
 
@@ -397,6 +409,15 @@ Status: verified locally; live Secret Manager and IAM acceptance deferred.
 - Atomically stage protected scalar/JWT material for canonical Compose.
 - Keep B1 verification fixtures and production inputs explicitly separated.
 
+#### Phase D2 — Cloud KMS functional wiring
+
+Status: verified locally with the existing adapter and injected client; live KMS acceptance deferred.
+
+- Require `gcp-kms` and a full CryptoKey resource in every non-local API runtime.
+- Preserve authenticated encrypt/decrypt and returned CryptoKeyVersion metadata semantics.
+- Define ADC and key-scoped Encrypter/Decrypter IAM for the future GCE VM service account.
+- Fail closed on missing config, access failure, malformed data, or client/network failure.
+
 ### Phase E — Real GCE deployment
 
 Verify VM boot, Compose startup, TLS, health checks, nginx routing, migrations, MinIO media, Worker,
@@ -517,6 +538,6 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-Phase D1 verifies Secret Manager staging locally before Phase D2 KMS and Phase D3 backup-only GCS.
-Phase E owns real GCE/systemd operations; Phase F owns legacy cleanup and CI replacement. No deletion
-is allowed now.
+Phase D1 and D2 verify Secret Manager staging and Cloud KMS wiring locally. Phase D3 owns
+backup-only GCS upload/retention/restore; Phase E owns real GCE/systemd and live managed-service
+acceptance; Phase F owns legacy cleanup and CI replacement. No deletion is allowed now.

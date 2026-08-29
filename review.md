@@ -608,3 +608,28 @@ API, Worker, and Migration production fail-fast checks passed. An isolated produ
 started and returned healthy without exposing a host port. The B1 verification preflight remained
 green. Focused D1/B1-B4/JWT/backup contracts: 45 PASS. Repository secret scan, Ruff, format, and
 `git diff --check` passed. Temporary synthetic data and Docker resources were removed.
+
+## Phase D2 Cloud KMS Functional Wiring
+
+Status: READY. Canonical policy is `docs/deployment/cloud-kms.md`. The existing `PiiCipher` port,
+Google Cloud KMS adapter, volunteer PII service, encrypted metadata, tenant/field authenticated data,
+and API dependency wiring are retained. No parallel encryption framework or schema change exists.
+
+Every non-local API must select `gcp-kms` with a full environment-specific CryptoKey resource name.
+Settings, the adapter, and production preflight reject invalid names. Compose supplies only the
+provider and resource name to API; it contains no credentials or key material. The future GCE VM
+service account uses ADC and key-scoped `roles/cloudkms.cryptoKeyEncrypterDecrypter`; D2 changes no
+live IAM and does not use a downloaded service-account JSON key.
+
+Local injected-client verification covers exact resource/AAD invocation, non-empty ciphertext,
+round-trip equality, returned CryptoKeyVersion metadata, old-version decrypt, permission denial,
+malformed ciphertext, client failure, audit-before-decrypt, and no local fallback. Only synthetic PII
+is used and error output contains neither plaintext nor ciphertext. Live KMS is deferred because no
+approved test project/key/ADC is configured.
+
+No GCS transfer, GCE provisioning, systemd, DNS/firewall/TLS mutation, legacy deletion, Terraform
+state change, CI replacement, product behavior, DB schema, tenant/RLS, or LINE/LIFF change is
+included. Focused D2 KMS/PII/config contracts: 85 PASS. Broader unit/security backend tests: 559
+PASS. Production and B1-B4 preflights, Compose config, repository secret scan, Ruff, format, and
+`git diff --check`: PASS. Migration: NONE. Commit: included in the coherent Phase D2 deployment
+commit.

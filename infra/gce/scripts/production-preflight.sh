@@ -83,6 +83,9 @@ done
 [[ "$(env_value "$CONFIG_ENV" APP_ENV)" == "production" ]] || fail "APP_ENV must be production"
 [[ "$(env_value "$CONFIG_ENV" PII_ENCRYPTION_PROVIDER)" == "gcp-kms" ]] ||
   fail "PII_ENCRYPTION_PROVIDER must remain gcp-kms"
+kms_key_name="$(env_value "$CONFIG_ENV" PII_KMS_KEY_NAME)"
+[[ "$kms_key_name" =~ ^projects/[^/[:space:]]+/locations/[^/[:space:]]+/keyRings/[^/[:space:]]+/cryptoKeys/[^/[:space:]]+$ ]] ||
+  fail "PII_KMS_KEY_NAME must be a full Cloud KMS CryptoKey resource name"
 configured_private="$(env_value "$CONFIG_ENV" AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE)"
 configured_public="$(env_value "$CONFIG_ENV" AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE)"
 [[ -f "$configured_private" && -f "$configured_public" ]] ||

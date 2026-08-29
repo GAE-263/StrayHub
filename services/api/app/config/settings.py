@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -29,6 +30,9 @@ _PLACEHOLDER_SECRET_VALUES = frozenset(
 )
 _PLACEHOLDER_SECRET_PREFIXES = ("fake-", "local-only-")
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_KMS_CRYPTO_KEY_PATTERN = re.compile(
+    r"^projects/[^/\s]+/locations/[^/\s]+/keyRings/[^/\s]+/cryptoKeys/[^/\s]+$"
+)
 
 
 def is_placeholder_secret(value: str | None) -> bool:
@@ -48,6 +52,12 @@ def is_loopback_url(value: str | None) -> bool:
     if value is None or not value.strip():
         return False
     return (urlparse(value).hostname or "").lower() in _LOOPBACK_HOSTS
+
+
+def is_kms_crypto_key_name(value: str | None) -> bool:
+    """Return whether a value is a full Cloud KMS CryptoKey resource name."""
+
+    return bool(value and _KMS_CRYPTO_KEY_PATTERN.fullmatch(value.strip()))
 
 
 class Settings(BaseSettings):
@@ -176,6 +186,8 @@ class Settings(BaseSettings):
             problems.append("PII_ENCRYPTION_PROVIDER must use a non-local provider")
         if provider == "gcp-kms":
             missing("PII_KMS_KEY_NAME", self.pii_kms_key_name)
+            if self.pii_kms_key_name and not is_kms_crypto_key_name(self.pii_kms_key_name):
+                problems.append("PII_KMS_KEY_NAME must be a full Cloud KMS CryptoKey resource name")
         if self.pii_allow_local_provider:
             problems.append("PII_ALLOW_LOCAL_PROVIDER must be false")
 
