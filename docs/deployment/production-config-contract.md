@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B2 production-like runtime and ingress verified
+Status: Phase B3 production-like runtime, ingress, and local recovery verified
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -166,3 +166,22 @@ TLS, DNS, firewall policy, real GCE provisioning, systemd, live Secret Manager i
 KMS/PII verification, real LINE/LIFF calls, GCS backup, backup/restore scripts, legacy CI replacement,
 Terraform state migration, and removal of Cloud Run/Cloud SQL/runtime-GCS assets. GCS is backup-only
 in the target design and is not a dependency of this Compose runtime.
+
+## Phase B3 backup / restore contract
+
+Backups are one-shot operator scripts, not long-running Compose services. The canonical local staging
+root is the Git-ignored `infra/gce/backup/generated/`, or an explicitly selected protected external
+root. A shared UTC backup ID groups `postgres/postgres.dump`, PostgreSQL metadata,
+`minio/objects/`, the MinIO inventory, and `manifest.json`. All artifacts use owner-only permissions.
+
+PostgreSQL backup uses the schema-owning migration credential inside the PostgreSQL container and
+custom-format `pg_dump`; restore accepts only an explicit artifact, confirmation flag, and an
+isolated `strayhub_b3_restore_*` target. MinIO uses the pinned `minio/mc` image and accepts restore
+only into a confirmed `strayhub-b3-restore-*` bucket. No backup path is mounted into nginx, Web, API,
+or any long-running service.
+
+Phase B3 proves local data correctness only. PostgreSQL and MinIO captures are sequential and not
+transactionally atomic. The production target remains a private, IAM-restricted GCS backup bucket in
+Phase D; live upload, retention enforcement, scheduling, and restore from GCS are not implemented.
+See `docs/deployment/backup-restore.md` for commands, manifest fields, retention proposal, and
+destructive-restore guards.

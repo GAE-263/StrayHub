@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A inventory complete; Phase B1 runtime and Phase B2 HTTP ingress verified
+Status: Phase A inventory, Phase B1 runtime, Phase B2 ingress, and Phase B3 recovery verified
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -91,6 +91,18 @@ The isolated `strayhub-b2-verify` stack passed `/`, `/healthz`, the public versi
 through nginx. Its containers, network, and verification volumes were removed afterward. TLS, DNS,
 firewall policy, real GCE, and every legacy-removal gate remain deferred.
 
+## Phase B3 canonical backup / restore artifacts
+
+Phase B3 adds one-shot PostgreSQL and MinIO backup/restore scripts plus a stable manifest/inventory
+format. Generated artifacts live only under the narrow Git-ignored staging root or an explicit
+protected external path; nothing is mounted into the application or ingress services. Restore
+scripts require explicit sources, confirmation flags, and strict isolated target names.
+
+The `strayhub-b3-verify` drill recovered a synthetic database row, the current Alembic head, RLS
+policies/runtime-role safety, and two synthetic MinIO objects with matching SHA-256 inventory. The
+shared manifest passed integrity verification. This proves local correctness, not off-VM durability:
+GCS transfer, IAM, retention enforcement, schedules, and restore from GCS remain Phase D work.
+
 ## Current deployment inventory
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
@@ -109,6 +121,9 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `infra/gce/verification/` | Runtime-generated, Git-ignored JWT material plus tracked policy README | Phase B1 verification only | Preflight and B1 env-selected API startup | Verification only | KEEP_CANONICAL |
 | `docs/deployment/production-config-contract.md` | Runtime field ownership and B1 operations | GCE single VM / Compose | Operators and contract tests | Yes | KEEP_CANONICAL |
 | `docs/deployment/production-nginx-routing.md` | Public/private boundary and HTTP route contract | GCE single VM / Compose | Operators and contract tests | Yes | KEEP_CANONICAL |
+| `infra/gce/scripts/backup-all.sh` and component scripts | One-shot PostgreSQL/MinIO backup and guarded restore | GCE single VM / Compose tools | B3 recovery drills and operator docs | Operations | KEEP_CANONICAL |
+| `infra/gce/backup/` | Tracked backup policy plus ignored generated staging | Local B3 / future GCS transfer layout | Backup scripts and contracts | Sensitive operations | KEEP_CANONICAL |
+| `docs/deployment/backup-restore.md` | Recovery, manifest, retention, and safety contract | GCE single VM / future backup-only GCS | Operators and contract tests | Operations | KEEP_CANONICAL |
 | `infra/gcp-demo/Dockerfile.api` | FastAPI production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests, verification docs | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.worker` | Worker production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.web` | Standalone Next.js image | Cloud Run-oriented port 8080 | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
@@ -140,8 +155,9 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
-Production Compose, its runtime contract, preflight, and production HTTP nginx configuration now
-exist. GCE provisioning, TLS, backup, restore, and systemd artifacts do not yet exist. Local Terraform cache content under
+Production Compose, its runtime contract, preflight, production HTTP nginx configuration, and local
+backup/restore verification artifacts now exist. GCE provisioning, TLS, live GCS transfer,
+scheduling, and systemd artifacts do not yet exist. Local Terraform cache content under
 `.terraform/` is generated tooling state, not a versioned deployment source of truth.
 
 ## Terraform coupling and future ownership
@@ -321,6 +337,8 @@ Status: verified with the isolated `strayhub-b2-verify` stack.
 
 ### Phase B3 — Backup / restore design and verification
 
+Status: verified locally with the isolated `strayhub-b3-verify` stack; durable GCS backup is deferred.
+
 - Design PostgreSQL and MinIO backup/restore workflows targeting backup-only GCS.
 - Prove restore behavior in isolation before adding real schedules or cloud wiring.
 
@@ -461,7 +479,6 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-After Phase B2 acceptance, Phase B3 designs and verifies PostgreSQL/MinIO backup and restore without
-adding live cloud wiring. Phase B4 owns DNS/firewall/TLS at the network edge; Phase C owns VM
+After Phase B3 acceptance, Phase B4 owns DNS/firewall/TLS at the network edge. Phase C owns VM
 operations and replacement CI gates; Phase D owns live Secret Manager/KMS and backup-only GCS
-wiring. No deletion is allowed now.
+upload/IAM/retention/restore verification. No deletion is allowed now.

@@ -535,3 +535,31 @@ removed.
 Deferred: TLS, DNS, firewall policy, real GCE provisioning, systemd, live Secret Manager wiring,
 functional KMS verification, GCS backup, backup/restore, legacy CI replacement, Terraform state
 migration, and legacy removal. Migration: NONE.
+
+## Phase B3 PostgreSQL and MinIO Backup / Restore
+
+Status: READY. Canonical operator contract is `docs/deployment/backup-restore.md`; generated artifacts
+use the narrow Git-ignored `infra/gce/backup/generated/` root or an explicit protected external root.
+The one-shot scripts add no Compose service, port, nginx route, application behavior, schema
+migration, tenant/RLS change, LINE/LIFF change, live GCS call, or legacy deletion.
+
+Backup model: one UTC backup ID groups a PostgreSQL custom-format logical dump and SHA-256 metadata,
+a MinIO key/size/SHA-256 inventory and object tree, and a non-secret `manifest.json`. PostgreSQL and
+MinIO are captured sequentially; the manifest explicitly records that the pair is not transactionally
+atomic. Owner-only artifact modes and strict path validation passed.
+
+PostgreSQL drill: PASS in `strayhub-b3-verify`. Migration ran; one synthetic probe row was dumped and
+restored into `strayhub_b3_restore_drill`; Alembic head matched
+`0037_animal_external_sources`; 37 RLS-enabled tables, 40 policies, restricted runtime-role flags,
+and the runtime SELECT grant remained valid. Missing-confirmation and normal-database targets were
+rejected.
+
+MinIO drill: PASS. Two synthetic objects with nested keys were backed up, restored only into
+`strayhub-b3-restore-drill`, copied back, and matched object count 2 plus canonical inventory SHA-256.
+Anonymous access remained disabled. Missing-confirmation targets were rejected.
+
+Manifest/retention: manifest integrity PASS. Proposed proof-of-concept retention is seven daily and
+four weekly generations; monthly retention and all automated pruning remain deferred. Local B3
+staging is not durable/off-VM backup. Production readiness requires private GCS upload, IAM,
+retention, and restore-from-GCS verification in Phase D. Migration: NONE. Commit: included in the
+coherent Phase B3 deployment commit.
