@@ -3,6 +3,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+!infra/gce/.env.production.example
+infra/gce/verification/generated/
 .venv/
 venv/
 __pycache__/

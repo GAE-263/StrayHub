@@ -418,3 +418,91 @@ Immediate next phase: design and separately review Phase B production Compose/ng
 config/persistence/backup/restore artifacts.
 
 Deletion allowed now: NO.
+
+## Phase B1 Production Compose and Runtime Contract
+
+Status: READY. Canonical Compose is `infra/gce/docker-compose.production.yml`; the runtime config
+contract is `docs/deployment/production-config-contract.md`; operator preflight is
+`infra/gce/scripts/preflight.sh`; and synthetic non-local inputs are
+`infra/gce/.env.production.example`.
+
+Runtime boundary: PostgreSQL 16, MinIO, FastAPI, Worker, and Next.js share the canonical private
+Compose network. PostgreSQL and MinIO use named volumes. A short-lived MinIO bucket bootstrap and a
+tools-profile one-shot Alembic service are not part of the long-running runtime. API and Web host
+bindings are loopback-only verification aids pending Phase B2 nginx.
+
+Database boundary: migration and runtime credentials are separate. The runtime login is not a
+superuser, cannot bypass RLS, and inherits the existing `strayhub_runtime` role; Alembic uses the
+schema-owning migration login and reached `0037_animal_external_sources`. Schema migration added:
+NONE.
+
+Verification: PASS with isolated project `strayhub-b1-verify`. Compose config, preflight,
+PostgreSQL/MinIO health, one-shot migration, API fail-fast/startup/health, long-running Worker, Web
+startup, internal Web-to-API reach, MinIO write/read, and PostgreSQL/MinIO persistence across normal
+`down`/`up` all passed. The isolated stack and its verification volumes were removed afterward.
+Focused deployment/config tests passed (25); repository Ruff lint, Ruff format check, and
+`git diff --check` passed.
+
+Cloud dependency: the B1 Compose runtime requires no Cloud Run, Cloud SQL, runtime GCS, Cloud Run
+migration job, or legacy deploy script. Existing production-style Dockerfiles are reused as
+transitional image assets only; legacy files remain intact.
+
+Deferred: nginx, TLS, real GCE, systemd, live Secret Manager wiring, functional KMS/PII validation,
+real LINE/LIFF calls, GCS backup, backup/restore scripts, replacement CI, Terraform state migration,
+and legacy removal. Legacy deletion allowed now: NO.
+
+## GCE Verification JWT Key Isolation (Historical, Superseded)
+
+Historical decision: ACCEPT COMMITTED VERIFICATION KEY after isolation hardening. The
+runtime-generated policy in the next section supersedes this decision; no verification PEM is now
+accepted as a repository artifact.
+
+Provenance: the RSA pair was generated once with OpenSSL specifically for the isolated Phase B1
+`strayhub-b1-verify` smoke on 2026-08-29. Both files remain untracked in the current working tree and
+have zero Git-history commits. They were not copied from a deterministic fixture or production
+source, registered with an external issuer, uploaded to Secret Manager, or used outside the isolated
+local B1 stack.
+
+Metadata: RSA 2048; private and public PEMs parse; the public key derived from the private key matches
+the checked-in public file. No key contents were copied into review evidence.
+
+Isolation: canonical Compose now requires operator-selected key-file paths and no longer hard-codes
+the fixture names. Only the synthetic env marked `B1_VERIFICATION_ONLY=true` selects them. Compose
+mounts the private key read-only into API only with requested mode `0400`; no Worker, Web, migration,
+PostgreSQL, or MinIO mount exists. Real GCE keys remain a Secret Manager responsibility.
+
+Image/scanner safety: `.dockerignore` excludes the verification PEM directory from every build
+context; source Dockerfiles use narrow `COPY` statements; direct inspection found neither PEM in the
+API, Worker, nor Web images. The repository-wide local secret scan has one documented exact-file
+exception, while Terraform and legacy deploy scripts have no fixture reference or upload path.
+
+Evidence: verification README warning, preflight marker/path confinement, reference allowlist,
+Terraform/deploy isolation, Docker build-context policy, key metadata/pair match, production Secret
+Manager contract, and narrow scanner exception are enforced by focused contract tests. Local file
+modes are private `0600` and public `0644`, but documentation explicitly does not treat Git modes as
+a production security boundary. Commit: not created.
+
+## Runtime-Generated JWT Verification Policy
+
+This decision supersedes the preceding acceptance of a committed verification fixture. Phase B1 JWT
+material is now generated after checkout under the Git-ignored
+`infra/gce/verification/generated/` directory; neither PEM is a repository artifact.
+
+Preflight invokes `generate-verification-jwt-keys.sh`, which generates an RSA 2048 PKCS#8/private and
+derived-public pair when missing or invalid, reuses a valid matching pair, repairs modes to `0600` and
+`0644`, and supports explicit local rotation through `--force`. It prints metadata only.
+
+The synthetic env selects only the ignored generated paths. Compose remains path-parameterized and
+mounts the files read-only into API only. Terraform, legacy deploy scripts, and Secret Manager upload
+paths do not reference the generated directory. The obsolete committed-PEM secret-scan exception was
+removed, while `.dockerignore` excludes the generated directory from every image context.
+
+Production policy is unchanged: real JWT private/public keys come from Secret Manager or another
+approved production source and are staged outside the repository. Generated verification keys are
+not valid production, staging, shared-demo, or externally reachable credentials. Migration: NONE.
+
+Validation: generator generation/reuse/invalid-repair/force-rotation and RSA pair metadata PASS;
+preflight and Compose config PASS; isolated migration/API/Worker/Web/API-health/Web-to-API PASS;
+container mounts read-only into API only with effective `0600`/`0644`; focused contracts 33 PASS;
+repository secret scan without a PEM exception PASS; Ruff, format, and `git diff --check` PASS. The
+isolated Compose stack and volumes were removed after verification.
