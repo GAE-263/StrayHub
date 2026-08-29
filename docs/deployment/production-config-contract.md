@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B1-B4 and Phase D1-D2 managed-service contracts verified locally
+Status: Phase B1-B4 and Phase D1-D3 managed-service contracts verified locally
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -61,6 +61,9 @@ requires `AI_API_KEY`.
 | `B4_HTTP_HOST_PORT`, `B4_HTTPS_HOST_PORT` | Edge verifier | Non-secret | Verification ports `8088`/`8443` | Host ports `80`/`443` |
 | `B4_LETSENCRYPT_DIR` | Certificate mount | Sensitive path | Ignored self-signed verification tree | Host `/etc/letsencrypt` |
 | `B4_ACME_WEBROOT` | HTTP-01 webroot | Non-secret path | Ignored verification directory | Protected host webroot |
+| `GCS_BACKUP_BUCKET` | Host backup scripts only | Non-secret resource name | Explicit fake transport input | Private backup-only bucket name |
+| `GCS_BACKUP_PREFIX` | Host backup scripts only | Non-secret object prefix | `strayhub-backups` | `strayhub-backups` |
+| `BACKUP_ENVIRONMENT` | Host backup scripts only | Non-secret path segment | `gcp-demo` | `production` or approved environment |
 
 `POSTGRES_PASSWORD` belongs to the bootstrap/migration login and matches `DATABASE_MIGRATION_URL`.
 `POSTGRES_RUNTIME_PASSWORD` belongs to the non-superuser application login and matches
@@ -187,10 +190,10 @@ only into a confirmed `strayhub-b3-restore-*` bucket. No backup path is mounted 
 or any long-running service.
 
 Phase B3 proves local data correctness only. PostgreSQL and MinIO captures are sequential and not
-transactionally atomic. The production target remains a private, IAM-restricted GCS backup bucket in
-Phase D; live upload, retention enforcement, scheduling, and restore from GCS are not implemented.
-See `docs/deployment/backup-restore.md` for commands, manifest fields, retention proposal, and
-destructive-restore guards.
+transactionally atomic. D3 adds host-only `gcloud storage` upload/download with pre/post-transfer
+manifest validation and `_COMPLETE` activation. No GCS setting enters Compose or the application.
+Live bucket/IAM/lifecycle acceptance and scheduling remain deferred. See
+`docs/deployment/backup-restore.md` and `docs/deployment/gcs-backup.md`.
 
 ## Phase B4 TLS edge contract
 
@@ -227,3 +230,16 @@ The future GCE VM service account authenticates through Application Default Cred
 no IAM or live KMS call. Mock-client tests verify authenticated encrypt/decrypt, returned key-version
 metadata, safe failures, and no non-local fallback. See `docs/deployment/cloud-kms.md` for the full
 resource, IAM, ADC, rotation, failure, and deferred live-acceptance contract.
+
+## Phase D3 GCS backup transport contract
+
+GCS is backup-only; MinIO remains runtime media. The production template exposes only host-side
+bucket, prefix, and environment identifiers. `gcloud storage` authenticates through the future GCE
+VM service account's ADC and never uses JSON/HMAC credentials. Upload revalidates B3 artifacts before
+and after transfer and writes `_COMPLETE` last; download rejects incomplete/corrupt sets and never
+auto-restores.
+
+The future VM receives bucket-level `roles/storage.objectCreator` plus
+`roles/storage.objectViewer`; lifecycle, not the VM, owns expiration. The proposed 35-day age rule is
+explicitly not seven-daily/four-weekly selection. Local fake-CLI verification does not prove live GCS
+or IAM. See `docs/deployment/gcs-backup.md`.

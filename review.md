@@ -633,3 +633,29 @@ included. Focused D2 KMS/PII/config contracts: 85 PASS. Broader unit/security ba
 PASS. Production and B1-B4 preflights, Compose config, repository secret scan, Ruff, format, and
 `git diff --check`: PASS. Migration: NONE. Commit: included in the coherent Phase D2 deployment
 commit.
+
+## Phase D3 GCS Backup Wiring and Restore Verification
+
+Status: PARTIALLY READY. Canonical policy is `docs/deployment/gcs-backup.md`. Host-side
+`gcloud storage` scripts wrap the existing B3 artifact contract; MinIO remains runtime media and no
+application/Compose service receives GCS backup configuration. Upload verifies before/after transfer
+and writes `_COMPLETE` last. Download requires the marker, refuses overwrite, and revalidates all
+PostgreSQL and MinIO hashes before exposing fresh restore staging.
+
+Canonical auth is the future GCE VM service account through ADC. Bucket IAM is limited to
+`roles/storage.objectCreator` plus `roles/storage.objectViewer` on the specific private backup
+bucket; lifecycle owns deletion. The proposed 7-day unlocked retention plus 35-day age lifecycle is
+a rolling window, not exact seven-daily/four-weekly selection. Public access, JSON keys, HMAC,
+Object Admin, manual production pruning, and live IAM mutation are excluded.
+
+No approved test bucket exists. A filesystem-backed fake `gcloud` exercised the production scripts,
+including marker ordering and incomplete/corrupt rejection. The isolated `strayhub-d3-verify` drill
+created a real PostgreSQL dump and MinIO artifact, uploaded them, removed local staging, downloaded
+fresh, and restored the synthetic row, Alembic head, RLS/runtime-role checks, MinIO key, bytes, and
+inventory checksum. This is local end-to-end evidence, not live GCS acceptance.
+
+No real GCE, systemd, DNS/firewall/TLS mutation, runtime GCS migration, legacy deletion, Terraform
+state change, CI replacement, product behavior, DB schema, tenant/RLS, or LINE/LIFF change is
+included. Focused GCE/D3 contracts: 57 PASS. Repository secret scan, Ruff, format, and
+`git diff --check`: PASS. Migration: NONE. Commit: included in the coherent Phase D3 deployment
+commit.

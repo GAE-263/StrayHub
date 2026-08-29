@@ -124,6 +124,22 @@ def _verify_manifest(arguments: argparse.Namespace) -> None:
     manifest_path = Path(arguments.manifest).resolve(strict=True)
     manifest = _load_json(manifest_path)
     backup_dir = manifest_path.parent
+    allowed_exact = {
+        Path("_COMPLETE"),
+        Path("manifest.json"),
+        Path("postgres"),
+        Path("postgres/metadata.json"),
+        Path("postgres/postgres.dump"),
+        Path("minio"),
+        Path("minio/inventory.json"),
+        Path("minio/objects"),
+    }
+    for path in backup_dir.rglob("*"):
+        relative = path.relative_to(backup_dir)
+        if path.is_symlink():
+            raise ValueError(f"symlink is forbidden in backup layout: {relative}")
+        if relative not in allowed_exact and Path("minio/objects") not in relative.parents:
+            raise ValueError(f"unexpected file in backup layout: {relative}")
     required = {
         "schema_version",
         "backup_id",

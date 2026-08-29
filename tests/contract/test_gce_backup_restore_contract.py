@@ -207,22 +207,30 @@ def test_backup_tools_add_no_service_port_or_nginx_route() -> None:
 
 def test_documentation_states_local_limit_retention_and_gcs_deferral() -> None:
     documentation = DOC.read_text(encoding="utf-8")
+    normalized = " ".join(documentation.split())
 
     for phrase in (
         "not an off-VM or durable production backup",
-        "seven daily generations and four weekly generations",
+        "35-day age-based lifecycle",
+        "seven-daily/four-weekly selection",
         "transactionally_atomic: false",
-        "Phase D must prove upload, IAM, retention, and restore from GCS",
+        "writes `_COMPLETE` last",
+        "live bucket/IAM/lifecycle and restore acceptance remain required",
         "Only names beginning `strayhub_b3_restore_`",
         "Only bucket names beginning `strayhub-b3-restore-`",
     ):
-        assert phrase in documentation
+        assert phrase in normalized
 
 
 def test_scripts_have_no_cloud_run_cloud_sql_or_live_gcs_dependency() -> None:
-    combined = "\n".join(
-        path.read_text(encoding="utf-8") for path in SCRIPTS.glob("*backup*.sh") if path.is_file()
+    b3_scripts = (
+        "backup-all.sh",
+        "backup-postgres.sh",
+        "backup-minio.sh",
+        "restore-postgres.sh",
+        "restore-minio.sh",
     )
+    combined = "\n".join(_script(name) for name in b3_scripts)
     normalized = combined.lower()
 
     for forbidden in ("cloud run", "cloud sql", "gs://", "gcloud", "gsutil"):

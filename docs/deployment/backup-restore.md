@@ -1,6 +1,6 @@
 # PostgreSQL and MinIO Backup / Restore
 
-Status: Phase B3 local backup/restore correctness verified; production durability is not yet implemented
+Status: Phase B3 local restore verified; Phase D3 GCS transport verified by simulation, live durability deferred
 
 ## Backup model and boundary
 
@@ -12,9 +12,9 @@ The canonical backup captures two components sequentially under one UTC-stamped 
 
 The default B3 staging root is the Git-ignored `infra/gce/backup/generated/`. This is local disk on
 the same development machine and is **not an off-VM or durable production backup**. The layout is
-designed for direct future upload beneath `strayhub-backups/<environment>/<backup-id>/` in a private,
-IAM-restricted GCS bucket. Phase D must prove upload, IAM, retention, and restore from GCS before the
-backup system can be called production-ready.
+uploaded beneath `strayhub-backups/<environment>/<backup-id>/` in a private, IAM-restricted GCS
+bucket by the D3 transport scripts. Simulated upload/download and integrity checks pass, but live
+bucket/IAM/lifecycle and restore acceptance remain required before production readiness.
 
 Production dumps and object copies may contain sensitive shelter data and PII. Store them with
 owner-only permissions, never commit them, never serve them through nginx, and never put them on an
@@ -103,13 +103,17 @@ PostgreSQL and MinIO are captured sequentially, not as a distributed snapshot. T
 short time gap aid correlation but do not guarantee cross-system atomicity. Before production, decide
 whether writes must be paused or coordinated during backup and define a measured recovery point.
 
-## Retention proposal
+## Retention and GCS transport
 
-For production-like proof of concept, retain seven daily generations and four weekly generations.
-Monthly retention is deferred until storage volume, legal/privacy obligations, and recovery targets
-are known. B3 does not schedule backups and does not prune local or GCS data. Any future pruning tool
-must validate its exact environment root, refuse symlinks/broad paths, provide dry-run evidence, and
-never delete from GCS until Phase D retention and IAM tests pass.
+The D3 bucket proposal uses a 7-day unlocked retention policy and a 35-day age-based lifecycle. This
+is a rolling age window, not the earlier seven-daily/four-weekly selection proposal. GCS lifecycle
+cannot choose weekly generations without scheduler or metadata logic, so exact weekly/monthly
+retention remains deferred. The VM has no delete permission and D3 adds no pruning command.
+
+`gcs-backup-preflight.sh`, `upload-backup-gcs.sh`, and `download-backup-gcs.sh` reuse this manifest.
+Upload verifies locally, transfers with `gcloud storage`, re-downloads and verifies, then writes
+`_COMPLETE` last. Download requires that marker, uses a fresh isolated destination, and revalidates
+all hashes before the existing restore scripts may run. See `docs/deployment/gcs-backup.md`.
 
 ## B3 recovery drill
 
@@ -126,6 +130,12 @@ were restored to `strayhub-b3-restore-drill`; object count and the canonical inv
 matched. The manifest revalidated all component hashes. The isolated stack, volumes, and generated
 artifacts were removed after verification.
 
-Deferred: real GCS transfer and credentials/IAM, live Secret Manager, backup scheduling/pruning,
-production maintenance mode, real GCE, systemd, TLS/DNS/firewall, KMS verification, CI replacement,
+The D3 drill repeated the restore boundary after a simulated GCS round trip: upload with `_COMPLETE`
+last, removal of local staging, download to a fresh directory, and full manifest verification. The
+downloaded PostgreSQL dump restored its synthetic probe row, migration head, RLS/runtime-role
+checks; the downloaded MinIO artifact restored its synthetic key and exact bytes/checksum. Live GCS
+remains unverified.
+
+Deferred: live GCS bucket/IAM/lifecycle and transfer acceptance, backup scheduling, exact
+daily/weekly/monthly selection, production maintenance mode, real GCE, systemd, CI replacement,
 Terraform state migration, and legacy deletion.

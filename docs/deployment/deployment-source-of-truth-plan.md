@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, and Phase D1-D2 managed-service wiring verified locally
+Status: Phase A, Phase B1-B4, and Phase D1-D3 managed-service wiring verified locally
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -139,6 +139,18 @@ compatibility, permission-denied and malformed-ciphertext failures, tenant/field
 and no local fallback. IAM is limited to `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the specific
 key where practical. Live KMS, IAM mutation, and real GCE identity acceptance remain deferred.
 
+## Phase D3 canonical GCS backup artifacts
+
+D3 adds host-side `gcloud storage` transfer around the existing B3 artifact and restore contracts.
+The private backup bucket uses ADC, bucket-scoped Object Creator/Viewer IAM, public access prevention,
+and server-side age-based lifecycle. MinIO remains runtime media and no Compose service receives GCS
+configuration.
+
+Upload validates locally and after a verification download before writing `_COMPLETE`; download
+requires the marker and revalidates all PostgreSQL/MinIO hashes in fresh staging. A fake CLI proves
+the production scripts without credentials. Live GCS/IAM/lifecycle and GCE ADC acceptance remain
+deferred, so D3 is not yet live-ready.
+
 ## Current deployment inventory
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
@@ -195,10 +207,11 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
-Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, and local
-backup/restore verification artifacts now exist. GCE provisioning, live certificate issuance, live GCS transfer,
-scheduling, and systemd artifacts do not yet exist. Local Terraform cache content under
-`.terraform/` is generated tooling state, not a versioned deployment source of truth.
+Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, local
+backup/restore verification, and simulated GCS transport contracts now exist. GCE provisioning,
+live certificate issuance, live GCS transfer, scheduling, and systemd artifacts do not yet exist.
+Local Terraform cache content under `.terraform/` is generated tooling state, not a versioned
+deployment source of truth.
 
 ## Terraform coupling and future ownership
 
@@ -280,10 +293,10 @@ Current contradictions:
 | Worker | Legacy model is a Cloud Run service although the worker is a polling process | Run Worker as a private long-lived Compose service |
 | Migration | Cloud Run job executes Alembic | Use a reviewed one-shot Compose/VM migration command |
 | Ingress | Cloud Run URLs are emitted directly | nginx owns public HTTP/TLS and routes `/` and `/v1/*` |
-| Backup | Local PostgreSQL/MinIO backup and restore are verified; live GCS transfer is absent | Add private GCS upload/IAM/retention and restore-from-GCS verification |
+| Backup | Local PostgreSQL/MinIO restore and simulated private GCS transport are verified; live GCS acceptance is absent | Keep D3 host-side transport; verify live bucket/IAM/lifecycle, ADC, and restore in Phase E |
 
-The GCS adapter should not be repurposed automatically as a backup tool. Phase D must decide whether a
-dedicated backup client/CLI is safer than reusing application object-storage abstractions.
+The application GCS adapter is not the backup tool. D3 selects host-side `gcloud storage` with ADC
+so backup transport remains outside application object-storage abstractions.
 
 ## Future GCE repository structure
 
@@ -418,6 +431,15 @@ Status: verified locally with the existing adapter and injected client; live KMS
 - Define ADC and key-scoped Encrypter/Decrypter IAM for the future GCE VM service account.
 - Fail closed on missing config, access failure, malformed data, or client/network failure.
 
+#### Phase D3 — GCS backup transport
+
+Status: simulated transport/integrity verified; live GCS acceptance deferred.
+
+- Transfer only complete B3 PostgreSQL/MinIO artifacts to a private backup bucket.
+- Require `_COMPLETE` and full manifest/checksum validation before restore staging is accepted.
+- Use VM ADC with bucket-scoped Object Creator/Viewer; lifecycle owns deletion.
+- Keep MinIO as runtime media and keep all GCS operations outside application containers.
+
 ### Phase E — Real GCE deployment
 
 Verify VM boot, Compose startup, TLS, health checks, nginx routing, migrations, MinIO media, Worker,
@@ -538,6 +560,6 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-Phase D1 and D2 verify Secret Manager staging and Cloud KMS wiring locally. Phase D3 owns
-backup-only GCS upload/retention/restore; Phase E owns real GCE/systemd and live managed-service
-acceptance; Phase F owns legacy cleanup and CI replacement. No deletion is allowed now.
+Phase D1-D3 verify managed-service contracts locally. D3 still requires approved live GCS
+acceptance. Phase E owns real GCE/systemd and live managed-service acceptance; Phase F owns legacy
+cleanup and CI replacement. No deletion is allowed now.

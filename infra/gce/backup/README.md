@@ -8,7 +8,7 @@ be mounted into nginx, Web, or API, and operators must not place real production
 developer workstation. Production backups can contain credentials, PII, and shelter-owned data even
 though the manifest itself excludes secrets.
 
-The stable layout is directly transferable to the future private GCS target:
+The stable layout is transferred to the private GCS backup target by the Phase D3 host-side scripts:
 
 ```text
 strayhub-backups/<environment>/<backup-id>/
@@ -21,5 +21,6 @@ strayhub-backups/<environment>/<backup-id>/
     └── objects/<original object keys>
 ```
 
-Phase D will choose and verify transfer tooling, private-bucket IAM, retention enforcement, and a
-restore initiated from GCS. No B3 script contacts GCS.
+Phase D3 uses only `gcloud storage` with ADC, verifies the manifest before and after transfer, and
+writes `_COMPLETE` last. The existing B3 capture/restore scripts still do not contact GCS. See
+`docs/deployment/gcs-backup.md`; live bucket/IAM/lifecycle acceptance remains deferred.
