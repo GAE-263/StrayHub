@@ -89,21 +89,24 @@ services:
       PII_ENCRYPTION_PROVIDER: ${PII_ENCRYPTION_PROVIDER:?PII_ENCRYPTION_PROVIDER is required}
       PII_KMS_KEY_NAME: ${PII_KMS_KEY_NAME:?PII_KMS_KEY_NAME is required}
       AI_PROVIDER: ${AI_PROVIDER:?AI_PROVIDER is required}
+      AI_ENDPOINT: ${AI_ENDPOINT:-}
+      AI_MODEL_NAME: ${AI_MODEL_NAME:-}
+      AI_API_KEY: ${AI_API_KEY:-}
     secrets:
-      # B1 env selects ignored, runtime-generated files. Real deployments must instead stage Secret
-      # Manager values at approved host paths; no verification path is hard-coded here.
-      - source: b1_jwt_private_key
-        target: b1_jwt_private_key
+      # The selected env file supplies either ignored verification paths or protected D1 staged
+      # production paths. No verification or production key path is hard-coded here.
+      - source: runtime_jwt_private_key
+        target: runtime_jwt_private_key
         mode: 0400
-      - source: b1_jwt_public_key
-        target: b1_jwt_public_key
+      - source: runtime_jwt_public_key
+        target: runtime_jwt_public_key
         mode: 0444
     command:
       - /bin/sh
       - -ec
       - |
-        export AUTH_JWT_ACTIVE_PRIVATE_KEY="$$(cat /run/secrets/b1_jwt_private_key)"
-        export AUTH_JWT_ACTIVE_PUBLIC_KEY="$$(cat /run/secrets/b1_jwt_public_key)"
+        export AUTH_JWT_ACTIVE_PRIVATE_KEY="$$(cat /run/secrets/runtime_jwt_private_key)"
+        export AUTH_JWT_ACTIVE_PUBLIC_KEY="$$(cat /run/secrets/runtime_jwt_public_key)"
         exec uvicorn services.api.app.main:app --host 0.0.0.0 --port 8080
     healthcheck:
       test:
@@ -205,7 +208,7 @@ volumes:
   minio_data:
 
 secrets:
-  b1_jwt_private_key:
+  runtime_jwt_private_key:
     file: ${AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE:?AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE is required}
-  b1_jwt_public_key:
+  runtime_jwt_public_key:
     file: ${AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE:?AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE is required}

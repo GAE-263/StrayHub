@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B4 TLS-ready runtime and local HTTPS edge verified
+Status: Phase B1-B4 and Phase D1 secret staging verified locally
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -17,27 +17,27 @@ the ownership boundary for those later integrations without implementing them no
 | Field | Required by | Classification | Phase B1 source | Future production source |
 | --- | --- | --- | --- | --- |
 | `APP_ENV` | API, Worker, Alembic | Non-secret | Verification env; fixed to `gcp-demo` | Compose non-secret env/config |
-| `DATABASE_URL` | API, Worker | Secret | Synthetic restricted-runtime login; internal `postgres:5432` URL | Secret Manager |
-| `DATABASE_MIGRATION_URL` | Alembic | Secret | Synthetic bootstrap/migration login; internal `postgres:5432` URL | Secret Manager |
+| `DATABASE_URL` | API, Worker | Secret | Synthetic restricted-runtime login; internal `postgres:5432` URL | Secret Manager → staged `runtime.env` |
+| `DATABASE_MIGRATION_URL` | Alembic | Secret | Synthetic bootstrap/migration login; internal `postgres:5432` URL | Secret Manager → staged `runtime.env` |
 | `MINIO_ENDPOINT` | API | Non-secret | Verification env; internal `http://minio:9000` | Compose non-secret env/config |
-| `MINIO_ACCESS_KEY` | API, MinIO, bucket bootstrap | Secret | Synthetic verification env | Secret Manager |
-| `MINIO_SECRET_KEY` | API, MinIO, bucket bootstrap | Secret | Synthetic verification env | Secret Manager |
+| `MINIO_ACCESS_KEY` | API, MinIO, bucket bootstrap | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
+| `MINIO_SECRET_KEY` | API, MinIO, bucket bootstrap | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `MINIO_BUCKET` | API, bucket bootstrap | Non-secret | Verification env | Compose non-secret env/config |
 | `LINE_CHANNEL_ID` | API | Non-secret | Synthetic verification env | Compose non-secret env/config |
-| `LINE_CHANNEL_SECRET` | API | Secret | Synthetic verification env | Secret Manager |
-| `LINE_CHANNEL_ACCESS_TOKEN` | API | Secret | Synthetic verification env | Secret Manager |
+| `LINE_CHANNEL_SECRET` | API | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
+| `LINE_CHANNEL_ACCESS_TOKEN` | API | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `LIFF_ID` | API, Web | Non-secret | Synthetic verification env | Compose non-secret env/config |
-| `ANIMAL_CONFIRMATION_SECRET` | API | Secret | Synthetic verification env | Secret Manager |
+| `ANIMAL_CONFIRMATION_SECRET` | API | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `AUTH_JWT_ISSUER` | API | Non-secret | Verification env | Compose non-secret env/config |
 | `AUTH_JWT_AUDIENCE` | API | Non-secret | Verification env | Compose non-secret env/config |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE` | API | Non-secret | Verification env identifier | Compose non-secret env/config |
 | `AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE` | API | Non-secret | Verification env identifier | Compose non-secret env/config |
-| `AUTH_JWT_ACTIVE_PRIVATE_KEY` | API | Secret | Runtime-generated, ignored Compose file secret | Secret Manager |
-| `AUTH_JWT_ACTIVE_PUBLIC_KEY` | API | Secret | Runtime-generated, ignored Compose file secret | Secret Manager |
+| `AUTH_JWT_ACTIVE_PRIVATE_KEY` | API | Secret | Runtime-generated, ignored Compose file secret | Secret Manager → staged private file |
+| `AUTH_JWT_ACTIVE_PUBLIC_KEY` | API | Secret | Runtime-generated, ignored Compose file secret | Secret Manager → staged public file |
 | `PII_ENCRYPTION_PROVIDER` | API | Non-secret | Verification env; `gcp-kms` | Compose non-secret env/config |
 | `PII_KMS_KEY_NAME` | API | Non-secret resource identifier | Structurally valid synthetic resource name | KMS resource reference |
 | `AI_PROVIDER` | API | Non-secret | Verification env; `mock` | Compose non-secret env/config |
-| `AI_API_KEY` | API when external AI is selected | Secret | Not set because Phase B1 uses mock AI | Secret Manager |
+| `AI_API_KEY` | API when external AI is selected | Secret | Not set because Phase B1 uses mock AI | Secret Manager → optional staged `runtime.env` entry |
 
 Optional previous JWT key material and its reference follow the same Secret Manager/non-secret
 identifier split when rotation enables them. External AI endpoint/model fields become Compose
@@ -50,9 +50,9 @@ requires `AI_API_KEY`.
 | --- | --- | --- | --- | --- |
 | `POSTGRES_DB` | PostgreSQL | Non-secret | Verification env | Compose non-secret env/config |
 | `POSTGRES_USER` | PostgreSQL | Non-secret | Verification env | Compose non-secret env/config |
-| `POSTGRES_PASSWORD` | PostgreSQL | Secret | Synthetic verification env | Secret Manager |
+| `POSTGRES_PASSWORD` | PostgreSQL | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `POSTGRES_RUNTIME_USER` | PostgreSQL init, API, Worker | Non-secret | Verification env | Compose non-secret env/config |
-| `POSTGRES_RUNTIME_PASSWORD` | PostgreSQL init, API, Worker | Secret | Synthetic verification env | Secret Manager |
+| `POSTGRES_RUNTIME_PASSWORD` | PostgreSQL init, API, Worker | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `API_BASE_URL` | Web server | Non-secret | Compose; internal `http://api:8080` | Compose non-secret env/config |
 | `B1_VERIFICATION_ONLY` | B1 preflight | Non-secret safety marker | Verification env; must be `true` | Not used in real deployment |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE` | Compose secret transport | Sensitive path, not key material | Ignored generated-file path | Protected staged file populated from Secret Manager |
@@ -199,3 +199,17 @@ unchanged B2 routing table. Verification uses runtime-generated ignored self-sig
 production uses host-level Certbot/Let's Encrypt state mounted read-only. No private TLS key belongs
 in Git or a container image. See `docs/deployment/tls-dns-firewall.md` for DNS, static-IP, firewall,
 renewal, failure, LINE/LIFF, trusted-proxy, and deferred-production requirements.
+
+## Phase D1 Secret Manager runtime contract
+
+Production secrets are fetched once at the VM boundary into protected immutable generations under
+`/var/lib/strayhub/secrets`. Scalar values are transported in mode-`0600` `runtime.env`; the active
+JWT pair remains file-based and is mounted read-only into API only. The atomic `current` symlink
+switches the env and pair together. Compose stays canonical and selects either B1 verification files
+or D1 production staging through explicit env-file inputs.
+
+The committed `.env.production.template` contains non-secret configuration and external staged
+paths only. Production preflight rejects `B1_VERIFICATION_ONLY=true`, repository-generated paths,
+missing fields, unsafe permissions, and invalid JWT pairs, then performs API/Worker/Migration
+fail-fast checks. See `docs/deployment/secret-manager.md` for inventory, naming, IAM, rotation,
+container-env risk, simulation, and commands.

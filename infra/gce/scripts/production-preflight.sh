@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+COMPOSE_FILE="$ROOT_DIR/infra/gce/docker-compose.production.yml"
+CONFIG_ENV=""
+SECRETS_ROOT="/var/lib/strayhub/secrets"
+PROJECT_NAME="strayhub-d1-preflight-$$"
+
+usage() {
+  echo "Usage: $0 --config-env PATH [--secrets-root PATH] [--project-name NAME]" >&2
+}
+
+fail() {
+  echo "[Production secret preflight] FAIL: $*" >&2
+  exit 1
+}
+
+while (($#)); do
+  case "$1" in
+    --config-env) CONFIG_ENV="${2:-}"; shift 2 ;;
+    --secrets-root) SECRETS_ROOT="${2:-}"; shift 2 ;;
+    --project-name) PROJECT_NAME="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage; fail "unknown or incomplete argument: $1" ;;
+  esac
+done
+
+command -v docker >/dev/null || fail "docker is required"
+command -v openssl >/dev/null || fail "openssl is required"
+[[ "$PROJECT_NAME" =~ ^strayhub-d1-preflight-[a-z0-9_-]{1,40}$ ]] ||
+  fail "--project-name must use the isolated strayhub-d1-preflight-* prefix"
+[[ -f "$CONFIG_ENV" ]] || fail "--config-env must name a protected non-secret config file"
+[[ -d "$SECRETS_ROOT" ]] || fail "secret staging root does not exist"
+SECRETS_ROOT="$(cd "$SECRETS_ROOT" && pwd -P)"
+current="$SECRETS_ROOT/current"
+[[ -L "$current" ]] || fail "current secret generation symlink is missing"
+generation="$(cd "$current" && pwd -P)"
+case "$generation" in
+  "$SECRETS_ROOT/generations/"*) ;;
+  *) fail "current secret generation escapes the staging root" ;;
+esac
+
+mode_of() {
+  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+}
+
+[[ "$(mode_of "$SECRETS_ROOT")" == "700" ]] || fail "secret staging root mode must be 0700"
+runtime_env="$current/runtime.env"
+private_key="$current/jwt-private.pem"
+public_key="$current/jwt-public.pem"
+for secret_file in "$runtime_env" "$private_key" "$public_key"; do
+  [[ -s "$secret_file" ]] || fail "required staged secret file is missing or empty"
+  [[ "$(mode_of "$secret_file")" == "600" ]] || fail "staged secret file mode must be 0600"
+done
+
+env_value() {
+  local file="$1"
+  local key="$2"
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; found = 1} END {exit !found}' \
+    "$file"
+}
+
+[[ "$(env_value "$CONFIG_ENV" B1_VERIFICATION_ONLY 2>/dev/null || true)" == "false" ]] ||
+  fail "B1_VERIFICATION_ONLY must be false in production"
+if grep -Eq 'verification/generated|SYNTHETIC VERIFICATION ONLY|NOT FOR REAL DEPLOYMENT' "$CONFIG_ENV"; then
+  fail "production config references verification-only material"
+fi
+
+required_config=(
+  APP_ENV POSTGRES_DB POSTGRES_USER POSTGRES_RUNTIME_USER MINIO_ENDPOINT MINIO_BUCKET
+  LINE_CHANNEL_ID LIFF_ID AUTH_JWT_ISSUER AUTH_JWT_AUDIENCE
+  AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE
+  AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE
+  PII_ENCRYPTION_PROVIDER PII_KMS_KEY_NAME AI_PROVIDER
+  B4_HTTP_HOST_PORT B4_HTTPS_HOST_PORT B4_LETSENCRYPT_DIR B4_ACME_WEBROOT
+)
+for key in "${required_config[@]}"; do
+  value="$(env_value "$CONFIG_ENV" "$key" 2>/dev/null || true)"
+  [[ -n "$value" ]] || fail "$key is missing or empty"
+  [[ ! "$value" =~ (CHANGE|PLACEHOLDER|PROJECT_ID|example\.com) ]] || fail "$key is unresolved"
+done
+[[ "$(env_value "$CONFIG_ENV" APP_ENV)" == "production" ]] || fail "APP_ENV must be production"
+[[ "$(env_value "$CONFIG_ENV" PII_ENCRYPTION_PROVIDER)" == "gcp-kms" ]] ||
+  fail "PII_ENCRYPTION_PROVIDER must remain gcp-kms"
+configured_private="$(env_value "$CONFIG_ENV" AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE)"
+configured_public="$(env_value "$CONFIG_ENV" AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE)"
+[[ -f "$configured_private" && -f "$configured_public" ]] ||
+  fail "configured production JWT files do not exist"
+configured_private="$(cd "$(dirname "$configured_private")" && pwd -P)/$(basename "$configured_private")"
+configured_public="$(cd "$(dirname "$configured_public")" && pwd -P)/$(basename "$configured_public")"
+private_key="$(cd "$(dirname "$private_key")" && pwd -P)/$(basename "$private_key")"
+public_key="$(cd "$(dirname "$public_key")" && pwd -P)/$(basename "$public_key")"
+[[ "$configured_private" == "$private_key" ]] || fail "production JWT private path is not staged"
+[[ "$configured_public" == "$public_key" ]] || fail "production JWT public path is not staged"
+
+required_runtime=(
+  POSTGRES_PASSWORD POSTGRES_RUNTIME_PASSWORD DATABASE_URL DATABASE_MIGRATION_URL
+  MINIO_ACCESS_KEY MINIO_SECRET_KEY LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN
+  ANIMAL_CONFIRMATION_SECRET
+)
+for key in "${required_runtime[@]}"; do
+  value="$(env_value "$runtime_env" "$key" 2>/dev/null || true)"
+  [[ -n "$value" && "$value" != "''" ]] || fail "$key is missing or empty from runtime.env"
+done
+
+derived_public="$(mktemp "${TMPDIR:-/tmp}/strayhub-d1-public.XXXXXX")"
+compose=(docker compose --project-name "$PROJECT_NAME" --env-file "$CONFIG_ENV" \
+  --env-file "$runtime_env" -f "$COMPOSE_FILE")
+cleanup() {
+  rm -f "$derived_public"
+  "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+openssl pkey -in "$private_key" -pubout -out "$derived_public" >/dev/null 2>&1 ||
+  fail "staged JWT private key is invalid"
+cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not match"
+
+"${compose[@]}" config --quiet
+"${compose[@]}" run --rm --no-deps --entrypoint /bin/sh api -ec '
+  export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(cat /run/secrets/runtime_jwt_private_key)"
+  export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(cat /run/secrets/runtime_jwt_public_key)"
+  python -c "from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process=\"api\")"
+' >/dev/null
+"${compose[@]}" run --rm --no-deps --entrypoint python worker -c \
+  'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
+  >/dev/null
+docker compose --project-name "$PROJECT_NAME" --profile tools --env-file "$CONFIG_ENV" \
+  --env-file "$runtime_env" -f "$COMPOSE_FILE" run --rm --no-deps --entrypoint python migration -c \
+  'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="migration")' \
+  >/dev/null
+
+echo "[Production secret preflight] PASS"

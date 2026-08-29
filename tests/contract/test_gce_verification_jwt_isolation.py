@@ -28,14 +28,20 @@ REFERENCE_ALLOWLIST = {
     ".gitignore",
     "docs/deployment/deployment-source-of-truth-plan.md",
     "docs/deployment/production-config-contract.md",
+    "docs/deployment/secret-manager.md",
     "docs/deployment/tls-dns-firewall.md",
+    "infra/gce/.env.production.template",
     "infra/gce/.env.production.example",
+    "infra/gce/scripts/fetch-secrets.sh",
     "infra/gce/scripts/generate-verification-jwt-keys.sh",
     "infra/gce/scripts/generate-verification-tls-cert.sh",
     "infra/gce/scripts/preflight.sh",
+    "infra/gce/scripts/production-preflight.sh",
+    "infra/gce/secrets/production-secret-map.tsv",
     "infra/gce/verification/README.md",
     "review.md",
     "tests/contract/test_gce_production_compose_contract.py",
+    "tests/contract/test_gce_secret_manager_contract.py",
     "tests/contract/test_gce_tls_edge_contract.py",
     "tests/contract/test_gce_verification_jwt_isolation.py",
 }
@@ -180,15 +186,23 @@ def test_compose_requires_selected_key_files_and_mounts_only_into_api() -> None:
     compose = yaml.safe_load(compose_text)
 
     assert "verification/generated" not in compose_text
-    assert compose["secrets"]["b1_jwt_private_key"]["file"].startswith(
+    assert compose["secrets"]["runtime_jwt_private_key"]["file"].startswith(
         "${AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE:"
     )
-    assert compose["secrets"]["b1_jwt_public_key"]["file"].startswith(
+    assert compose["secrets"]["runtime_jwt_public_key"]["file"].startswith(
         "${AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE:"
     )
     assert compose["services"]["api"]["secrets"] == [
-        {"source": "b1_jwt_private_key", "target": "b1_jwt_private_key", "mode": 0o400},
-        {"source": "b1_jwt_public_key", "target": "b1_jwt_public_key", "mode": 0o444},
+        {
+            "source": "runtime_jwt_private_key",
+            "target": "runtime_jwt_private_key",
+            "mode": 0o400,
+        },
+        {
+            "source": "runtime_jwt_public_key",
+            "target": "runtime_jwt_public_key",
+            "mode": 0o444,
+        },
     ]
     for service_name, service in compose["services"].items():
         if service_name != "api":

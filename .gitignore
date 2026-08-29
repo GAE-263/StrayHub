@@ -4,6 +4,7 @@ Thumbs.db
 .env.*
 !.env.example
 !infra/gce/.env.production.example
+!infra/gce/.env.production.template
 infra/gce/verification/generated/
 infra/gce/backup/generated/
 .venv/

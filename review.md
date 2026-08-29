@@ -585,3 +585,26 @@ stack returned HTTP 308, served the ACME probe exactly, returned HTTPS 200 for W
 versioned API, and Volunteer LIFF, and returned the expected webhook GET 405. Only nginx published
 ports (verification 8088/8443); all internal services remained private. Focused B1/B2/B4/JWT
 contracts: 30 PASS. The isolated stack and volumes were removed after the drill.
+
+## Phase D1 Secret Manager Runtime Staging
+
+Status: READY. Canonical policy is `docs/deployment/secret-manager.md`. One read-only
+fetch maps explicit, parameterized Secret Manager IDs into private immutable generations. Scalar
+secrets use `runtime.env`; the active JWT pair remains file-based. An atomic `current` symlink keeps
+the generation coherent, with directory mode 0700 and secret file mode 0600.
+
+Production uses the non-secret `.env.production.template` plus external staged material under
+`/var/lib/strayhub/secrets`; it rejects B1 verification markers and generated repository paths. The
+B1 verifier remains unchanged. API, Worker, Migration, PostgreSQL, MinIO, LINE, confirmation, JWT,
+and optional external-AI ownership are explicit; no application behavior or schema changes exist.
+
+No live Secret Manager/IAM mutation, KMS call, GCS transfer, GCE provisioning, systemd, TLS/DNS/
+firewall mutation, legacy deletion, Terraform state change, or CI replacement is included.
+Migration: NONE. Commit: included in the coherent Phase D1 deployment commit.
+
+Verification: synthetic fetch/staging, required-secret failure preservation, atomic rotation,
+0700/0600 permissions, JWT pair validation, two-env Compose render, and production preflight PASS.
+API, Worker, and Migration production fail-fast checks passed. An isolated production-mode API
+started and returned healthy without exposing a host port. The B1 verification preflight remained
+green. Focused D1/B1-B4/JWT/backup contracts: 45 PASS. Repository secret scan, Ruff, format, and
+`git diff --check` passed. Temporary synthetic data and Docker resources were removed.

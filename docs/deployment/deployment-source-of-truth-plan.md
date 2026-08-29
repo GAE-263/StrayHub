@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A and Phase B1-B4 verified locally
+Status: Phase A, Phase B1-B4, and Phase D1 secret staging verified locally
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -115,6 +115,18 @@ The isolated `strayhub-b4-final` stack passed HTTP redirect, ACME webroot, HTTPS
 structural webhook, running nginx syntax, and public-port isolation checks. Its containers, network,
 and verification volumes were removed afterward. Real edge mutation remains deferred.
 
+## Phase D1 canonical Secret Manager staging artifacts
+
+D1 centralizes read-only secret fetch at the future VM boundary. A declarative inventory maps
+parameterized Secret Manager IDs to a protected scalar env file and active JWT files; immutable
+generations switch through one atomic symlink. The committed production template contains no secret
+values and cannot select B1 generated verification keys. No container calls GCP directly.
+
+Local D1 verification used synthetic source files and the same staging/permission/consumption path.
+Staging, atomic rotation, production preflight, API startup/health, and Worker/Migration fail-fast
+checks passed. Live Secret Manager, IAM mutation, GCE identity, KMS operations, and GCS transfer
+remain deferred.
+
 ## Current deployment inventory
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
@@ -137,6 +149,9 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `infra/gce/backup/` | Tracked backup policy plus ignored generated staging | Local B3 / future GCS transfer layout | Backup scripts and contracts | Sensitive operations | KEEP_CANONICAL |
 | `docs/deployment/backup-restore.md` | Recovery, manifest, retention, and safety contract | GCE single VM / future backup-only GCS | Operators and contract tests | Operations | KEEP_CANONICAL |
 | `docs/deployment/tls-dns-firewall.md` | TLS, DNS, static-IP, firewall, and renewal contract | GCE single VM edge | Operators and contract tests | Yes | KEEP_CANONICAL |
+| `infra/gce/scripts/fetch-secrets.sh` and `production-preflight.sh` | Read-only secret staging and production consumption gate | GCE single VM / local synthetic verification | Operators and contract tests | Pre-start gate | KEEP_CANONICAL |
+| `infra/gce/secrets/production-secret-map.tsv` | Parameterized required/optional secret inventory | GCE single VM | Fetcher and contract tests | Operations | KEEP_CANONICAL |
+| `docs/deployment/secret-manager.md` | Secret naming, transport, IAM, rotation, and leakage contract | GCE single VM | Operators and contract tests | Operations | KEEP_CANONICAL |
 | `infra/gcp-demo/Dockerfile.api` | FastAPI production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests, verification docs | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.worker` | Worker production-style image | Cloud Run-oriented naming/port | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
 | `infra/gcp-demo/Dockerfile.web` | Standalone Next.js image | Cloud Run-oriented port 8080 | demo build workflow, gate, IaC tests | Image build gate | KEEP_TRANSITIONAL |
@@ -374,6 +389,14 @@ Status: verified locally with the isolated `strayhub-b4-final` stack; real edge 
 Validate Secret Manager injection, Cloud KMS PII operations, GCS backup, least-privilege IAM, and the
 retained Terraform state boundary. GCS runtime media behavior is not part of this phase.
 
+#### Phase D1 — Secret Manager runtime staging
+
+Status: verified locally; live Secret Manager and IAM acceptance deferred.
+
+- Fetch only the declared secret inventory through one read-only VM-side step.
+- Atomically stage protected scalar/JWT material for canonical Compose.
+- Keep B1 verification fixtures and production inputs explicitly separated.
+
 ### Phase E — Real GCE deployment
 
 Verify VM boot, Compose startup, TLS, health checks, nginx routing, migrations, MinIO media, Worker,
@@ -494,6 +517,6 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-After Phase B4 acceptance, Phase C owns VM
-operations and replacement CI gates; Phase D owns live Secret Manager/KMS and backup-only GCS
-upload/IAM/retention/restore verification. No deletion is allowed now.
+Phase D1 verifies Secret Manager staging locally before Phase D2 KMS and Phase D3 backup-only GCS.
+Phase E owns real GCE/systemd operations; Phase F owns legacy cleanup and CI replacement. No deletion
+is allowed now.
