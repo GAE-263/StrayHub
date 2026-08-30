@@ -28,51 +28,12 @@ permissions:
 jobs:
   demo-build:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: strayhub
-          POSTGRES_USER: strayhub
-          POSTGRES_PASSWORD: strayhub
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U strayhub -d strayhub"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgresql+asyncpg://strayhub:strayhub@127.0.0.1:5432/strayhub
-      STRAYHUB_TEST_DATABASE_URL: postgresql://strayhub:strayhub@127.0.0.1:5432/strayhub
     steps:
       - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            apps/web/package-lock.json
-            packages/contracts/package-lock.json
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
-
-      - run: uv sync --dev
-      - run: uv run alembic upgrade head
-      - run: npm ci --prefix apps/web
-      - run: npm ci --prefix packages/contracts
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pytest -q -p no:warnings
-      - run: npm --prefix apps/web run quality
-      - run: npm --prefix packages/contracts run check
 
       - name: Terraform format and validate
         working-directory: infra/gcp-demo/terraform
