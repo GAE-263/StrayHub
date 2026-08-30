@@ -694,3 +694,33 @@ No Cloud Run, Cloud SQL, GCS, KMS, Secret Manager, legacy IAM/state, DNS/TLS/LIN
 behavior, or migration was touched. E2/E3/E4: NOT STARTED. Focused provisioning contracts: 10 PASS.
 Secret scan, Ruff, format, Terraform fmt/validate, shell syntax, and `git diff --check`: PASS. Commit:
 not created.
+
+## Phase E2 Live Secret Manager / KMS / GCS Acceptance
+
+Status: READY. Confirmed VM metadata ADC identity
+`strayhub-gce-sa@canvas-primacy-502703-k1.iam.gserviceaccount.com` with no JSON credential. Newly
+enabled APIs were Secret Manager and Cloud KMS; Storage was already enabled.
+
+Eleven required `strayhub-prod-*` secrets received synthetic acceptance versions and exact
+secret-level `roles/secretmanager.secretAccessor`. Live canonical fetch staged one 0700/0600 atomic
+generation without logging values; a failed nonexistent-prefix fetch preserved `current`. The live
+Ubuntu run found a GNU/BSD `stat` ordering bug in production preflight, which is now covered by a
+contract test. Production fail-fast preflight then passed without starting the app stack.
+
+Dedicated KMS resource
+`projects/canvas-primacy-502703-k1/locations/asia-east1/keyRings/strayhub-pii/cryptoKeys/pii-encryption`
+has only key-scoped Encrypter/Decrypter for the VM SA. The existing adapter passed live ADC encrypt,
+decrypt, exact synthetic round trip, key-version scope, malformed-ciphertext fail-closed, and no
+local fallback without logging plaintext or ciphertext.
+
+Private bucket `strayhub-backups-canvas-primacy-502703-k1` is asia-east1, uniform-access and
+PAP-enforced, with unlocked 7-day retention and 35-day age deletion. VM IAM is only bucket-scoped
+Object Creator/Viewer. A six-object synthetic B3 set uploaded and revalidated before `_COMPLETE` was
+written last; a fresh seven-object download restored the synthetic PostgreSQL row, Alembic head,
+RLS/runtime role, two MinIO objects, bytes, and inventory checksum. The isolated stack, volumes,
+source, images, and local artifacts were removed; the governed GCS acceptance set remains.
+
+Secret/KMS/GCS resources were created with controlled `gcloud` pending canonical managed-service
+Terraform/remote-state ownership review. No app deployment, systemd, DNS/TLS/LINE change, production
+DB/MinIO data, legacy resource, Terraform state migration, CI replacement, or schema migration was
+performed. Commit and push: NONE.

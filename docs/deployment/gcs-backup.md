@@ -1,6 +1,6 @@
 # GCS Backup Transport Contract
 
-Status: Phase D3 transport and integrity verified with a simulated `gcloud storage` backend; live GCS acceptance is deferred
+Status: Phase E2 live VM ADC upload/download and isolated restore-from-GCS accepted
 
 ## Backup-only boundary
 
@@ -27,7 +27,8 @@ separate rclone configuration. D3 does not add an equivalent `gsutil` or rclone 
 
 ## Bucket contract
 
-The production backup bucket name and project remain environment-specific inputs. The canonical
+The production backup bucket name and project remain environment-specific inputs. The accepted E2
+bucket is `strayhub-backups-canvas-primacy-502703-k1` in `asia-east1`. The canonical
 object root is:
 
 ```text
@@ -57,10 +58,10 @@ resource deletion, or live bucket mutation occurs here.
 
 ## Authentication and IAM
 
-Canonical authentication is future GCE VM service account -> Application Default Credentials ->
+Canonical authentication is GCE VM service account -> Application Default Credentials ->
 `gcloud storage`. Downloaded service-account JSON and HMAC access keys are forbidden.
 
-At the specific backup bucket, grant the future GCE VM service account both:
+At the specific backup bucket, grant the GCE VM service account both:
 
 - `roles/storage.objectCreator` to create new immutable backup objects and `_COMPLETE` markers;
 - `roles/storage.objectViewer` to list/read objects for verification and restore.
@@ -152,15 +153,14 @@ deferred with monthly retention. D3 does not claim or implement that pruning pol
 
 ## Verification boundary and security
 
-No approved test project or dedicated test bucket is configured. D3 tests therefore inject a fake
+Historical D3 tests inject a fake
 `gcloud` executable backed by a temporary filesystem. The same production scripts prove command
 shape, ADC-only behavior, pre/post-transfer checksum validation, marker ordering, fresh download,
 and rejection of incomplete/corrupt sets. Synthetic stand-ins contain no real PII or production
 media, and test cleanup removes only its exact temporary root.
 
-This simulation does not prove GCS service behavior, live IAM, bucket policy, lifecycle enforcement,
-or real GCE ADC. Live upload, download, and restore-from-GCS acceptance require an approved dedicated
-test bucket/prefix in Phase E. Until then Phase D3 is partially ready, not live-ready.
+That simulation alone does not prove GCS service behavior, live IAM, bucket policy, lifecycle
+enforcement, or real GCE ADC. Phase E2 now supplies that live evidence.
 
 The isolated `strayhub-d3-verify` drill used a real PostgreSQL custom dump and real MinIO object
 capture with the filesystem-backed fake CLI transport. After upload, the local backup directory was
@@ -169,6 +169,29 @@ role checks, plus the MinIO key, bytes, and inventory checksum. The stack, volum
 transport root were removed afterward. This is end-to-end local restore evidence, not live GCS
 evidence.
 
-Deferred: Phase E real GCE identity, live bucket/IAM/lifecycle acceptance, scheduling, maintenance,
-alerting, and recovery ownership; Phase F legacy Terraform/Cloud Run/Cloud SQL cleanup and deployment
-CI replacement. Legacy deletion remains forbidden.
+## Phase E2 live acceptance
+
+The dedicated bucket has uniform bucket-level access, public access prevention enforced, no public
+principal, an unlocked 604800-second retention period, and a 35-day age-based Delete lifecycle rule.
+The VM service account has only bucket-scoped `roles/storage.objectCreator` and
+`roles/storage.objectViewer`; it has no delete or administrative role and uses no HMAC or JSON key.
+
+Backup `20260830T015218Z-e2live` contains synthetic data only. The canonical uploader validated the
+B3 manifest, uploaded six data/metadata objects, downloaded and revalidated them, then wrote and
+read `_COMPLETE` last. The original local staging path was moved aside before the canonical
+downloader produced a fresh seven-object set from GCS and revalidated all checksums. The downloaded
+dump restored the synthetic PostgreSQL row, Alembic head `0037_animal_external_sources`, RLS and
+runtime-role safety; MinIO restored two objects with the exact inventory checksum. The isolated
+Compose stack, volumes, temporary source, images, and local backup artifacts were removed afterward.
+
+Incomplete/corrupt-set rejection remains covered by the production-script simulated contract tests;
+no intentionally incomplete live prefix was retained. MinIO remains runtime media, and no
+application service receives this bucket. The completed synthetic GCS set remains governed by the
+unlocked 7-day retention and 35-day lifecycle because the VM deliberately lacks delete permission.
+
+The bucket and IAM were created with controlled `gcloud` commands pending a separate canonical IaC
+and remote-state ownership review. Legacy runtime-GCS Terraform and resources were not modified.
+
+Deferred: scheduling, maintenance/traffic policy, alerting and recovery ownership, Phase E3
+application supervision, and Phase F legacy cleanup/CI replacement. Legacy deletion remains
+forbidden.

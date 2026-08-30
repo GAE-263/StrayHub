@@ -365,7 +365,7 @@ def test_transfer_scripts_are_strict_adc_only_operator_tools() -> None:
     assert "storage rm" not in upload
 
 
-def test_documented_bucket_iam_lifecycle_and_ownership_are_narrow() -> None:
+def test_documented_bucket_iam_lifecycle_and_live_ownership_are_narrow() -> None:
     documentation = DOC.read_text(encoding="utf-8")
     normalized = " ".join(documentation.split())
 
@@ -379,7 +379,9 @@ def test_documented_bucket_iam_lifecycle_and_ownership_are_narrow() -> None:
         "seven daily plus four weekly",
         "Google-managed encryption",
         "managed-service-only Terraform",
-        "live GCS acceptance is deferred",
+        "Phase E2 live acceptance",
+        "strayhub-backups-canvas-primacy-502703-k1",
+        "controlled `gcloud` commands",
         "Do not grant `roles/storage.objectAdmin`",
     ):
         assert phrase in normalized

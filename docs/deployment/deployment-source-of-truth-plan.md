@@ -229,8 +229,8 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
 Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, local
-backup/restore verification, and simulated GCS transport contracts now exist. GCE provisioning,
-live certificate issuance, live GCS transfer, scheduling, and systemd artifacts do not yet exist.
+backup/restore verification, GCE provisioning, and live GCS transfer acceptance now exist. Live
+certificate issuance, scheduling, and systemd artifacts do not yet exist.
 Local Terraform cache content under `.terraform/` is generated tooling state, not a versioned
 deployment source of truth.
 
@@ -437,7 +437,7 @@ retained Terraform state boundary. GCS runtime media behavior is not part of thi
 
 #### Phase D1 — Secret Manager runtime staging
 
-Status: verified locally; live Secret Manager and IAM acceptance deferred.
+Status: verified locally in D1; live Secret Manager and IAM accepted in E2.
 
 - Fetch only the declared secret inventory through one read-only VM-side step.
 - Atomically stage protected scalar/JWT material for canonical Compose.
@@ -445,7 +445,7 @@ Status: verified locally; live Secret Manager and IAM acceptance deferred.
 
 #### Phase D2 — Cloud KMS functional wiring
 
-Status: verified locally with the existing adapter and injected client; live KMS acceptance deferred.
+Status: verified locally in D2 with the existing adapter and injected client; live KMS accepted in E2.
 
 - Require `gcp-kms` and a full CryptoKey resource in every non-local API runtime.
 - Preserve authenticated encrypt/decrypt and returned CryptoKeyVersion metadata semantics.
@@ -454,7 +454,7 @@ Status: verified locally with the existing adapter and injected client; live KMS
 
 #### Phase D3 — GCS backup transport
 
-Status: simulated transport/integrity verified; live GCS acceptance deferred.
+Status: simulated transport/integrity verified in D3; live GCS accepted in E2.
 
 - Transfer only complete B3 PostgreSQL/MinIO artifacts to a private backup bucket.
 - Require `_COMPLETE` and full manifest/checksum validation before restore staging is accepted.
@@ -474,6 +474,22 @@ Status: READY; live host foundation and repeatable bootstrap accepted.
 - Create only the reviewed host/network identity boundary after a separate apply prompt.
 - Verify IAP administration, Docker/Compose, ADC identity, swap, filesystem, and reboot persistence.
 - Deploy no application, secret, DNS, certificate, or LINE change during host acceptance.
+
+#### Phase E2 — live managed-service acceptance
+
+Status: READY; VM ADC access to Secret Manager, Cloud KMS, and private backup GCS accepted.
+
+- Eleven required `strayhub-prod-*` secrets use exact secret-level accessor IAM and stage atomically
+  at 0700/0600 without logging values; optional external AI remains disabled.
+- `asia-east1/keyRings/strayhub-pii/cryptoKeys/pii-encryption` grants only key-scoped
+  Encrypter/Decrypter and passes existing-adapter live round trip plus malformed-ciphertext failure.
+- `strayhub-backups-canvas-primacy-502703-k1` is private, uniform, PAP-enforced, uses unlocked 7-day
+  retention plus 35-day age deletion, and grants only bucket-scoped Object Creator/Viewer.
+- A synthetic completed backup uploaded with `_COMPLETE` last, downloaded fresh, and restored its
+  PostgreSQL row/Alembic/RLS/runtime role plus two exact MinIO objects/checksum.
+- No application stack, systemd, DNS, LINE/LIFF endpoint, legacy resource, or Terraform state changed.
+- Managed-service resources were created through controlled `gcloud`; canonical Terraform ownership
+  and remote state remain a required follow-up before production cutover.
 
 ### Phase F — Legacy removal
 
@@ -590,8 +606,7 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-Phase E1 created and accepted the isolated host foundation without changing or deleting legacy
-resources. The approved idempotency replacement changed only the disposable VM and preserved its
-static IP and surrounding resources. Phase E2 live Secret Manager/KMS/GCS acceptance is next but was
-not started here. Later E phases own application/systemd and edge acceptance; Phase F owns legacy
-cleanup and CI replacement.
+Phase E1 accepted the isolated host foundation, and Phase E2 accepted its live least-privilege
+Secret Manager/KMS/GCS paths without application deployment or legacy changes. Phase E3 systemd and
+operational supervision is next but was not started here. Later E phases own application and edge
+acceptance; Phase F owns legacy cleanup and CI replacement.

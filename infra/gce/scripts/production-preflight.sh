@@ -42,7 +42,7 @@ case "$generation" in
 esac
 
 mode_of() {
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
 }
 
 [[ "$(mode_of "$SECRETS_ROOT")" == "700" ]] || fail "secret staging root mode must be 0700"

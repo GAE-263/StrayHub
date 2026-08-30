@@ -1,6 +1,6 @@
 # Secret Manager Runtime Staging
 
-Status: Phase D1 local staging and consumption verified; live GCP validation deferred
+Status: Phase E2 live VM ADC staging and least-privilege access accepted
 
 ## Boundary and secret inventory
 
@@ -40,7 +40,7 @@ mount; D1 does not redesign JWT rotation or make a previous key mandatory.
 
 ## Fetch and atomic staging
 
-On the future VM, an operator runs an explicit read-only fetch:
+On the canonical VM, an operator runs an explicit read-only fetch:
 
 ```bash
 infra/gce/scripts/fetch-secrets.sh \
@@ -108,7 +108,7 @@ Do not print the rendered model because scalar env transport is visible by desig
 
 ## IAM and legacy mismatch
 
-The future GCE VM service account is the staging principal. Grant only
+The GCE VM service account is the staging principal. Grant only
 `roles/secretmanager.secretAccessor`, preferably with secret-level IAM on the declared inventory.
 Do not grant project Editor/Owner or let every container authenticate to GCP independently. D1 makes
 no live IAM change.
@@ -126,8 +126,8 @@ pair. Automated scheduling and rollback/pruning policy are deferred to Phase E.
 
 For credential-free D1 verification, `--source-dir` reads synthetic files named with the same secret
 IDs and exercises identical validation, staging, permissions, generation switching, and Compose
-consumption. It is verification-only and cannot be an implicit production fallback. No approved test
-GCP project is configured, so live Secret Manager validation is deferred to Phase E/D acceptance.
+consumption. It is verification-only and cannot be an implicit production fallback. This was the
+credential-free D1 evidence; the separate Phase E2 section records the later live acceptance.
 
 The completed local D1 drill staged all 11 required values, left optional `AI_API_KEY` absent for
 `AI_PROVIDER=mock`, verified 0700/0600 modes, rejected a missing required secret without changing
@@ -136,6 +136,24 @@ passed API, Worker, and Migration fail-fast checks. A separate isolated API cont
 production mode and returned `{"status":"ok"}` from its internal health endpoint. All temporary
 Docker and synthetic staging resources were removed afterward.
 
-Deferred: Phase D2 Cloud KMS functional encrypt/decrypt and IAM; Phase D3 private GCS backup upload,
-lifecycle, and restore-from-GCS; Phase E real VM identity, ownership, systemd, rotation scheduling,
-and live Secret Manager validation; Phase F legacy cleanup and deployment CI replacement.
+## Phase E2 live acceptance
+
+Project `canvas-primacy-502703-k1` contains the 11 required canonical `strayhub-prod-*` secrets with
+synthetic-but-valid acceptance versions; external AI remains disabled, so no AI secret was created.
+The keyless VM identity `strayhub-gce-sa@canvas-primacy-502703-k1.iam.gserviceaccount.com` has only
+`roles/secretmanager.secretAccessor` on each exact secret. No project-wide accessor or administrative
+role was granted.
+
+On `strayhub-gce`, metadata ADC fetched the declared inventory into
+`/var/lib/strayhub/secrets`, verified 0700 directories and 0600 files, validated the JWT pair, and
+atomically activated one generation without logging values. A safe fetch using a nonexistent prefix
+failed non-zero and preserved the previous `current` target. The live run exposed and fixed GNU/BSD
+`stat` ordering in `production-preflight.sh`; the canonical production preflight then passed with the
+live staged generation. No application stack was started.
+
+The secrets and versions were created with controlled `gcloud` commands because canonical
+managed-service IaC ownership is not settled. Moving them into retained Terraform and remote state
+requires a separate ownership review; legacy Terraform was not modified or adopted.
+
+Deferred: production credential replacement/rotation, automated generation pruning, systemd and
+application deployment in Phase E3, plus Phase F legacy cleanup and deployment CI replacement.

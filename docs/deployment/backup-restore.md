@@ -1,6 +1,6 @@
 # PostgreSQL and MinIO Backup / Restore
 
-Status: Phase B3 local restore verified; Phase D3 GCS transport verified by simulation, live durability deferred
+Status: Phase E2 live GCS transport and isolated restore-from-GCS accepted with synthetic data
 
 ## Backup model and boundary
 
@@ -134,8 +134,9 @@ The D3 drill repeated the restore boundary after a simulated GCS round trip: upl
 last, removal of local staging, download to a fresh directory, and full manifest verification. The
 downloaded PostgreSQL dump restored its synthetic probe row, migration head, RLS/runtime-role
 checks; the downloaded MinIO artifact restored its synthetic key and exact bytes/checksum. Live GCS
-remains unverified.
+was not part of that D3 drill.
 
-Deferred: live GCS bucket/IAM/lifecycle and transfer acceptance, backup scheduling, exact
-daily/weekly/monthly selection, production maintenance mode, real GCE, systemd, CI replacement,
-Terraform state migration, and legacy deletion.
+Phase E2 repeated the drill through the dedicated private live bucket using VM ADC and restored the
+fresh download into isolated PostgreSQL/MinIO targets. Deferred: backup scheduling, exact
+daily/weekly/monthly selection, production maintenance mode, systemd, CI replacement, Terraform
+state migration, and legacy deletion.

@@ -11,6 +11,7 @@ KMS_DOC_PATH = ROOT / "docs" / "deployment" / "cloud-kms.md"
 PII_CIPHER_PATH = (
     ROOT / "services" / "api" / "app" / "infrastructure" / "security" / "pii_cipher.py"
 )
+LIVE_VERIFY_PATH = GCE_ROOT / "scripts" / "verify-live-kms.py"
 
 
 def test_production_template_selects_kms_without_credentials() -> None:
@@ -63,17 +64,30 @@ def test_existing_adapter_uses_adc_client_and_has_no_runtime_fallback() -> None:
     ).read_text(encoding="utf-8")
 
 
-def test_kms_iam_and_deferred_boundaries_are_least_privilege() -> None:
+def test_live_verifier_uses_existing_adapter_without_leaking_payloads() -> None:
+    verifier = LIVE_VERIFY_PATH.read_text(encoding="utf-8")
+
+    assert "configured_pii_cipher(" in verifier
+    assert 'app_env="production"' in verifier
+    assert 'provider="gcp-kms"' in verifier
+    assert "allow_local_provider=False" in verifier
+    assert "pii_ciphertext_invalid" in verifier
+    assert "print(plaintext" not in verifier
+    assert "print(encrypted" not in verifier
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in verifier
+
+
+def test_kms_iam_and_live_acceptance_boundaries_are_least_privilege() -> None:
     documentation = KMS_DOC_PATH.read_text(encoding="utf-8")
 
     for phrase in (
-        "future GCE VM service account",
+        "GCE VM service account",
         "Application Default Credentials",
         "roles/cloudkms.cryptoKeyEncrypterDecrypter",
         "specific PII CryptoKey",
-        "Live KMS verification is therefore deferred",
-        "Phase D3",
-        "Phase E",
+        "Phase E2 live acceptance",
+        "controlled `gcloud` commands",
+        "Phase E3",
         "Phase F",
     ):
         assert phrase in documentation

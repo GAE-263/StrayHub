@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B1-B4 and Phase D1-D3 managed-service contracts verified locally
+Status: Phase B1-B4/D1-D3 contracts plus Phase E2 live managed-service access accepted
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -9,9 +9,9 @@ one private Compose network. The checked-in environment is synthetic verificatio
 preflight generates the JWT material after checkout under an ignored directory. Neither is a
 production credential source, and neither may be copied into a real deployment.
 
-Phase D1 defines protected Secret Manager staging. Phase D2 verifies the existing Cloud KMS PII
-adapter and production selection locally without using live GCP credentials. Real GCE acceptance and
-live managed-service calls remain deferred.
+Phase D1 defines protected Secret Manager staging, D2 retains the existing Cloud KMS PII adapter,
+and D3 keeps GCS backup-only. Phase E2 verifies all three through the real GCE VM metadata identity
+without introducing a service-account JSON or application-side GCS dependency.
 
 ## Application configuration
 
@@ -171,10 +171,11 @@ safe MinIO write/read, and persistence across a normal down/up cycle.
 Phase B2 adds nginx single-origin routing and Phase B4 adds the TLS-ready edge without changing
 application behavior. B4 only documents DNS/firewall/static-IP requirements. D1 verifies local
 Secret Manager staging and D2 verifies the existing KMS adapter, provider selection, failure policy,
-and configuration contracts with an injected client. Deferred: real DNS/firewall/certificate/GCE,
-systemd, live Secret Manager and KMS calls, real LINE/LIFF calls, D3 GCS transfer/retention/restore,
-legacy CI replacement, Terraform state migration, and removal of Cloud Run/Cloud SQL/runtime-GCS
-assets. GCS is backup-only in the target design and is not a dependency of this Compose runtime.
+and configuration contracts with an injected client. E1 accepted the GCE host foundation, and E2
+accepted live Secret Manager, KMS, and GCS backup access. Deferred: real DNS/firewall/certificate,
+systemd, real LINE/LIFF calls, legacy CI replacement, Terraform state migration, and removal of Cloud
+Run/Cloud SQL/runtime-GCS assets. GCS is backup-only in the target design and is not a dependency of
+this Compose runtime.
 
 ## Phase B3 backup / restore contract
 
@@ -192,7 +193,7 @@ or any long-running service.
 Phase B3 proves local data correctness only. PostgreSQL and MinIO captures are sequential and not
 transactionally atomic. D3 adds host-only `gcloud storage` upload/download with pre/post-transfer
 manifest validation and `_COMPLETE` activation. No GCS setting enters Compose or the application.
-Live bucket/IAM/lifecycle acceptance and scheduling remain deferred. See
+Live bucket/IAM/lifecycle acceptance passed in Phase E2; scheduling remains deferred. See
 `docs/deployment/backup-restore.md` and `docs/deployment/gcs-backup.md`.
 
 ## Phase B4 TLS edge contract
@@ -225,7 +226,7 @@ full CryptoKey resource name; Settings, the adapter, and production preflight re
 references. Compose supplies these two values only to API and contains no credential or key
 material. Worker, Migration, Web, nginx, PostgreSQL, and MinIO do not receive KMS configuration.
 
-The future GCE VM service account authenticates through Application Default Credentials and holds
+The GCE VM service account authenticates through Application Default Credentials and holds
 `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the specific PII CryptoKey where practical. D2 makes
 no IAM or live KMS call. Mock-client tests verify authenticated encrypt/decrypt, returned key-version
 metadata, safe failures, and no non-local fallback. See `docs/deployment/cloud-kms.md` for the full

@@ -1,6 +1,6 @@
 # Cloud KMS PII Encryption Contract
 
-Status: Phase D2 adapter and production wiring verified locally; live KMS acceptance deferred
+Status: Phase E2 live VM ADC encrypt/decrypt and key-scoped IAM accepted
 
 ## Provider boundary
 
@@ -44,7 +44,7 @@ decrypt call. D2 does not create rotation, re-encryption, disablement, or destru
 Canonical production authentication is:
 
 ```text
-future GCE VM service account
+GCE VM service account
   -> Application Default Credentials from the metadata service
   -> google-cloud-kms client
   -> configured CryptoKey
@@ -54,7 +54,7 @@ Downloaded service-account JSON keys are not part of the production design and m
 Git, Secret Manager staging, Compose env files, images, or host configuration. Local automated tests
 inject a mock client through the existing adapter seam and never acquire ADC.
 
-The future GCE VM service account is the principal. Grant
+The GCE VM service account is the principal. Grant
 `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the specific PII CryptoKey where practical. Do not
 grant project Editor/Owner, Cloud KMS Admin, or project-wide crypto access. D2 performs no IAM
 mutation. Because the planned identity is VM-scoped, Phase E must verify metadata-service exposure
@@ -91,16 +91,25 @@ request shape, non-empty ciphertext, round-trip equality, returned version prese
 decrypt behavior, permission-denied failure, malformed-ciphertext failure, and no local fallback.
 Only synthetic applicant values and random tenant/application identifiers are used.
 
-No approved test project, test CryptoKey, or explicit developer ADC is configured in this repository.
-Live KMS verification is therefore deferred to Phase E/D acceptance. Any later live check must be
-opt-in, off by default, use a pre-existing approved test key and synthetic plaintext only, and must
-not create/delete keys, change IAM, use a production key, or print plaintext/ciphertext.
+## Phase E2 live acceptance
+
+The dedicated live resource is
+`projects/canvas-primacy-502703-k1/locations/asia-east1/keyRings/strayhub-pii/cryptoKeys/pii-encryption`.
+The keyless VM service account has `roles/cloudkms.cryptoKeyEncrypterDecrypter` only on that
+CryptoKey. It has no KMS Admin, Editor, Owner, or project-wide crypto binding.
+
+`verify-live-kms.py` selects the existing non-local `gcp-kms` adapter, obtains ADC from VM metadata,
+and uses synthetic plaintext plus field-scoped authenticated data. Live encrypt, decrypt, exact
+round-trip equality, returned key-version scope, and malformed-ciphertext fail-closed behavior passed.
+The verifier prints neither plaintext nor ciphertext and cannot enable the local AES provider.
+
+The ring, key, and binding were created with controlled `gcloud` commands because canonical
+managed-service IaC ownership is not settled. A later remote-state/ownership review must adopt or
+replace this procedure without modifying legacy state in place.
 
 ## Deferred boundaries
 
-- Phase D3: private GCS backup upload, lifecycle, retention, and restore-from-GCS.
-- Phase E: real GCE identity, metadata/container isolation, live KMS round trip, and operational
-  acceptance.
+- Phase E3: application deployment and operational supervision.
 - Phase F: legacy Cloud Run/Cloud SQL/Terraform cleanup and deployment CI replacement.
 
 No legacy infrastructure, Terraform state, DNS, firewall, TLS, systemd, schema, product behavior, or

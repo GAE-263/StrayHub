@@ -232,6 +232,7 @@ def test_production_preflight_enforces_mode_separation_and_consumption_checks() 
     assert 'validate_runtime_safety(process="migration")' in preflight
     assert '--env-file "$CONFIG_ENV"' in preflight
     assert '--env-file "$runtime_env"' in preflight
+    assert preflight.index("stat -c '%a'") < preflight.index("stat -f '%Lp'")
 
 
 def test_documentation_limits_iam_and_defers_live_gcp_mutation() -> None:
@@ -244,7 +245,7 @@ def test_documentation_limits_iam_and_defers_live_gcp_mutation() -> None:
         "directory mode `0700`",
         "file mode `0600`",
         "runtime-generated verification JWT",
-        "live Secret Manager validation is deferred",
+        "Phase E2 live acceptance",
         "does not create or mutate secrets",
         "container environment",
     ):
