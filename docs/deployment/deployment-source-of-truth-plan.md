@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E5 accepted; Phase F not started
+Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E5 accepted; Phase F1-F2 design READY
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -235,9 +235,9 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
-Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, backup/restore
-verification, GCE provisioning, live managed-service access, and systemd scheduling now exist. Live
-DNS and trusted certificate issuance do not yet exist.
+Production Compose, its runtime contract, preflight, accepted edge nginx configuration,
+backup/restore verification, GCE provisioning, live managed-service access, systemd scheduling,
+live DNS, and trusted edge TLS now exist.
 Local Terraform cache content under `.terraform/` is generated tooling state, not a versioned
 deployment source of truth.
 
@@ -552,7 +552,18 @@ not started.
 
 ### Phase F — Legacy removal
 
-Only after GCE acceptance:
+Phase F1 completed the read-only ownership inventory. See
+[`phase-f-legacy-inventory.md`](phase-f-legacy-inventory.md). It authorizes no removal; legacy remote
+state ownership, replacement CI/release provenance, rollback artifacts, and a reviewed deletion plan
+remain hard gates.
+
+Phase F2 found no configured/discoverable legacy state in repository history, local metadata, or the
+accepted project; Cloud SQL remains explicitly unknown because its API was not enabled. It assigns
+future retained-resource ownership and defines immutable releases, replacement CI, and rollback in
+[`phase-f-release-and-state-plan.md`](phase-f-release-and-state-plan.md). F3 may implement those
+gates but may not delete legacy infrastructure.
+
+Only after every applicable gate is satisfied:
 
 - remove Cloud Run services and public IAM;
 - remove the Cloud Run migration job and Cloud Run-specific scripts;
