@@ -782,3 +782,59 @@ blocked on the application VM; the Docker `DOCKER-USER` chain remains empty.
 No DNS record, certificate, LINE webhook URL, LIFF URL, application/domain behavior, schema,
 tenant/RLS behavior, managed-service policy, or legacy infrastructure is changed. Migration: NONE.
 Commit and push: NONE.
+
+## Phase E5 Full Deployment Acceptance + Rollback Drill
+
+Status: READY after authenticated live acceptance. Canonical public edge, trusted TLS, Web/public
+API, LINE webhook signature enforcement, GCE runtime, DB/RLS, MinIO, Worker, exact-secret ADC, live
+KMS, GCS backup, isolated restore, systemd restart, one reboot, OS Login/IAP/rose, and firewall
+isolation passed. DNS, TLS, LINE/LIFF URLs, IAM, Terraform ownership/state, CI, product behavior,
+schema, and legacy resources were unchanged. Migration: NONE.
+
+The live DB is at `0037_animal_external_sources` with 37 RLS-enabled tables and 40 policies;
+`strayhub_app` remains non-superuser/non-BYPASSRLS and `strayhub_migration` remains the migration
+role. E5b added a guarded server-side operator CLI after the empty-database resume proved no existing
+canonical first-principal path. It requires an allowed environment, explicit allow flag, explicit
+confirmation, and a protected password source before database access. Creation uses existing
+services/repositories, Argon2 hashing, tenant scope, audit behavior, and one transaction through the
+migration role; no raw SQL creation, HTTP bootstrap endpoint, fake header, or JWT minting was added.
+
+The bootstrap dry run passed and rolled back. The first live run created exactly the reviewed
+Tenant A/B synthetic fixture set; the identical second run reused all 14 fixtures with stable UUIDs
+and no duplicates. Password material remains in a root-owned 0600 VM file outside the release tree
+and was never logged or committed. No real PII was used.
+
+The live verifier used normal `/v1/auth/login`, server-side password verification, deployed session
+creation, and normal JWT issuance. Missing auth returned 401; valid login and Tenant A authenticated
+animal access passed; Tenant B context selection returned 404. Tenant A volunteer grant, QR-first
+resolution, animal confirmation, and synthetic care-report submission passed. Report
+`1b3d5c88-3430-46dc-a2b5-8c29b57b04e8` is retained for truthful acceptance history. The same
+volunteer's Tenant B QR candidate request returned 403. Real-device LIFF remains deferred.
+
+The first non-empty manual backup exposed root-owned nested MinIO files in a bind mount. The backup
+mirror and restore verification containers now run with the caller UID:GID and writable temporary mc
+configuration. Backup `20260830T125231Z-e3daily8453` then passed PostgreSQL, one nested MinIO object,
+manifest/checksum, private-GCS upload/readback, and `_COMPLETE`. A fresh GCS download restored the
+isolated PostgreSQL head/RLS/runtime role and MinIO object count/inventory checksum. Disposable
+restore targets, incomplete staging, and temporary artifacts were removed; successful backup
+evidence remains under existing retention.
+
+A normal systemd restart preserved both named volumes, DB head, public health, and a synthetic MinIO
+marker. An operator container kill produced the expected 502; Docker treated it as an operator stop,
+and systemd restored the runtime while PostgreSQL/MinIO remained healthy. A host-PID SIGKILL was
+rejected as unsafe due to PID reuse, so automatic crash-policy re-verification is deferred. Exactly
+one VM reboot changed boot ID, recovered public health, all units/containers, `ip_forward=1`, rose
+SSH, timer, volumes, DB head, and marker; the marker was then removed exactly.
+
+Rollback inventory found only `/opt/strayhub/releases/e702d7d-e3`, no revision marker, and no prior
+edge config copy. The current edge/script hashes match the working tree, but no previous artifact can
+pass the schema-compatibility hard gate. Live rollback/roll-forward was not faked; the documented
+dry-run passed and immutable release packaging remains required before a live drill.
+
+Final verification passed 82 GCE deployment contracts, 15 focused backup/GCS contracts, 7 focused
+restore contracts, 67 focused E5b auth/tenant/security/bootstrap tests, and a confirming 20-test
+critical Playwright run. Ruff, format,
+repository-native secret scan, tracked-artifact scan, `git diff --check`, Terraform fmt/validate,
+and the final no-drift plan passed. Final public routes/TLS, runtime, GCS `_COMPLETE`, cleanup, and
+latest-ten edge log checks passed; the latest ten health requests were all 2xx with zero 5xx. The
+reviewed local commits were authorized; no push was performed. Phase F: NOT STARTED.

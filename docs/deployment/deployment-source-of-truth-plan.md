@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E4 accepted
+Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E5 accepted; Phase F not started
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -519,6 +519,37 @@ Status: READY; live operational supervision and recovery accepted.
   `20260830T033225Z-e3daily6182`, `_COMPLETE`, held-lock rejection, and an enabled/active persistent
   timer. Empty MinIO backups retain strict integrity verification despite GCS omitting empty dirs.
 
+#### Phase E5 — full deployment acceptance and rollback drill
+
+Status: READY; infrastructure/operational and authenticated live acceptance passed. Phase F remains
+not started.
+
+- Public edge, Web, public API, signed/invalid LINE webhook, TLS, runtime services, DB/RLS, MinIO,
+  Worker, Secret Manager, KMS, GCS backup, isolated restore, systemd restart, one reboot, SSH, and
+  firewall isolation passed.
+- Focused evidence passed 78 deployment contracts, 20 deployed-Web critical E2E tests, and 14
+  tenant/RLS/volunteer/LINE isolation/security tests.
+- E5b added an explicitly guarded server-side operator command that creates deterministic synthetic
+  Tenant A/B fixtures through canonical services/repositories and the existing migration credential.
+  Dry run passed; the first live run created the reviewed fixture set and the identical second run
+  reused every UUID without duplicates. No raw SQL creation or auth bypass was added.
+- Normal deployed password login and server-side JWT issuance passed. Tenant A authenticated access,
+  QR-first volunteer authorization, animal confirmation, and care-report submission passed. Tenant B
+  context switching returned 404 and cross-shelter QR authorization returned 403. Runtime
+  `strayhub_app` remains non-superuser/non-BYPASSRLS with 37 RLS-enabled tables.
+- The acceptance bootstrap remains an operator CLI, not a public endpoint. It requires allowed
+  environment semantics, explicit allow and confirmation, and a protected password source. No fake
+  header, forged JWT, private-key export, RLS relaxation, real identity, or real PII was introduced.
+- A non-empty MinIO backup exposed root-owned bind output; backup and restore verification now run
+  with the caller UID:GID and passed a nested-object GCS backup/restore drill.
+- The only release directory is `/opt/strayhub/releases/e702d7d-e3`; no previous immutable release
+  or edge-config copy exists. The schema-compatibility gate therefore permitted only a documented
+  dry-run rollback, not a live switch.
+- Operator-stop failure and systemd recovery passed, but an unsafe host-PID crash injection was
+  rejected. Automatic crash-policy re-verification remains deferred.
+- Full evidence and remaining deferred items are in `docs/deployment/full-acceptance.md`. The E5
+  changes form the reviewed local checkpoint; no push was performed.
+
 ### Phase F — Legacy removal
 
 Only after GCE acceptance:
@@ -535,18 +566,18 @@ Only after GCE acceptance:
 
 No Cloud Run/Terraform application asset may be removed until every gate is checked:
 
-- [ ] GCE production Compose validated
+- [x] GCE production Compose validated
 - [x] nginx routing validated in isolated Phase B2 HTTP verification
-- [ ] production config fail-fast passes
-- [ ] DB migrations work
-- [ ] MinIO media works and persists across normal restart
-- [ ] Worker works
-- [ ] LINE webhook works
+- [x] production config fail-fast passes
+- [x] DB migrations work
+- [x] MinIO media works and persists across normal restart
+- [x] Worker works
+- [x] LINE webhook works
 - [ ] LIFF works
-- [ ] Secret Manager wiring works without secret disclosure
-- [ ] KMS works with the intended VM identity
-- [ ] GCS backup works
-- [ ] restore tested for PostgreSQL and MinIO
+- [x] Secret Manager wiring works without secret disclosure
+- [x] KMS works with the intended VM identity
+- [x] GCS backup works
+- [x] restore tested for PostgreSQL and MinIO
 - [ ] replacement CI deployment gate exists
 - [ ] Terraform remote state and retained-resource ownership reviewed
 - [ ] rollback procedure and acceptance owner recorded
@@ -637,5 +668,6 @@ Removed only after the gates pass:
 Phase E1 accepted the isolated host foundation, Phase E2 accepted its live least-privilege Secret
 Manager/KMS/GCS paths, and Phase E3 accepted systemd startup, recovery, reboot, and backup scheduling.
 Phase E4 kept DNS and trusted TLS on the existing old edge and accepted the live single-edge routing,
-edge-only Web/API firewall, OS Login/IAP access, and reboot persistence. Phase F owns legacy cleanup
-and CI replacement; neither E5 nor Phase F starts in this checkpoint.
+edge-only Web/API firewall, OS Login/IAP access, and reboot persistence. Phase E5 now accepts the
+full infrastructure and authenticated synthetic volunteer flow. Phase F owns legacy cleanup and CI
+replacement; it remains not started pending the E5 final review and safe commit.
