@@ -1,6 +1,6 @@
 # PostgreSQL and MinIO Backup / Restore
 
-Status: Phase E3 live systemd backup scheduling and GCS integrity acceptance complete
+Status: Phase E5 non-empty live backup and isolated restore accepted
 
 ## Backup model and boundary
 
@@ -30,6 +30,12 @@ required. Run the non-destructive backup preflight first:
 ```bash
 infra/gce/scripts/backup-preflight.sh strayhub-b3-verify
 ```
+
+MinIO backup and restore verification containers write bind-mounted staging as the invoking host
+UID:GID and keep their temporary mc configuration under `/tmp`. This preserves the 0700 host
+ownership contract for nested objects and lets the non-root `strayhub` service validate and clean
+temporary artifacts. Phase E5 added this rule after the first non-empty nested-object backup and the
+first restore cleanup both failed safely on root-owned container output.
 
 Create one combined backup:
 
@@ -146,3 +152,10 @@ object directory that GCS cannot represent, then apply the same strict manifest 
 does not change the backup format or claim exact daily/weekly/monthly selection. Deferred:
 production maintenance policy, alert delivery, CI replacement, Terraform state migration, and
 legacy deletion.
+
+Phase E5 backup `20260830T125231Z-e3daily8453` exercised a nested synthetic MinIO object, passed the
+combined manifest/checksums, uploaded and re-read `_COMPLETE`, downloaded fresh from GCS, and
+restored into strict disposable PostgreSQL/MinIO names. PostgreSQL matched head `0037`, RLS, and
+runtime-role safety; MinIO matched object count 1 and the inventory SHA-256. Disposable restore
+targets, failed incomplete local staging, and temporary verification artifacts were removed after
+evidence capture; the successful backup remains under the existing retention/lifecycle policy.

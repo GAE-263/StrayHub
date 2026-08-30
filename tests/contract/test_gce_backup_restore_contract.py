@@ -71,6 +71,10 @@ def test_minio_scripts_preserve_objects_and_guard_isolated_restore() -> None:
     restore = _script("restore-minio.sh")
 
     assert "mc mirror --overwrite" in backup
+    assert '--user "$host_uid:$host_gid"' in backup
+    assert "MC_CONFIG_DIR=/tmp/.mc" in backup
+    assert '--user "$host_uid:$host_gid"' in restore
+    assert "MC_CONFIG_DIR=/tmp/.mc" in restore
     assert "minio-inventory" in backup
     assert "--backup-objects-dir" in restore
     assert "--confirm-isolated-restore" in restore

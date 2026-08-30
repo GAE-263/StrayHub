@@ -1,6 +1,6 @@
 # GCE systemd Operational Supervision
 
-Status: Phase E3 live operational acceptance complete
+Status: Phase E3 accepted; Phase E5 restart/reboot acceptance passed with noted failure-injection boundary
 
 ## Scope and paths
 
@@ -185,6 +185,24 @@ sudo systemctl stop strayhub
 Rollback installs a reviewed previous repo version and its repo-owned unit files, runs daemon-reload,
 then starts the unit again. Do not use volume deletion, revoke live IAM, alter DNS, or delete legacy
 infrastructure as an operational rollback.
+
+## Phase E5 operational acceptance
+
+Phase E5 repeated a normal `systemctl restart` and exactly one controlled VM reboot. Both preserved
+`strayhub-production_postgres_data` and `strayhub-production_minio_data`, Alembic head
+`0037_animal_external_sources`, a synthetic MinIO persistence marker, public routing, and the
+enabled/active backup timer. The reboot changed boot ID, retained `net.ipv4.ip_forward=1`, and
+recovered OS Login/IAP/rose access plus all runtime containers. The marker was removed after proof.
+
+An operator `docker kill` correctly produced a public 502 but, by Docker design, counted as an
+explicit operator stop under `unless-stopped`; systemd recovered the runtime. A host-PID SIGKILL
+proposal was rejected because PID reuse could target an unrelated process. Automatic crash-policy
+re-verification is therefore deferred instead of using an unsafe injection. The earlier E3 crash
+evidence remains historical; E5 does not overwrite it.
+
+The release inventory also found only `/opt/strayhub/releases/e702d7d-e3`, with no previous
+immutable artifact or revision marker. E5 performed the required documented rollback dry run but no
+live release switch. See `docs/deployment/full-acceptance.md` for the evidence and hard gate.
 
 ## Deferred boundary
 

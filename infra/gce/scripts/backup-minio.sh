@@ -35,11 +35,16 @@ bucket="$(backup_compose run --rm --no-deps --entrypoint /bin/sh minio-bootstrap
 [[ "$bucket" =~ ^[a-z0-9][a-z0-9.-]{2,62}$ ]] || backup_fail "unsafe MinIO bucket name"
 timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 mc_version="$(backup_compose run --rm --no-deps --entrypoint /bin/sh minio-bootstrap -ec 'mc --version | head -1' | tr -d '\r\n')"
+host_uid="$(id -u)"
+host_gid="$(id -g)"
 
 backup_compose run --rm --no-deps \
+  --user "$host_uid:$host_gid" \
   --volume "$component_dir:/backup" \
   --entrypoint /bin/sh \
   minio-bootstrap -ec '
+    export MC_CONFIG_DIR=/tmp/.mc
+    mkdir -p "$MC_CONFIG_DIR"
     mc alias set runtime http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
     mc mirror --overwrite "runtime/$MINIO_BUCKET" /backup/objects >/dev/null
   '

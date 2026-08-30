@@ -47,11 +47,16 @@ backup_compose run --rm --no-deps \
 verification_dir="$(mktemp -d "${TMPDIR:-/tmp}/strayhub-b3-minio-verify.XXXXXX")"
 trap 'rm -rf -- "$verification_dir"' EXIT
 mkdir -p "$verification_dir/objects"
+host_uid="$(id -u)"
+host_gid="$(id -g)"
 backup_compose run --rm --no-deps \
+  --user "$host_uid:$host_gid" \
   --env "TARGET_BUCKET=$TARGET_BUCKET" \
   --volume "$verification_dir:/verify" \
   --entrypoint /bin/sh \
   minio-bootstrap -ec '
+    export MC_CONFIG_DIR=/tmp/.mc
+    mkdir -p "$MC_CONFIG_DIR"
     mc alias set runtime http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
     mc mirror --overwrite "runtime/$TARGET_BUCKET" /verify/objects >/dev/null
   '
