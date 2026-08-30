@@ -1,74 +1,63 @@
 # TLS, DNS, and Firewall Edge Contract
 
-Status: Phase B4 local TLS edge verified; real edge changes deferred
+Status: Phase E4 single-edge live cutover accepted
 
 ## Edge topology and exposure
 
-The canonical production edge is a reserved GCE static external IP with one public hostname. DNS
-points that hostname directly to the VM; nginx on the VM is the only public Compose service:
+The canonical public edge is the existing nginx VM at `34.10.249.63`. DNS and the valid Let's
+Encrypt certificate for `strayhub.enadv.quest` remain on that host. The application VM at
+`34.81.77.204` no longer runs nginx:
 
 ```text
-Internet -> reserved GCE static IP -> TCP 80/443 -> nginx
-                                                |-> /healthz and /v1/* -> API
-                                                `-> all other paths -> Web
+Internet -> strayhub.enadv.quest -> old VM nginx 34.10.249.63 (TLS + routing)
+                                      |-> 34.81.77.204:8080 (API)
+                                      `-> 34.81.77.204:3000 (Web)
 ```
 
-The firewall allows inbound TCP 80 and 443 only for application traffic. It must not expose Web
-3000/3001, API 8000/8001/8080, PostgreSQL 5432, MinIO 9000/9001, or Worker ports. SSH must use a
-controlled administrator path or restricted source ranges; broad `0.0.0.0/0` SSH is not accepted by
-this contract. B4 documents this policy but makes no GCP firewall mutation.
+The old edge alone accepts public TCP 80/443. On the new GCE VM, host ports 3000 (Web) and 8080
+(API) accept ingress only from `34.10.249.63/32`. PostgreSQL 5432 and MinIO 9000/9001 remain
+unpublished. SSH remains IAP-only from `35.235.240.0/20`; broad `0.0.0.0/0` SSH is forbidden.
 
 ## DNS and static IP
 
-Until an approved production domain exists, examples use `strayhub.example.com`. The deployment has
-one canonical public hostname. `www` is unsupported until an explicit redirect and certificate SAN
-are approved. An A record points to the reserved static external IPv4 address; add an AAAA record
-only if the VM has a deliberately configured static IPv6 path and matching firewall policy.
+The approved canonical hostname is `strayhub.enadv.quest`, and its existing DNS A record continues
+to point to the old edge at `34.10.249.63`. E4 makes no DNS mutation. `www` remains unsupported and
+no AAAA record is added.
 
-Reserve the external address before DNS cutover. DNS must resolve to that stable address before
-certificate issuance. This stability also protects the LINE webhook and LIFF endpoint references.
-Phase E owns static-IP provisioning and DNS evidence; B4 does not create or modify records.
+The new VM keeps its reserved external IP `34.81.77.204` solely as the source-restricted application
+upstream and IAP administration target. It is not the canonical DNS/TLS endpoint.
 
 The eventual public URL shapes are:
 
-- `https://<canonical-host>/v1/line/webhook`
-- `https://<canonical-host>/volunteer-application`
+- `https://strayhub.enadv.quest/v1/line/webhook`
+- `https://strayhub.enadv.quest/volunteer-application`
 
-The LIFF endpoint must be HTTPS. No LINE Developers setting or real webhook is changed in B4.
+The hostname is unchanged, so this adjustment changes no LINE webhook, LIFF, or Rich Menu URL.
 
 ## TLS and ACME strategy
 
-nginx terminates TLS on the single VM. Host-level Certbot obtains a Let's Encrypt certificate using
-HTTP-01 and stores its state under `/etc/letsencrypt`. This avoids an external HTTPS load balancer
-and a long-running Certbot container, matching the selected low-cost single-VM architecture.
+The old edge nginx terminates TLS using its existing host-level Certbot installation. The accepted
+certificate SAN is `strayhub.enadv.quest`; the new GCE VM must not issue or mount a public
+certificate.
 
-The certificate must use Certbot certificate name `strayhub`, producing:
+The existing edge certificate uses:
 
 ```text
-/etc/letsencrypt/live/strayhub/fullchain.pem
-/etc/letsencrypt/live/strayhub/privkey.pem
+/etc/letsencrypt/live/strayhub.enadv.quest/fullchain.pem
+/etc/letsencrypt/live/strayhub.enadv.quest/privkey.pem
 ```
 
-Compose mounts the entire Certbot state read-only at `/etc/letsencrypt` so archive symlink rotation
-continues to work. The host ACME webroot is mounted read-only at `/var/www/certbot`. Only
-`/.well-known/acme-challenge/` is served over HTTP; directory listing is disabled and missing files
-return 404. Every other HTTP request returns 308 to the same host and URI over HTTPS. The HTTPS block
-keeps the B2 `1m` body limit and routes unchanged, preserves `Host`, appends `X-Forwarded-For`, and
-sets `X-Forwarded-Proto: https`.
+No certificate material is mounted into the new application Compose stack. The tracked old-edge
+config preserves `/.well-known/acme-challenge/`, redirects other HTTP traffic to HTTPS, keeps the
+`1m` body limit, preserves `Host`, appends `X-Forwarded-For`, and sets
+`X-Forwarded-Proto: https`.
 
-A production issuance command is intentionally not executed in B4. After DNS and firewall gates,
-an operator may use the host package's equivalent of:
-
-```bash
-certbot certonly --webroot --webroot-path /var/lib/strayhub/acme-webroot \
-  --cert-name strayhub -d <canonical-host>
-```
+E4 neither issues nor replaces the certificate.
 
 ## Renewal and failure policy
 
-The production host performs a daily renewal check. The future Phase E scheduler runs `certbot
-renew` and reloads nginx only from a successful deploy hook, for example `docker compose ... exec -T
-nginx nginx -s reload`. B4 records the command contract but adds no cron job, systemd unit, or timer.
+The existing old-edge Certbot mechanism continues to own renewal. Renewal reloads only host nginx;
+it never restarts the new application Compose stack.
 
 Failed issuance leaves HTTPS unavailable and blocks production cutover; it never enables plaintext
 application traffic. Failed renewal keeps the existing valid certificate, emits an operator-visible
@@ -82,23 +71,24 @@ runtime for `b4-verification.local`, `localhost`, and `127.0.0.1`. It reuses a v
 missing/invalid pair, and supports `--force`. The private key is mode `0600`, the certificate `0644`,
 and both remain beneath Git- and Docker-ignored `infra/gce/verification/generated/`.
 
-The synthetic Compose env publishes nginx on local ports 8088 and 8443 and mounts this verification
-tree in the same shape as Certbot state. `curl -k` is acceptable only for this self-signed isolated
-drill; production clients must validate the public CA chain normally.
+The historical B4 synthetic Compose env published nginx on local ports 8088 and 8443 and mounted
+this verification tree in the same shape as Certbot state. The selected E4 application Compose no
+longer mounts it. `curl -k` is acceptable only for that self-signed isolated drill; production
+clients must validate the public CA chain normally.
 
-The isolated `strayhub-b4-final` drill passed HTTP 308 redirect, exact ACME challenge bytes, HTTPS
+The historical isolated `strayhub-b4-final` drill passed HTTP 308 redirect, exact ACME challenge bytes, HTTPS
 Web root, API health, public versioned API, and Volunteer LIFF route. A GET to the LINE webhook
 returned the expected 405 through nginx, proving structural path ownership without a LINE payload.
 The running container passed `nginx -t`; Compose published only nginx's verification ports.
 
 ## Headers and trusted proxies
 
-B4 enables conservative `X-Content-Type-Options: nosniff` and
-`Referrer-Policy: strict-origin-when-cross-origin`. HSTS and frame policy are deferred until the real
-hostname/TLS deployment and LIFF embedded-browser compatibility are proven. nginx supplies forwarded
-headers, but Phase E must explicitly constrain Uvicorn's trusted proxy source to the Compose nginx
-boundary; global client-IP trust must not be weakened.
+The tracked old-edge config enables conservative `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: strict-origin-when-cross-origin`. HSTS and frame policy remain deferred pending
+explicit LIFF embedded-browser compatibility acceptance. nginx supplies forwarded
+headers. Firewall ingress constrains the application upstreams to `34.10.249.63/32`; global
+client-IP trust must not be weakened.
 
-Deferred: real certificate issuance, DNS/static-IP/firewall changes, systemd/cron scheduling, real
-GCE, load balancers, live Secret Manager/KMS/GCS wiring, deployment CI replacement, Terraform state
-migration, and legacy deletion.
+The live E4 acceptance passed edge reload, public Web/API/LIFF routes, structural LINE webhook
+routing, trusted existing TLS, edge-only upstream firewall behavior, and one application-VM reboot.
+Deferred: deployment CI replacement, Terraform state migration, and legacy deletion.

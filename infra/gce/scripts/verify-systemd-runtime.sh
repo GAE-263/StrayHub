@@ -28,6 +28,19 @@ done
 command -v docker >/dev/null || fail "docker is required"
 command -v curl >/dev/null || fail "curl is required"
 
+env_value() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; found = 1} END {exit !found}' \
+    "$CONFIG_ENV"
+}
+
+canonical_hostname="$(env_value E4_CANONICAL_HOSTNAME 2>/dev/null || true)"
+web_port="$(env_value E4_WEB_UPSTREAM_HOST_PORT 2>/dev/null || true)"
+api_port="$(env_value E4_API_UPSTREAM_HOST_PORT 2>/dev/null || true)"
+[[ "$canonical_hostname" == "strayhub.enadv.quest" ]] || fail "canonical hostname is invalid"
+[[ "$web_port" == "3000" ]] || fail "Web upstream host port must be 3000"
+[[ "$api_port" == "8080" ]] || fail "API upstream host port must be 8080"
+
 compose=(
   docker compose
   --project-name strayhub-production
@@ -51,8 +64,11 @@ container_ready() {
 }
 
 endpoint_code() {
-  curl --insecure --silent --show-error --output /dev/null --max-time 5 \
-    --write-out '%{http_code}' "https://127.0.0.1$1" 2>/dev/null || true
+  local port="$1"
+  local path="$2"
+  curl --silent --show-error --output /dev/null --max-time 5 \
+    --header "Host: $canonical_hostname" --write-out '%{http_code}' \
+    "http://127.0.0.1:$port$path" 2>/dev/null || true
 }
 
 runtime_ready() {
@@ -60,13 +76,12 @@ runtime_ready() {
   container_ready minio true || return 1
   container_ready api true || return 1
   container_ready web true || return 1
-  container_ready nginx true || return 1
   container_ready worker false || return 1
-  [[ "$(endpoint_code /healthz)" == "200" ]] || return 1
-  [[ "$(endpoint_code /)" == "200" ]] || return 1
-  [[ "$(endpoint_code /v1/public/volunteer-organizations)" == "200" ]] || return 1
-  [[ "$(endpoint_code /volunteer-application)" == "200" ]] || return 1
-  [[ "$(endpoint_code /v1/line/webhook)" == "405" ]] || return 1
+  [[ "$(endpoint_code "$api_port" /healthz)" == "200" ]] || return 1
+  [[ "$(endpoint_code "$web_port" /)" == "200" ]] || return 1
+  [[ "$(endpoint_code "$api_port" /v1/public/volunteer-organizations)" == "200" ]] || return 1
+  [[ "$(endpoint_code "$web_port" /volunteer-application)" == "200" ]] || return 1
+  [[ "$(endpoint_code "$api_port" /v1/line/webhook)" == "405" ]] || return 1
 }
 
 deadline=$((SECONDS + TIMEOUT))
@@ -78,4 +93,4 @@ until runtime_ready; do
   sleep 3
 done
 
-printf '[Systemd runtime health] PASS: local nginx, API, Web, Worker, PostgreSQL, and MinIO\n'
+printf '[Systemd runtime health] PASS: direct API/Web upstreams, Worker, PostgreSQL, and MinIO\n'

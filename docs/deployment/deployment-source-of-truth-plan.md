@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E3 accepted
+Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E4 accepted
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -10,15 +10,12 @@ behavior, or authorize removal of existing deployment assets.
 
 ## Canonical deployment
 
-The deployment source of truth is **GCE single VM + nginx + Docker Compose**.
+The deployment source of truth is **existing public edge nginx + GCE application VM Docker Compose**.
 
 ```text
-Internet
-   │
-   ▼
-nginx :80/:443
-   ├─ /        → Next.js
-   └─ /v1/*    → FastAPI
+Internet -> strayhub.enadv.quest -> nginx 34.10.249.63 :80/:443
+                                      |-> GCE 34.81.77.204:3000 -> Next.js
+                                      `-> GCE 34.81.77.204:8080 -> FastAPI
 
 private Docker network
    ├─ FastAPI
@@ -38,6 +35,8 @@ GCS            → backup target only
 Canonical statements:
 
 - PostgreSQL and MinIO run on the GCE VM under production Compose.
+- The old VM nginx at `34.10.249.63` is the sole public DNS/TLS/routing edge.
+- The new GCE VM runs no canonical nginx; its Web/API host ports accept only `34.10.249.63/32`.
 - MinIO is the canonical runtime media store.
 - GCS is not canonical runtime media storage; it is the off-VM backup target.
 - Cloud Run and Cloud SQL are not canonical runtime services.
@@ -91,6 +90,9 @@ The isolated `strayhub-b2-verify` stack passed `/`, `/healthz`, the public versi
 through nginx. Its containers, network, and verification volumes were removed afterward. TLS, DNS,
 firewall policy, real GCE, and every legacy-removal gate remain deferred.
 
+This B2 container is retained as historical verification evidence, not the selected live E4 edge.
+The live routing source of truth is `infra/edge-nginx/strayhub.enadv.quest.conf` on the old edge VM.
+
 ## Phase B3 canonical backup / restore artifacts
 
 Phase B3 adds one-shot PostgreSQL and MinIO backup/restore scripts plus a stable manifest/inventory
@@ -103,9 +105,9 @@ policies/runtime-role safety, and two synthetic MinIO objects with matching SHA-
 shared manifest passed integrity verification. This proves local correctness, not off-VM durability:
 GCS transfer, IAM, retention enforcement, schedules, and restore from GCS remain Phase D work.
 
-## Phase B4 canonical network edge artifacts
+## Historical Phase B4 network edge artifacts
 
-Phase B4 keeps nginx as the only public service, adds TLS termination and an HTTP-01 exception, and
+At the isolated B4 checkpoint, Compose nginx was the only published service, added TLS termination and an HTTP-01 exception, and
 defines the reserved-static-IP, single-hostname, TCP 80/443 firewall, host-level Certbot, renewal,
 and failure contracts. Runtime-generated self-signed material proves the same mounts locally and is
 never a production trust source. No address, DNS record, firewall rule, or public certificate is
@@ -113,7 +115,8 @@ created in this phase.
 
 The isolated `strayhub-b4-final` stack passed HTTP redirect, ACME webroot, HTTPS Web/API/LIFF,
 structural webhook, running nginx syntax, and public-port isolation checks. Its containers, network,
-and verification volumes were removed afterward. Real edge mutation remains deferred.
+and verification volumes were removed afterward. The later E4 acceptance superseded this topology
+with the existing external edge while retaining these checks as historical evidence.
 
 ## Phase D1 canonical Secret Manager staging artifacts
 
@@ -153,10 +156,13 @@ deferred, so D3 is not yet live-ready.
 
 ## Phase E1 canonical GCE host plan
 
-`infra/gce/terraform/` is the isolated source of truth for the canonical host foundation. It plans
-only a custom VPC/subnet, public 80/443 plus IAP-only SSH firewall, reserved regional IPv4, dedicated
+`infra/gce/terraform/` is the isolated source of truth for the canonical host foundation. E1 planned
+a custom VPC/subnet, public 80/443 plus IAP-only SSH firewall, reserved regional IPv4, dedicated
 metadata service account, and one `e2-medium` Ubuntu 24.04 LTS VM with a 30 GiB `pd-balanced` disk.
 It has local bootstrap state and no relationship to legacy `infra/gcp-demo` state.
+
+The E4 adjustment replaces only that original public-web rule with Web/API upstream ingress from
+`34.10.249.63/32`. It preserves IAP SSH, the VM, static IP, VPC/subnet, and service account.
 
 The reviewed target is `canvas-primacy-502703-k1`, `asia-east1`, `asia-east1-b`. Read-only inventory
 found unrelated us-central1 resources but no E1 target collision. The saved 7/0/0 plan applied and
@@ -182,16 +188,17 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `infra/local/nginx/line-local.conf.template` | Single-origin local LINE/LIFF proxy | Local host nginx | `test_line_local.sh`, README, contract tests | Local LINE validation | KEEP_TRANSITIONAL |
 | `scripts/test_line_local.sh` | Renders and validates the local nginx topology | Local host processes | README and contract tests | Local LINE validation | KEEP_TRANSITIONAL |
 | `infra/gce/docker-compose.production.yml` | Canonical production-like application runtime | GCE single VM / Compose | B1 preflight, config contract, contract tests | Yes | KEEP_CANONICAL |
-| `infra/gce/nginx/strayhub.conf` | Canonical HTTP single-origin routing | GCE single VM / Compose | B2 preflight, routing contract tests | Yes | KEEP_CANONICAL |
+| `infra/gce/nginx/strayhub.conf` | Historical B2/B4 isolated ingress verification | GCE verification only | Historical routing contract tests | Verification only | KEEP_TRANSITIONAL |
+| `infra/edge-nginx/strayhub.enadv.quest.conf` | Canonical public single-origin routing and TLS termination | Existing edge VM `34.10.249.63` | E4 routing contracts and operators | Yes | KEEP_CANONICAL |
 | `infra/gce/.env.production.example` | Synthetic non-local verification inputs | Phase B1 verification only | B1 preflight and Compose | Verification only | KEEP_CANONICAL |
 | `infra/gce/scripts/preflight.sh` | Operator input and Compose render checks | GCE single VM / Compose | B1 operations | Pre-start gate | KEEP_CANONICAL |
 | `infra/gce/verification/` | Runtime-generated, Git-ignored JWT material plus tracked policy README | Phase B1 verification only | Preflight and B1 env-selected API startup | Verification only | KEEP_CANONICAL |
 | `docs/deployment/production-config-contract.md` | Runtime field ownership and B1 operations | GCE single VM / Compose | Operators and contract tests | Yes | KEEP_CANONICAL |
-| `docs/deployment/production-nginx-routing.md` | Public/private boundary and HTTP route contract | GCE single VM / Compose | Operators and contract tests | Yes | KEEP_CANONICAL |
+| `docs/deployment/production-nginx-routing.md` | Historical B2 Compose routing contract | GCE verification only | Historical contract tests | Verification only | KEEP_TRANSITIONAL |
 | `infra/gce/scripts/backup-all.sh` and component scripts | One-shot PostgreSQL/MinIO backup and guarded restore | GCE single VM / Compose tools | B3 recovery drills and operator docs | Operations | KEEP_CANONICAL |
 | `infra/gce/backup/` | Tracked backup policy plus ignored generated staging | Local B3 / future GCS transfer layout | Backup scripts and contracts | Sensitive operations | KEEP_CANONICAL |
 | `docs/deployment/backup-restore.md` | Recovery, manifest, retention, and safety contract | GCE single VM / future backup-only GCS | Operators and contract tests | Operations | KEEP_CANONICAL |
-| `docs/deployment/tls-dns-firewall.md` | TLS, DNS, static-IP, firewall, and renewal contract | GCE single VM edge | Operators and contract tests | Yes | KEEP_CANONICAL |
+| `docs/deployment/tls-dns-firewall.md` | TLS, DNS, static-IP, firewall, and renewal contract | Existing edge + GCE application VM | Operators and contract tests | Yes | KEEP_CANONICAL |
 | `infra/gce/terraform/` | Isolated GCE host foundation | GCE single VM | E1 plan/preflight/contracts | Future runtime host | KEEP_CANONICAL |
 | `docs/deployment/gce-provisioning.md` | E1 ownership, plan, host, firewall, identity, and rollback contract | GCE single VM | Operators and contract tests | Provisioning gate | KEEP_CANONICAL |
 | `infra/gce/scripts/fetch-secrets.sh` and `production-preflight.sh` | Read-only secret staging and production consumption gate | GCE single VM / local synthetic verification | Operators and contract tests | Pre-start gate | KEEP_CANONICAL |
@@ -416,9 +423,10 @@ Status: verified locally with the isolated `strayhub-b3-verify` stack; durable G
 - Design PostgreSQL and MinIO backup/restore workflows targeting backup-only GCS.
 - Prove restore behavior in isolation before adding real schedules or cloud wiring.
 
-### Phase B4 — TLS and network edge
+### Historical Phase B4 — TLS and network edge
 
-Status: verified locally with the isolated `strayhub-b4-final` stack; real edge changes deferred.
+Status at checkpoint: verified locally with the isolated `strayhub-b4-final` stack; live edge work
+was deferred to the later, now-accepted E4 phase.
 
 - Define DNS, firewall, TLS certificate provisioning, and renewal.
 - Verify HTTPS redirects and forwarded-protocol behavior without changing application routes.
@@ -628,5 +636,6 @@ Removed only after the gates pass:
 
 Phase E1 accepted the isolated host foundation, Phase E2 accepted its live least-privilege Secret
 Manager/KMS/GCS paths, and Phase E3 accepted systemd startup, recovery, reboot, and backup scheduling.
-Phase E4 owns DNS, trusted TLS issuance, and public endpoint cutover; it has not started. Phase F owns
-legacy cleanup and CI replacement.
+Phase E4 kept DNS and trusted TLS on the existing old edge and accepted the live single-edge routing,
+edge-only Web/API firewall, OS Login/IAP access, and reboot persistence. Phase F owns legacy cleanup
+and CI replacement; neither E5 nor Phase F starts in this checkpoint.

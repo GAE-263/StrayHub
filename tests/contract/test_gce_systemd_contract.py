@@ -7,6 +7,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 GCE = ROOT / "infra" / "gce"
 SYSTEMD = GCE / "systemd"
+SYSCTL = SYSTEMD / "99-strayhub-network.conf"
 SCRIPTS = GCE / "scripts"
 DOC = ROOT / "docs" / "deployment" / "systemd-operations.md"
 
@@ -57,7 +58,7 @@ def test_compose_restart_policy_excludes_one_shot_services() -> None:
     compose = yaml.safe_load((GCE / "docker-compose.production.yml").read_text(encoding="utf-8"))
     services = compose["services"]
 
-    for service in ("nginx", "web", "api", "worker", "postgres", "minio"):
+    for service in ("web", "api", "worker", "postgres", "minio"):
         assert services[service]["restart"] == "unless-stopped"
     for service in ("migration", "minio-bootstrap"):
         assert services[service]["restart"] == "no"
@@ -106,6 +107,9 @@ def test_installer_keeps_repo_units_authoritative_and_does_not_start_runtime() -
     assert "chown -R strayhub:strayhub /var/lib/strayhub/secrets" in installer
     assert "systemctl daemon-reload" in installer
     assert "systemctl enable strayhub.service strayhub-backup.timer" in installer
+    assert 'SYSCTL_TARGET="/etc/sysctl.d/99-strayhub-network.conf"' in installer
+    assert 'sysctl --load "$SYSCTL_TARGET"' in installer
+    assert SYSCTL.read_text(encoding="utf-8").strip().endswith("net.ipv4.ip_forward = 1")
     assert "systemctl start" not in installer
     assert "cat >" not in installer
 
@@ -115,7 +119,8 @@ def test_health_check_is_bounded_and_uses_only_local_routes() -> None:
 
     assert "deadline=$((SECONDS + TIMEOUT))" in health
     assert 'cd "$ROOT_DIR"' in health
-    assert "https://127.0.0.1" in health
+    assert "http://127.0.0.1:$port$path" in health
+    assert "container_ready nginx" not in health
     for route in (
         "/healthz",
         "/v1/public/volunteer-organizations",
@@ -143,8 +148,7 @@ def test_operations_document_failure_gates_and_deferred_cutover() -> None:
         "journalctl",
         "API failure recovery",
         "Phase E4",
-        "No DNS",
-        "No Let's Encrypt",
-        "No LINE/LIFF endpoint",
+        "strayhub.enadv.quest",
+        "34.10.249.63",
     ):
         assert phrase in documentation

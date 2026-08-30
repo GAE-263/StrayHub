@@ -46,8 +46,10 @@ service, which waits for healthy PostgreSQL and runs Alembic upgrade head. MinIO
 dependency. If preflight or migration fails, `strayhub.service` is blocked; there is no second
 migration command or restart loop.
 
-`strayhub.service` starts the existing canonical services: PostgreSQL, MinIO and its idempotent
-bucket bootstrap, API, Worker, Web, and nginx. Compose dependency health gates remain authoritative.
+`strayhub.service` starts the canonical application services: PostgreSQL, MinIO and its idempotent
+bucket bootstrap, API, Worker, and Web. Public nginx is intentionally absent from this VM; the
+existing edge at `34.10.249.63` is the sole TLS and routing owner. Compose dependency health gates
+remain authoritative.
 Long-running services retain `restart: unless-stopped`; migration and minio-bootstrap retain
 `restart: "no"`.
 
@@ -69,15 +71,18 @@ migration oneshot. At a new boot, Alembic upgrade head is safely idempotent and 
 application unit.
 
 `verify-systemd-runtime.sh` waits at most 180 seconds. It requires healthy PostgreSQL, MinIO, API,
-Web, and nginx containers, a running Worker, local HTTPS 200 responses for API health, the Web root,
-the public structural API and volunteer route, and the expected GET 405 at the LINE webhook path.
-It uses `https://127.0.0.1` only. A timeout fails startup visibly rather than accepting a degraded
-runtime.
+and Web containers, a running Worker, direct local HTTP responses on the source-restricted Web/API
+host ports, the public structural API and volunteer route, and the expected GET 405 at the LINE
+webhook path. A timeout fails startup visibly rather than accepting a degraded runtime.
 
-For the pre-cutover E3 drill only, the existing runtime-generated self-signed verification
-certificate supplies the nginx read-only mount. This is not certificate issuance or a production
-trust source. No DNS, No Let's Encrypt, and No LINE/LIFF endpoint is changed. Phase E4 owns the real
-hostname, certificate, and public endpoint cutover.
+The application VM neither mounts nor issues a TLS certificate. DNS and the existing Let's Encrypt
+certificate remain unchanged on the old edge. The hostname `strayhub.enadv.quest` and LINE/LIFF
+endpoints are unchanged.
+
+Docker's published Web/API ports require host IPv4 forwarding. The repo-owned
+`infra/gce/systemd/99-strayhub-network.conf` persists `net.ipv4.ip_forward=1` through reboot, and
+the systemd installer loads it before enabling the runtime. GCE firewall policy remains the ingress
+boundary: forwarding does not make an unallowed port or source reachable.
 
 ## Failure recovery and reboot
 
@@ -183,6 +188,21 @@ infrastructure as an operational rollback.
 
 ## Deferred boundary
 
-Phase E4 owns DNS, trusted TLS issuance, real public endpoint acceptance, and any LINE/LIFF endpoint
-update. Scheduling alert delivery, centralized logging, exact tiered retention, remote Terraform
+Phase E4 accepted the single-edge live routing and firewall boundary; DNS, existing TLS ownership,
+and LINE/LIFF endpoint values remain unchanged. Scheduling alert delivery, centralized logging, exact tiered retention, remote Terraform
 state ownership, deployment CI replacement, and Phase F legacy removal also remain deferred.
+
+## SSH administration
+
+The VM keeps project OS Login as its single SSH identity mechanism: `enable-oslogin=TRUE` and
+`block-project-ssh-keys=TRUE`. SSH ingress remains restricted to IAP TCP forwarding from
+`35.235.240.0/20`; no world-open TCP 22 rule is permitted. The intended Linux user is
+`b97502027_gmail_com`.
+
+The approved `rose` public key was added to the operator's OS Login profile on 2026-08-30 and has
+fingerprint
+`SHA256:1pQPrAV7PeZS7v9Jue457oP9HW9KtADYkAnGsfkaGec`. OS Login profile keys are intentionally
+operator-managed outside Terraform so Terraform cannot overwrite unrelated access.
+The matching operator-held private key authenticated successfully through IAP before firewall
+tightening, after tightening, and after the accepted reboot. No private key is stored in the repo or
+uploaded to GCP.

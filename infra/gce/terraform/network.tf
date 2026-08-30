@@ -14,18 +14,21 @@ resource "google_compute_subnetwork" "gce" {
   private_ip_google_access = true
 }
 
-resource "google_compute_firewall" "public_web" {
+resource "google_compute_firewall" "edge_upstreams" {
   project   = var.project_id
-  name      = "${var.instance_name}-allow-web"
+  name      = "${var.instance_name}-allow-edge-upstreams"
   network   = google_compute_network.gce.name
   direction = "INGRESS"
 
-  source_ranges           = ["0.0.0.0/0"]
+  source_ranges           = [var.edge_source_cidr]
   target_service_accounts = [google_service_account.runtime.email]
 
   allow {
     protocol = "tcp"
-    ports    = ["80", "443"]
+    ports = [
+      tostring(var.web_upstream_port),
+      tostring(var.api_upstream_port),
+    ]
   }
 
   log_config {

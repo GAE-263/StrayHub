@@ -33,3 +33,15 @@ output "boot_disk_type" {
 output "boot_disk_size_gb" {
   value = var.boot_disk_size_gb
 }
+
+output "edge_source_cidr" {
+  value = var.edge_source_cidr
+}
+
+output "web_upstream_port" {
+  value = var.web_upstream_port
+}
+
+output "api_upstream_port" {
+  value = var.api_upstream_port
+}

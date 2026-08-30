@@ -43,7 +43,6 @@ def test_canonical_compose_has_runtime_services_and_bounded_helpers() -> None:
         "migration",
         "worker",
         "web",
-        "nginx",
     }
     assert services["minio-bootstrap"]["restart"] == "no"
     assert services["migration"]["restart"] == "no"
@@ -72,6 +71,20 @@ def test_phase_b1_uses_internal_database_and_minio_dns_with_persistence() -> Non
     assert services["web"]["environment"]["API_BASE_URL"] == "http://api:8080"
     assert "ports" not in services["postgres"]
     assert "ports" not in services["minio"]
+    assert services["web"]["ports"] == [
+        {
+            "target": 8080,
+            "published": "${E4_WEB_UPSTREAM_HOST_PORT:?E4_WEB_UPSTREAM_HOST_PORT is required}",
+            "protocol": "tcp",
+        }
+    ]
+    assert services["api"]["ports"] == [
+        {
+            "target": 8080,
+            "published": "${E4_API_UPSTREAM_HOST_PORT:?E4_API_UPSTREAM_HOST_PORT is required}",
+            "protocol": "tcp",
+        }
+    ]
     assert "postgres_data:/var/lib/postgresql/data" in services["postgres"]["volumes"]
     assert services["minio"]["volumes"] == ["minio_data:/data"]
     assert {"postgres_data", "minio_data"} == compose["volumes"].keys()

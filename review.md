@@ -753,3 +753,32 @@ was healthy (2.9 GiB memory available; root disk 32% used), and no secret value 
 No DNS, Let's Encrypt issuance, LINE/LIFF endpoint update, public cutover, legacy cleanup, Terraform
 state migration, deployment CI, product behavior, schema, or tenant/RLS change was made. IAM, KMS,
 and GCS policy were unchanged. Migration: NONE. Commit and push: NONE. Phase E4: NOT STARTED.
+
+## Phase E4 Single Public Edge Architecture Adjustment
+
+Status: READY. The selected
+architecture retains the existing nginx VM `34.10.249.63` as the sole public DNS/TLS/routing edge
+for `strayhub.enadv.quest`. The application VM `34.81.77.204` runs Web, API, Worker, PostgreSQL, and
+MinIO without canonical nginx. Its host upstreams are Web TCP 3000 and API TCP 8080, restricted by
+Terraform to `34.10.249.63/32`; PostgreSQL and MinIO remain unpublished. Public 80/443 are removed
+from the new-GCE firewall plan.
+
+SSH keeps the existing OS Login plus IAP model. Project metadata SSH keys remain blocked, no public
+TCP 22 rule is added, and OS Login profile keys remain operator-managed outside Terraform. The
+approved `rose` key authenticated through IAP before and after firewall tightening and after reboot.
+The private key remains ignored, untracked, and operator-local.
+
+Live acceptance deployed the no-nginx GCE runtime, installed the tracked old-edge config, and
+replaced the world-public GCE 80/443 rule with edge-only TCP 3000/8080. A reboot exposed
+`net.ipv4.ip_forward=0`; the explicitly approved repo-owned sysctl file now persists the sole setting
+`net.ipv4.ip_forward=1`. No custom iptables/nftables/NAT rule was added. After the controlled reboot,
+old-edge Web/API, public routes, trusted TLS, systemd runtime, named volumes, backup timer, and rose
+SSH all passed. Final Terraform plan reported no changes.
+
+Focused E4/GCE contracts: 86 PASS. Repository secret scan, Ruff, format, Terraform fmt/validate, and
+`git diff --check`: PASS. Direct non-edge probes confirmed TCP 80/443/3000/8080/5432/9000/9001 are
+blocked on the application VM; the Docker `DOCKER-USER` chain remains empty.
+
+No DNS record, certificate, LINE webhook URL, LIFF URL, application/domain behavior, schema,
+tenant/RLS behavior, managed-service policy, or legacy infrastructure is changed. Migration: NONE.
+Commit and push: NONE.

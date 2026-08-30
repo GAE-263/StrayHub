@@ -74,7 +74,7 @@ required_config=(
   AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE
   AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE
   PII_ENCRYPTION_PROVIDER PII_KMS_KEY_NAME AI_PROVIDER
-  B4_HTTP_HOST_PORT B4_HTTPS_HOST_PORT B4_LETSENCRYPT_DIR B4_ACME_WEBROOT
+  E4_CANONICAL_HOSTNAME E4_WEB_UPSTREAM_HOST_PORT E4_API_UPSTREAM_HOST_PORT
 )
 for key in "${required_config[@]}"; do
   value="$(env_value "$CONFIG_ENV" "$key" 2>/dev/null || true)"
@@ -84,6 +84,12 @@ done
 [[ "$(env_value "$CONFIG_ENV" APP_ENV)" == "production" ]] || fail "APP_ENV must be production"
 [[ "$(env_value "$CONFIG_ENV" PII_ENCRYPTION_PROVIDER)" == "gcp-kms" ]] ||
   fail "PII_ENCRYPTION_PROVIDER must remain gcp-kms"
+[[ "$(env_value "$CONFIG_ENV" E4_CANONICAL_HOSTNAME)" == "strayhub.enadv.quest" ]] ||
+  fail "E4_CANONICAL_HOSTNAME must be strayhub.enadv.quest"
+[[ "$(env_value "$CONFIG_ENV" E4_WEB_UPSTREAM_HOST_PORT)" == "3000" ]] ||
+  fail "E4_WEB_UPSTREAM_HOST_PORT must be 3000"
+[[ "$(env_value "$CONFIG_ENV" E4_API_UPSTREAM_HOST_PORT)" == "8080" ]] ||
+  fail "E4_API_UPSTREAM_HOST_PORT must be 8080"
 kms_key_name="$(env_value "$CONFIG_ENV" PII_KMS_KEY_NAME)"
 [[ "$kms_key_name" =~ ^projects/[^/[:space:]]+/locations/[^/[:space:]]+/keyRings/[^/[:space:]]+/cryptoKeys/[^/[:space:]]+$ ]] ||
   fail "PII_KMS_KEY_NAME must be a full Cloud KMS CryptoKey resource name"

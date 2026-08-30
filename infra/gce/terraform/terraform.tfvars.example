@@ -8,3 +8,6 @@ zone       = "asia-east1-b"
 # instance_name     = "strayhub-gce"
 # machine_type      = "e2-medium"
 # boot_disk_size_gb = 30
+# edge_source_cidr  = "34.10.249.63/32"
+# web_upstream_port = 3000
+# api_upstream_port = 8080

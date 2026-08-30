@@ -56,15 +56,20 @@ def test_location_machine_disk_and_static_ip_contract() -> None:
         assert required in variables + compute
 
 
-def test_network_ingress_is_minimal_and_iap_only() -> None:
+def test_network_ingress_is_edge_restricted_and_iap_only() -> None:
     network = (TF_ROOT / "network.tf").read_text(encoding="utf-8")
+    variables = (TF_ROOT / "variables.tf").read_text(encoding="utf-8")
 
     assert "auto_create_subnetworks = false" in network
-    assert 'source_ranges           = ["0.0.0.0/0"]' in network
-    assert 'ports    = ["80", "443"]' in network
+    assert 'resource "google_compute_firewall" "edge_upstreams"' in network
+    assert "source_ranges           = [var.edge_source_cidr]" in network
+    assert 'default     = "34.10.249.63/32"' in variables
+    assert "tostring(var.web_upstream_port)" in network
+    assert "tostring(var.api_upstream_port)" in network
     assert "source_ranges           = [var.iap_ssh_source_range]" in network
     assert 'ports    = ["22"]' in network
-    for forbidden_port in ("3000", "3001", "8000", "8001", "8080", "5432", "9000", "9001"):
+    assert '"0.0.0.0/0"' not in network
+    for forbidden_port in ("80", "443", "3001", "8000", "8001", "5432", "9000", "9001"):
         assert f'"{forbidden_port}"' not in network
 
 

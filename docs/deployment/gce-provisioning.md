@@ -9,7 +9,7 @@ The reviewed target is project `canvas-primacy-502703-k1`, region `asia-east1`, 
 source of truth for the canonical GCE host foundation:
 
 - isolated custom VPC `strayhub-gce-vpc` and subnet `strayhub-gce-subnet`;
-- public web and IAP-only SSH firewall rules;
+- old-edge-source-restricted Web/API and IAP-only SSH firewall rules;
 - regional reserved IPv4 `strayhub-gce-ip`;
 - dedicated metadata identity `strayhub-gce-sa`;
 - single VM `strayhub-gce` and its auto-delete boot disk.
@@ -40,7 +40,7 @@ not enable APIs; required API enablement must be a separate reviewed mutation be
 ## VM, disk, and operating system
 
 The Demo/PoC baseline is one `e2-medium` VM (2 vCPU, 4 GiB memory) plus a persistent 2 GiB swap file.
-It is intended for low-volume nginx, Next.js, FastAPI, Worker, PostgreSQL, and MinIO operation. The
+It is intended for low-volume Next.js, FastAPI, Worker, PostgreSQL, and MinIO operation. The
 accepted tradeoff is a single-machine SPOF, limited headroom, and maintenance downtime.
 
 The VM uses a 30 GiB `pd-balanced` boot disk for mixed database, object, Docker-layer, and log I/O.
@@ -53,12 +53,19 @@ therefore mandatory before production data is entrusted to it. The verified OS f
 The regional external IPv4 is reserved separately and attached to the VM. DNS and LINE endpoints do
 not change in E1. Firewall rules target only the dedicated service account:
 
-- `0.0.0.0/0` to TCP 80 and 443 for nginx;
+- `34.10.249.63/32` to TCP 3000 and 8080 for the old edge's Web/API upstream access;
 - Google IAP TCP forwarding `35.235.240.0/20` to TCP 22.
 
-There is no public 22 rule and no ingress for 3000, 3001, 8000, 8001, 8080, 5432, 9000, or 9001.
+There is no public 22, 80, or 443 rule and no ingress for PostgreSQL or MinIO. Web/API ports are not
+world-open.
 OS Login is enabled and project SSH keys are blocked. An administrator still needs the separately
-reviewed OS Login and IAP permissions; E1 Terraform does not grant project IAM.
+reviewed OS Login key and IAP permissions; Terraform does not grant project IAM or manage profile
+keys.
+
+Phase E4 live acceptance replaced the original public 80/443 rule with only
+`34.10.249.63/32` to TCP 3000/8080. The old edge is the sole public TLS endpoint. Docker DNAT on the
+application VM requires the repo-owned `/etc/sysctl.d/99-strayhub-network.conf`, containing only
+`net.ipv4.ip_forward=1`; it persisted across the accepted reboot without custom firewall/NAT rules.
 
 ## Identity and ADC
 
@@ -149,5 +156,6 @@ backup exists on the accepted VM yet.
 Approximate resource classes are one `e2-medium`, one 30 GiB `pd-balanced` disk, one reserved
 external IPv4, and network egress as used. This is not an exact billing estimate.
 
-Deferred: E2 live Secret Manager/KMS/GCS acceptance; application deployment and systemd supervision;
-DNS/TLS/LINE endpoint cutover; Phase F legacy cleanup and CI replacement.
+E1-time deferred record: E2 live Secret Manager/KMS/GCS acceptance, E3 systemd supervision, and E4
+single-edge live routing are now accepted. Full deployment acceptance/rollback remains Phase E5;
+Phase F legacy cleanup and CI replacement remain deferred.

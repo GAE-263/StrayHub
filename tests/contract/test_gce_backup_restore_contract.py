@@ -198,7 +198,8 @@ def test_backup_tools_add_no_service_port_or_nginx_route() -> None:
     published = {name for name, service in compose["services"].items() if service.get("ports")}
     nginx = (GCE_ROOT / "nginx" / "strayhub.conf").read_text(encoding="utf-8").lower()
 
-    assert published == {"nginx"}
+    assert published == {"api", "web"}
+    assert "nginx" not in compose["services"]
     assert not any("backup" in name or "restore" in name for name in compose["services"])
     assert "backup" not in nginx
     assert "minio" not in nginx

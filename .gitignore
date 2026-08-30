@@ -36,3 +36,4 @@ apps/web/test-results/
 playwright-report/
 screenshots/
 AGENTS.md
+/rose

@@ -1,6 +1,6 @@
 # Production Runtime Configuration Contract
 
-Status: Phase B1-B4/D1-D3 contracts plus Phase E2 live managed-service access accepted
+Status: Phase B1-B4/D1-D3 contracts plus Phase E2-E4 live runtime access accepted
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
@@ -58,9 +58,9 @@ requires `AI_API_KEY`.
 | `B1_VERIFICATION_ONLY` | B1 preflight | Non-secret safety marker | Verification env; must be `true` | Not used in real deployment |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE` | Compose secret transport | Sensitive path, not key material | Ignored generated-file path | Protected staged file populated from Secret Manager |
 | `AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE` | Compose secret transport | Non-secret/sensitive path | Ignored generated-file path | Protected staged file populated from Secret Manager |
-| `B4_HTTP_HOST_PORT`, `B4_HTTPS_HOST_PORT` | Edge verifier | Non-secret | Verification ports `8088`/`8443` | Host ports `80`/`443` |
-| `B4_LETSENCRYPT_DIR` | Certificate mount | Sensitive path | Ignored self-signed verification tree | Host `/etc/letsencrypt` |
-| `B4_ACME_WEBROOT` | HTTP-01 webroot | Non-secret path | Ignored verification directory | Protected host webroot |
+| `E4_CANONICAL_HOSTNAME` | Runtime health and edge contract | Non-secret | `strayhub.enadv.quest` | Same canonical hostname |
+| `E4_WEB_UPSTREAM_HOST_PORT` | Old-edge Web upstream | Non-secret | `3000` | Source-restricted host port `3000` |
+| `E4_API_UPSTREAM_HOST_PORT` | Old-edge API upstream | Non-secret | `8080` | Source-restricted host port `8080` |
 | `GCS_BACKUP_BUCKET` | Host backup scripts only | Non-secret resource name | Explicit fake transport input | Private backup-only bucket name |
 | `GCS_BACKUP_PREFIX` | Host backup scripts only | Non-secret object prefix | `strayhub-backups` | `strayhub-backups` |
 | `BACKUP_ENVIRONMENT` | Host backup scripts only | Non-secret path segment | `gcp-demo` | `production` or approved environment |
@@ -92,15 +92,16 @@ rotation, cleanup, and forbidden-use rules.
 
 ## Canonical commands
 
-The historical B2 ingress drill used `strayhub-b2-verify`. Current TLS ingress checks use the
-isolated project name `strayhub-b4-final`; neither addresses the normal local demo stack.
+The historical `strayhub-b2-verify` B2 and B4 ingress drills used isolated Compose nginx. The selected E4 architecture runs
+no nginx on the application VM; the existing edge VM owns public TLS and proxies to the direct
+source-restricted Web/API host ports.
 
 Set the shared arguments for readability:
 
 ```bash
 COMPOSE_FILE=infra/gce/docker-compose.production.yml
 ENV_FILE=infra/gce/.env.production.example
-PROJECT=strayhub-b4-final
+PROJECT=strayhub-e4-verify
 ```
 
 Preflight and render the resolved model:
@@ -135,17 +136,16 @@ Start the runtime:
 docker compose --project-name "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 ```
 
-Verify API health and the Web root only through nginx:
+Verify API health and the Web root directly on the local application VM:
 
 ```bash
-curl --head http://127.0.0.1:8088/
-curl --insecure --fail https://127.0.0.1:8443/healthz
-curl --insecure --fail https://127.0.0.1:8443/
+curl --head -H 'Host: strayhub.enadv.quest' http://127.0.0.1:3000/
+curl --fail -H 'Host: strayhub.enadv.quest' http://127.0.0.1:8080/healthz
 ```
 
-nginx is the only host-published service. API, Web, PostgreSQL, MinIO, Worker, and the MinIO console
-have no host port. See `docs/deployment/production-nginx-routing.md` for the complete HTTP route and
-proxy policy.
+Only API and Web publish source-restricted upstream ports. PostgreSQL, MinIO, Worker, and the MinIO
+console have no host port. See `infra/edge-nginx/strayhub.enadv.quest.conf` for the selected public
+routing policy.
 
 Stop the isolated stack while preserving named volumes:
 
@@ -162,7 +162,7 @@ docker compose --project-name "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FIL
 destroys them. In other words, `docker compose down -v` destroys verification data and must not be
 used as the normal stop command.
 
-## Phase B1-B4 verification boundary
+## Historical Phase B1-B4 verification boundary
 
 Included: Compose parsing, operator preflight, PostgreSQL/MinIO health, bucket bootstrap, one-shot
 Alembic, API fail-fast/startup/health, long-running Worker, Web startup, internal Web-to-API reach,
@@ -172,10 +172,11 @@ Phase B2 adds nginx single-origin routing and Phase B4 adds the TLS-ready edge w
 application behavior. B4 only documents DNS/firewall/static-IP requirements. D1 verifies local
 Secret Manager staging and D2 verifies the existing KMS adapter, provider selection, failure policy,
 and configuration contracts with an injected client. E1 accepted the GCE host foundation, and E2
-accepted live Secret Manager, KMS, and GCS backup access. Deferred: real DNS/firewall/certificate,
-systemd, real LINE/LIFF calls, legacy CI replacement, Terraform state migration, and removal of Cloud
-Run/Cloud SQL/runtime-GCS assets. GCS is backup-only in the target design and is not a dependency of
-this Compose runtime.
+accepted live Secret Manager, KMS, and GCS backup access. E3 later accepted systemd supervision and
+E4 selected the existing external nginx edge without changing DNS, certificate ownership, or
+LINE/LIFF URLs. Legacy CI replacement, Terraform state migration, and removal of Cloud Run/Cloud
+SQL/runtime-GCS assets remain deferred. GCS is backup-only in the target design and is not a
+dependency of this Compose runtime.
 
 ## Phase B3 backup / restore contract
 
@@ -196,14 +197,15 @@ manifest validation and `_COMPLETE` activation. No GCS setting enters Compose or
 Live bucket/IAM/lifecycle acceptance passed in Phase E2; scheduling remains deferred. See
 `docs/deployment/backup-restore.md` and `docs/deployment/gcs-backup.md`.
 
-## Phase B4 TLS edge contract
+## Historical Phase B4 TLS edge contract
 
-nginx is the only service with host-published HTTP/HTTPS ports. It serves only the HTTP-01 challenge
+The isolated B4 Compose nginx was the only service with host-published HTTP/HTTPS ports. It served only the HTTP-01 challenge
 over plaintext, redirects every other HTTP request with 308, and terminates TLS before applying the
 unchanged B2 routing table. Verification uses runtime-generated ignored self-signed material;
-production uses host-level Certbot/Let's Encrypt state mounted read-only. No private TLS key belongs
-in Git or a container image. See `docs/deployment/tls-dns-firewall.md` for DNS, static-IP, firewall,
-renewal, failure, LINE/LIFF, trusted-proxy, and deferred-production requirements.
+production used host-level Certbot/Let's Encrypt state mounted read-only. The selected live E4
+architecture supersedes that verification topology: TLS remains on the existing external edge and
+the GCE application Compose contains no nginx. No private TLS key belongs in Git or a container
+image. See `docs/deployment/tls-dns-firewall.md` for the accepted live contract.
 
 ## Phase D1 Secret Manager runtime contract
 

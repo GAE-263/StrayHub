@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SYSTEMD_SOURCE="$ROOT_DIR/infra/gce/systemd"
 SYSTEMD_TARGET="/etc/systemd/system"
+SYSCTL_SOURCE="$SYSTEMD_SOURCE/99-strayhub-network.conf"
+SYSCTL_TARGET="/etc/sysctl.d/99-strayhub-network.conf"
 units=(
   strayhub-secrets.service
   strayhub-migrate.service
@@ -22,11 +24,14 @@ id strayhub >/dev/null 2>&1 || fail "strayhub user is missing"
 getent group docker >/dev/null 2>&1 || fail "docker group is missing"
 [[ -d /opt/strayhub/current ]] || fail "canonical deployment path is missing"
 [[ -f /etc/strayhub/production.env ]] || fail "production config is missing"
+[[ -f "$SYSCTL_SOURCE" ]] || fail "Docker forwarding sysctl source is missing"
 
 for unit in "${units[@]}"; do
   [[ -f "$SYSTEMD_SOURCE/$unit" ]] || fail "missing unit source: $unit"
   install -o root -g root -m 0644 "$SYSTEMD_SOURCE/$unit" "$SYSTEMD_TARGET/$unit"
 done
+install -o root -g root -m 0644 "$SYSCTL_SOURCE" "$SYSCTL_TARGET"
+sysctl --load "$SYSCTL_TARGET" >/dev/null
 chown root:strayhub /etc/strayhub
 chmod 0750 /etc/strayhub
 chown root:strayhub /etc/strayhub/production.env

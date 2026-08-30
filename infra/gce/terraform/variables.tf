@@ -38,9 +38,42 @@ variable "instance_name" {
 }
 
 variable "machine_type" {
-  description = "Demo/PoC baseline for nginx, Web, API, Worker, PostgreSQL, and MinIO."
+  description = "Demo/PoC baseline for Web, API, Worker, PostgreSQL, and MinIO."
   type        = string
   default     = "e2-medium"
+}
+
+variable "edge_source_cidr" {
+  description = "Only the canonical external nginx edge may reach application upstream ports."
+  type        = string
+  default     = "34.10.249.63/32"
+
+  validation {
+    condition     = var.edge_source_cidr == "34.10.249.63/32"
+    error_message = "edge_source_cidr must remain the approved old-edge VM address."
+  }
+}
+
+variable "web_upstream_port" {
+  description = "Source-restricted host port for the Next.js upstream."
+  type        = number
+  default     = 3000
+
+  validation {
+    condition     = var.web_upstream_port == 3000
+    error_message = "web_upstream_port must remain 3000."
+  }
+}
+
+variable "api_upstream_port" {
+  description = "Source-restricted host port for the FastAPI upstream."
+  type        = number
+  default     = 8080
+
+  validation {
+    condition     = var.api_upstream_port == 8080
+    error_message = "api_upstream_port must remain 8080."
+  }
 }
 
 variable "boot_disk_size_gb" {
