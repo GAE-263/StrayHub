@@ -24,6 +24,7 @@ apps/web/out/
 .terraform/
 *.tfstate*
 *.tfvars
+*.tfplan
 .idea/
 .vscode/
 *.log

@@ -151,6 +151,25 @@ requires the marker and revalidates all PostgreSQL/MinIO hashes in fresh staging
 the production scripts without credentials. Live GCS/IAM/lifecycle and GCE ADC acceptance remain
 deferred, so D3 is not yet live-ready.
 
+## Phase E1 canonical GCE host plan
+
+`infra/gce/terraform/` is the isolated source of truth for the canonical host foundation. It plans
+only a custom VPC/subnet, public 80/443 plus IAP-only SSH firewall, reserved regional IPv4, dedicated
+metadata service account, and one `e2-medium` Ubuntu 24.04 LTS VM with a 30 GiB `pd-balanced` disk.
+It has local bootstrap state and no relationship to legacy `infra/gcp-demo` state.
+
+The reviewed target is `canvas-primacy-502703-k1`, `asia-east1`, `asia-east1-b`. Read-only inventory
+found unrelated us-central1 resources but no E1 target collision. The saved 7/0/0 plan applied and
+created only the E1 host resources. No API, managed-service IAM grant, application, DNS, certificate,
+secret, or legacy integration was created or changed.
+
+Live acceptance passed after the original reset exposed an interactive Docker GPG keyring overwrite.
+The non-interactive `gpg --batch --yes` correction required a provider ForceNew operation. A separate
+disposable-state review proved the VM contained no application, database, MinIO, secret, backup, or
+production data, then the approved saved 1-add/0-change/1-destroy plan replaced only the VM. Its first
+startup, an explicit second bootstrap run, and one post-replacement reboot all exited zero. The
+reserved IP and all surrounding network/identity resources persisted, and the final plan has no drift.
+
 ## Current deployment inventory
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
@@ -173,6 +192,8 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `infra/gce/backup/` | Tracked backup policy plus ignored generated staging | Local B3 / future GCS transfer layout | Backup scripts and contracts | Sensitive operations | KEEP_CANONICAL |
 | `docs/deployment/backup-restore.md` | Recovery, manifest, retention, and safety contract | GCE single VM / future backup-only GCS | Operators and contract tests | Operations | KEEP_CANONICAL |
 | `docs/deployment/tls-dns-firewall.md` | TLS, DNS, static-IP, firewall, and renewal contract | GCE single VM edge | Operators and contract tests | Yes | KEEP_CANONICAL |
+| `infra/gce/terraform/` | Isolated GCE host foundation | GCE single VM | E1 plan/preflight/contracts | Future runtime host | KEEP_CANONICAL |
+| `docs/deployment/gce-provisioning.md` | E1 ownership, plan, host, firewall, identity, and rollback contract | GCE single VM | Operators and contract tests | Provisioning gate | KEEP_CANONICAL |
 | `infra/gce/scripts/fetch-secrets.sh` and `production-preflight.sh` | Read-only secret staging and production consumption gate | GCE single VM / local synthetic verification | Operators and contract tests | Pre-start gate | KEEP_CANONICAL |
 | `infra/gce/secrets/production-secret-map.tsv` | Parameterized required/optional secret inventory | GCE single VM | Fetcher and contract tests | Operations | KEEP_CANONICAL |
 | `docs/deployment/secret-manager.md` | Secret naming, transport, IAM, rotation, and leakage contract | GCE single VM | Operators and contract tests | Operations | KEEP_CANONICAL |
@@ -445,6 +466,15 @@ Status: simulated transport/integrity verified; live GCS acceptance deferred.
 Verify VM boot, Compose startup, TLS, health checks, nginx routing, migrations, MinIO media, Worker,
 LINE webhook, LIFF, backup, and restore using controlled evidence without secrets.
 
+#### Phase E1 — GCE host foundation
+
+Status: READY; live host foundation and repeatable bootstrap accepted.
+
+- Keep GCE state and ownership isolated from legacy Cloud Run/Cloud SQL Terraform.
+- Create only the reviewed host/network identity boundary after a separate apply prompt.
+- Verify IAP administration, Docker/Compose, ADC identity, swap, filesystem, and reboot persistence.
+- Deploy no application, secret, DNS, certificate, or LINE change during host acceptance.
+
 ### Phase F — Legacy removal
 
 Only after GCE acceptance:
@@ -560,6 +590,8 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-Phase D1-D3 verify managed-service contracts locally. D3 still requires approved live GCS
-acceptance. Phase E owns real GCE/systemd and live managed-service acceptance; Phase F owns legacy
-cleanup and CI replacement. No deletion is allowed now.
+Phase E1 created and accepted the isolated host foundation without changing or deleting legacy
+resources. The approved idempotency replacement changed only the disposable VM and preserved its
+static IP and surrounding resources. Phase E2 live Secret Manager/KMS/GCS acceptance is next but was
+not started here. Later E phases own application/systemd and edge acceptance; Phase F owns legacy
+cleanup and CI replacement.

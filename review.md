@@ -659,3 +659,38 @@ state change, CI replacement, product behavior, DB schema, tenant/RLS, or LINE/L
 included. Focused GCE/D3 contracts: 57 PASS. Repository secret scan, Ruff, format, and
 `git diff --check`: PASS. Migration: NONE. Commit: included in the coherent Phase D3 deployment
 commit.
+
+## Phase E1 GCE Provisioning — Live Apply
+
+Status: READY after controlled idempotency replacement. Confirmed account `b97502027@gmail.com`, project
+`canvas-primacy-502703-k1`, region `asia-east1`, and zone `asia-east1-b`; both location resources are
+UP. Read-only inventory found two unrelated us-central1 VMs/static IPs on the default VPC, no
+asia-east1 target collision, no Cloud Run service or bucket, and disabled Secret Manager/KMS/Cloud
+SQL Admin APIs. No API was enabled.
+
+The new isolated `infra/gce/terraform/` plan owns only a custom VPC/subnet, public 80/443 firewall,
+IAP-only SSH firewall, reserved regional IPv4, dedicated keyless VM service account, and one
+`e2-medium` Ubuntu 24.04 LTS VM with a 30 GiB `pd-balanced` auto-delete boot disk and 2 GiB persistent
+swap. Host bootstrap installs Docker/Compose and creates protected paths but deploys no app or
+secret. Local bootstrap state is ignored; a dedicated remote backend remains required before apply.
+
+Terraform provider `hashicorp/google` is locked to v6.50.0. The reviewed `7 to add, 0 to change, 0
+to destroy` plan applied successfully. The live VM is `RUNNING` at reserved IP `34.81.77.204` with
+the expected isolated network, firewall, disk, keyless service account, and no legacy impact.
+
+IAP, Ubuntu 24.04, Docker 29.7.2, Compose v5.5.0, hello-world, host paths, 2 GiB swap, outbound
+connectivity, ADC identity, and intended sockets passed. The original reset exposed a bootstrap
+repeat failure: GPG attempted an interactive overwrite of the Docker keyring. The source fix adds
+`--batch --yes`; startup-script ForceNew semantics produced a separately reviewed replacement plan.
+
+Before replacement, the VM had no app, database, MinIO, secret, backup, Docker volume, or production
+data. The exact saved `1 add, 0 change, 1 destroy` plan replaced only the VM, changing instance ID
+`5710279376629586026` to `5310649467353876523`. Reserved IP `34.81.77.204`, VPC, subnet, firewalls,
+and service account persisted. First startup, an explicit second bootstrap execution, and one
+post-replacement reboot all exited zero; fstab and Docker repository entries remained singular,
+Docker/Compose, swap, protected paths, and ADC remained healthy. Final Terraform plan: no changes.
+
+No Cloud Run, Cloud SQL, GCS, KMS, Secret Manager, legacy IAM/state, DNS/TLS/LINE, app/schema/tenant
+behavior, or migration was touched. E2/E3/E4: NOT STARTED. Focused provisioning contracts: 10 PASS.
+Secret scan, Ruff, format, Terraform fmt/validate, shell syntax, and `git diff --check`: PASS. Commit:
+not created.
