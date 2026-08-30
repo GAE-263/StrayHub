@@ -1,6 +1,6 @@
 # PostgreSQL and MinIO Backup / Restore
 
-Status: Phase E2 live GCS transport and isolated restore-from-GCS accepted with synthetic data
+Status: Phase E3 live systemd backup scheduling and GCS integrity acceptance complete
 
 ## Backup model and boundary
 
@@ -13,8 +13,8 @@ The canonical backup captures two components sequentially under one UTC-stamped 
 The default B3 staging root is the Git-ignored `infra/gce/backup/generated/`. This is local disk on
 the same development machine and is **not an off-VM or durable production backup**. The layout is
 uploaded beneath `strayhub-backups/<environment>/<backup-id>/` in a private, IAM-restricted GCS
-bucket by the D3 transport scripts. Simulated upload/download and integrity checks pass, but live
-bucket/IAM/lifecycle and restore acceptance remain required before production readiness.
+bucket by the D3 transport scripts. Phase E2 accepted live VM-ADC upload, fresh download, integrity,
+and isolated restore; Phase E3 accepted the supervised recurring execution path.
 
 Production dumps and object copies may contain sensitive shelter data and PII. Store them with
 owner-only permissions, never commit them, never serve them through nginx, and never put them on an
@@ -137,6 +137,12 @@ checks; the downloaded MinIO artifact restored its synthetic key and exact bytes
 was not part of that D3 drill.
 
 Phase E2 repeated the drill through the dedicated private live bucket using VM ADC and restored the
-fresh download into isolated PostgreSQL/MinIO targets. Deferred: backup scheduling, exact
-daily/weekly/monthly selection, production maintenance mode, systemd, CI replacement, Terraform
-state migration, and legacy deletion.
+fresh download into isolated PostgreSQL/MinIO targets. Phase E3 accepted a repo-owned systemd
+oneshot that runs this same backup/validation/upload chain under `flock`, plus one enabled and active
+`Persistent=true` daily timer at 03:00 UTC. Manual backup `20260830T033225Z-e3daily6182` passed
+manifest/checksum verification, VM-ADC GCS upload, verification download, and `_COMPLETE`; a held
+lock rejected a concurrent run. Empty MinIO inventories are valid: transfer scripts recreate the
+object directory that GCS cannot represent, then apply the same strict manifest validation. This
+does not change the backup format or claim exact daily/weekly/monthly selection. Deferred:
+production maintenance policy, alert delivery, CI replacement, Terraform state migration, and
+legacy deletion.

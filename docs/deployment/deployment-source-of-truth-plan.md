@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, and Phase D1-D3 managed-service wiring verified locally
+Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E3 accepted
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -228,9 +228,9 @@ Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, 
 | `README.md` GCP Demo sections | Says Terraform is the GCP source of truth | Legacy/transitional | Developers and reviewers | Documentation only | REPLACE |
 | `docs/verification/ci-refactor-verification.md` | Historical CI/deployment-gate evidence | Historical GCP Demo | Review history | Evidence only | KEEP_TRANSITIONAL |
 
-Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, local
-backup/restore verification, GCE provisioning, and live GCS transfer acceptance now exist. Live
-certificate issuance, scheduling, and systemd artifacts do not yet exist.
+Production Compose, its runtime contract, preflight, TLS-ready nginx configuration, backup/restore
+verification, GCE provisioning, live managed-service access, and systemd scheduling now exist. Live
+DNS and trusted certificate issuance do not yet exist.
 Local Terraform cache content under `.terraform/` is generated tooling state, not a versioned
 deployment source of truth.
 
@@ -491,6 +491,26 @@ Status: READY; VM ADC access to Secret Manager, Cloud KMS, and private backup GC
 - Managed-service resources were created through controlled `gcloud`; canonical Terraform ownership
   and remote state remain a required follow-up before production cutover.
 
+#### Phase E3 — systemd operational supervision
+
+Status: READY; live operational supervision and recovery accepted.
+
+- Install repo-owned secret, migration, runtime, backup service, and daily persistent timer units.
+- Enforce secret fetch and production preflight before the single existing migration path, and block
+  application startup on either failure.
+- Start and stop canonical Compose without deleting PostgreSQL or MinIO named volumes; retain Docker
+  restart policies for long-running services and no-loop policies for oneshots.
+- Verify bounded localhost health, deterministic restart, API-container recovery, one controlled
+  reboot, manual GCS backup activation, timer persistence, and operational headroom.
+- Keep DNS, trusted TLS issuance, LINE/LIFF endpoints, legacy resources, and public cutover unchanged.
+- The synthetic database URL mismatch was corrected with exactly one new version on each existing
+  URL secret: `strayhub_app` remains the restricted runtime role and `strayhub_migration` remains
+  migration-only. No secret resource or previous version was removed.
+- Live acceptance passed startup, Alembic head `0037_animal_external_sources`, restart without
+  migration rerun, API crash recovery, one reboot, named-volume persistence, manual GCS backup
+  `20260830T033225Z-e3daily6182`, `_COMPLETE`, held-lock rejection, and an enabled/active persistent
+  timer. Empty MinIO backups retain strict integrity verification despite GCS omitting empty dirs.
+
 ### Phase F — Legacy removal
 
 Only after GCE acceptance:
@@ -606,7 +626,7 @@ Removed only after the gates pass:
 
 ## Immediate next phase
 
-Phase E1 accepted the isolated host foundation, and Phase E2 accepted its live least-privilege
-Secret Manager/KMS/GCS paths without application deployment or legacy changes. Phase E3 systemd and
-operational supervision is next but was not started here. Later E phases own application and edge
-acceptance; Phase F owns legacy cleanup and CI replacement.
+Phase E1 accepted the isolated host foundation, Phase E2 accepted its live least-privilege Secret
+Manager/KMS/GCS paths, and Phase E3 accepted systemd startup, recovery, reboot, and backup scheduling.
+Phase E4 owns DNS, trusted TLS issuance, and public endpoint cutover; it has not started. Phase F owns
+legacy cleanup and CI replacement.

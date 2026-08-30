@@ -42,6 +42,10 @@ trap cleanup EXIT
 "$GCS_CLI" storage rsync --recursive "$BACKUP_DIR" "$remote_uri" >/dev/null
 mkdir -p "$verification_root/backup"
 "$GCS_CLI" storage rsync --recursive "$remote_uri" "$verification_root/backup" >/dev/null
+# Object stores do not preserve an empty directory. Recreate the canonical
+# layout before validation; a non-empty expected inventory still fails if any
+# object is absent.
+mkdir -p "$verification_root/backup/minio/objects"
 python3 "$BACKUP_METADATA_HELPER" verify-manifest \
   --manifest "$verification_root/backup/manifest.json" >/dev/null
 [[ "$(python3 "$BACKUP_METADATA_HELPER" field \

@@ -724,3 +724,32 @@ Secret/KMS/GCS resources were created with controlled `gcloud` pending canonical
 Terraform/remote-state ownership review. No app deployment, systemd, DNS/TLS/LINE change, production
 DB/MinIO data, legacy resource, Terraform state migration, CI replacement, or schema migration was
 performed. Commit and push: NONE.
+
+## Phase E3 systemd / Operational Supervision
+
+Status: READY. Repo-owned systemd units define one ordered boot transaction: live Secret
+Manager staging, production preflight, the existing Compose Alembic migration, canonical runtime
+startup, and bounded localhost health verification. A separate oneshot uses the existing B3/D3
+backup chain, with `flock` overlap rejection and a persistent daily 03:00 UTC timer.
+
+The main stop path is bounded `docker compose stop`, never volume deletion. PostgreSQL and MinIO
+named volumes remain persistent, long-running Compose services retain `unless-stopped`, and
+migration/minio-bootstrap retain no-loop policies. Unit files contain no secret values or credential
+JSON. The synthetic DB URL blocker was resolved with one enabled version added to each existing
+database URL secret: `strayhub_app` is the restricted runtime role and `strayhub_migration` is the
+migration role. No secret resource/version was deleted, no other secret changed, and the runtime
+role remains non-superuser without database/role creation or `BYPASSRLS`.
+
+Fresh secret staging, preflight, migration, and all local routes passed at Alembic head
+`0037_animal_external_sources`. A systemd restart preserved the two named volumes and did not rerun
+migration; an API host-PID crash recovered automatically with restart count 1. One controlled reboot
+recovered Docker, secret fetch, migration, the complete runtime, the same static IP, ADC identity,
+volumes, and head. Manual backup `20260830T033225Z-e3daily6182` passed local integrity, VM-ADC GCS
+upload/download verification, and `_COMPLETE`; held-lock overlap rejection passed. The daily timer
+is enabled/active with `Persistent=true`. Empty MinIO backup verification now reconstructs the
+directory GCS cannot store before applying the unchanged strict inventory checks. Resource headroom
+was healthy (2.9 GiB memory available; root disk 32% used), and no secret value was logged.
+
+No DNS, Let's Encrypt issuance, LINE/LIFF endpoint update, public cutover, legacy cleanup, Terraform
+state migration, deployment CI, product behavior, schema, or tenant/RLS change was made. IAM, KMS,
+and GCS policy were unchanged. Migration: NONE. Commit and push: NONE. Phase E4: NOT STARTED.

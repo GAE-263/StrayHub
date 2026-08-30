@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "$ROOT_DIR"
 COMPOSE_FILE="$ROOT_DIR/infra/gce/docker-compose.production.yml"
 CONFIG_ENV=""
 SECRETS_ROOT="/var/lib/strayhub/secrets"

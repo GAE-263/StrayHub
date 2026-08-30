@@ -50,6 +50,7 @@ trap cleanup EXIT
 staged_backup="$temporary_dir/backup"
 mkdir -p "$staged_backup"
 "$GCS_CLI" storage rsync --recursive "$remote_uri" "$staged_backup" >/dev/null
+mkdir -p "$staged_backup/minio/objects"
 [[ -f "$staged_backup/_COMPLETE" ]] || backup_fail "downloaded backup has no completion marker"
 cmp -s "$temporary_dir/expected-complete" "$staged_backup/_COMPLETE" ||
   backup_fail "downloaded completion marker mismatch"

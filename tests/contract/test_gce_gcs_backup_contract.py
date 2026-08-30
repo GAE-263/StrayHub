@@ -65,11 +65,10 @@ if operation == "rsync" and arguments[2] == "--recursive" and len(arguments) == 
     if not source.is_dir():
         raise SystemExit(5)
     destination.mkdir(parents=True, exist_ok=True)
-    for child in source.iterdir():
-        target = destination / child.name
-        if child.is_dir():
-            shutil.copytree(child, target, dirs_exist_ok=True)
-        else:
+    for child in source.rglob("*"):
+        if child.is_file():
+            target = destination / child.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(child, target)
     raise SystemExit(0)
 
@@ -105,7 +104,7 @@ def _run(arguments: list[object], environment: dict[str, str]) -> subprocess.Com
     )
 
 
-def _build_backup(tmp_path: Path, backup_id: str) -> Path:
+def _build_backup(tmp_path: Path, backup_id: str, *, include_minio_object: bool = True) -> Path:
     backup_dir = tmp_path / "local" / "gcp-demo" / backup_id
     postgres = backup_dir / "postgres"
     objects = backup_dir / "minio" / "objects" / "nested"
@@ -113,7 +112,8 @@ def _build_backup(tmp_path: Path, backup_id: str) -> Path:
     objects.mkdir(parents=True)
     dump = postgres / "postgres.dump"
     dump.write_bytes(b"synthetic PostgreSQL custom dump stand-in")
-    (objects / "probe.txt").write_bytes(b"synthetic MinIO object")
+    if include_minio_object:
+        (objects / "probe.txt").write_bytes(b"synthetic MinIO object")
     environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
 
     commands = (
@@ -260,6 +260,55 @@ def test_simulated_upload_download_requires_complete_and_revalidates_manifest(
         if command[:3] == ["storage", "rsync", "--recursive"]
     ]
     assert marker_upload > verification_downloads[1]
+
+
+def test_empty_minio_backup_round_trips_without_object_store_directories(
+    tmp_path: Path,
+) -> None:
+    backup_id = "20260829T015151Z-d3empty"
+    backup_dir = _build_backup(tmp_path, backup_id, include_minio_object=False)
+    fake_cli, environment = _fake_cli(tmp_path)
+
+    upload = _run(_transport_arguments(UPLOAD, backup_dir, fake_cli), environment)
+    assert upload.returncode == 0, upload.stdout + upload.stderr
+
+    remote = (
+        tmp_path
+        / "fake-gcs"
+        / "strayhub-d3-test-backups"
+        / "strayhub-backups"
+        / "gcp-demo"
+        / backup_id
+    )
+    assert not (remote / "minio" / "objects").exists()
+
+    destination = tmp_path / "empty-downloaded"
+    download = _run(
+        [
+            DOWNLOAD,
+            "--backup-id",
+            backup_id,
+            "--destination-root",
+            destination,
+            "--bucket",
+            "strayhub-d3-test-backups",
+            "--prefix",
+            "strayhub-backups",
+            "--environment",
+            "gcp-demo",
+            "--gcloud-bin",
+            fake_cli,
+        ],
+        environment,
+    )
+    assert download.returncode == 0, download.stdout + download.stderr
+    restored = destination / "gcp-demo" / backup_id
+    assert (restored / "minio" / "objects").is_dir()
+    subprocess.run(
+        [METADATA, "verify-manifest", "--manifest", restored / "manifest.json"],
+        cwd=ROOT,
+        check=True,
+    )
 
 
 def test_incomplete_or_corrupt_remote_backup_is_rejected(tmp_path: Path) -> None:

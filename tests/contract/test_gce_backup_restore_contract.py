@@ -215,7 +215,8 @@ def test_documentation_states_local_limit_retention_and_gcs_deferral() -> None:
         "seven-daily/four-weekly selection",
         "transactionally_atomic: false",
         "writes `_COMPLETE` last",
-        "live bucket/IAM/lifecycle and restore acceptance remain required",
+        "Phase E2 accepted live VM-ADC upload",
+        "Phase E3 accepted a repo-owned systemd oneshot",
         "Only names beginning `strayhub_b3_restore_`",
         "Only bucket names beginning `strayhub-b3-restore-`",
     ):
