@@ -16,9 +16,6 @@ MENU_PLACEHOLDER_ACTIONS: dict[str, str] = {
     # 志工選單
     "walk_report": "散步回報功能開發中，稍後開放。",
     "volunteer_checkin": "志工報到功能開發中，稍後開放。",
-    # 領養人選單
-    "want_to_adopt": "「我想領養」功能開發中，稍後開放。",
-    "adoption_report": "領養回報功能開發中，稍後開放。",
     # 工作人員選單（重點：透過 LINE 輸入/管理動物資訊，流程參考 paw-village）
     "staff_create_animal": (
         "新增動物功能開發中：將以 LIFF 表單輸入動物基本資料與照片"
@@ -39,6 +36,17 @@ MENU_LIFF_ACTIONS: dict[str, str] = {
     "staff_update_health": "staff-animal",
 }
 
+# 領養人選單裡的兩個項目：開啟領養假頁面（之後會換成真正的領養 LIFF）。
+ADOPTION_ENTRY_ACTIONS: frozenset[str] = frozenset({"want_to_adopt", "adoption_report"})
+
+# 志工／領養人選單都有的「返回主選單」：切回 default，讓有個別身份的人自由換入口。
+BACK_TO_DEFAULT_MENU_ACTION = "back_to_default_menu"
+
 
 def is_menu_action(action: str) -> bool:
-    return action in MENU_PLACEHOLDER_ACTIONS or action in MENU_LIFF_ACTIONS
+    return (
+        action in MENU_PLACEHOLDER_ACTIONS
+        or action in MENU_LIFF_ACTIONS
+        or action in ADOPTION_ENTRY_ACTIONS
+        or action == BACK_TO_DEFAULT_MENU_ACTION
+    )

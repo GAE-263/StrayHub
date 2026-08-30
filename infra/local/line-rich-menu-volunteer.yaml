@@ -10,3 +10,6 @@ actions:
   - label: 志工報到
     type: postback
     data: action=volunteer_checkin
+  - label: 返回主選單
+    type: postback
+    data: action=back_to_default_menu

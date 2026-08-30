@@ -11,3 +11,6 @@ actions:
   - label: 領養回報
     type: postback
     data: action=adoption_report
+  - label: 返回主選單
+    type: postback
+    data: action=back_to_default_menu

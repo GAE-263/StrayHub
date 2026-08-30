@@ -78,6 +78,7 @@ class VolunteerAccessHandler:
             LineIdentityVerifier("worker-does-not-verify-line-identity"),
             audit=AuditService(self.session),
             notifications=VolunteerNotificationService(repository),
+            rich_menu_router=_rich_menu_router(),
         )
         await VolunteerBatchService(repository).process_pending_items(
             batch, access_service, limit=500, claimed_items=claimed_items

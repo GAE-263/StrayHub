@@ -56,6 +56,7 @@ const EMOJI = {
   staff_update_health: "🩺",
   staff_animal_list: "📖",
   staff_change_status: "🔄",
+  back_to_default_menu: "↩️",
 };
 
 const ROLE_TITLE = {
