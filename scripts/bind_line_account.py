@@ -65,9 +65,7 @@ async def _bind(username: str, line_user_id: str) -> None:
             )
             return
 
-        await repo.add(
-            LineUserBinding(line_user_id=line_user_id, user_id=user.id, status="active")
-        )
+        await repo.add(LineUserBinding(line_user_id=line_user_id, user_id=user.id, status="active"))
 
         memberships = await repo.memberships(user.id, active_only=True)
         await session.commit()

@@ -1922,6 +1922,17 @@ export interface components {
             area_type: string | null;
             /** @default null */
             area_path: string | null;
+            /** @default null */
+            species: string | null;
+            /** @default null */
+            size: string | null;
+            /** @default null */
+            energy: string | null;
+            temperament?: string[];
+            /** @default false */
+            is_adoptable: boolean;
+            /** @default null */
+            adoption_notes: string | null;
         };
         ManagementAnimalResponse: {
             animal: components["schemas"]["ManagementAnimal"];

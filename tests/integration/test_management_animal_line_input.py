@@ -167,6 +167,45 @@ async def test_create_animal_rejects_blank_name() -> None:
         await _cleanup(ids)
 
 
+async def test_create_animal_retry_with_same_shelter_number_fails_safely() -> None:
+    ids = await _seed()
+    shelter_number = f"RETRY-{ids['animal'].hex[:8]}"
+    try:
+        async with session_factory() as session:
+            await set_organization_scope(session, ids["org"])
+            service = LineStaffAnimalInputService(session, ids["org"], InMemoryStorageFake())
+            await service.create_animal(
+                actor_user_id=ids["user"],
+                animal_data={"tempAnimalId": shelter_number, "name": "重試測試犬"},
+                photo=_photo(),
+            )
+            await set_organization_scope(session, ids["org"])
+            with pytest.raises(DomainError) as duplicate:
+                await service.create_animal(
+                    actor_user_id=ids["user"],
+                    animal_data={"tempAnimalId": shelter_number, "name": "重試測試犬"},
+                    photo=_photo(),
+                )
+
+            assert duplicate.value.code == "animal_already_exists"
+            assert duplicate.value.status_code == 409
+            count = len(
+                (
+                    await session.execute(
+                        select(Animal).where(
+                            Animal.organization_id == ids["org"],
+                            Animal.shelter_number == shelter_number,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert count == 1
+    finally:
+        await _cleanup(ids)
+
+
 async def test_health_record_lands_in_medical_records_with_status_label() -> None:
     ids = await _seed()
     try:
@@ -226,6 +265,49 @@ async def test_health_record_rejects_unknown_animal() -> None:
                     photo=None,
                 )
             assert err.value.status_code == 404
+    finally:
+        await _cleanup(ids)
+
+
+async def test_health_record_exact_retry_returns_original_record() -> None:
+    ids = await _seed()
+    payload = {"status": "healthy", "description": "網路重試只建立一次"}
+    submitted_at = "2026-08-27T14:05:00+08:00"
+    try:
+        async with session_factory() as session:
+            await set_organization_scope(session, ids["org"])
+            service = LineStaffAnimalInputService(session, ids["org"], InMemoryStorageFake())
+            first = await service.add_health_record(
+                actor_user_id=ids["user"],
+                animal_id=ids["animal"],
+                health_record=payload,
+                submitted_at=submitted_at,
+                photo=None,
+            )
+            await set_organization_scope(session, ids["org"])
+            replay = await service.add_health_record(
+                actor_user_id=ids["user"],
+                animal_id=ids["animal"],
+                health_record=payload,
+                submitted_at=submitted_at,
+                photo=None,
+            )
+
+            assert replay == first
+            count = len(
+                (
+                    await session.execute(
+                        select(MedicalRecord).where(
+                            MedicalRecord.organization_id == ids["org"],
+                            MedicalRecord.animal_id == ids["animal"],
+                            MedicalRecord.content == payload["description"],
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert count == 1
     finally:
         await _cleanup(ids)
 

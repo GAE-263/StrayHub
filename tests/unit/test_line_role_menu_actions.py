@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from services.api.app.api import line_webhook
@@ -203,6 +204,35 @@ async def test_missing_role_menu_id_is_a_noop() -> None:
     )
 
     assert linked is None
+
+
+def test_all_missing_role_menu_ids_disable_router_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = SimpleNamespace(
+        line_rich_menu_default_id="",
+        line_rich_menu_volunteer_id="",
+        line_rich_menu_adopter_id="",
+        line_rich_menu_staff_id="",
+        line_role_menu_features_active=lambda: True,
+    )
+    monkeypatch.setattr(line_webhook, "get_settings", lambda: settings)
+
+    assert line_webhook._rich_menu_router() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["messaging_api_5xx", "messaging_api_timeout"])
+async def test_menu_api_failure_is_best_effort_for_webhook(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    class FailingRouter:
+        async def link_for_user(self, **kwargs):
+            raise RuntimeError(failure)
+
+    monkeypatch.setattr(line_webhook, "_rich_menu_router", lambda: FailingRouter())
+
+    assert await line_webhook._switch_rich_menu("U-user", LineRole.VOLUNTEER) is False
 
 
 def test_adoption_inquiry_submission_does_not_switch_to_adopter_menu() -> None:

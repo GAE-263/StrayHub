@@ -21,6 +21,7 @@ class Animal(IdentityMixin, AuditMixin, Base):
     __tablename__ = "animals"
     __table_args__ = (
         UniqueConstraint("organization_id", "id", name="uq_animals_org_id"),
+        UniqueConstraint("organization_id", "shelter_number", name="uq_animal_org_shelter_number"),
         CheckConstraint("sex IN ('male', 'female', 'unknown')", name="ck_animals_sex"),
         CheckConstraint("birth_date <= intake_date", name="ck_animals_birth_intake"),
         CheckConstraint(

@@ -2609,6 +2609,12 @@ components:
         area_name: { type: [string, "null"] }
         area_type: { type: [string, "null"] }
         area_path: { type: [string, "null"], default: null }
+        species: { type: [string, "null"], default: null }
+        size: { type: [string, "null"], default: null }
+        energy: { type: [string, "null"], default: null }
+        temperament: { type: array, items: { type: string } }
+        is_adoptable: { type: boolean, default: false }
+        adoption_notes: { type: [string, "null"], default: null }
     ManagementAnimalResponse:
       type: object
       required: [animal]

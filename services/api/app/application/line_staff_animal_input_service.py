@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
@@ -69,6 +70,7 @@ class LineStaffAnimalInputService:
         animal_data: dict,
         photo: UploadedPhoto,
     ) -> dict:
+        self._validate_photo_type(photo)
         name = (animal_data.get("name") or "").strip()
         if not name:
             raise DomainError("animal_name_required", "動物名稱不得為空白", 422)
@@ -77,16 +79,33 @@ class LineStaffAnimalInputService:
         shelter_number = (animal_data.get("tempAnimalId") or "").strip() or None
         if shelter_number is not None and len(shelter_number) > MAX_SHELTER_NUMBER_LENGTH:
             raise DomainError("shelter_number_too_long", "收容編號過長", 422)
-        asset = await self._store_photo(photo, purpose="line_staff_animal")
+        if shelter_number is not None:
+            existing_animal_id = (
+                await self.session.execute(
+                    select(Animal.id).where(
+                        Animal.organization_id == self.organization_id,
+                        Animal.shelter_number == shelter_number,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing_animal_id is not None:
+                raise DomainError("animal_already_exists", "此收容編號已建立", 409)
         animal = Animal(
             organization_id=self.organization_id,
             name=name,
             shelter_number=shelter_number,
-            current_photo_key=asset.object_key,
             status="active",
         )
         self.session.add(animal)
-        await self.session.flush()
+        try:
+            # Claim the unique shelter number before storing external media. A concurrent retry
+            # therefore fails without leaving an unreferenced object behind.
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise DomainError("animal_already_exists", "此收容編號已建立", 409) from exc
+        asset = await self._store_photo(photo, purpose="line_staff_animal")
+        animal.current_photo_key = asset.object_key
         await AuditService(self.session).record(
             organization_id=self.organization_id,
             actor_user_id=actor_user_id,
@@ -113,6 +132,8 @@ class LineStaffAnimalInputService:
         submitted_at: str | None,
         photo: UploadedPhoto | None,
     ) -> dict:
+        if photo is not None:
+            self._validate_photo_type(photo)
         description = (health_record.get("description") or "").strip()
         if not description:
             raise DomainError("health_record_description_required", "健康狀況說明不得為空白", 422)
@@ -132,13 +153,29 @@ class LineStaffAnimalInputService:
         tz = await self._organization_timezone()
         occurred_at = self._resolve_occurred_at(submitted_at, tz)
         label = HEALTH_STATUS_LABELS[status_code]
+        title = f"健康回報：{label}"
+        if submitted_at:
+            existing_record_id = (
+                await self.session.execute(
+                    select(MedicalRecord.id).where(
+                        MedicalRecord.organization_id == self.organization_id,
+                        MedicalRecord.animal_id == animal_id,
+                        MedicalRecord.occurred_at == occurred_at,
+                        MedicalRecord.title == title,
+                        MedicalRecord.content == description,
+                        MedicalRecord.created_by_user_id == actor_user_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing_record_id is not None:
+                return {"success": True, "recordId": str(existing_record_id)}
         record = MedicalRecord(
             organization_id=self.organization_id,
             animal_id=animal_id,
             occurred_at=occurred_at,
             occurred_timezone=tz,
             record_type=MedicalRecordType.OTHER.value,
-            title=f"健康回報：{label}",
+            title=title,
             content=description,
             created_by_user_id=actor_user_id,
             updated_by_user_id=actor_user_id,
@@ -174,8 +211,7 @@ class LineStaffAnimalInputService:
         return {"success": True, "recordId": str(record.id)}
 
     async def _store_photo(self, photo: UploadedPhoto, *, purpose: str) -> MediaAsset:
-        if photo.content_type not in ALLOWED_PHOTO_TYPES:
-            raise DomainError("unsupported_media_type", "照片格式不支援", 422)
+        self._validate_photo_type(photo)
         object_key = f"line-staff/{self.organization_id}/{uuid4().hex}"
         stored = await self.media.store_cleaned(
             organization_id=self.organization_id,
@@ -195,6 +231,11 @@ class LineStaffAnimalInputService:
         self.session.add(asset)
         await self.session.flush()
         return asset
+
+    @staticmethod
+    def _validate_photo_type(photo: UploadedPhoto) -> None:
+        if photo.content_type not in ALLOWED_PHOTO_TYPES:
+            raise DomainError("unsupported_media_type", "照片格式不支援", 422)
 
     async def _organization_timezone(self) -> str:
         organization = (

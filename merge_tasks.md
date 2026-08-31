@@ -434,18 +434,54 @@ Manifest security constraints：
 
 **目的**：先跑 focused tests，再跑全套；所有 failure 必須分類處理，不得 skip 或放寬 assertion。
 
-- [ ] T058 [P] 執行 LINE focused suite：`tests/unit/test_line_*.py`、`tests/integration/test_line_*.py`、`tests/integration/test_adoption_webhook_flow.py`、`tests/integration/test_management_animal_line_input.py`、`tests/integration/test_volunteer_access_expiration.py`，結果記錄到 `merge_tasks.md`
-- [ ] T059 [P] 執行 authentication／authorization／tenant isolation focused suite，涵蓋 `tests/unit/test_liff_exchange_states.py`、management boundary tests 與所有 `isolation`／`security` marker，結果記錄到 `merge_tasks.md`
-- [ ] T060 執行完整 Python gate：`uv run ruff check .`、`uv run ruff format --check .`、使用專用 `strayhub_test` 的 `uv run pytest`；結果必須至少不低於原 baseline `1097 passed, 2 skipped, 0 failed` 且所有新增測試通過
-- [ ] T061 [P] 執行 web gate：`npm --prefix apps/web run quality` 與 `npm --prefix apps/web run build`，確認 API contract／TypeScript consumer／LIFF asset packaging 無 regression
-- [ ] T062 執行 `./scripts/verify_local.sh` 與 CI 等價 critical e2e，確認 normal demo database/storage guard、demo bootstrap、login、management、volunteer 與 DB isolation 都通過
-- [ ] T063 [P] 以缺少全部 `LINE_RICH_MENU_*_ID`、只缺單一 role ID、Messaging API 5xx／timeout 三種情境驗證 webhook 仍快速回覆且不 crash，結果記錄到 `merge_tasks.md`
+- [x] T058 [P] 執行 LINE focused suite：`tests/unit/test_line_*.py`、`tests/integration/test_line_*.py`、`tests/integration/test_adoption_webhook_flow.py`、`tests/integration/test_management_animal_line_input.py`、`tests/integration/test_volunteer_access_expiration.py`，結果記錄到 `merge_tasks.md`
+- [x] T059 [P] 執行 authentication／authorization／tenant isolation focused suite，涵蓋 `tests/unit/test_liff_exchange_states.py`、management boundary tests 與所有 `isolation`／`security` marker，結果記錄到 `merge_tasks.md`
+- [x] T060 執行完整 Python gate：`uv run ruff check .`、`uv run ruff format --check .`、使用專用 `strayhub_test` 的 `uv run pytest`；結果必須至少不低於原 baseline `1097 passed, 2 skipped, 0 failed` 且所有新增測試通過
+- [x] T061 [P] 執行 web gate：`npm --prefix apps/web run quality` 與 `npm --prefix apps/web run build`，確認 API contract／TypeScript consumer／LIFF asset packaging 無 regression
+- [x] T062 執行 `./scripts/verify_local.sh` 與 CI 等價 critical e2e，確認 normal demo database/storage guard、demo bootstrap、login、management、volunteer 與 DB isolation 都通過
+- [x] T063 [P] 以缺少全部 `LINE_RICH_MENU_*_ID`、只缺單一 role ID、Messaging API 5xx／timeout 三種情境驗證 webhook 仍快速回覆且不 crash，結果記錄到 `merge_tasks.md`
 - [ ] T064 使用 local-only credential 執行 `scripts/demo-line.sh` smoke：公開 menu → 志工申請 → 管理員核准 → 自動切 volunteer menu → 返回公開 menu → 領養流程 → 選地區／收容所 → 分別完成「心有所屬」與 AI 停用時的「推薦我」→ 返回／取消／續接；送出 inquiry 後確認未切 adopter menu
 - [ ] T065 使用真實 LINE account、公開 HTTPS tunnel、LIFF ID 與 Messaging API credential 執行 staff smoke：後端驗證 memberships → 工作人員選定目前收容所 → 授權該收容所 staff menu → 新增動物 → 更新健康／照片 → 動物清單；切換收容所必須重新建立 context，並驗證未選定收容所與非 staff 都無法重播相同 LIFF/API request
-- [ ] T066 測試志工到期與多 membership 邊界：一個 shelter 到期不得移除另一 shelter 權限，menu context 不得暴露另一 shelter 動物，結果記錄到 `merge_tasks.md`
-- [ ] T067 測試 duplicate webhook／重試／LINE reply token 失效／menu link failure，確認 adoption draft、inquiry、animal mutation 與 approval 都具冪等或安全失敗行為
-- [ ] T068 以 `git diff origin/main...HEAD` 審核所有變更，確認 T006 標記 EXCLUDED 的 Growth Diary、非領養用途 Gemini、非必要 adoption admin UI、CI rewrite 與文件未意外進入 integration diff
-- [ ] T069 執行 `git diff --check`、搜尋 conflict marker、搜尋 credential pattern、列出 untracked files，將 clean evidence 記錄到 `merge_tasks.md`
+- [x] T066 測試志工到期與多 membership 邊界：一個 shelter 到期不得移除另一 shelter 權限，menu context 不得暴露另一 shelter 動物，結果記錄到 `merge_tasks.md`
+- [x] T067 測試 duplicate webhook／重試／LINE reply token 失效／menu link failure，確認 adoption draft、inquiry、animal mutation 與 approval 都具冪等或安全失敗行為
+- [x] T068 以 `git diff origin/main...HEAD` 審核所有變更，確認 T006 標記 EXCLUDED 的 Growth Diary、非領養用途 Gemini、非必要 adoption admin UI、CI rewrite 與文件未意外進入 integration diff
+- [x] T069 執行 `git diff --check`、搜尋 conflict marker、搜尋 credential pattern、列出 untracked files，將 clean evidence 記錄到 `merge_tasks.md`
+
+### Phase 8 執行紀錄
+
+- LINE focused suite：**130 passed, 0 failed**。Authentication／authorization／isolation
+  suite：**136 passed, 1 skipped, 0 failed**；skip 是測試 DB 未預載三個 MOA shelters 的明確
+  data prerequisite，不是功能 failure。
+- 完整 `./scripts/verify_local.sh`：PASS。包含 Ruff、format、mypy、migration/bootstrap、
+  storage/secret contracts、Docker API/Worker/Web builds；完整 Python 為
+  **1221 passed, 2 skipped, 0 failed**，高於 baseline。兩個 skip 分別要求可拋棄且已匯入 MOA
+  的資料庫、以及預載三 shelters 的 RLS dataset，均為既有顯式前置條件。
+- Web `quality`：normal/mobile/a11y 各 **357 tests passed**，TypeScript 與 Prettier PASS；
+  Next production build PASS（23 pages）。generated OpenAPI check PASS。
+- CI-equivalent critical Playwright 在本次 HEAD 的獨立 `8002/3002` stack：
+  **20 passed, 0 failed**。首次 sandbox 與舊 3001 process 的失敗分別是 macOS Chromium
+  sandbox 權限與 stale process，改在受控 fresh stack 後無產品 failure。
+- Menu failure matrix 已涵蓋全空 IDs、缺單一 role ID、Messaging API 5xx 與 timeout；皆為
+  no-op／安全失敗，不使 webhook crash。LINE credential 另以 read-only rich-menu list API
+  驗證有效；未輸出 token。
+- Staff mutation 補上 race-safe organization+shelter-number uniqueness、媒體寫入前 MIME 檢查，
+  以及 health-record exact retry idempotency。重試／duplicate webhook／approval／expiry focused
+  suite：**41 passed, 0 failed**。
+- 志工到期只清除目標 organization context；跨 shelter scope、multi-membership exchange 與
+  staff active-context tests 均通過，client shelter ID 不構成授權。
+- Scope audit：`git diff origin/main...HEAD` 及未提交 working diff 未包含 Growth Diary、
+  非領養 Gemini、adoption admin/inbox 或 `.github/workflows` rewrite；T006 EXCLUDED 維持排除。
+- Hygiene：`git diff --check`、credential-shaped secret scan、七字元 conflict marker scan PASS；
+  無 untracked files。
+- `./scripts/test_line_local.sh --no-tunnel` 已驗證 real-mode credential presence、LIFF mock
+  disabled、API/Web、nginx `/v1` 與 HMR routing。完整 public ngrok tunnel 因會將本機 demo/API
+  暴露至外網，被執行環境安全審查拒絕，未繞過限制。
+- T064、T065 保持未完成：需要持有人在手機 LINE、LINE Developers 與受控公開 HTTPS
+  tunnel 上執行互動。自動化測試或 read-only token check 不冒充真實 smoke evidence。
+
+**Stop Gate 8：BLOCKED（僅 T064／T065 人工實機 smoke）。** 所有可無人值守執行的
+static、unit、integration、full regression、build 與 local routing gate 均 PASS；production
+feature flag 保持 `false`，不得產生 `LINE_ROLE_MENU_SMOKE_EVIDENCE`。
 
 **Stop Gate 8**：focused、full Python、web、local verification、LINE smoke 全部有證據；任一 failure 皆為 blocker。
 
