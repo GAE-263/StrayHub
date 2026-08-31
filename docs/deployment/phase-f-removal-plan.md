@@ -1,0 +1,218 @@
+# Phase F5 Legacy Deletion Readiness and F6 Removal Plan
+
+Status: **BLOCKED**
+
+Inventory date: 2026-08-31
+
+Infrastructure mutation: **NONE**
+
+Legacy deletion: **NOT PERFORMED**
+
+This document is a non-destructive review and a proposed sequence for a separately authorized
+Phase F6. It is not deletion authority. No `apply`, `destroy`, state operation, import, IAM change,
+API change, traffic change, or resource deletion was performed for F5.
+
+## Accepted production checkpoint
+
+| Field | Verified value |
+| --- | --- |
+| F4 provenance commit | `a6f39ea0a42987b00c882edd8bad63155e0308e8` |
+| Release | `20260831T034951Z-38ab34dc6aaf` |
+| Source | `38ab34dc6aaff78e0f3a9f20dbf954a071fb355a` |
+| API image | `sha256:febfd99365a536c4063b0b6d1351cd3ea984118fb1f067899c1e1223170dad83` |
+| Worker image | `sha256:9234c5d4dda3c53f59bb6af15fee957fdb6cbced490a8074318feca71872ad4f` |
+| Web image | `sha256:56ee756e8cab60d0afe6f87248a8273b78ecaae0221d2b117bae1bd83cd68203` |
+| Migration | `0037_animal_external_sources` |
+| Runtime role / DB host | `strayhub_app` / Compose `postgres` |
+| Public hostname / edge | `strayhub.enadv.quest` / `34.10.249.63` |
+| Application host | `strayhub-gce` / `34.81.77.204` |
+
+The active release pointer, non-secret receipt, image environment, and running API/Worker/Web
+containers matched the release above. `strayhub.service` and `strayhub-backup.timer` were active,
+and the bounded runtime verifier passed API, Web, Worker, PostgreSQL, and MinIO.
+
+## Blocking decisions
+
+| Gate | Result | Reason |
+| --- | --- | --- |
+| Cloud SQL | `CLOUD_SQL_UNKNOWN` | Cloud SQL Admin and Cloud Asset APIs are not enabled; F5 did not enable them. No state, private-service peering, reserved global address, or runtime reference was found, but that is not an API-level absence proof. |
+| Legacy production traffic | `NONE` | DNS resolves to the retained nginx edge; live nginx sends Web/API traffic only to `34.81.77.204:3000/8080`; public Web, health, volunteer route and LINE webhook structural checks reached that path. |
+| Legacy CI/operator redeploy risk | `YES` | The demo workflow does not deploy, but `infra/gcp-demo/apply.sh` can apply the obsolete root when `GCP_DEMO_APPLY=1`; `migrate.sh`, `seed-demo.sh`, and `sync-line.sh` can execute legacy Cloud Run jobs. |
+| Shared-resource ownership | `PARTIAL` | Current consumers and future owners are known, but the platform Terraform root/backend and imports do not yet exist. |
+| Terraform state ownership | `PARTIAL` | Current GCE local state is known and no-change; the legacy backend bucket/state remains unavailable and externally unknown. |
+| State migration | `STATE_MIGRATION_FIRST` | Retained Secret Manager/KMS/GCS/IAM must be adopted by an isolated platform owner before legacy source can be retired safely. |
+| Destroy-plan review | `NOT_AVAILABLE` | There is no usable legacy state. Initializing or planning the legacy root with guessed backend/inputs could create a false or dangerous plan. |
+| N/N-1 | `SECOND_IMMUTABLE_RELEASE_REQUIRED` | Only immutable N exists. The older directory lacks accepted immutable provenance and schema compatibility, so it is not rollback evidence. |
+| Backup/restore | `PASS` | PostgreSQL/MinIO live restore evidence exists; the timer is enabled/active, the latest local manifest validates, and its GCS prefix has `_COMPLETE`. A new backup is still mandatory immediately before F6. |
+
+Because Cloud SQL, legacy state, platform ownership, redeploy retirement, and genuine N-1 are not
+closed, deletion safety and F6 entry are **BLOCKED**.
+
+## Evidence-backed resource inventory
+
+An absent expected name is evidence that there is currently no matching deletion target in the
+active project; it is not evidence about an unknown external project or backend.
+
+| Resource | Actual GCP identity | Current use | Future use | Classification | Evidence | Proposed F6 action |
+| --- | --- | --- | --- | --- | --- | --- |
+| Application VM | `projects/canvas-primacy-502703-k1/zones/asia-east1-b/instances/strayhub-gce` | Canonical runtime | Canonical runtime | `KEEP_CURRENT` | Running, healthy, current release active | Never delete in legacy cleanup |
+| Application IP | `regions/asia-east1/addresses/strayhub-gce-ip` (`34.81.77.204`) | Edge upstream | Stable application address | `KEEP_CURRENT` | In use by current VM and nginx | Never delete |
+| Application network | `strayhub-gce-vpc`, `strayhub-gce-subnet` | Canonical isolated network | GCE runtime | `KEEP_CURRENT` | Known current Terraform addresses | Never delete |
+| Application firewall | `strayhub-gce-allow-edge-upstreams`, `strayhub-gce-allow-iap-ssh` | Edge-only upstream and IAP SSH | GCE runtime/admin | `KEEP_CURRENT` | Exact source ranges and current state verified | Never delete |
+| Runtime identity | `strayhub-gce-sa@canvas-primacy-502703-k1.iam.gserviceaccount.com` | VM ADC | GCE runtime | `KEEP_CURRENT` | VM attachment plus resource-level grants | Never delete or weaken |
+| Public edge | `nginx-20260820-033352`, `rrapi-nginx` (`34.10.249.63`) | Sole DNS/TLS edge | Manual retained edge | `KEEP_CURRENT` | DNS and live nginx upstream evidence | Never delete in Phase F |
+| DNS/TLS | `strayhub.enadv.quest`, edge certificate/config | Public traffic, LINE/LIFF | `MANUAL_RETAIN` | `KEEP_CURRENT` | Public HTTPS healthy; Cloud DNS API is disabled and ownership stays manual/external | Retain unchanged |
+| Immutable release | release directory, receipt, manifest and three digest images for `20260831T034951Z-38ab34dc6aaf` | Current N | Roll-forward and audit | `KEEP_CURRENT` | Runtime digests match manifest | Retain; add genuine compatible N-1 |
+| Current registry | `asia-east1/strayhub` | API/Worker/Web immutable images | Canonical release registry | `KEEP_CURRENT` | Repository IAM is publisher writer/runtime reader | Never delete |
+| Current WIF | pool `github-strayhub`, provider `github` | GitHub OIDC | Canonical release auth | `KEEP_CURRENT` | Active, repository/ref/environment restricted | Never delete or broaden |
+| Publisher identity | `strayhub-artifact-publisher@...` | Immutable publication | Canonical publisher | `KEEP_CURRENT` | WIF impersonation and repository writer | Never delete |
+| Deployer identity | `strayhub-gce-deployer@...` | Reserved production environment identity | Canonical deployment boundary | `KEEP_CURRENT` | Separate WIF binding; no broad project role observed | Retain pending deployment design |
+| Production secrets | Eleven `strayhub-prod-*` secrets | Atomic runtime staging | `PLATFORM_TERRAFORM` | `KEEP_SHARED` | Each has exact runtime accessor binding | Import metadata/IAM later; never import values or delete versions |
+| PII KMS | `asia-east1/strayhub-pii/pii-encryption` | Runtime encrypt/decrypt | `PLATFORM_TERRAFORM` | `KEEP_SHARED` | Enabled key, exact runtime grant | Import key/IAM later; never delete key material |
+| Backup GCS | `strayhub-backups-canvas-primacy-502703-k1` | Off-VM backup/restore | `PLATFORM_TERRAFORM` | `KEEP_SHARED` | Private, uniform, retention/lifecycle, runtime creator/viewer | Import bucket/IAM later; never delete backup objects in legacy cleanup |
+| Project APIs | Enabled shared project services | Current GCE and unrelated workloads | Platform/project boundary | `HOLD` | Services are not legacy-exclusive; legacy Terraform uses `disable_on_destroy=false` | Do not disable in Phase F without separate consumer proof |
+| Default network/firewalls/default Compute SA | Project defaults | Edge and unrelated workloads | External/shared | `HOLD` | Ownership is mixed; edge uses default network and SA | Exclude from automated cleanup |
+| Legacy Cloud Run services | Expected `strayhub-demo-{web,api,worker}`; no matching live identity | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Active project lists only unrelated `rrbot` | No cloud delete now; remove declarations only after all gates and a final absence check |
+| Legacy Cloud Run migration job | Expected `strayhub-demo-migration`; no matching live identity | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | No Cloud Run jobs listed | No cloud delete now; retire helper/declaration after gates |
+| Legacy service accounts/IAM | Expected `strayhub-demo-{api,next,worker,migration}`; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | SA inventory contains only current and unrelated identities | Remove source only after final policy diff; never remove current grants |
+| Legacy WIF | Expected `strayhub-demo-github`; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Only `github-strayhub` exists | Remove source only; do not touch current pool/provider |
+| Legacy Artifact Registry | Expected `asia-east1/strayhub-demo`; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Only current `strayhub` and unrelated `rrbot-9527` exist | Remove source only after final registry inventory |
+| Legacy observability | Expected `strayhub-demo-logs` and `strayhub-demo-cloud-run-errors`; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Only standard logging buckets; no custom metric found | Remove source only after final logging inventory |
+| Legacy network/private service access | Expected `strayhub-demo-vpc` and address/peering; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Network/global-address/peering inventory has no match | Remove source only; do not touch current/default networks |
+| Cloud SQL/database/users | Expected `strayhub-demo-postgres`; exact identity unresolved | None in canonical runtime | None expected | `UNKNOWN` | API unavailable and no usable state; negative indirect evidence is insufficient | STOP until `PRESENT` or `ABSENT_PROVEN` |
+| Legacy runtime GCS | Bucket name is an externally required Terraform input | None in canonical runtime | None expected | `UNKNOWN` | Sole active-project bucket is canonical backup, but external bucket identity is unknown | STOP until exact identity, contents, retention, owner and state are proven |
+| Legacy backend/state | GCS bucket unknown, prefix `strayhub/gcp-demo` | None available | Historical evidence only | `UNKNOWN` | No bucket in repo/history/local backend metadata; no matching prefix in project bucket | STOP; do not init against a guessed bucket |
+| Legacy repo CI/operator paths | `demo-build.yml`, `infra/gcp-demo` apply/job helpers and IaC | Validation plus callable mutation paths | None after replacement | `LEGACY_SAFE_CANDIDATE` | Replacement release workflow exists, but manual path is still callable | First F6 repo change: retire fail-closed and replace remaining contracts |
+| Unrelated resources | `rrapi-20260813`, `rr-test`, `rr-api-firewall`, `rrbot`, `rrbot-9527`, `car-930` | Other workloads/ownership unknown | Outside StrayHub | `EXCLUDED` | Live identities do not establish StrayHub ownership | Never include in Phase F commands |
+
+There are no proven live GCP legacy deletion candidates today. The `LEGACY_SAFE_CANDIDATE` rows are
+repository-source retirement candidates only. A later appearance of a matching live resource moves
+that row back to `HOLD` until ownership and data-retention evidence are reviewed.
+
+## Shared-resource ownership transition
+
+| Resource | Current owner | Current consumer | Future owner | Terraform import required? | Safe to remove from legacy ownership? |
+| --- | --- | --- | --- | --- | --- |
+| Secrets and secret IAM | Manual/operator | `strayhub-gce-sa` | `PLATFORM_TERRAFORM` | Yes, metadata and exact IAM only | Only after zero-change adoption; never remove secret/value |
+| KMS keyring/key/IAM | Manual/operator | API through `strayhub-gce-sa` | `PLATFORM_TERRAFORM` | Yes | Only exact retired-principal bindings after policy comparison |
+| Backup bucket/IAM | Manual/operator | Backup service through `strayhub-gce-sa` | `PLATFORM_TERRAFORM` | Yes | Only after zero-change adoption; bucket/data remain retained |
+| GCE host foundation | Local GCE Terraform | Canonical VM | `GCE_TERRAFORM` | No current import; remote backend later | Not part of legacy ownership |
+| Edge/DNS/TLS | Manual/external | Public users, LINE and LIFF | `MANUAL_RETAIN` | No current plan | No; retain unchanged |
+
+Conceptual state sequence: declare exact live configuration in an isolated platform root; select a
+reviewed remote backend; import one resource or exact IAM member at a time; require a zero-change
+plan after every adoption; prove the legacy root no longer references retained resources; only then
+retire legacy source. If a legacy state is discovered, stop and redesign this as an explicit state
+split. F5 performs none of these operations.
+
+## DO NOT DELETE
+
+- `strayhub-gce`, its boot disk, `strayhub-gce-ip`, `strayhub-gce-vpc`,
+  `strayhub-gce-subnet`, current firewall rules, and `strayhub-gce-sa`.
+- The `strayhub` Artifact Registry, `github-strayhub` pool/provider,
+  `strayhub-artifact-publisher`, and `strayhub-gce-deployer`.
+- All eleven `strayhub-prod-*` secrets, versions, access bindings, KMS keyring/key/versions, backup
+  bucket, backup objects, retention/lifecycle, and current runtime IAM.
+- `nginx-20260820-033352`, `rrapi-nginx`, public DNS, trusted TLS material, and nginx configuration.
+- PostgreSQL and MinIO named volumes, immutable release directories, receipts, manifests, current
+  systemd units, and backup timer.
+- `rrapi-20260813`, `rr-test`, `rr-api-firewall`, `rrbot`, `rrbot-9527`, and `car-930`.
+- Default project network, firewall rules, Compute service account, and shared project APIs without
+  a separately reviewed ownership/consumer decision.
+
+## Proposed F6 sequence — do not execute in F5
+
+Every step is fail-closed. Steps containing an unresolved placeholder are not executable until a
+reviewed, exact resource manifest replaces it.
+
+1. **Close every F5 blocker.** Precondition: Cloud SQL is `PRESENT` or `ABSENT_PROVEN`, backend/state
+   identity is resolved, platform imports have zero-change plans, and a genuine compatible N-1 is
+   accepted. Action: documentation/review only. Verification: all F6 gates below are checked.
+   Stop condition: any result remains `UNKNOWN`, `PARTIAL`, or failed.
+2. **Retire legacy redeploy paths on the default branch.** Precondition: current release workflow
+   and replacement contracts pass. Action: separately reviewed repository commit that removes or
+   permanently fail-closes `infra/gcp-demo/apply.sh` and the three legacy job helpers, then replaces
+   `demo-build.yml` and legacy-shape CI assertions. Verification: default branch no longer has a
+   callable legacy apply/job execution path; current release workflow still passes. Rollback:
+   revert only the repository commit; do not recreate cloud resources.
+3. **Establish N/N-1.** Precondition: a second immutable release has reviewed schema compatibility.
+   Action: publish/deploy through canonical OIDC/WIF and exact-digest tooling. Verification: both
+   manifests, receipts, images and rollback dry run pass. Stop: no genuine compatible pair.
+4. **Capture fresh recovery evidence.** Precondition: stable current runtime. Action: invoke the
+   existing systemd backup service, verify local manifest/checksums, GCS `_COMPLETE`, and the latest
+   accepted isolated restore procedure/evidence. Verification: PostgreSQL head/RLS/runtime role and
+   MinIO inventory pass. Stop: any backup, upload, marker or restore failure.
+5. **Freeze the exact deletion manifest.** Precondition: fresh read-only GCP inventory and policy
+   exports. Action: record full resource names/regions and exact IAM members only for proven legacy
+   resources. Verification: two-person comparison against this KEEP/HOLD/EXCLUDED list and current
+   Terraform no-change plan. Stop: a current/shared/unrelated resource appears.
+6. **Remove legacy traffic bindings, if any.** Precondition: exact candidate exists and traffic/log
+   evidence remains zero. Action class: remove only the candidate Cloud Run invoker/domain/traffic
+   binding named in the frozen manifest. Verification: public traffic and current GCE acceptance
+   remain healthy. Stop/rollback: restore the saved exact binding if current traffic regresses.
+   Current inventory makes this a no-op.
+7. **Remove legacy Cloud Run services and job, if any.** Precondition: exact service/job identities
+   are in the frozen manifest and no traffic/schedule/caller exists. Action class: individual
+   `gcloud run services delete` / `gcloud run jobs delete`; never wildcard. Verification: each exact
+   identity is absent and current routes pass. Stop: any dependency or unexpected identity.
+   Current inventory makes this a no-op.
+8. **Resolve and disposition Cloud SQL.** Precondition: status is no longer unknown. If absent,
+   perform no action. If present, require exact instance identity, ownership, retention/export,
+   backup verification, connection audit and explicit separate deletion approval before an
+   individual `gcloud sql instances delete`. Verification: approved export/retention evidence and
+   current local PostgreSQL acceptance. Stop: any data, owner, state or rollback uncertainty.
+9. **Resolve and disposition legacy runtime GCS.** Precondition: exact bucket is proven legacy-only,
+   its state and contents have an approved retention disposition, and it is not the backup bucket.
+   Action class: delete reviewed objects/bucket only under separate authorization. Verification:
+   exact bucket absence plus MinIO/GCS-backup acceptance. Stop: unknown data or owner, shared IAM,
+   or any name equal to the protected backup bucket.
+10. **Remove legacy-exclusive IAM identities and bindings.** Precondition: principals are absent from
+    every current consumer and are listed exactly. Action class: remove each legacy-only IAM member,
+    then service account; never edit a whole policy. Verification: policy diff contains only named
+    retired principals; current VM, publisher and deployer access still pass. Stop/rollback: restore
+    the saved exact member if a current check fails.
+11. **Remove legacy WIF and registry/observability, if present.** Precondition: exact resources are
+    proven legacy-only and no artifact/identity retention requirement exists. Action class:
+    individual provider, pool, repository, logging metric/bucket deletion from the frozen manifest.
+    Verification: current `github-strayhub`, `strayhub` repository and release digests remain.
+    Stop: any current provenance or shared consumer reference.
+12. **Remove legacy-exclusive networking, if present.** Precondition: Cloud SQL/runtime resources
+    are gone, exact network/address/peering has no consumer, and it is neither current nor default.
+    Action class: dependency-ordered individual peering/address/network deletion. Verification:
+    current GCE network/firewalls and edge path pass. Stop: shared peering/route or unknown owner.
+13. **Review project APIs last.** Precondition: project-wide consumer inventory proves an API is
+    legacy-exclusive. Action: separate approval for a single named service disablement. Verification:
+    current and unrelated workloads pass. Default F6 action is retain; never infer exclusivity from
+    legacy Terraform.
+14. **Retire legacy IaC/docs only after cloud/state disposition.** Precondition: no state can later
+    apply the old source and every historical record has a superseding pointer. Action: reviewed
+    repository removal/archive commit. Verification: current contracts, release build and docs pass.
+    Stop: source is still required to explain unresolved state/resources.
+15. **Run post-removal acceptance.** Precondition: all authorized steps succeeded. Action: no new
+    mutation; run public routes, authenticated tenant/RLS/volunteer checks, systemd/runtime health,
+    managed-service access, backup timer, secret scan and current Terraform plan. Rollback/stop:
+    stop further removal immediately and restore only the exact last reversible binding/config;
+    use immutable N/N-1 or roll-forward according to the accepted release procedure.
+
+A broad `terraform destroy` is prohibited: no trustworthy legacy state exists, and the source mixes
+legacy resources with shared secrets, KMS IAM and project APIs.
+
+## F6 hard gates
+
+- [x] current immutable runtime digest matches manifest
+- [ ] Cloud SQL status resolved
+- [x] production traffic uses only current GCE path
+- [x] current Artifact Registry/WIF/IAM explicitly protected
+- [ ] shared Secret/KMS/GCS/IAM ownership adopted and zero-change
+- [x] legacy CI/operator redeploy path identified
+- [ ] legacy redeploy path retired on the default branch
+- [ ] legacy Terraform/backend state risk fully resolved
+- [ ] genuine compatible immutable N/N-1 exists
+- [x] no current/shared resource appears in the proposed deletion plan
+- [x] unrelated resources are excluded
+- [x] backup/restore readiness confirmed
+- [x] fresh pre-removal backup is required
+- [x] dependency-ordered removal and stop conditions are defined
+- [x] post-removal acceptance plan is defined
+
+Only evidence-backed gates are checked. Phase F6 entry remains **BLOCKED**.

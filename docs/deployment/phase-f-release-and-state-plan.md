@@ -259,3 +259,44 @@ only that pattern and does not weaken the clean-tree validator. The failed run i
 F4 is complete for the first immutable release. F5 may review ownership and release gates, but
 deletion safety remains **BLOCKED** until a genuine compatible N/N-1 pair and all independent legacy
 absence/ownership gates exist.
+
+## Phase F5 deletion-readiness decision
+
+Status: **BLOCKED**
+
+F5 reverified immutable N on the live GCE host: release, receipt, source, migration head and all
+three running image digests match the F4 manifest. The current GCE local state also produced a
+read-only no-change plan. No second genuine immutable release exists, so the decision is
+`SECOND_IMMUTABLE_RELEASE_REQUIRED`, not a claim that the historical `e702d7d-e3` directory is N-1.
+
+Legacy remote state remains unavailable. The backend bucket was never recorded, no local backend
+metadata/state exists, and the sole active-project bucket has no `strayhub/gcp-demo` objects. This
+bounded evidence does not rule out an externally supplied bucket or other project. Consequently a
+legacy destroy plan is `NOT_AVAILABLE`; F5 did not initialize a guessed backend or run a synthetic
+destroy plan.
+
+Cloud SQL remains `CLOUD_SQL_UNKNOWN`. Its Admin API and Cloud Asset API are not enabled. The
+canonical runtime uses local Compose PostgreSQL, and the active project exposes no service-network
+peering or reserved global address, but deletion readiness requires a positive resource-status
+resolution rather than inference. An externally named legacy runtime-media bucket is also unknown.
+
+The retained ownership target remains:
+
+- `GCE_TERRAFORM` for the current host foundation;
+- `PLATFORM_TERRAFORM` for Secret Manager metadata/exact IAM, KMS, backup GCS and exact IAM; and
+- `MANUAL_RETAIN` for edge/DNS/TLS.
+
+This target is not implemented. F5 therefore returns shared ownership `PARTIAL`, Terraform state
+ownership `PARTIAL`, and `STATE_MIGRATION_FIRST`. Imports must occur only in a separately approved
+phase, one exact resource/member at a time, with a zero-change plan; secret values and versions must
+not enter state. If legacy state appears, stop and redesign as a state split.
+
+Backup/restore readiness remains `PASS`: the persistent timer is active, the latest local manifest
+`20260831T030530Z-e3daily4507` validates, and GCS contains its `_COMPLETE` marker. The accepted E5
+non-empty PostgreSQL/MinIO GCS restore drill remains the restore evidence. F6 must still begin with
+a fresh backup, manifest/checksum and `_COMPLETE` verification, followed by review of the accepted
+isolated restore evidence/procedure.
+
+See [`phase-f-removal-plan.md`](phase-f-removal-plan.md) for the protected-resource inventory,
+operator-path risk, exact F6 stop conditions, and unchecked hard gates. F5 performed no import,
+state movement, apply, destroy, IAM/API change, production mutation, or deletion.

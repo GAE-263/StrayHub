@@ -569,6 +569,14 @@ GCE verification/publication workflow. Publication remains gated on separately r
 registry, and environment approval; no production deployment occurred. See
 [`gce-release-process.md`](gce-release-process.md). Deletion remains blocked.
 
+Phase F4 published and deployed the first accepted immutable release through the dedicated
+Artifact Registry and restricted GitHub OIDC/WIF boundary. Phase F5 then performed a read-only live
+inventory and produced [`phase-f-removal-plan.md`](phase-f-removal-plan.md). Current runtime digests,
+traffic routing, GCE state and backup readiness pass, but destructive cleanup remains blocked:
+Cloud SQL and the externally supplied legacy backend/runtime-bucket identities are unresolved,
+retained platform resources have not been imported, legacy operator mutation paths remain callable,
+and there is no genuine immutable N-1. No legacy resource or CI path was removed in F5.
+
 Only after every applicable gate is satisfied:
 
 - remove Cloud Run services and public IAM;
@@ -595,9 +603,9 @@ No Cloud Run/Terraform application asset may be removed until every gate is chec
 - [x] KMS works with the intended VM identity
 - [x] GCS backup works
 - [x] restore tested for PostgreSQL and MinIO
-- [ ] replacement CI deployment gate exists
+- [x] replacement CI release/publication gate exists
 - [ ] Terraform remote state and retained-resource ownership reviewed
-- [ ] rollback procedure and acceptance owner recorded
+- [x] rollback procedure and acceptance owner recorded
 
 ## Contradictory and legacy documentation
 
@@ -692,4 +700,6 @@ restricted GitHub WIF boundary. A workflow-only commit enables manual dispatch f
 pinning the artifact source to the reviewed SHA. GitHub run `33354828878` published the first exact
 digest bundle, and release `20260831T034951Z-38ab34dc6aaf` is active with matching runtime digests
 and authenticated acceptance. The historical deployment remains retained but is not a genuine
-immutable N-1. Legacy cleanup stays blocked and no legacy resource has been deleted.
+immutable N-1. F5's read-only inventory and proposed removal sequence are documented, but Cloud SQL,
+legacy state/bucket ownership, platform imports, legacy operator-path retirement, and genuine N-1
+remain hard blockers. Legacy cleanup stays blocked and no legacy resource has been deleted.

@@ -198,16 +198,58 @@ F2 remained non-destructive and produced the ownership and release design linked
 5. make no legacy state or deletion change; and
 6. leave candidate deletion planning for a separately reviewed later task.
 
-No destructive Phase F task should begin because F1/F2 are `READY`.
+No destructive Phase F task should begin merely because F1/F2 are `READY`.
+
+## Phase F5 final inventory checkpoint
+
+Status: **BLOCKED** for destructive cleanup. This section supersedes the earlier preliminary
+classification where live F4 evidence now exists; it does not rewrite the historical F1 findings.
+
+F5 verified release `20260831T034951Z-38ab34dc6aaf` and all three running image digests against its
+manifest. DNS resolves to the retained nginx edge at `34.10.249.63`, whose live configuration sends
+Web/API traffic only to `strayhub-gce` at `34.81.77.204:3000/8080`. The application, Worker,
+PostgreSQL, MinIO, systemd unit, and backup timer are healthy. The runtime database endpoint is the
+Compose `postgres` service and the runtime role remains `strayhub_app`.
+
+The active project contains no matching `strayhub-demo-*` Cloud Run service/job, service account,
+WIF pool, Artifact Registry, VPC/private-service-access boundary, logging bucket, or logging metric.
+Those absent identities are not live deletion targets; their source declarations are
+`LEGACY_SAFE_CANDIDATE` only after all F6 gates. The project contains only the unrelated Cloud Run
+service `rrbot`, unrelated registry `rrbot-9527`, and the explicitly excluded `rr*`/`car-930`
+resources alongside current StrayHub infrastructure.
+
+Cloud SQL remains `CLOUD_SQL_UNKNOWN`: Cloud SQL Admin and Cloud Asset APIs are not enabled, and F5
+did not enable them. No legacy state, service-networking peering, reserved global address, Cloud Run
+consumer, or current runtime reference was found, but those negative signals do not prove API-level
+absence. The externally supplied runtime-GCS bucket identity and the legacy GCS backend bucket also
+remain unknown. Therefore the preliminary `LEGACY_CANDIDATE` labels for Cloud SQL/runtime GCS are
+now conservatively `UNKNOWN`, and project APIs/default shared resources are `HOLD`.
+
+The legacy CI redeploy answer is `YES`: `.github/workflows/demo-build.yml` itself performs no GCP
+authentication, push, apply, or deploy, but `infra/gcp-demo/apply.sh` can apply the obsolete root
+under `GCP_DEMO_APPLY=1`; `migrate.sh`, `seed-demo.sh`, and `sync-line.sh` can execute its Cloud Run
+jobs. F6 must first retire these operator paths and replace legacy-shape CI assertions on the
+default branch. No path was disabled during F5.
+
+Current GCE local state still contains exactly the eight previously recorded addresses. A live
+read-only plan reported no changes. There is still no usable legacy state, so a legacy destroy plan
+is `NOT_AVAILABLE`; no guessed backend was initialized. Shared ownership is only partial until an
+isolated `PLATFORM_TERRAFORM` root adopts exact Secret Manager/KMS/GCS/IAM resources with zero-change
+plans. The required decision is `STATE_MIGRATION_FIRST`.
+
+The complete resource matrix, protected-resource list, hard gates, and exact dependency-ordered F6
+proposal are in [`phase-f-removal-plan.md`](phase-f-removal-plan.md). F6 remains blocked by Cloud SQL,
+legacy backend/runtime-bucket identity, incomplete platform ownership, callable legacy operator
+paths, and the absence of a genuine compatible immutable N-1.
 
 ## Phase F deletion hard gates
 
-- [ ] replacement GCE CI deployment gate exists
-- [ ] production GCE deployment can be reproduced
+- [x] replacement GCE CI release/publication gate exists
+- [x] production GCE deployment can be reproduced
 - [ ] Terraform state ownership reviewed
 - [ ] shared resources identified and protected
-- [ ] rollback owner recorded
-- [ ] rollback artifact/release strategy exists
+- [x] rollback owner recorded
+- [x] rollback artifact/release strategy exists
 - [x] legacy deployment no longer receives production traffic
 - [ ] legacy CI cannot redeploy unexpectedly
 - [ ] candidate deletion plan reviewed
