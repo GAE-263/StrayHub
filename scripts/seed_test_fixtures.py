@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-from scripts.test_database import require_test_database
-
-
-async def seed(*args, **kwargs):
-    require_test_database()
-    from scripts.seed_local import seed as seed_local
-
-    return await seed_local(*args, **kwargs)
+from scripts.seed_local import seed
+from scripts.test_database import require_fixture_database
 
 
 def main() -> None:
-    require_test_database()
-    from scripts.seed_local import main as seed_local_main
+    require_fixture_database()
+    from scripts.seed_local import main
 
-    seed_local_main()
+    main()
 
 
 __all__ = ["seed"]

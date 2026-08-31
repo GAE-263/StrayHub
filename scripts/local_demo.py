@@ -2,6 +2,7 @@
 
 from urllib.parse import urlsplit
 
+from scripts.test_database import require_test_database
 from services.api.app.config.settings import get_settings
 from sqlalchemy.engine import make_url
 
@@ -19,7 +20,7 @@ def require_local_demo(app_env: str, database_url: str) -> None:
         app_env not in {"local", "test"}
         or url.drivername not in {"postgresql", "postgresql+asyncpg"}
         or url.host not in LOCAL_HOSTS
-        or not (url.database == "strayhub" or (url.database or "").startswith("strayhub_"))
+        or url.database != "strayhub"
         or url.query
     ):
         raise ValueError(
@@ -27,9 +28,14 @@ def require_local_demo(app_env: str, database_url: str) -> None:
         )
 
 
-def guard(*, storage: bool = False) -> None:
+def guard(*, storage: bool = False, allow_isolation_test: bool = False) -> None:
     settings = get_settings()
-    require_local_demo(settings.app_env, settings.database_url)
+    try:
+        require_local_demo(settings.app_env, settings.database_url)
+    except ValueError:
+        if not allow_isolation_test:
+            raise
+        require_test_database(settings.database_url)
     # The repository's Alembic env reads DATABASE_URL, not database_migration_url.
     # Validate the actual target instead of rejecting an unrelated unused setting.
     if storage and urlsplit(settings.minio_endpoint).hostname not in LOCAL_HOSTS:

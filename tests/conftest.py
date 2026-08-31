@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import pytest
-
 from scripts.test_database import asyncpg_url, require_test_database
 
 

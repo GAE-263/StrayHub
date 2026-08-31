@@ -59,7 +59,7 @@ SC-006 的 Standard Local Fixture 固定包含：2 位平台管理員（1 位啟
 ## Scenario 7: Migration 與 bootstrap
 
 1. 在全新空資料庫執行 `uv run alembic upgrade head`。
-2. 執行 `uv run python -m scripts.seed_local`，確認建立一位啟用中的 `local-platform-admin`。
+2. 在 loopback `strayhub_test` 執行 `uv run python -m scripts.seed_test_fixtures`，確認建立一位啟用中的 `local-platform-admin`。
 3. 在已有 User 資料但啟用平台管理員數量為 0 或超過 2 時執行 Migration，確認 Migration fail closed 並提供修復提示。
 
 ## Automated validation

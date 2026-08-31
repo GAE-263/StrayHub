@@ -35,6 +35,7 @@ from services.api.app.persistence.models.volunteer_access import (
 from sqlalchemy import select
 
 from .seed_observation_vocabulary import seed_vocabulary
+from .test_database import require_fixture_database
 
 VOLUNTEER_FIXTURE_NAMESPACE = UUID("41c08fbb-fef2-4930-abd9-bd1f77226888")
 
@@ -317,6 +318,7 @@ async def _get_or_create(session, model, statement, factory):
 
 
 async def seed() -> dict[str, dict[str, str]]:
+    require_fixture_database()
     hasher = Argon2PasswordHasher()
     now = datetime.now(timezone.utc)
     result: dict[str, dict[str, str]] = {}
@@ -759,6 +761,7 @@ async def seed() -> dict[str, dict[str, str]]:
 
 
 def main() -> None:
+    require_fixture_database()
     print(json.dumps(asyncio.run(seed()), ensure_ascii=False, indent=2))
 
 

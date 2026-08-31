@@ -27,8 +27,10 @@ Local fixture 不是正式 LINE 身分，不能取代受控 LIFF 驗收。
 
 ```bash
 docker compose -f infra/local/docker-compose.yml up -d postgres minio
+export STRAYHUB_TEST_DATABASE_URL=postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test
+export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub_test
 uv run alembic upgrade head
-uv run python -m scripts.seed_local
+uv run python -m scripts.seed_test_fixtures
 ```
 
 確認 `.env` 至少包含 local `LINE_CHANNEL_ID`、`LIFF_ID`、JWT keys 與 database settings。分別啟動 API 與 Web：
