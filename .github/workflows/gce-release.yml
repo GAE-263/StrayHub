@@ -5,11 +5,13 @@ on:
     paths:
       - ".github/workflows/gce-release.yml"
       - "infra/gce/**"
+      - "infra/gcp-platform/**"
       - "infra/gcp-demo/Dockerfile.*"
       - "scripts/build-release-bundle.sh"
       - "scripts/verify_acceptance_live.py"
       - "services/**"
       - "tests/contract/test_gce_release_contract.py"
+      - "tests/contract/test_gcp_platform_terraform_contract.py"
       - "pyproject.toml"
       - "uv.lock"
   push:
@@ -17,11 +19,13 @@ on:
     paths:
       - ".github/workflows/gce-release.yml"
       - "infra/gce/**"
+      - "infra/gcp-platform/**"
       - "infra/gcp-demo/Dockerfile.*"
       - "scripts/build-release-bundle.sh"
       - "scripts/verify_acceptance_live.py"
       - "services/**"
       - "tests/contract/test_gce_release_contract.py"
+      - "tests/contract/test_gcp_platform_terraform_contract.py"
       - "pyproject.toml"
       - "uv.lock"
   workflow_dispatch:
@@ -70,7 +74,8 @@ jobs:
           uv run pytest \
             tests/contract/test_gce_release_contract.py \
             tests/contract/test_gce_production_compose_contract.py \
-            tests/contract/test_gce_systemd_contract.py
+            tests/contract/test_gce_systemd_contract.py \
+            tests/contract/test_gcp_platform_terraform_contract.py
 
       - name: Shell syntax and lint
         run: |
@@ -92,11 +97,16 @@ jobs:
 
       - name: Terraform validation without backend access
         run: |
-          terraform fmt -check -recursive infra/gce/terraform infra/gcp-demo/terraform
+          terraform fmt -check -recursive \
+            infra/gce/terraform \
+            infra/gcp-demo/terraform \
+            infra/gcp-platform/terraform
           terraform -chdir=infra/gce/terraform init -backend=false -input=false
           terraform -chdir=infra/gce/terraform validate
           terraform -chdir=infra/gcp-demo/terraform init -backend=false -input=false
           terraform -chdir=infra/gcp-demo/terraform validate
+          terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
+          terraform -chdir=infra/gcp-platform/terraform validate
 
       - name: Repository-native secret scan
         run: |

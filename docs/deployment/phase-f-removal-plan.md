@@ -48,6 +48,18 @@ and the bounded runtime verifier passed API, Web, Worker, PostgreSQL, and MinIO.
 Because Cloud SQL, legacy state, platform ownership, redeploy retirement, and genuine N-1 are not
 closed, deletion safety and F6 entry are **BLOCKED**.
 
+### F5b ownership update
+
+`PLATFORM_TERRAFORM` now owns the retained Secret Manager/KMS/backup GCS/exact IAM set plus its
+dedicated state bucket. All 29 addresses were imported without live-resource change and the final
+plan is `No changes`. The platform ownership gate is resolved; see
+[`platform-terraform.md`](platform-terraform.md).
+
+The F5b source branch fail-closes all four legacy mutation helpers and hardens the legacy workflow
+to validation-only without OIDC. The redeploy gate remains unchecked until these exact changes are
+present on the default branch. Cloud SQL and external legacy backend/runtime GCS identities remain
+unknown, and no genuine immutable N-1 exists yet.
+
 ## Evidence-backed resource inventory
 
 An absent expected name is evidence that there is currently no matching deletion target in the
@@ -203,7 +215,7 @@ legacy resources with shared secrets, KMS IAM and project APIs.
 - [ ] Cloud SQL status resolved
 - [x] production traffic uses only current GCE path
 - [x] current Artifact Registry/WIF/IAM explicitly protected
-- [ ] shared Secret/KMS/GCS/IAM ownership adopted and zero-change
+- [x] shared Secret/KMS/GCS/IAM ownership adopted and zero-change
 - [x] legacy CI/operator redeploy path identified
 - [ ] legacy redeploy path retired on the default branch
 - [ ] legacy Terraform/backend state risk fully resolved

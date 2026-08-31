@@ -171,8 +171,9 @@ manufacture a previous release or weaken the compatibility gate for acceptance.
 - Normal stop/restart never uses `docker compose down -v`; named volumes and backups remain intact.
 - Release files and receipts contain provenance only. Secret values, environment dumps, JWT keys,
   authentication cookies, database URLs, and credentials must never be logged or archived.
-- Cloud SQL remains `UNKNOWN`. Cloud Run/SQL/IAM/WIF/registry deletion, shared-resource imports,
-  DNS/TLS changes, and all legacy cleanup remain prohibited.
+- Cloud SQL remains `UNKNOWN`. Cloud Run/SQL/IAM/WIF/registry deletion, DNS/TLS changes, and all
+  legacy cleanup remain prohibited. F5b's exact retained-resource imports are recorded separately
+  and do not authorize any release-time Terraform mutation.
 
 ## Phase F4 first immutable release
 
@@ -212,3 +213,20 @@ references all match the manifest exactly. Authenticated synthetic acceptance pa
 tenant/RLS isolation, volunteer authorization, QR-first reporting, care-report creation, and the
 cross-shelter denial. The historical `e702d7d-e3` directory is retained but is not represented as a
 genuine immutable N-1, so live rollback remains deferred.
+
+## Phase F5b second-release compatibility gate
+
+The F5b source candidate contains retained-resource Terraform ownership, fail-closed retirement of
+legacy mutation entrypoints, deployment documentation/workflow validation and contract tests. It
+does not change application code, Compose/runtime configuration, database models, Alembic
+migrations, authentication, tenant/RLS behavior, LINE/LIFF behavior, or release bundle format.
+
+Both the first immutable release and the F5b candidate declare migration head
+`0037_animal_external_sources`. On that evidence the second release may be published with
+`backward-compatible-with-previous`; this is not a schema downgrade claim. The rollback tool must
+still verify both manifests/receipts, target the recorded N-1, preserve the database and volumes,
+and refuse any digest, checksum, compatibility, or backup-preflight failure.
+
+After the second release is deployed and accepted, define N as its exact release ID and retain
+`20260831T034951Z-38ab34dc6aaf` as N-1. A live N -> N-1 -> N drill remains separately gated on a
+fresh completed backup and must never run before the second release is healthy.

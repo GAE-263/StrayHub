@@ -300,3 +300,21 @@ isolated restore evidence/procedure.
 See [`phase-f-removal-plan.md`](phase-f-removal-plan.md) for the protected-resource inventory,
 operator-path risk, exact F6 stop conditions, and unchecked hard gates. F5 performed no import,
 state movement, apply, destroy, IAM/API change, production mutation, or deletion.
+
+## Phase F5b retained-resource adoption checkpoint
+
+`PLATFORM_TERRAFORM` now exists at `infra/gcp-platform/terraform` with a dedicated private GCS
+backend. It owns 29 exact retained addresses: the state and backup buckets, eleven secret metadata
+resources, eleven exact secret IAM members, the KMS keyring/key/member, and two exact backup-bucket
+IAM members. Critical retained resources use `prevent_destroy`; secret values and versions are not
+managed.
+
+The first import plan contained only 13 label-adoption writes and no create/delete action. It was
+not applied. Existing labels are exposed by the provider as `effective_labels`, so the declaration
+now preserves them without an adoption write. The final plan is `No changes` with exit code zero.
+See [`platform-terraform.md`](platform-terraform.md) for the complete import ledger and operating
+rules.
+
+This resolves the shared-resource ownership blocker. Cloud SQL, the externally supplied legacy
+backend/runtime bucket identities, default-branch legacy mutation retirement, and a genuine N/N-1
+pair remain independent blockers. No legacy infrastructure was deleted.

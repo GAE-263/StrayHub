@@ -577,6 +577,13 @@ Cloud SQL and the externally supplied legacy backend/runtime-bucket identities a
 retained platform resources have not been imported, legacy operator mutation paths remain callable,
 and there is no genuine immutable N-1. No legacy resource or CI path was removed in F5.
 
+Phase F5b establishes `infra/gcp-platform/terraform` with a dedicated protected state bucket and
+adopts the exact retained Secret Manager/KMS/backup GCS/IAM resources. Twenty-nine addresses were
+imported; no secret values or versions entered state, no live retained resource was changed, and the
+final plan is `No changes`. The source branch fail-closes legacy mutation helpers, but default-branch
+retirement, Cloud SQL/backend/runtime-bucket resolution, and genuine N/N-1 remain required before
+F6. See [`platform-terraform.md`](platform-terraform.md).
+
 Only after every applicable gate is satisfied:
 
 - remove Cloud Run services and public IAM;

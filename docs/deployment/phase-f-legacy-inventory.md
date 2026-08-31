@@ -242,6 +242,23 @@ proposal are in [`phase-f-removal-plan.md`](phase-f-removal-plan.md). F6 remains
 legacy backend/runtime-bucket identity, incomplete platform ownership, callable legacy operator
 paths, and the absence of a genuine compatible immutable N-1.
 
+### Phase F5b update
+
+The retained-resource ownership blocker is resolved: `PLATFORM_TERRAFORM` uses a dedicated private
+backend and has imported 29 exact Secret Manager/KMS/GCS/IAM addresses with a final no-change plan.
+The state contains no secret values or versions. The complete ledger is in
+[`platform-terraform.md`](platform-terraform.md).
+
+The F5b source branch also converts all four `infra/gcp-demo` mutation helpers to unconditional
+fail-closed stubs and removes OIDC permission from the validation-only demo workflow. This becomes
+`Legacy redeploy risk: NO` only after the same reviewed retirement is present on the default branch;
+until then the project-wide result remains `YES`.
+
+Refreshed read-only discovery still cannot prove absence outside the accepted project: Cloud SQL
+Admin/Cloud Asset/service-networking APIs remain disabled, repository history never recorded a
+backend or runtime bucket name, and the active project contains only the canonical backup and new
+platform-state buckets. Cloud SQL, legacy backend and legacy runtime GCS therefore remain `UNKNOWN`.
+
 ## Phase F deletion hard gates
 
 - [x] replacement GCE CI release/publication gate exists
