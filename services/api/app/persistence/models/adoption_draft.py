@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
@@ -34,3 +34,16 @@ class AdoptionDraft(IdentityMixin, AuditMixin, Base):
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     last_interaction_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # Populated asynchronously by the (not-yet-wired) Gemini suitability
+    # analysis background task — nullable/additive so this stays a no-op
+    # until that trigger lands; see docs plan for the full design.
+    ai_suitability_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ai_suitability_explanation: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Non-NULL means: the adopter was just asked a free-text follow-up
+    # question about special requirements for THIS animal (because its AI
+    # score came back below 60%), and the next non-phone-number text message
+    # they send should be treated as that answer, not a stray/invalid input.
+    # Cleared as soon as that answer is received (or a new AI analysis runs).
+    ai_followup_target_animal_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("animals.id"), nullable=True
+    )

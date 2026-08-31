@@ -53,6 +53,21 @@ class Settings(BaseSettings):
     ai_endpoint: str | None = None
     ai_api_key: str | None = None
     ai_timeout_seconds: float = Field(default=30.0, gt=0)
+    # Unrelated to the ai_* block above (that's the care-report observation
+    # extraction feature's worker/job-queue settings) — this is the adoption
+    # suitability-analysis feature's own direct Gemini REST integration, with
+    # no shared code path. Left unset, the background analysis task simply
+    # skips itself and logs, so no environment breaks by omission.
+    gemini_api_key: str | None = None
+    gemini_model_name: str = "gemini-3.5-flash-lite"
+    # Alternative to gemini_api_key: a GCP service account JSON key file,
+    # authenticating against the same Gemini models via Vertex AI instead of
+    # AI Studio. Keep this file OUTSIDE the repo (it's a credential, not
+    # config) and point here via an absolute path in the local .env — never
+    # commit it. If both this and gemini_api_key are set, the service
+    # account takes precedence (see GeminiClient).
+    gemini_service_account_path: str | None = None
+    gemini_vertex_location: str = "global"
 
 
 @lru_cache(maxsize=1)

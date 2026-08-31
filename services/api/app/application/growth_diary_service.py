@@ -59,5 +59,8 @@ class GrowthDiaryInboxService:
             "shelter_number": animal.shelter_number if animal else None,
             "photo_url": photo_url,
             "note": entry.note,
+            "ai_mood": entry.ai_mood,
+            "ai_reply": entry.ai_reply,
+            "ai_staff_summary": entry.ai_staff_summary,
             "created_at": entry.created_at.isoformat(),
         }

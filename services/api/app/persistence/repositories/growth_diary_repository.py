@@ -6,6 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.growth_diary import GrowthDiaryDraft, GrowthDiaryEntry
+from services.api.app.persistence.models.identity import LineUserBinding, OrganizationMembership
+
+# Organization-scoped operational roles that get pushed a LINE notification
+# for a "concern"-flagged entry — not PLATFORM_ADMIN, which is a cross-tenant
+# super-admin role with no single shelter to notify about.
+_GROWTH_DIARY_ALERT_ROLES = ("STAFF", "SHELTER_ADMIN")
 
 
 class GrowthDiaryRepository:
@@ -41,6 +47,41 @@ class GrowthDiaryRepository:
             .order_by(GrowthDiaryEntry.created_at.desc())
         )
         return list(result.scalars())
+
+    async def list_staff_line_user_ids(self) -> list[str]:
+        """Every active STAFF/SHELTER_ADMIN in this organization who also has
+        an active LINE binding — the push targets for a "concern"-flagged
+        entry (see _run_growth_diary_ai_analysis in line_webhook.py)."""
+        result = await self.session.execute(
+            select(LineUserBinding.line_user_id)
+            .join(
+                OrganizationMembership,
+                OrganizationMembership.user_id == LineUserBinding.user_id,
+            )
+            .where(
+                OrganizationMembership.organization_id == self.organization_id,
+                OrganizationMembership.role.in_(_GROWTH_DIARY_ALERT_ROLES),
+                OrganizationMembership.status == "active",
+                LineUserBinding.status == "active",
+            )
+        )
+        return list(result.scalars())
+
+
+async def list_entries_for_inquiries(
+    session: AsyncSession, inquiry_ids: list[UUID], *, limit: int = 10
+) -> list[GrowthDiaryEntry]:
+    """Cross-organization by design, like `list_inquiries_for_adopter` — an
+    adopter's 日記回顧 spans every shelter they've ever adopted through."""
+    if not inquiry_ids:
+        return []
+    result = await session.execute(
+        select(GrowthDiaryEntry)
+        .where(GrowthDiaryEntry.inquiry_id.in_(inquiry_ids))
+        .order_by(GrowthDiaryEntry.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars())
 
 
 async def get_pending_draft(

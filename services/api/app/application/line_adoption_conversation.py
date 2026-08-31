@@ -32,6 +32,14 @@ class AdoptionConversationResult:
     state: AdoptionDraftState
     inquiry_id: UUID | None = None
     candidate_match_ids: tuple[UUID, ...] = ()
+    # True only on the one `handle()` call whose action actually transitions
+    # the draft INTO AWAITING_AI_SUITABILITY — not on every subsequent
+    # redisplay (e.g. re-tapping the rich menu resumes an existing draft
+    # already sitting in that state). The AI suitability analysis background
+    # task keys off this edge so it fires exactly once per draft.
+    entered_awaiting_ai_suitability: bool = False
+    # Same idea, for the recommend_me path's AI-curated recommendation list.
+    entered_awaiting_ai_recommendations: bool = False
 
 
 class LineAdoptionConversationService:
@@ -71,8 +79,9 @@ class LineAdoptionConversationService:
             draft.current_step = AdoptionDraftState.EXPIRED.value
             raise DomainError("draft_expired", "對話已過期", 409)
 
+        initial_state = AdoptionDraftState(draft.current_step)
         machine = AdoptionDraftStateMachine(
-            state=AdoptionDraftState(draft.current_step),
+            state=initial_state,
             path=AdoptionPath(draft.path) if draft.path else None,
             answers=AdoptionDraftAnswers(dict(draft.answers)),
             reconfirmation_keys=set(draft.reconfirmation_keys or []),
@@ -104,11 +113,24 @@ class LineAdoptionConversationService:
             machine.advance()
         elif action == "confirm_target_animal":
             machine.advance()
+        elif action == "confirm_answers":
+            machine.advance()
         elif action == "select_matched_animal":
             animal_id = _require_uuid(value, "animal_id_required", "需要選擇動物")
             if str(animal_id) not in (draft.candidate_match_ids or []):
                 raise DomainError("animal_not_offered", "請從系統推薦的動物中選擇", 409)
             draft.target_animal_id = animal_id
+            machine.advance()
+        elif action == "select_alternative_animal":
+            # 心有所屬・AI 適配度 <60% 後的替代名單 —「維持這隻」也是候選之一
+            # （見 _run_adoption_ai_followup_recommendations），一樣要先選再
+            # 確認，才會進入留下聯絡方式。
+            animal_id = _require_uuid(value, "animal_id_required", "需要選擇動物")
+            if str(animal_id) not in (draft.candidate_match_ids or []):
+                raise DomainError("animal_not_offered", "請從系統推薦的動物中選擇", 409)
+            draft.target_animal_id = animal_id
+            machine.advance()
+        elif action == "confirm_alternative_animal":
             machine.advance()
         elif action == "answer":
             if value is None:
@@ -117,15 +139,19 @@ class LineAdoptionConversationService:
                 self.answer_validator(machine.next_answer_key(), value)
             new_state = machine.answer_current(value)
             if new_state == AdoptionDraftState.PRESENTING_MATCHES:
+                # top_n is wider than the 3-5 finally shown — this is just the
+                # rule-based candidate pool that AI reranks in the background
+                # (see _run_adoption_ai_recommendation_curation) before the
+                # adopter ever sees it.
                 matches = await self._compute_matches(session, draft.organization_id, machine)
                 draft.candidate_match_ids = [str(match.animal_id) for match in matches]
                 draft.match_results = [_match_result(match) for match in matches]
                 # PRESENTING_MATCHES is a system-computed interstitial, not a
-                # step that waits for input; move straight into awaiting the
-                # adopter's tap on one of the offered matches.
+                # step that waits for input; move straight into
+                # AWAITING_AI_RECOMMENDATIONS to await the background AI task.
                 machine.advance()
             elif (
-                new_state == AdoptionDraftState.AWAITING_PHONE_NUMBER
+                new_state == AdoptionDraftState.CONFIRMING_ANSWERS
                 and machine.path == AdoptionPath.SPECIFIC_ANIMAL
                 and draft.target_animal_id is not None
             ):
@@ -147,6 +173,13 @@ class LineAdoptionConversationService:
                 draft.target_animal_id = None
                 draft.candidate_match_ids = []
                 draft.match_results = []
+            if machine.state == AdoptionDraftState.SELECTING_ORGANIZATION:
+                # organization_id lives on the draft row, not inside the
+                # state machine, so it isn't cleared by machine.back() on its
+                # own — without this, re-picking a shelter after backing all
+                # the way out hits "already selected" (see 心有所屬 testing
+                # notes: 返回地區選單 → pick a shelter → organization_already_selected).
+                draft.organization_id = None
         elif action in {"submit", "submit_current"}:
             machine.transition(AdoptionDraftState.SUBMITTING)
             answers = machine.submit()
@@ -187,6 +220,14 @@ class LineAdoptionConversationService:
             state=machine.state,
             inquiry_id=inquiry_id,
             candidate_match_ids=tuple(UUID(item) for item in draft.candidate_match_ids or []),
+            entered_awaiting_ai_suitability=(
+                initial_state != AdoptionDraftState.AWAITING_AI_SUITABILITY
+                and machine.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+            ),
+            entered_awaiting_ai_recommendations=(
+                initial_state != AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
+                and machine.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
+            ),
         )
 
     async def _compute_matches(

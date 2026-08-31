@@ -7,7 +7,7 @@ from services.api.app.persistence.database.base import AuditMixin, Base, Identit
 
 
 class GrowthDiaryDraft(AuditMixin, Base):
-    """One row per adopter mid-flow: exists only between tapping 毛孩成長日記
+    """One row per adopter mid-flow: exists only between tapping 毛孩日記
     (or picking which adopted pet) and sending the photo/text that completes
     the entry — deleted once saved. A pending marker, not a multi-step state
     machine, matching how minimal this first version of the flow is."""
@@ -29,3 +29,13 @@ class GrowthDiaryEntry(IdentityMixin, AuditMixin, Base):
     adopter_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Populated asynchronously by a background Gemini analysis task (see
+    # growth_diary_ai_analysis_service.py) — nullable/additive so a row is
+    # already visible (and the adopter's reply already sent) well before
+    # these fill in; NULL forever if that background task never ran (no
+    # Gemini credentials configured) or genuinely failed.
+    ai_mood: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # positive|neutral|concern
+    ai_reply: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    ai_staff_summary: Mapped[str | None] = mapped_column(String(1000), nullable=True)

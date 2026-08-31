@@ -30,6 +30,7 @@ type AdoptionInquiry = {
   match_scores_snapshot:
     | Array<{ animal_id: string; score: number; reasons: string[] }>
     | null;
+  adopter_name: string;
   phone_number: string;
   status: string;
   submitted_at: string;
@@ -49,6 +50,10 @@ const ANSWER_LABELS: Record<string, string> = {
   work_schedule: "作息時間",
   preferred_size: "希望的體型",
   preferred_energy: "希望的活動力",
+  parenting_style: "飼養風格",
+  patience_level: "耐心與應變",
+  adoption_motivation: "領養動機",
+  contact_time: "方便聯繫時間",
 };
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -132,7 +137,7 @@ export default function AdoptionInquiryDetailPage({ params }: Props) {
 
   const availableTransitions = STATUS_TRANSITIONS[inquiry.status] ?? [];
   const answerEntries = Object.entries(inquiry.answers).filter(
-    ([key]) => key !== "phone_number",
+    ([key]) => !["adopter_name", "phone_number"].includes(key),
   );
 
   return (
@@ -176,6 +181,10 @@ export default function AdoptionInquiryDetailPage({ params }: Props) {
         <Card className="ui-card-padded">
           <h2>領養人問卷</h2>
           <dl className="detail-list">
+            <div>
+              <dt>姓名</dt>
+              <dd>{inquiry.adopter_name}</dd>
+            </div>
             <div>
               <dt>聯絡電話</dt>
               <dd>{inquiry.phone_number}</dd>

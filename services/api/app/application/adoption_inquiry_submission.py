@@ -47,9 +47,16 @@ class AdoptionInquirySubmissionService:
                 shelter_number_snapshot=animal.shelter_number,
                 answers=dict(answers.values),
                 match_scores_snapshot=match_scores_snapshot,
+                adopter_name=answers.values["adopter_name"],
                 phone_number=answers.values["phone_number"],
                 status="new",
                 submitted_at=datetime.now(timezone.utc),
+                # Carries over whatever the (not-yet-wired) background Gemini
+                # analysis had already written onto the draft, if any — None
+                # until that trigger exists, which is fine since the column
+                # is nullable.
+                ai_suitability_score=draft.ai_suitability_score,
+                ai_suitability_explanation=draft.ai_suitability_explanation,
             )
         )
         if self.audit is not None:

@@ -15,6 +15,9 @@ from services.api.app.persistence.database.scope import (
 )
 from services.api.app.persistence.models.identity import Organization
 from services.api.app.persistence.models.volunteer_access import VolunteerDecisionBatch
+from services.worker.app.handlers.growth_diary_reminder_handler import (
+    GrowthDiaryReminderHandler,
+)
 from services.worker.app.handlers.volunteer_access_handler import VolunteerAccessHandler
 from services.worker.app.persistence.session import create_worker_session_factory
 
@@ -70,6 +73,10 @@ async def run_volunteer_iteration(factory, *, worker_id: str) -> None:
                 await VolunteerAccessHandler(session, worker_id=worker_id).deliver_notifications(
                     organization_id
                 )
+            async with factory() as session:
+                await set_organization_scope(session, organization_id)
+                await GrowthDiaryReminderHandler(session).send_due_reminders(organization_id)
+                await session.commit()
         except Exception:
             logger.exception(
                 "volunteer worker organization iteration failed",

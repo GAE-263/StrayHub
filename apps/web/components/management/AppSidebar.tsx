@@ -22,7 +22,7 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       },
       {
         href: "/growth-diary",
-        label: "毛孩成長日記",
+        label: "毛孩日記",
         icon: "diary",
       },
       { href: "/care-calendar", label: "照護行事曆", icon: "calendar" },

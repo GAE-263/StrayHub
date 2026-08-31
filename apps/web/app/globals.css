@@ -576,6 +576,18 @@ summary:focus-visible {
   font-weight: 700;
   padding: 4px 9px;
 }
+.ui-badge-positive {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.ui-badge-neutral {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+.ui-badge-concern {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
 .ui-breadcrumb {
   color: var(--muted);
   font-size: 13px;

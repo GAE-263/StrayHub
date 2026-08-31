@@ -35,6 +35,14 @@ _LOW_ENERGY_SCHEDULES = {"full_time_work", "little_time_at_home"}
 _HIGH_ENERGY_SCHEDULES = {"work_from_home", "flexible", "retired"}
 _SMALL_HOUSING = {"apartment_small"}
 
+# Theoretical ceiling of `_score()`'s point total: size(+2) + energy(+2) +
+# other_pets compatibility(+1, `other_pets` is a single field so only one of
+# the cat/dog bonuses can ever apply) + household kid compatibility(+1) +
+# work_schedule/energy compatibility(+1, only one of the two branches can
+# fire) + small-housing/small-size(+1). Used to turn the raw point total into
+# a 0-100 percentage for display and for the low-score threshold check.
+MAX_SCORE = 8.0
+
 
 def rank_animals(
     preferences: AdopterPreferences,
@@ -96,3 +104,31 @@ def _score(preferences: AdopterPreferences, animal: AnimalProfile) -> MatchScore
         reasons.append("適合小坪數居住空間")
 
     return MatchScore(animal_id=animal.animal_id, score=score, reasons=tuple(reasons))
+
+
+def max_achievable_score(preferences: AdopterPreferences) -> float:
+    """The ceiling `_score()` can actually reach for these preferences.
+
+    Smaller than `MAX_SCORE` when `preferred_size`/`preferred_energy` weren't
+    collected — the 心有所屬 (specific-animal) path never asks them, so a
+    percentage normalized against the full `MAX_SCORE` would unfairly cap
+    every specific-animal confirmation at 50%, permanently tripping the
+    "below 60%" low-score suggestion regardless of animal."""
+    total = MAX_SCORE - 4.0
+    if preferences.preferred_size:
+        total += 2
+    if preferences.preferred_energy:
+        total += 2
+    return total
+
+
+def score_percentage(score: float, preferences: AdopterPreferences) -> int:
+    """Normalize a raw `_score()` total into a 0-100 display percentage
+    against what these preferences could actually earn (see
+    `max_achievable_score`) — the raw point total means nothing to an
+    adopter on its own, and a percentage is also the unit the LINE bot's
+    "below 60%" low-score suggestion threshold is expressed in."""
+    ceiling = max_achievable_score(preferences)
+    if ceiling <= 0:
+        return 0
+    return max(0, min(100, round(score / ceiling * 100)))

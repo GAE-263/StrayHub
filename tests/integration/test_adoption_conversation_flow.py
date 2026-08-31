@@ -134,6 +134,9 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
                         "has_cats",
                         "adults_only",
                         "retired",
+                        "structured",
+                        "high_patience",
+                        "companionship",
                         "medium",
                         "high",
                     ]
@@ -146,8 +149,15 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
                         event_id=f"e-answer-{index}",
                     )
 
-                assert result.state == AdoptionDraftState.SELECTING_MATCHED_ANIMAL
+                # The rule-based pool pauses at AWAITING_AI_RECOMMENDATIONS for
+                # the AI background task to rerank it (see line_webhook.py) —
+                # simulated here the same way the AI-suitability tests do,
+                # since that task itself isn't exercised at this layer.
+                assert result.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
                 assert result.candidate_match_ids[0] == medium_high
+                pending_draft = await repository.get_by_token(token)
+                pending_draft.current_step = AdoptionDraftState.SELECTING_MATCHED_ANIMAL.value
+                await session.flush()
 
                 await conversation.handle(
                     token=token,
@@ -162,6 +172,21 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
                     action="confirm_target_animal",
                     value=None,
                     event_id="e-confirm-target",
+                )
+                # 留下聯絡方式現在拆成三步：姓名 → 方便聯繫時間 → 手機號碼。
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="王小明",
+                    event_id="e-adopter-name",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="平日白天（9-18點）",
+                    event_id="e-contact-time",
                 )
                 await conversation.handle(
                     token=token,
@@ -250,6 +275,9 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
                         "none",
                         "adults_only",
                         "work_from_home",
+                        "structured",
+                        "high_patience",
+                        "companionship",
                     ]
                 ):
                     result = await conversation.handle(
@@ -259,8 +287,38 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
                         value=value,
                         event_id=f"e-answer-{index}",
                     )
-                assert result.state == AdoptionDraftState.AWAITING_PHONE_NUMBER
+                assert result.state == AdoptionDraftState.CONFIRMING_ANSWERS
 
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="confirm_answers",
+                    value=None,
+                    event_id="e-confirm-answers",
+                )
+                assert result.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+
+                # In production this next hop is driven by the AI background
+                # task itself (see line_webhook.py), not a user action.
+                pending_draft = await repository.get_by_token(token)
+                pending_draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+                await session.flush()
+
+                # 留下聯絡方式現在拆成三步：姓名 → 方便聯繫時間 → 手機號碼。
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="王小明",
+                    event_id="e-adopter-name",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="平日白天（9-18點）",
+                    event_id="e-contact-time",
+                )
                 await conversation.handle(
                     token=token,
                     adopter_user_id=adopter_id,
@@ -288,5 +346,214 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
                 assert snapshot == [
                     {"animal_id": str(target_animal_id), "score": 0.0, "reasons": []}
                 ]
+    finally:
+        await _cleanup(organization_id=organization_id, adopter_id=adopter_id)
+
+
+@pytest.mark.asyncio
+async def test_entered_awaiting_ai_suitability_fires_only_on_the_transition_edge() -> None:
+    """`entered_awaiting_ai_suitability` gates the AI suitability analysis
+    background task (see line_webhook.py) — it must be True only on the one
+    `handle()` call that actually moves the draft into that state (the
+    confirm_answers action out of CONFIRMING_ANSWERS), not on any other
+    call, so the analysis fires exactly once per draft."""
+    organization_id, adopter_id = uuid4(), uuid4()
+    await engine.dispose(close=False)
+    target_animal_id = uuid4()
+    try:
+        await _insert_fixtures(
+            organization_id=organization_id,
+            adopter_id=adopter_id,
+            animal_ids=[(target_animal_id, "旺財", "large", "medium", [])],
+        )
+
+        async with session_factory() as session:
+            async with session.begin():
+                await set_organization_scope(session, organization_id)
+                unscoped_repository = AdoptionDraftRepository(session, None)
+                draft_service = LineAdoptionDraftService(unscoped_repository, ttl_seconds=3600)
+                draft, token = await draft_service.create(adopter_user_id=adopter_id)
+                await draft_service.set_organization(draft.id, organization_id=organization_id)
+                await session.flush()
+
+                repository = AdoptionDraftRepository(session, organization_id)
+                conversation = LineAdoptionConversationService(repository)
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="choose_path",
+                    value="specific_animal",
+                    event_id="e-choose-path",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="select_target_animal",
+                    value=str(target_animal_id),
+                    event_id="e-select-target",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="confirm_target_animal",
+                    value=None,
+                    event_id="e-confirm-target",
+                )
+                for index, value in enumerate(
+                    ["house", "first_time", "none", "adults_only", "work_from_home"]
+                ):
+                    result = await conversation.handle(
+                        token=token,
+                        adopter_user_id=adopter_id,
+                        action="answer",
+                        value=value,
+                        event_id=f"e-answer-{index}",
+                    )
+                    assert result.entered_awaiting_ai_suitability is False
+
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="structured",
+                    event_id="e-answer-parenting-style",
+                )
+                assert result.entered_awaiting_ai_suitability is False
+
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="high_patience",
+                    event_id="e-answer-patience",
+                )
+                assert result.entered_awaiting_ai_suitability is False
+
+                # The last personality question transitions into
+                # CONFIRMING_ANSWERS, not AWAITING_AI_SUITABILITY directly.
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="companionship",
+                    event_id="e-answer-motivation",
+                )
+                assert result.state == AdoptionDraftState.CONFIRMING_ANSWERS
+                assert result.entered_awaiting_ai_suitability is False
+
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="confirm_answers",
+                    value=None,
+                    event_id="e-confirm-answers",
+                )
+                assert result.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+                assert result.entered_awaiting_ai_suitability is True
+
+                # A later call that moves the draft on from here (in
+                # production, the AI background task doing so directly) must
+                # not report the entering edge again.
+                pending_draft = await repository.get_by_token(token)
+                pending_draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+                await session.flush()
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="王小明",
+                    event_id="e-adopter-name",
+                )
+                assert result.entered_awaiting_ai_suitability is False
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="answer",
+                    value="平日白天（9-18點）",
+                    event_id="e-contact-time",
+                )
+                assert result.entered_awaiting_ai_suitability is False
+                result = await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="phone_number",
+                    value="0912345678",
+                    event_id="e-phone",
+                )
+                assert result.state == AdoptionDraftState.REVIEWING
+                assert result.entered_awaiting_ai_suitability is False
+    finally:
+        await _cleanup(organization_id=organization_id, adopter_id=adopter_id)
+
+
+@pytest.mark.asyncio
+async def test_back_to_selecting_organization_clears_organization_so_it_can_be_reselected() -> None:
+    """Regression test: backing all the way out to SELECTING_ORGANIZATION
+    must clear `draft.organization_id` too, not just the state-machine's own
+    `path`/`target_animal_id` — otherwise re-picking a shelter (even the same
+    one) hits `organization_already_selected`. Caught live via 返回地區選單.
+
+    Uses token=None throughout (adopter_user_id-based lookup), matching how
+    `_handle_adoption_postback` actually drives this service in production —
+    that's where the bug was found; the token-based flow exercised by the
+    other tests in this file is a separate (shelter-fixed) entry point that
+    never revisits SELECTING_ORGANIZATION."""
+    organization_id, adopter_id = uuid4(), uuid4()
+    await engine.dispose(close=False)
+    try:
+        await _insert_fixtures(
+            organization_id=organization_id, adopter_id=adopter_id, animal_ids=[]
+        )
+
+        async with session_factory() as session:
+            async with session.begin():
+                await set_organization_scope(session, organization_id)
+                unscoped_repository = AdoptionDraftRepository(session, None)
+                draft_service = LineAdoptionDraftService(unscoped_repository, ttl_seconds=3600)
+                draft, _token = await draft_service.create(adopter_user_id=adopter_id)
+                await draft_service.set_organization(draft.id, organization_id=organization_id)
+                await session.flush()
+
+                repository = AdoptionDraftRepository(session, organization_id)
+                conversation = LineAdoptionConversationService(repository)
+                await conversation.handle(
+                    token=None,
+                    adopter_user_id=adopter_id,
+                    action="choose_path",
+                    value="specific_animal",
+                    event_id="e-choose-path",
+                )
+
+                result = await conversation.handle(
+                    token=None,
+                    adopter_user_id=adopter_id,
+                    action="back",
+                    value=None,
+                    event_id="e-back-1",
+                )
+                assert result.state == AdoptionDraftState.CHOOSING_PATH
+
+                result = await conversation.handle(
+                    token=None,
+                    adopter_user_id=adopter_id,
+                    action="back",
+                    value=None,
+                    event_id="e-back-2",
+                )
+                assert result.state == AdoptionDraftState.SELECTING_ORGANIZATION
+
+                refreshed = await repository.get_active_for_adopter(adopter_id)
+                assert refreshed.organization_id is None
+
+                # Re-selecting a shelter (even the same one) must succeed now.
+                await conversation.handle(
+                    token=None,
+                    adopter_user_id=adopter_id,
+                    action="select_organization",
+                    value=str(organization_id),
+                    event_id="e-reselect-org",
+                )
+                refreshed = await repository.get_active_for_adopter(adopter_id)
+                assert refreshed.organization_id == organization_id
     finally:
         await _cleanup(organization_id=organization_id, adopter_id=adopter_id)

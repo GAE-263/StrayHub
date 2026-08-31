@@ -36,6 +36,7 @@ class AdoptionInboxService:
             "shelter_number_snapshot": inquiry.shelter_number_snapshot,
             "answers": inquiry.answers,
             "match_scores_snapshot": inquiry.match_scores_snapshot,
+            "adopter_name": inquiry.adopter_name,
             "phone_number": inquiry.phone_number,
             "status": inquiry.status,
             "submitted_at": inquiry.submitted_at.isoformat(),

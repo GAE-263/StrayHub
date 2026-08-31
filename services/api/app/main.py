@@ -1,3 +1,7 @@
+import asyncio
+from contextlib import asynccontextmanager
+from uuid import uuid4
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -36,8 +40,38 @@ from services.api.app.api.qr_codes import router as qr_codes_router
 from services.api.app.api.report_inbox import router as report_inbox_router
 from services.api.app.api.reportable_scope import router as reportable_scope_router
 from services.api.app.api.volunteer_access import router as volunteer_access_router
+from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
+from services.api.app.infrastructure.storage.ports import ObjectScope
+from services.api.app.observability.logging import get_logger
 
-app = FastAPI(title="StrayHub CRM Care Report API", version="0.1.0")
+_logger = get_logger(__name__)
+
+
+async def _warm_up_object_storage_client() -> None:
+    """boto3/botocore lazily loads and parses its S3 service-model JSON the
+    first time any S3 API method is called in a process — measured at
+    several seconds on a cold WSL2 bind-mount. Pay that cost once here,
+    fire-and-forget at startup, instead of on whichever real request
+    happens to be first — e.g. the LINE adoption bot's first animal-photo
+    lookup, which sits inside a tight reply-token window and has no room
+    for a multi-second surprise. `generate_presigned_url` is a pure local
+    signature computation (no network call), so a made-up scope/key here
+    has no real side effects."""
+    try:
+        await MinioStorageAdapter().signed_url(
+            scope=ObjectScope(uuid4()), key="warmup", expires_seconds=1
+        )
+    except Exception:
+        _logger.exception("object_storage_warmup_failed")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    asyncio.create_task(_warm_up_object_storage_client())
+    yield
+
+
+app = FastAPI(title="StrayHub CRM Care Report API", version="0.1.0", lifespan=_lifespan)
 
 
 def _custom_openapi() -> dict:
