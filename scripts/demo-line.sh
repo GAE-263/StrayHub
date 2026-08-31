@@ -69,13 +69,42 @@ require_value() {
   }
 }
 
+listeners_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u
+  elif command -v ss >/dev/null 2>&1; then
+    ss -tlnpH "sport = :${port}" 2>/dev/null \
+      | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
+  fi
+}
+
+# Set DEMO_KILL_STALE=1 to reclaim a port from a Ctrl-C'd previous run.
 require_port_available() {
   local label="$1"
   local port="$2"
-  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "${label} port ${port} 已被使用，請先停止舊服務。" >&2
-    exit 1
+  local pids
+  pids="$(listeners_on_port "$port" | tr '\n' ' ')"
+  [[ -z "${pids// /}" ]] && return 0
+
+  if [[ "${DEMO_KILL_STALE:-0}" == "1" ]]; then
+    echo "[Line Demo] ${label} port ${port} 佔用中 (PID ${pids})，清除中" >&2
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      [[ -z "$(listeners_on_port "$port")" ]] && return 0
+      sleep 0.25
+    done
+    # shellcheck disable=SC2086
+    kill -9 $pids 2>/dev/null || true
+    sleep 0.5
+    [[ -z "$(listeners_on_port "$port")" ]] && return 0
   fi
+
+  echo "${label} port ${port} 已被使用 (PID ${pids})。" >&2
+  echo "  停止舊服務：  kill ${pids}" >&2
+  echo "  或自動清除：  DEMO_KILL_STALE=1 ./scripts/demo-line.sh" >&2
+  exit 1
 }
 
 extract_tunnel_url() {
@@ -161,13 +190,19 @@ require_port_available "Web" "$WEB_PORT"
 if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:-}" ]]; then
   require_command openssl
   key_dir="$(mktemp -d "${TMPDIR:-/tmp}/strayhub-line-keys.XXXXXX")"
+  # Keep stderr visible: a silent failure here surfaces later as an opaque
+  # HTTP 503 (authentication_not_configured) from /v1/auth/login.
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-    -out "$key_dir/private.pem" >/dev/null 2>&1
+    -out "$key_dir/private.pem" >/dev/null
   openssl pkey -in "$key_dir/private.pem" -pubout \
-    -out "$key_dir/public.pem" >/dev/null 2>&1
+    -out "$key_dir/public.pem" >/dev/null
   export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(<"$key_dir/private.pem")"
   export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(<"$key_dir/public.pem")"
   rm -rf "$key_dir"
+  if [[ -z "$AUTH_JWT_ACTIVE_PRIVATE_KEY" || -z "$AUTH_JWT_ACTIVE_PUBLIC_KEY" ]]; then
+    echo "openssl 未產生 JWT 金鑰；請確認 openssl 可用後重試。" >&2
+    exit 1
+  fi
 fi
 
 export PII_ALLOW_LOCAL_PROVIDER=true
@@ -179,9 +214,18 @@ fi
 pids=()
 log_dir="$(mktemp -d "${TMPDIR:-/tmp}/strayhub-line.XXXXXX")"
 cleanup() {
-  local pid
+  local pid port pids_on
+  # Kill each child and its descendants (npm -> node -> next-server would
+  # otherwise linger and hold WEB_PORT, causing EADDRINUSE next run).
   for pid in "${pids[@]:-}"; do
-    kill "$pid" 2>/dev/null || true
+    [[ -z "$pid" ]] && continue
+    pkill -TERM -P "$pid" 2>/dev/null || true
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  for port in "$API_PORT" "$WEB_PORT"; do
+    pids_on="$(listeners_on_port "$port" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    [[ -n "${pids_on// /}" ]] && kill -TERM $pids_on 2>/dev/null || true
   done
   rm -rf "$log_dir"
 }

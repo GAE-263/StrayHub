@@ -40,17 +40,55 @@ require_command() {
   }
 }
 
+# Print the PIDs listening on a TCP port (lsof or ss fallback); empty if none.
+listeners_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u
+  elif command -v ss >/dev/null; then
+    ss -tlnpH "sport = :${port}" 2>/dev/null \
+      | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u
+  fi
+}
+
+# Fail fast if a demo port is occupied. Set DEMO_KILL_STALE=1 to reclaim it
+# by killing the stale listeners (handy after a Ctrl-C'd previous run).
 require_port_available() {
   local label="$1"
   local port="$2"
-  if command -v lsof >/dev/null && lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "${label} port ${port} 已被使用，請先停止舊服務後再執行 demo.sh。" >&2
-    exit 1
+  local pids
+  pids="$(listeners_on_port "$port" | tr '\n' ' ')"
+  [[ -z "${pids// /}" ]] && return 0
+
+  if [[ "${DEMO_KILL_STALE:-0}" == "1" ]]; then
+    echo "[Demo] ${label} port ${port} 已被 PID ${pids}占用，DEMO_KILL_STALE=1 → 清除中" >&2
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      [[ -z "$(listeners_on_port "$port")" ]] && return 0
+      sleep 0.25
+    done
+    # shellcheck disable=SC2086
+    kill -9 $pids 2>/dev/null || true
+    sleep 0.5
+    [[ -z "$(listeners_on_port "$port")" ]] && return 0
   fi
+
+  echo "${label} port ${port} 已被使用 (PID ${pids})。" >&2
+  echo "  先停止舊服務：  kill ${pids}" >&2
+  echo "  或自動清除重跑：  DEMO_KILL_STALE=1 ./scripts/demo.sh ${MODE}" >&2
+  exit 1
 }
 
 require_command uv
 require_command npm
+
+# Fail fast on occupied ports before the slow bootstrap so `next dev` /
+# uvicorn don't die with EADDRINUSE after several minutes of work.
+if [[ "$MODE" != "check" ]]; then
+  require_port_available "API" "$API_PORT"
+  require_port_available "Web" "$WEB_PORT"
+fi
 
 # Check .env-aware settings before migrations, grants, data or storage writes.
 uv run python -m scripts.local_demo
@@ -58,13 +96,18 @@ uv run python -m scripts.local_demo
 if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:-}" ]]; then
   require_command openssl
   key_dir="$(mktemp -d)"
-  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" \
-    >/dev/null 2>&1
-  openssl pkey -in "$key_dir/private.pem" -pubout -out "$key_dir/public.pem" \
-    >/dev/null 2>&1
+  # Keep stderr visible: a silent openssl failure here surfaces later as an
+  # opaque HTTP 503 (authentication_not_configured) from /v1/auth/login.
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" >/dev/null
+  openssl pkey -in "$key_dir/private.pem" -pubout -out "$key_dir/public.pem" >/dev/null
   export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(<"$key_dir/private.pem")"
   export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(<"$key_dir/public.pem")"
   rm -rf "$key_dir"
+  if [[ -z "$AUTH_JWT_ACTIVE_PRIVATE_KEY" || -z "$AUTH_JWT_ACTIVE_PUBLIC_KEY" ]]; then
+    echo "openssl 未產生 JWT 金鑰；請確認 openssl 可用後重試。" >&2
+    exit 1
+  fi
+  echo "[Demo] Generated ephemeral RSA JWT signing key (local only, not persisted)"
 fi
 
 export PII_ALLOW_LOCAL_PROVIDER=true
@@ -75,7 +118,10 @@ fi
 
 if [[ "${DEMO_SKIP_DOCKER:-0}" != "1" ]]; then
   require_command docker
-  docker compose -f infra/local/docker-compose.yml up -d postgres minio
+  # --wait blocks until postgres passes its healthcheck; without it a cold
+  # start races the migration and asyncpg fails with "Connection reset by peer".
+  docker compose -f infra/local/docker-compose.yml up -d --wait --wait-timeout 90 \
+    postgres minio
 fi
 
 echo "[Demo] Migration"
@@ -102,13 +148,25 @@ if [[ "$MODE" == "check" ]]; then
   exit 0
 fi
 
+# Re-check in case something grabbed a port during the bootstrap window.
 require_port_available "API" "$API_PORT"
 require_port_available "Web" "$WEB_PORT"
 
 pids=()
 cleanup() {
+  local pid port pids_on
+  # Kill each child and its descendants (npm -> node -> next-server would
+  # otherwise linger and hold WEB_PORT, causing EADDRINUSE next run).
   for pid in "${pids[@]:-}"; do
-    kill "$pid" 2>/dev/null || true
+    [[ -z "$pid" ]] && continue
+    pkill -TERM -P "$pid" 2>/dev/null || true
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  # Backstop: reclaim the demo ports regardless of process tree shape.
+  for port in "$API_PORT" "$WEB_PORT"; do
+    pids_on="$(listeners_on_port "$port" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    [[ -n "${pids_on// /}" ]] && kill -TERM $pids_on 2>/dev/null || true
   done
 }
 trap cleanup EXIT INT TERM
