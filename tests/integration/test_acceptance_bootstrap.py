@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from scripts.bootstrap_acceptance import (
     ADMIN_A_USERNAME,
     ALLOWED_ENVIRONMENTS,
@@ -33,7 +35,7 @@ from services.api.app.application.volunteer_reporting_authorization import (
 from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
-from services.api.app.persistence.database.engine import session_factory
+from services.api.app.persistence.database.engine import engine, session_factory
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
@@ -55,6 +57,15 @@ from services.api.app.persistence.repositories.reportable_scope_repository impor
 from sqlalchemy import func, select
 
 PASSWORD = "synthetic-acceptance-password-2026"
+
+
+@pytest_asyncio.fixture
+async def isolated_application_database_pool() -> AsyncIterator[None]:
+    await engine.dispose(close=False)
+    try:
+        yield
+    finally:
+        await engine.dispose()
 
 
 def _token_adapter() -> JwtAccessTokenAdapter:
@@ -115,7 +126,9 @@ def test_acceptance_bootstrap_password_sources_are_protected(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_acceptance_bootstrap_is_idempotent_and_auth_tenant_volunteer_compatible() -> None:
+async def test_acceptance_bootstrap_is_idempotent_and_auth_tenant_volunteer_compatible(
+    isolated_application_database_pool: None,
+) -> None:
     clock = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
     async with session_factory() as session:
         first = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
