@@ -340,3 +340,13 @@ GCP credentials，也不會由 `scripts/demo.sh` 建立雲端資源。
 - [Task List](specs/001-volunteer-care-report/tasks.md)
 - [Quickstart](specs/001-volunteer-care-report/quickstart.md)
 - [Contract Index](specs/001-volunteer-care-report/contracts/README.md)
+
+## LINE 角色選單與工作人員動物輸入
+
+依角色（訪客/志工/領養人/工作人員）自動切換 LINE Rich Menu，以及工作人員透過 LINE/LIFF
+新增動物與健康紀錄兩支端點，屬於本專案獨立的一批工作，尚未在上面的一鍵 demo 流程中串接。
+細節與設定步驟見：
+
+- [`docs/line-role-menu-framework.md`](docs/line-role-menu-framework.md) — 角色→選單框架、`scripts/sync_line_role_menus.py`
+- [`docs/staff-animal-line-input.md`](docs/staff-animal-line-input.md) — `POST /v1/management/animals`、`POST /v1/management/animals/{animalId}/health-records`
+- [`docs/line-account-setup.md`](docs/line-account-setup.md) — LINE Console 串帳號完整步驟

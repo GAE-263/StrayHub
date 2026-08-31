@@ -1,21 +1,53 @@
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 from services.api.app.api.dependencies import (
     RequestContext,
     current_request_context,
     request_session,
 )
-from services.api.app.api.errors import ErrorResponse
+from services.api.app.api.errors import DomainError, ErrorResponse
 from services.api.app.api.management_access import require_staff_or_admin
+from services.api.app.application.line_staff_animal_input_service import (
+    LineStaffAnimalInputService,
+    UploadedPhoto,
+)
 from services.api.app.application.management_animal_service import ManagementAnimalService
 from services.api.app.domain.animal_profile import AnimalProfile, AnimalProfileUpdate
+from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/v1/management/animals", tags=["Management Animals"])
+
+MAX_PHOTO_BYTES = 10 * 1024 * 1024
+
+
+def _parse_payload(payload: str) -> dict:
+    try:
+        parsed = json.loads(payload)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise DomainError("invalid_payload", "payload 不是有效的 JSON", 422) from exc
+    if not isinstance(parsed, dict):
+        raise DomainError("invalid_payload", "payload 格式錯誤", 422)
+    return parsed
+
+
+async def _read_photo(upload: UploadFile | None) -> UploadedPhoto | None:
+    if upload is None:
+        return None
+    data = await upload.read()
+    if not data:
+        return None
+    if len(data) > MAX_PHOTO_BYTES:
+        raise DomainError("media_too_large", "照片超過允許大小", 422)
+    return UploadedPhoto(
+        data=data,
+        content_type=(upload.content_type or "application/octet-stream"),
+    )
 
 
 class AnimalStatusUpdateRequest(BaseModel):
@@ -46,6 +78,30 @@ class ManagementAnimalListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+@router.post("")
+async def create_management_animal(
+    payload: str = Form(...),  # noqa: B008
+    photo: UploadFile = File(...),  # noqa: B008
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    """工作人員以 LINE/LIFF 新增收容動物（multipart：payload JSON + photo）。"""
+    organization_id = require_staff_or_admin(context)
+    data = _parse_payload(payload)
+    animal_data = data.get("animal")
+    if not isinstance(animal_data, dict):
+        raise DomainError("invalid_payload", "缺少 animal 欄位", 422)
+    photo_obj = await _read_photo(photo)
+    if photo_obj is None:
+        raise DomainError("photo_required", "請附上一張照片", 422)
+    service = LineStaffAnimalInputService(session, organization_id, MinioStorageAdapter())
+    return await service.create_animal(
+        actor_user_id=context.user_id,
+        animal_data=animal_data,
+        photo=photo_obj,
+    )
 
 
 @router.get("", response_model=ManagementAnimalListResponse)
@@ -111,4 +167,29 @@ async def update_management_animal_status(
         status=payload.status,
         reason=payload.reason,
         actor_user_id=context.user_id,
+    )
+
+
+@router.post("/{animal_id}/health-records")
+async def create_management_animal_health_record(
+    animal_id: UUID,
+    payload: str = Form(...),  # noqa: B008
+    photo: UploadFile | None = File(default=None),  # noqa: B008
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    """工作人員以 LINE/LIFF 更新健康紀錄（multipart：payload JSON + 選填 photo）。"""
+    organization_id = require_staff_or_admin(context)
+    data = _parse_payload(payload)
+    health_record = data.get("healthRecord")
+    if not isinstance(health_record, dict):
+        raise DomainError("invalid_payload", "缺少 healthRecord 欄位", 422)
+    photo_obj = await _read_photo(photo)
+    service = LineStaffAnimalInputService(session, organization_id, MinioStorageAdapter())
+    return await service.add_health_record(
+        actor_user_id=context.user_id,
+        animal_id=animal_id,
+        health_record=health_record,
+        submitted_at=data.get("submittedAt"),
+        photo=photo_obj,
     )

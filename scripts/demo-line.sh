@@ -93,7 +93,7 @@ wait_for_tunnel_http() {
   local host="${url#https://}"
   local public_ip=""
   host="${host%%/*}"
-  for _ in $(seq 1 45); do
+  for _ in $(seq 1 90); do
     if curl --max-time 5 -fsS "${url}${path}" >/dev/null 2>&1; then
       return 0
     fi
@@ -192,7 +192,7 @@ uv run python -m uvicorn services.api.app.main:app \
   --host "$API_HOST" --port "$API_PORT" &
 pids+=("$!")
 
-for _ in $(seq 1 30); do
+for _ in $(seq 1 120); do
   if curl --max-time 1 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null 2>&1; then
     break
   fi
@@ -216,7 +216,7 @@ API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
   npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
 pids+=("$!")
 
-for _ in $(seq 1 30); do
+for _ in $(seq 1 240); do
   if curl --max-time 1 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/null 2>&1; then
     break
   fi

@@ -1,0 +1,16 @@
+# 領養人選單（先做框架，內容後續補）。
+# 註：ADOPTER 為新角色，後端角色體系尚未正式納入，見設計文件。
+version: 1
+role: adopter
+name: strayhub-adopter
+chatBarText: 領養選單
+actions:
+  - label: 我想領養
+    type: postback
+    data: action=want_to_adopt
+  - label: 領養回報
+    type: postback
+    data: action=adoption_report
+  - label: 返回主選單
+    type: postback
+    data: action=back_to_default_menu

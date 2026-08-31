@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.line_rich_menu_routing import (
+    RichMenuRoutingService,
+    build_registry,
+)
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.volunteer_access_service import VolunteerAccessService
 from services.api.app.application.volunteer_batch_service import VolunteerBatchService
@@ -29,6 +33,22 @@ from services.api.app.persistence.repositories.volunteer_access_repository impor
 from services.worker.app.persistence.volunteer_access_repository import (
     WorkerVolunteerAccessRepository,
 )
+
+
+def _rich_menu_router() -> RichMenuRoutingService | None:
+    """四個 richMenuId 都沒設定時回 None，選單退回即為 no-op。"""
+    from services.api.app.config.settings import get_settings
+
+    settings = get_settings()
+    registry = build_registry(
+        default=settings.line_rich_menu_default_id,
+        volunteer=settings.line_rich_menu_volunteer_id,
+        adopter=settings.line_rich_menu_adopter_id,
+        staff=settings.line_rich_menu_staff_id,
+    )
+    if not registry.menu_ids:
+        return None
+    return RichMenuRoutingService(LineMessagingApiAdapter(), registry)
 
 
 class VolunteerAccessHandler:
@@ -58,6 +78,7 @@ class VolunteerAccessHandler:
             LineIdentityVerifier("worker-does-not-verify-line-identity"),
             audit=AuditService(self.session),
             notifications=VolunteerNotificationService(repository),
+            rich_menu_router=_rich_menu_router(),
         )
         await VolunteerBatchService(repository).process_pending_items(
             batch, access_service, limit=500, claimed_items=claimed_items
@@ -123,6 +144,7 @@ class VolunteerAccessHandler:
             AuthenticationRepository(self.session),
             audit=AuditService(self.session),
             notifications=VolunteerNotificationService(repository),
+            rich_menu_router=_rich_menu_router(),
         ).sweep(limit=limit)
         await self.session.commit()
         return changed

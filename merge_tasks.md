@@ -253,15 +253,29 @@ Manifest security constraints：
 
 **目的**：保留 role branch 歷史，以 semantic merge 讓 LINE 功能適配 main 的 DB／production baseline。
 
-- [ ] T009 將 `origin/feat/line-role-rich-menu@179de538` 以 `--no-commit --no-ff` merge 到 integration branch，先保存 conflict 清單到 `merge_tasks.md`，未審完不得建立 merge commit
-- [ ] T010 逐段 semantic merge `.env.example`，同時保留 demo DB=`strayhub`、test DB=`strayhub_test` 說明與 `LINE_RICH_MENU_*_ID`、`WEB_PUBLIC_BASE_URL`、LIFF／Messaging API 空白範例，禁止真實 credential
-- [ ] T011 [P] semantic merge `README.md`，保留 main 的 local/production 操作契約並加入 LINE 文件索引，不得把 test fixture 指令描述為 demo seed
-- [ ] T012 semantic merge `services/api/app/config/settings.py`，保留 main 的 runtime safety、database、migration、KMS、secret、worker validation，再加入 LINE／LIFF／Rich Menu 設定；以 production fail-closed 為優先
-- [ ] T013 審查 `scripts/demo-line.sh` 的 timeout 變更，只保留 cold-start 容錯，確認它不呼叫 `scripts.seed_local`／測試 fixture、不寫入 demo DB 測試身分，並在 `tests/contract/test_local_product_quality_contract.py` 補契約測試
-- [ ] T014 [P] 檢查所有已合併 shell script 與 `.gitattributes` 的 LF／可執行權限，使用 `bash -n scripts/demo-line.sh line-liff/serve-demo.sh` 驗證
-- [ ] T015 對所有 conflict 檔案在 `merge_tasks.md` 記錄 conflict type、預期最終行為、採用段落與驗證方式，確認不存在 conflict marker 後才建立 role-source merge commit
+- [x] T009 將 `origin/feat/line-role-rich-menu@179de538` 以 `--no-commit --no-ff` merge 到 integration branch，先保存 conflict 清單到 `merge_tasks.md`，未審完不得建立 merge commit
+- [x] T010 逐段 semantic merge `.env.example`，同時保留 demo DB=`strayhub`、test DB=`strayhub_test` 說明與 `LINE_RICH_MENU_*_ID`、`WEB_PUBLIC_BASE_URL`、LIFF／Messaging API 空白範例，禁止真實 credential
+- [x] T011 [P] semantic merge `README.md`，保留 main 的 local/production 操作契約並加入 LINE 文件索引，不得把 test fixture 指令描述為 demo seed
+- [x] T012 semantic merge `services/api/app/config/settings.py`，保留 main 的 runtime safety、database、migration、KMS、secret、worker validation，再加入 LINE／LIFF／Rich Menu 設定；以 production fail-closed 為優先
+- [x] T013 審查 `scripts/demo-line.sh` 的 timeout 變更，只保留 cold-start 容錯，確認它不呼叫 `scripts.seed_local`／測試 fixture、不寫入 demo DB 測試身分，並在 `tests/contract/test_local_product_quality_contract.py` 補契約測試
+- [x] T014 [P] 檢查所有已合併 shell script 與 `.gitattributes` 的 LF／可執行權限，使用 `bash -n scripts/demo-line.sh line-liff/serve-demo.sh` 驗證
+- [x] T015 對所有 conflict 檔案在 `merge_tasks.md` 記錄 conflict type、預期最終行為、採用段落與驗證方式，確認不存在 conflict marker 後才建立 role-source merge commit
 
 **Stop Gate 2**：role branch 可編譯且 conflict resolution ledger 完整；不得只以 Git merge 成功視為通過。
+
+### Phase 2 執行紀錄（2026-09-01，Asia/Taipei）
+
+- `git merge --no-commit --no-ff origin/feat/line-role-rich-menu` 自動完成，沒有 Git textual conflict；仍逐檔完成 semantic review，未使用整檔 `ours`／`theirs`。
+- `.env.example`：保留 main 的 demo/test DB 契約及假 credential，只新增空白 `LINE_RICH_MENU_{DEFAULT,VOLUNTEER,ADOPTER,STAFF}_ID`。
+- `services/api/app/config/settings.py`：main 的 non-local runtime safety、database/migration、KMS/secret/worker validators 均保留；LINE IDs 全空時 role routing no-op，production enable/fail-closed 契約留在 Phase 7 完成。
+- `README.md`：保留 main local/production 說明，只新增 LINE 文件索引；未加入 test fixture 作為 demo seed 的敘述。
+- `scripts/demo-line.sh`：只採用 tunnel/API/Web cold-start timeout 增加；新增 `tests/contract/test_local_product_quality_contract.py` 契約，禁止 `scripts.seed_local`、`scripts.test_local`、pytest、`strayhub_test`、ORG-A 與重設 `DATABASE_URL`。
+- Shell validation：`bash -n scripts/demo-line.sh line-liff/serve-demo.sh` PASS；兩檔都是 UTF-8 executable、無 CRLF。
+- Python format：將 role source 新增／修改的 11 個 Python 檔依 main Ruff formatter 正規化；`ruff check` PASS、相關檔 `ruff format --check` PASS。
+- Focused regression：74 passed，涵蓋 LINE adapter lifecycle、role menu actions、staff input、volunteer menu、LIFF exchange、expiration、DB-backed staff animal input及 local product contract。第一次 sandbox 執行的 4 個 DB test 是 localhost socket `PermissionError`，允許連線至專用 local test DB 後 4/4 PASS，並非程式 failure。
+- Conflict ledger：Textual conflict 無；semantic hot spots 為 `.env.example`、`README.md`、`settings.py`、`demo-line.sh`，最終行為如上。`line_webhook.py`、staff authorization、adopter placeholder 與 role context 已成功引入，但依計畫必須在 Phase 3–5 繼續收斂，不能視為最終 production behavior。
+
+**Stop Gate 2：PASS**。Role source 已 semantic merge、格式化並通過 74 個 focused tests；merge commit 建立後才進入 adoption slice。
 
 ## Phase 3：公開入口與領養流程（US1，P0）
 

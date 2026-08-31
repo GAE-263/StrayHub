@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -35,7 +37,23 @@ from services.api.app.api.report_inbox import router as report_inbox_router
 from services.api.app.api.reportable_scope import router as reportable_scope_router
 from services.api.app.api.volunteer_access import router as volunteer_access_router
 
-app = FastAPI(title="StrayHub CRM Care Report API", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    yield
+    # LINE adapter 共用一個 process 層級的 HTTP client；不關會留下連線池。
+    from services.api.app.infrastructure.line.messaging_api_adapter import (
+        close_shared_line_client,
+    )
+
+    await close_shared_line_client()
+
+
+app = FastAPI(
+    title="StrayHub CRM Care Report API",
+    version="0.1.0",
+    lifespan=_lifespan,
+)
 
 
 def _custom_openapi() -> dict:

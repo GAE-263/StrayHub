@@ -4,6 +4,7 @@ from __future__ import annotations
 # shape; E501 is suppressed for those literal payloads only.
 # ruff: noqa: E501
 import json
+import logging
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
@@ -19,7 +20,16 @@ from services.api.app.application.line_draft_conversation import (
 )
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
+from services.api.app.application.line_menu_actions import (
+    ADOPTION_ENTRY_ACTIONS,
+    MENU_PLACEHOLDER_ACTIONS,
+)
 from services.api.app.application.line_message_presenter import quick_reply_for_options
+from services.api.app.application.line_rich_menu_routing import (
+    LineRole,
+    RichMenuRoutingService,
+    build_registry,
+)
 from services.api.app.application.line_webhook_session import LineWebhookSessionService
 from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.ports.line_messaging import LineMessagingPort
@@ -50,6 +60,7 @@ from services.api.app.persistence.repositories.reportable_scope_repository impor
 from sqlalchemy import select
 
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
+logger = logging.getLogger(__name__)
 
 VOLUNTEER_APPLICATION_COMMAND = "我要報名志工"
 
@@ -94,6 +105,103 @@ def _volunteer_application_liff_url() -> str:
     return f"https://liff.line.me/{get_settings().liff_id}"
 
 
+def _adoption_entry_message() -> dict:
+    """領養流程占位介面：假頁面，之後會換成真正的 LIFF。
+
+    需要 WEB_PUBLIC_BASE_URL（demo-line.sh 的 NGROK_URL）才有連結；未設定時
+    退回純文字，行為與其他占位選單項目一致。
+    """
+    base_url = get_settings().web_public_base_url.rstrip("/")
+    if not base_url:
+        return _text("領養媒合功能準備中，之後會在這裡提供可領養動物與媒合流程。")
+    return {
+        "type": "text",
+        "text": "領養流程還在建置中，先提供假頁面試試看，之後會換成正式版。",
+        "quickReply": {
+            "items": [
+                {
+                    "type": "action",
+                    "action": {
+                        "type": "uri",
+                        "label": "開啟領養流程（假頁面）",
+                        "uri": f"{base_url}/adoption-entry/index.html",
+                    },
+                }
+            ]
+        },
+    }
+
+
+def _rich_menu_router() -> RichMenuRoutingService | None:
+    """四個 richMenuId 都沒設定時回 None，選單切換為 no-op。"""
+    settings = get_settings()
+    registry = build_registry(
+        default=settings.line_rich_menu_default_id,
+        volunteer=settings.line_rich_menu_volunteer_id,
+        adopter=settings.line_rich_menu_adopter_id,
+        staff=settings.line_rich_menu_staff_id,
+    )
+    if not registry.menu_ids:
+        return None
+    return RichMenuRoutingService(LineMessagingApiAdapter(), registry)
+
+
+async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
+    """把使用者的 Rich Menu 切到指定角色（role=None 為 default）。
+
+    Best-effort：切換失敗不影響回覆本身，只記 log。
+    """
+    if not line_user_id:
+        return False
+    router = _rich_menu_router()
+    if router is None:
+        return False
+    try:
+        rich_menu_id = await router.link_for_user(line_user_id=line_user_id, role=role)
+        return rich_menu_id is not None
+    except Exception:
+        logger.warning("switching rich menu failed (role=%s)", role, exc_info=True)
+        return False
+
+
+async def _switch_menu_to_adopter(line_user_id: str | None) -> bool:
+    """點「領養流程」直接把 Rich Menu 切到領養人選單，不經過 LIFF/綁定。"""
+    return await _switch_rich_menu(line_user_id, LineRole.ADOPTER)
+
+
+async def _switch_menu_to_default(line_user_id: str | None) -> bool:
+    """志工／領養人選單裡的「返回主選單」：切回 default，讓人可以自由換身分入口。"""
+    return await _switch_rich_menu(line_user_id, None)
+
+
+async def _switch_menu_to_volunteer_if_active(session, line_user_id: str | None) -> bool:
+    """點「志工服務」時：若已有生效中的志工資格，直接切回志工選單。
+
+    核准當下已經切過一次選單（VolunteerAccessService.decide_application），但
+    「返回主選單」把選單切走之後，原本只能靠重新走一次 LIFF 登入／交換身分才能
+    切回去——那段路徑（entry 交換）是設計給「還沒決定要去哪個收容所」的人用
+    的，已核准的人每次都要重跑一次沒有必要，而且只要中途沒完整跑完
+    （沒登入、頁面沒開完、還在 LIFF 內建瀏覽器的快取狀態卡住）選單就切不回去，
+    使用者會覺得「按了沒反應」。這裡繞過 LIFF，直接查已核准的 grant 判斷。
+    """
+    if not line_user_id:
+        return False
+    identities = AuthenticationRepository(session)
+    binding = await identities.get_line_binding(line_user_id)
+    if binding is None:
+        return False
+    memberships = await identities.memberships(binding.user_id, active_only=True)
+    for membership in memberships:
+        if membership.role != "VOLUNTEER":
+            continue
+        effective = await identities.lock_effective_volunteer_access(
+            binding.user_id, membership.organization_id
+        )
+        if effective is not None:
+            return await _switch_rich_menu(line_user_id, LineRole.VOLUNTEER)
+    return False
+
+
 def _volunteer_application_entry_message() -> dict:
     return {
         "type": "text",
@@ -113,6 +221,55 @@ def _volunteer_application_entry_message() -> dict:
     }
 
 
+async def _handle_menu_action(
+    line: LineMessagingPort,
+    event: dict,
+) -> bool:
+    """處理角色選單的 postback。
+
+    必須在 _resolve_context 之前跑：選單對所有加好友的人都看得到，包含尚未
+    綁定的使用者。而且這些 action 不帶 draft_token，若落到 _handle_postback
+    會撞上照護回報草稿的檢查，回覆「缺少回報草稿識別」。
+    """
+    if event.get("type") != "postback":
+        return False
+    action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
+        "action", [""]
+    )[0]
+    if action == "start_binding":
+        # 目前沒有專屬的綁定 LIFF 頁；工作人員綁定走 scripts/bind_line_account.py，
+        # 志工走報名流程。實際入口待產品決定後接上。
+        await _reply(
+            line,
+            event,
+            [
+                _text(
+                    "身分綁定功能準備中。若你要報名志工，請點選單的志工報名或輸入「我要報名志工」。"
+                )
+            ],
+        )
+        return True
+    if action in ADOPTION_ENTRY_ACTIONS:
+        # 領養選單裡的項目：開啟領養假頁面（之後會換成真正的領養 LIFF）。
+        await _reply(line, event, [_adoption_entry_message()])
+        return True
+    if action == "back_to_default_menu":
+        # 志工／領養人選單裡的「返回主選單」：讓有個別身份的人可以自由切回去，
+        # 重新選志工服務或領養流程，不用退出好友重加。
+        line_user_id = event.get("source", {}).get("userId")
+        switched = await _switch_menu_to_default(line_user_id)
+        if switched:
+            await _reply(line, event, [_text("已切回主選單，請重新選擇志工服務或領養流程。")])
+        else:
+            await _reply(line, event, [_text("選單切換功能尚未啟用，請聯繫工作人員協助。")])
+        return True
+    placeholder = MENU_PLACEHOLDER_ACTIONS.get(action)
+    if placeholder is None:
+        return False
+    await _reply(line, event, [_text(placeholder)])
+    return True
+
+
 async def _handle_public_volunteer_application_entry(
     session,
     line: LineMessagingPort,
@@ -130,14 +287,27 @@ async def _handle_public_volunteer_application_entry(
     )
     is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
     if postback_values.get("action", [""])[0] == "adoption_placeholder":
-        await _reply(
-            line,
-            event,
-            [_text("領養媒合功能準備中，之後會在這裡提供可領養動物與媒合流程。")],
-        )
+        line_user_id = event.get("source", {}).get("userId")
+        switched = await _switch_menu_to_adopter(line_user_id)
+        if switched:
+            await _reply(
+                line,
+                event,
+                [_text("已切換到領養選單，請由下方選單點選「我想領養」或「領養回報」。")],
+            )
+        else:
+            await _reply(line, event, [_adoption_entry_message()])
         return True
     if not is_text_command and not is_postback_command:
         return False
+    line_user_id = event.get("source", {}).get("userId")
+    if await _switch_menu_to_volunteer_if_active(session, line_user_id):
+        await _reply(
+            line,
+            event,
+            [_text("已切回志工選單，請由下方選單點選「散步回報」或「志工報到」。")],
+        )
+        return True
     await _reply(line, event, [_volunteer_application_entry_message()])
     return True
 
@@ -283,7 +453,12 @@ async def _reply_next_step(
     organization_id: UUID,
     draft,
     raw_token: str,
+    lead: list[dict] | None = None,
 ) -> None:
+    # A LINE reply token is single-use and short-lived, so a message that has to
+    # precede the next step is passed in here and sent in the same reply call
+    # rather than in a second reply that LINE would reject.
+    lead_messages = lead or []
     state = DraftState(draft.current_step)
     if state in {
         DraftState.ANSWERING_COMPLETION,
@@ -308,13 +483,14 @@ async def _reply_next_step(
         await _reply(
             line,
             event,
-            [answer_message],
+            [*lead_messages, answer_message],
         )
     elif state == DraftState.AWAITING_MEDIA:
         await _reply(
             line,
             event,
             [
+                *lead_messages,
                 _text("可以傳送一張或多張照片；若要略過，請按下略過照片。"),
                 {
                     "type": "template",
@@ -335,6 +511,7 @@ async def _reply_next_step(
             line,
             event,
             [
+                *lead_messages,
                 _text("心得可直接輸入；若沒有補充，請按下略過心得。"),
                 {
                     "type": "template",
@@ -364,6 +541,7 @@ async def _reply_next_step(
             line,
             event,
             [
+                *lead_messages,
                 _text("回報摘要：\n" + "\n".join(summary_lines) + "\n\n確認送出前仍可修改。"),
                 {
                     "type": "template",
@@ -393,6 +571,8 @@ async def _reply_next_step(
                 },
             ],
         )
+    elif lead_messages:
+        await _reply(line, event, lead_messages)
 
 
 async def _handle_postback(
@@ -512,7 +692,6 @@ async def _handle_postback(
                 animal_id=animal.id,
             )
             message = f"已確認 {animal.name}，現在開始照護回報。"
-        await _reply(line, event, [_text(message)])
         await _reply_next_step(
             session,
             line,
@@ -520,6 +699,7 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token=raw_token,
+            lead=[_text(message)],
         )
         return None
     if action == "resume_draft" and not token:
@@ -529,7 +709,6 @@ async def _handle_postback(
         if draft is None:
             await _reply(line, event, [_text("目前沒有可繼續的回報。")])
             return None
-        await _reply(line, event, [_text("已恢復未完成回報，請繼續回答目前問題。")])
         await _reply_next_step(
             session,
             line,
@@ -537,6 +716,7 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token="",
+            lead=[_text("已恢復未完成回報，請繼續回答目前問題。")],
         )
         return None
     if not token and action not in {
@@ -641,6 +821,10 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    if await _handle_menu_action(line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     if await _handle_public_volunteer_application_entry(session, line, event):
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
@@ -733,7 +917,15 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         if error.code in {"line_binding_required", "shelter_context_required"}
                         else error.message
                     )
-                    await _reply(line, event, [_text(message)])
+                    # When the failure came from the LINE API itself the reply
+                    # token is already spent or invalid; replying again would
+                    # raise a second time, escape this handler and roll back the
+                    # event claim, making LINE redeliver the event.
+                    if error.code != "line_api_unavailable":
+                        try:
+                            await _reply(line, event, [_text(message)])
+                        except DomainError:
+                            pass
                     results.append(
                         {"webhook_event_id": event_id, "status": "rejected", "reason": error.code}
                     )

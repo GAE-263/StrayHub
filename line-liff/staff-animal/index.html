@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <!-- viewport-fit=cover 讓頁面能延伸到瀏海/手勢列範圍，搭配 css 的 safe-area-padding 使用 -->
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"
+  />
+  <title>動物之家公益平台</title>
+
+  <!-- 童趣溫馨手繪風字型：圓體大標 Fredoka + 中文本文 Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Tailwind CSS：用 CDN 版本，不用額外build流程，開發最快 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cream: "#FAF6EE",
+            cocoa: "#716053",
+            sunny: "#FFD79A",
+            mint: "#B8E3D2",
+            sky: "#BEE3F2",
+            blossom: "#F6C9D0",
+            coral: "#F3B4A0",
+          },
+          fontFamily: {
+            fredoka: ["Fredoka", "Noto Sans TC", "sans-serif"],
+            body: ["Noto Sans TC", "Fredoka", "sans-serif"],
+          },
+          borderRadius: {
+            cozy: "24px",
+          },
+          boxShadow: {
+            cozy: "4px 4px 0px 0px #716053",
+            "cozy-sm": "2px 2px 0px 0px #716053",
+            "cozy-lg": "6px 6px 0px 0px #716053",
+          },
+        },
+      },
+    };
+  </script>
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-cream text-cocoa font-body text-base safe-area-padding">
+  <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col bg-cream">
+
+    <!-- ============================================================ -->
+    <!-- 畫面 1：登入頁 -->
+    <!-- ============================================================ -->
+    <section id="screen-login" class="screen flex-1 flex flex-col items-center justify-center px-6 py-10 text-center">
+      <div class="text-6xl mb-4">🐾</div>
+      <h1 class="font-fredoka text-2xl font-bold mb-2 text-cocoa">動物之家公益平台</h1>
+      <p class="text-cocoa/70 mb-10">協助收容所快速記錄動物資料 🎈</p>
+
+      <div class="flex flex-col items-center gap-4">
+        <div class="w-12 h-12 border-4 border-cocoa/20 border-t-cocoa rounded-full animate-spin"></div>
+        <p id="login-status-text" class="text-lg text-cocoa/80">正在透過 LINE 登入...</p>
+      </div>
+
+      <div id="login-error-box" class="hidden mt-8 w-full bg-coral border-4 border-cocoa rounded-cozy shadow-cozy px-5 py-5">
+        <p class="text-cocoa text-lg mb-4 font-bold"></p>
+        <button
+          id="login-retry-btn"
+          class="w-full bg-sunny border-4 border-cocoa text-cocoa text-lg font-fredoka font-bold py-4 rounded-cozy shadow-cozy active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm transition-all"
+        >
+          🔄 重新登入
+        </button>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 畫面 2：主選單 -->
+    <!-- ============================================================ -->
+    <section id="screen-menu" class="screen hidden flex-1 flex flex-col px-6 py-6">
+      <!-- 使用者資訊列 -->
+      <div class="flex items-center justify-between mb-10">
+        <div class="flex items-center gap-3">
+          <img
+            id="menu-user-avatar"
+            src="https://placehold.co/56x56?text=%F0%9F%90%BE"
+            alt="使用者頭像"
+            class="w-14 h-14 rounded-full object-cover bg-cream border-4 border-cocoa"
+          />
+          <div>
+            <p id="menu-user-name" class="text-lg font-fredoka font-bold text-cocoa">—</p>
+            <span
+              id="menu-user-role"
+              class="inline-block text-sm font-bold text-cocoa bg-blossom border-2 border-cocoa px-2 py-0.5 rounded-full"
+            >—</span>
+          </div>
+        </div>
+        <button id="btn-logout" class="text-cocoa/60 text-sm underline decoration-cocoa/40">登出</button>
+      </div>
+
+      <h2 class="font-fredoka text-xl font-bold mb-6 text-cocoa">請選擇要進行的作業 🌟</h2>
+
+      <div class="flex flex-col gap-5">
+        <!-- (A) 新增收容動物 -->
+        <button
+          id="btn-goto-add-animal"
+          class="w-full bg-mint border-4 border-cocoa active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm text-cocoa rounded-cozy py-8 px-6 flex items-center gap-4 shadow-cozy transition-all"
+        >
+          <span class="text-4xl">📷</span>
+          <span class="text-left">
+            <span class="block text-xl font-fredoka font-bold">新增收容動物</span>
+            <span class="block text-sm text-cocoa/70 mt-1">拍照建檔、產生新動物ID</span>
+          </span>
+        </button>
+
+        <!-- (B) 更新現有動物紀錄 -->
+        <button
+          id="btn-goto-update-animal"
+          class="w-full bg-sky border-4 border-cocoa active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm text-cocoa rounded-cozy py-8 px-6 flex items-center gap-4 shadow-cozy transition-all"
+        >
+          <span class="text-4xl">📝</span>
+          <span class="text-left">
+            <span class="block text-xl font-fredoka font-bold">更新現有動物紀錄</span>
+            <span class="block text-sm text-cocoa/70 mt-1">記錄健康狀況、更新照片</span>
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 畫面 3：新增收容動物 -->
+    <!-- ============================================================ -->
+    <section id="screen-add-animal" class="screen hidden flex-1 flex flex-col px-6 py-6 pb-10">
+      <div class="flex items-center gap-3 mb-6">
+        <button id="btn-add-animal-back" class="w-10 h-10 flex items-center justify-center text-xl bg-cream border-2 border-cocoa rounded-full active:translate-x-[1px] active:translate-y-[1px] transition-all">←</button>
+        <h2 class="font-fredoka text-xl font-bold text-cocoa">📷 新增收容動物</h2>
+      </div>
+
+      <form id="add-animal-form" class="flex flex-col gap-6">
+        <!-- 拍照 / 選圖 -->
+        <div>
+          <label class="block text-lg font-fredoka font-bold mb-2 text-cocoa">動物照片</label>
+          <div class="photo-picker-box mx-auto relative rounded-cozy border-4 border-cocoa flex items-center justify-center overflow-hidden bg-white">
+            <div id="add-photo-placeholder" class="text-center text-cocoa/50 px-4">
+              <div class="text-4xl mb-2">📷</div>
+              <p class="text-base">尚未選擇照片</p>
+            </div>
+            <img id="add-photo-preview" class="hidden absolute inset-0 w-full h-full object-cover" alt="動物照片預覽" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 mt-4">
+            <label for="add-photo-camera-input" class="text-center bg-sunny active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm border-2 border-cocoa text-cocoa text-lg font-fredoka font-bold py-3 rounded-cozy shadow-cozy-sm cursor-pointer transition-all">
+              拍照
+            </label>
+            <label for="add-photo-gallery-input" class="text-center bg-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm border-2 border-cocoa text-cocoa text-lg font-fredoka font-bold py-3 rounded-cozy shadow-cozy-sm cursor-pointer transition-all">
+              從相簿選擇
+            </label>
+            <input id="add-photo-camera-input" type="file" accept="image/*" capture="environment" />
+            <input id="add-photo-gallery-input" type="file" accept="image/*" />
+          </div>
+        </div>
+
+        <!-- 系統自動產生的動物ID -->
+        <div class="bg-sky border-4 border-cocoa rounded-cozy shadow-cozy-sm px-4 py-3">
+          <p class="text-sm text-cocoa/70 mb-1">🐾 系統自動產生的動物ID</p>
+          <p id="add-animal-id-display" class="text-2xl font-mono font-bold text-cocoa">—</p>
+        </div>
+
+        <!-- 基礎資訊表單 -->
+        <div>
+          <label for="add-input-name" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">動物暱稱 <span class="text-[#C1553A]">*</span></label>
+          <input
+            id="add-input-name"
+            type="text"
+            placeholder="例：小黑"
+            class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sunny"
+          />
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="add-input-species" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">物種</label>
+            <select id="add-input-species" class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-3 py-3 text-cocoa focus:outline-none focus:ring-4 focus:ring-sunny">
+              <option value="dog">狗</option>
+              <option value="cat">貓</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+          <div>
+            <label for="add-input-gender" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">性別</label>
+            <select id="add-input-gender" class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-3 py-3 text-cocoa focus:outline-none focus:ring-4 focus:ring-sunny">
+              <option value="unknown">未知</option>
+              <option value="male">公</option>
+              <option value="female">母</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="add-input-breed" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">品種</label>
+          <input
+            id="add-input-breed"
+            type="text"
+            placeholder="例：米克斯"
+            class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sunny"
+          />
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="add-input-age" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">預估年齡</label>
+            <input
+              id="add-input-age"
+              type="text"
+              placeholder="例：約1歲"
+              class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sunny"
+            />
+          </div>
+          <div>
+            <label for="add-input-size" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">體型</label>
+            <select id="add-input-size" class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-3 py-3 text-cocoa focus:outline-none focus:ring-4 focus:ring-sunny">
+              <option value="small">小型</option>
+              <option value="medium" selected>中型</option>
+              <option value="large">大型</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="add-input-location" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">發現地點/來源</label>
+          <input
+            id="add-input-location"
+            type="text"
+            placeholder="例：台北市大安區公園"
+            class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sunny"
+          />
+        </div>
+
+        <div>
+          <label for="add-input-notes" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">備註</label>
+          <textarea
+            id="add-input-notes"
+            rows="3"
+            placeholder="其他需要記錄的狀況"
+            class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sunny"
+          ></textarea>
+        </div>
+
+        <div id="add-animal-error-box" class="hidden bg-coral border-4 border-cocoa text-cocoa text-base font-bold rounded-cozy px-4 py-3"></div>
+
+        <button
+          type="button"
+          id="btn-add-animal-submit"
+          class="w-full bg-sunny active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm disabled:opacity-50 disabled:pointer-events-none border-4 border-cocoa text-cocoa text-xl font-fredoka font-bold py-4 rounded-cozy shadow-cozy transition-all"
+        >
+          送出 🐾
+        </button>
+      </form>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 畫面 4：更新現有動物紀錄 -->
+    <!-- ============================================================ -->
+    <section id="screen-update-animal" class="screen hidden flex-1 flex flex-col px-6 py-6 pb-10">
+      <div class="flex items-center gap-3 mb-6">
+        <button id="btn-update-animal-back" class="w-10 h-10 flex items-center justify-center text-xl bg-cream border-2 border-cocoa rounded-full active:translate-x-[1px] active:translate-y-[1px] transition-all">←</button>
+        <h2 class="font-fredoka text-xl font-bold text-cocoa">📝 更新現有動物紀錄</h2>
+      </div>
+
+      <form id="update-animal-form" class="flex flex-col gap-6">
+        <!-- 動物ID查詢 -->
+        <div>
+          <label for="update-input-animal-id" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">動物ID</label>
+          <div class="flex gap-3">
+            <input
+              id="update-input-animal-id"
+              type="text"
+              placeholder="輸入動物ID，例：A20260816-7431"
+              class="flex-1 text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sky"
+            />
+            <button
+              type="button"
+              id="btn-lookup-animal"
+              class="bg-sky active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm border-[3px] border-cocoa text-cocoa text-lg font-fredoka font-bold px-5 rounded-cozy shadow-cozy-sm transition-all"
+            >
+              查詢
+            </button>
+          </div>
+        </div>
+
+        <div id="update-animal-error-box" class="hidden bg-coral border-4 border-cocoa text-cocoa text-base font-bold rounded-cozy px-4 py-3"></div>
+
+        <!-- 查到的動物：讓使用者肉眼確認 -->
+        <div id="update-matched-animal-box" class="hidden bg-mint border-4 border-cocoa rounded-cozy shadow-cozy-sm px-4 py-3 flex items-center gap-4">
+          <img id="update-matched-animal-photo" class="w-16 h-16 rounded-2xl object-cover bg-white border-2 border-cocoa" alt="動物照片" />
+          <div>
+            <p class="text-sm text-cocoa/70">🌟 已找到動物</p>
+            <p id="update-matched-animal-name" class="text-xl font-fredoka font-bold text-cocoa">—</p>
+            <p id="update-matched-animal-id" class="text-sm text-cocoa/60 font-mono">—</p>
+          </div>
+        </div>
+
+        <!-- 查到動物後才會顯示：拍照 + 健康狀況表單 -->
+        <div id="update-detail-section" class="hidden flex flex-col gap-6">
+          <div>
+            <label class="block text-lg font-fredoka font-bold mb-2 text-cocoa">最新照片(選填)</label>
+            <div class="photo-picker-box mx-auto relative rounded-cozy border-4 border-cocoa flex items-center justify-center overflow-hidden bg-white">
+              <div id="update-photo-placeholder" class="text-center text-cocoa/50 px-4">
+                <div class="text-4xl mb-2">📷</div>
+                <p class="text-base">尚未選擇照片</p>
+              </div>
+              <img id="update-photo-preview" class="hidden absolute inset-0 w-full h-full object-cover" alt="動物最新照片預覽" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <label for="update-photo-camera-input" class="text-center bg-sunny active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm border-2 border-cocoa text-cocoa text-lg font-fredoka font-bold py-3 rounded-cozy shadow-cozy-sm cursor-pointer transition-all">
+                拍照
+              </label>
+              <label for="update-photo-gallery-input" class="text-center bg-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm border-2 border-cocoa text-cocoa text-lg font-fredoka font-bold py-3 rounded-cozy shadow-cozy-sm cursor-pointer transition-all">
+                從相簿選擇
+              </label>
+              <input id="update-photo-camera-input" type="file" accept="image/*" capture="environment" />
+              <input id="update-photo-gallery-input" type="file" accept="image/*" />
+            </div>
+          </div>
+
+          <div>
+            <label for="update-input-health-status" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">健康狀況</label>
+            <select
+              id="update-input-health-status"
+              class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-3 py-3 text-cocoa focus:outline-none focus:ring-4 focus:ring-sky"
+            >
+              <option value="healthy">健康</option>
+              <option value="needs_medical">需要就醫</option>
+              <option value="in_treatment">治療中</option>
+              <option value="neutered">已絕育</option>
+              <option value="under_observation">觀察中</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="update-input-health-notes" class="block text-lg font-fredoka font-bold mb-2 text-cocoa">
+              健康狀況說明 <span class="text-[#C1553A]">*</span>
+            </label>
+            <textarea
+              id="update-input-health-notes"
+              rows="4"
+              placeholder="請描述詳細狀況，例：右前腳輕微跛行，已安排就醫"
+              class="w-full text-lg bg-white border-[3px] border-cocoa rounded-cozy px-4 py-3 text-cocoa placeholder:text-cocoa/40 focus:outline-none focus:ring-4 focus:ring-sky"
+            ></textarea>
+          </div>
+
+          <button
+            type="button"
+            id="btn-update-animal-submit"
+            class="w-full bg-sky active:translate-x-[2px] active:translate-y-[2px] active:shadow-cozy-sm disabled:opacity-50 disabled:pointer-events-none border-4 border-cocoa text-cocoa text-xl font-fredoka font-bold py-4 rounded-cozy shadow-cozy transition-all"
+          >
+            送出 🐾
+          </button>
+        </div>
+      </form>
+    </section>
+
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

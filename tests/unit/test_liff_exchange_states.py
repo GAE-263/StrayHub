@@ -388,3 +388,80 @@ async def test_database_failure_returns_safe_dependency_error() -> None:
     assert error.value.status_code == 503
     assert error.value.code == "liff_exchange_unavailable"
     assert error.value.message == "志工入口暫時無法使用"
+
+
+class RecordingRichMenuRouter:
+    """記錄 link_for_user 呼叫；optional 用來模擬 LINE API 失敗。"""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+        self.fail = fail
+
+    async def link_for_user(self, *, line_user_id: str, role: str | None) -> None:
+        self.calls.append((line_user_id, role))
+        if self.fail:
+            raise RuntimeError("LINE API 暫時不可用")
+
+
+def service_with_router(
+    repository: FakeRepository,
+    router: RecordingRichMenuRouter,
+    *,
+    entry_valid: bool = True,
+) -> SessionService:
+    return SessionService(
+        repository,
+        password_hasher=FakePasswordHasher(),
+        access_token=FakeAccessToken(),
+        line_verifier=FakeLineVerifier(),
+        entry_resolver=FakeEntryResolver(
+            repository.target_organization.id,
+            valid=entry_valid,
+        ),
+        rich_menu_router=router,
+    )
+
+
+@pytest.mark.asyncio
+async def test_active_exchange_links_volunteer_rich_menu() -> None:
+    """志工走 entry 交換身分，不經過 /v1/line/bind，這條路徑也必須切選單。"""
+    repository = FakeRepository()
+    router = RecordingRichMenuRouter()
+
+    result = await service_with_router(repository, router).exchange_line_identity(
+        id_token="valid-line-id-token",
+        shelter_entry_reference="valid-entry-reference",
+    )
+
+    assert result["state"] == "ACTIVE"
+    assert router.calls == [("U-line-user", "VOLUNTEER")]
+
+
+@pytest.mark.asyncio
+async def test_non_active_exchange_does_not_link_rich_menu() -> None:
+    repository = FakeRepository()
+    router = RecordingRichMenuRouter()
+
+    with pytest.raises(DomainError):
+        await service_with_router(repository, router, entry_valid=False).exchange_line_identity(
+            id_token="valid-line-id-token",
+            shelter_entry_reference="valid-entry-reference",
+        )
+
+    assert router.calls == []
+
+
+@pytest.mark.asyncio
+async def test_rich_menu_failure_does_not_break_exchange() -> None:
+    """選單切換是 best-effort；LINE API 失敗不得讓志工換不到 session。"""
+    repository = FakeRepository()
+    router = RecordingRichMenuRouter(fail=True)
+
+    result = await service_with_router(repository, router).exchange_line_identity(
+        id_token="valid-line-id-token",
+        shelter_entry_reference="valid-entry-reference",
+    )
+
+    assert result["state"] == "ACTIVE"
+    assert result["access_token"].startswith("internal:")
+    assert router.calls == [("U-line-user", "VOLUNTEER")]

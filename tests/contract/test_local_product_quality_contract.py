@@ -73,6 +73,21 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
     assert "/${LIFF_ID}/volunteer-entry?entry=" not in text
 
 
+def test_line_demo_does_not_run_test_fixtures_or_retarget_the_database() -> None:
+    text = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+
+    for forbidden in (
+        "scripts.seed_local",
+        "scripts.test_local",
+        "scripts/test_local.py",
+        "uv run pytest",
+        "strayhub_test",
+        "ORG-A",
+    ):
+        assert forbidden not in text
+    assert "DATABASE_URL=" not in text
+
+
 def test_line_demo_allows_the_generated_web_tunnel_dev_origin() -> None:
     script = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
     next_config = (ROOT / "apps/web/next.config.ts").read_text(encoding="utf-8")
