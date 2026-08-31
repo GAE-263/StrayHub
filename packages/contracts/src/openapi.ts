@@ -778,7 +778,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；不得自動建立正式 Membership。 */
+        /** @description FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；多 Membership 時 organization_id 只是選擇輸入，後端仍須逐一驗證，不得自動建立正式 Membership。 */
         post: operations["bindLineIdentity"];
         delete?: never;
         options?: never;
@@ -2139,9 +2139,21 @@ export interface components {
         };
         LineBindRequest: {
             id_token: string;
+            /**
+             * Format: uuid
+             * @description 多 Membership 時由使用者明確選擇；不是授權來源。
+             */
+            organization_id?: string | null;
         };
-        LineBindResponse: {
-            session: components["schemas"]["AuthResponse"];
+        LineBindResponse: components["schemas"]["LineBindSessionResponse"] | components["schemas"]["LineBindSelectionResponse"];
+        LineBindSessionResponse: components["schemas"]["AuthResponse"] & {
+            /** Format: uuid */
+            organization_id: string;
+        };
+        LineBindSelectionResponse: {
+            /** @constant */
+            state: "selection_required";
+            organizations: components["schemas"]["LoginOrganization"][];
         };
         RichMenuContext: {
             /** @enum {string} */
@@ -5133,6 +5145,7 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     getLineRichMenuContext: {

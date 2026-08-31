@@ -14,19 +14,52 @@ import { showScreen } from "../router.js";
 const statusTextEl = () => document.getElementById("login-status-text");
 const errorBoxEl = () => document.getElementById("login-error-box");
 const retryBtnEl = () => document.getElementById("login-retry-btn");
+const organizationSelectEl = () =>
+  document.getElementById("login-organization-select");
 
-export async function runLoginFlow() {
+let pendingLineIdentity = null;
+
+function destinationScreen() {
+  const action = new URLSearchParams(window.location.search).get("action");
+  if (action === "staff_create_animal") return "screen-add-animal";
+  if (action === "staff_update_health") return "screen-update-animal";
+  return "screen-menu";
+}
+
+export async function runLoginFlow(organizationId = null) {
   errorBoxEl().classList.add("hidden");
+  organizationSelectEl().classList.add("hidden");
   statusTextEl().textContent = "正在透過 LINE 登入...";
 
   try {
-    const lineIdentity = await initLiffAndLogin();
+    const lineIdentity = pendingLineIdentity || (await initLiffAndLogin());
+    pendingLineIdentity = lineIdentity;
 
     statusTextEl().textContent = "登入成功，正在確認身分...";
-    const verifiedUser = await verifyUserRole(lineIdentity);
+    const verifiedUser = await verifyUserRole(lineIdentity, organizationId);
+
+    if (verifiedUser.requiresOrganizationSelection) {
+      const select = organizationSelectEl();
+      select.replaceChildren(
+        ...verifiedUser.organizations.map((organization) => {
+          const option = document.createElement("option");
+          option.value = organization.id;
+          option.textContent = `${organization.name}（${organization.role}）`;
+          return option;
+        })
+      );
+      select.classList.remove("hidden");
+      errorBoxEl().querySelector("p").textContent = "請先選擇目前要操作的收容所";
+      retryBtnEl().textContent = "確認收容所";
+      retryBtnEl().dataset.mode = "select";
+      errorBoxEl().classList.remove("hidden");
+      statusTextEl().textContent = "需要選擇收容所";
+      return;
+    }
 
     setState({ currentUser: verifiedUser });
-    showScreen("screen-menu");
+    pendingLineIdentity = null;
+    showScreen(destinationScreen());
   } catch (err) {
     console.error("登入流程發生錯誤:", err);
     statusTextEl().textContent = "登入失敗";
@@ -37,6 +70,13 @@ export async function runLoginFlow() {
 }
 
 export function initLoginPage() {
-  retryBtnEl().addEventListener("click", runLoginFlow);
+  retryBtnEl().addEventListener("click", () => {
+    if (retryBtnEl().dataset.mode === "select") {
+      void runLoginFlow(organizationSelectEl().value);
+      return;
+    }
+    pendingLineIdentity = null;
+    void runLoginFlow();
+  });
   runLoginFlow();
 }

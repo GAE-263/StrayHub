@@ -117,13 +117,19 @@ def test_general_organization_requests_do_not_accept_client_org_scope() -> None:
     assert "organization_id" not in organization_request.get("properties", {})
 
 
-def test_line_contract_does_not_make_client_org_scope_trusted() -> None:
+def test_line_contract_only_accepts_explicit_org_selection_where_server_validates_it() -> None:
     document = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
 
-    for schema_name in ("LineBindRequest", "ResumeDraftRequest"):
-        properties = document["components"]["schemas"][schema_name].get("properties", {})
-        assert "org_id" not in properties
-        assert "organization_id" not in properties
+    resume_properties = document["components"]["schemas"]["ResumeDraftRequest"].get(
+        "properties", {}
+    )
+    assert "org_id" not in resume_properties
+    assert "organization_id" not in resume_properties
+
+    bind_properties = document["components"]["schemas"]["LineBindRequest"]["properties"]
+    assert "org_id" not in bind_properties
+    assert bind_properties["organization_id"]["format"] == "uuid"
+    assert "不是授權來源" in bind_properties["organization_id"]["description"]
 
 
 def test_liff_exchange_uses_state_discriminated_response_contract() -> None:

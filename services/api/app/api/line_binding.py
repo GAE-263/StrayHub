@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from services.api.app.api.authentication import get_session_service
@@ -15,14 +17,21 @@ router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
 
 class LineBindRequest(BaseModel):
     id_token: str
+    organization_id: UUID | None = None
 
 
 @router.post("/bind", openapi_extra={"security": []})
 async def bind_line_identity(
     payload: LineBindRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    return await service.bind_line_identity(id_token=payload.id_token)
+    result = await service.bind_line_identity(
+        id_token=payload.id_token,
+        organization_id=payload.organization_id,
+    )
+    await session.commit()
+    return result
 
 
 @router.get("/rich-menu/context")

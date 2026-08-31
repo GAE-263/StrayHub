@@ -920,7 +920,7 @@ paths:
       tags: [LINE Bot]
       operationId: bindLineIdentity
       security: []
-      description: FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；不得自動建立正式 Membership。
+      description: FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；多 Membership 時 organization_id 只是選擇輸入，後端仍須逐一驗證，不得自動建立正式 Membership。
       requestBody:
         required: true
         content:
@@ -933,6 +933,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LineBindResponse" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/line/rich-menu/context:
     get:
       tags: [LINE Bot]
@@ -2897,13 +2898,33 @@ components:
     LineBindRequest:
       type: object
       required: [id_token]
+      additionalProperties: false
       properties:
         id_token: { type: string }
+        organization_id:
+          type: [string, "null"]
+          format: uuid
+          description: 多 Membership 時由使用者明確選擇；不是授權來源。
     LineBindResponse:
+      oneOf:
+        - $ref: "#/components/schemas/LineBindSessionResponse"
+        - $ref: "#/components/schemas/LineBindSelectionResponse"
+    LineBindSessionResponse:
+      allOf:
+        - $ref: "#/components/schemas/AuthResponse"
+        - type: object
+          required: [organization_id]
+          properties:
+            organization_id: { type: string, format: uuid }
+    LineBindSelectionResponse:
       type: object
-      required: [session]
+      additionalProperties: false
+      required: [state, organizations]
       properties:
-        session: { $ref: "#/components/schemas/AuthResponse" }
+        state: { type: string, const: selection_required }
+        organizations:
+          type: array
+          items: { $ref: "#/components/schemas/LoginOrganization" }
     RichMenuContext:
       type: object
       required: [context_status, actions]

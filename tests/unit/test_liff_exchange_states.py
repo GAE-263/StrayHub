@@ -5,7 +5,11 @@ import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.authentication.session_service import SessionService
 from services.api.app.application.ports.authentication import ActiveVolunteerEntryReference
-from services.api.app.persistence.models.identity import RefreshTokenRecord, SessionRecord
+from services.api.app.persistence.models.identity import (
+    RefreshTokenRecord,
+    SessionRecord,
+    WebhookSession,
+)
 
 
 class FakePasswordHasher:
@@ -99,14 +103,28 @@ class FakeRepository:
         self.authorization_calls: list[str] = []
 
     async def get_line_binding(self, line_user_id: str):
-        raise AssertionError("LIFF exchange must lock active LINE Binding")
+        return self.binding if line_user_id == "U-line-user" else None
+
+    async def set_authentication_user_scope(self, user_id: UUID) -> None:
+        self.authorization_calls.append("user_scope")
+
+    async def effective_organization_access(self, user_id: UUID):
+        assert user_id == self.user.id
+        return [
+            (self.target_membership, self.target_organization),
+            (self.other_membership, self.other_organization),
+        ]
+
+    async def revoke_active_webhook_sessions(self, user_id: UUID) -> None:
+        assert user_id == self.user.id
+        self.authorization_calls.append("revoke_webhook_sessions")
 
     async def lock_line_binding(self, line_user_id: str):
         self.authorization_calls.append("binding")
         return self.binding if line_user_id == "U-line-user" else None
 
     async def get_user(self, user_id: UUID):
-        raise AssertionError("LIFF exchange must lock User before authorization")
+        return self.user if user_id == self.user.id else None
 
     async def set_authentication_context_scope(self, user_id: UUID, organization_id: UUID) -> None:
         self.scoped_to = (user_id, organization_id)
@@ -166,6 +184,59 @@ def service(repository: FakeRepository, *, entry_valid: bool = True) -> SessionS
             valid=entry_valid,
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_line_bind_requires_explicit_selection_for_multiple_memberships() -> None:
+    repository = FakeRepository()
+
+    result = await service(repository).bind_line_identity(id_token="valid-line-id-token")
+
+    assert result["state"] == "selection_required"
+    assert {item["id"] for item in result["organizations"]} == {
+        repository.target_organization.id,
+        repository.other_organization.id,
+    }
+    assert repository.values == []
+
+
+@pytest.mark.asyncio
+async def test_line_bind_selected_membership_sets_exact_session_context() -> None:
+    repository = FakeRepository()
+    repository.target_membership.role = "STAFF"
+
+    result = await service(repository).bind_line_identity(
+        id_token="valid-line-id-token",
+        organization_id=repository.target_organization.id,
+    )
+
+    assert result["organization_id"] == repository.target_organization.id
+    assert repository.scoped_to == (repository.user.id, repository.target_organization.id)
+    assert "revoke_webhook_sessions" in repository.authorization_calls
+    assert any(
+        isinstance(value, SessionRecord)
+        and value.active_organization_id == repository.target_organization.id
+        for value in repository.values
+    )
+    assert any(
+        isinstance(value, WebhookSession)
+        and value.organization_id == repository.target_organization.id
+        for value in repository.values
+    )
+
+
+@pytest.mark.asyncio
+async def test_line_bind_rejects_unowned_shelter_selection() -> None:
+    repository = FakeRepository()
+
+    with pytest.raises(DomainError) as caught:
+        await service(repository).bind_line_identity(
+            id_token="valid-line-id-token",
+            organization_id=uuid4(),
+        )
+
+    assert caught.value.code == "shelter_context_denied"
+    assert repository.values == []
 
 
 @pytest.mark.asyncio

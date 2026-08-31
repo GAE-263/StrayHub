@@ -35,7 +35,11 @@ from services.api.app.application.line_draft_conversation import (
 )
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
-from services.api.app.application.line_menu_actions import MENU_PLACEHOLDER_ACTIONS
+from services.api.app.application.line_menu_actions import (
+    MENU_LIFF_ACTIONS,
+    MENU_PLACEHOLDER_ACTIONS,
+    STAFF_MENU_ACTIONS,
+)
 from services.api.app.application.line_message_presenter import quick_reply_for_options
 from services.api.app.application.line_rich_menu_routing import (
     LineRole,
@@ -87,14 +91,24 @@ logger = logging.getLogger(__name__)
 VOLUNTEER_APPLICATION_COMMAND = "我要報名志工"
 
 
-async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID]:
+async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID, str]:
     identity = LineWebhookRepository(session)
     authentication = AuthenticationRepository(session)
     webhook_session = await LineWebhookSessionService(identity, authentication).resolve(
         line_user_id
     )
-    membership = (await authentication.memberships(webhook_session.user_id, active_only=True))[0]
-    return webhook_session.user_id, webhook_session.organization_id, membership.id
+    membership = await authentication.get_effective_membership(
+        webhook_session.user_id, webhook_session.organization_id
+    )
+    if membership is None:
+        raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
+    await set_organization_scope(session, webhook_session.organization_id)
+    return (
+        webhook_session.user_id,
+        webhook_session.organization_id,
+        membership.id,
+        membership.role,
+    )
 
 
 async def _reply(line: LineMessagingPort, event: dict, messages: list[dict]) -> None:
@@ -258,6 +272,7 @@ async def _handle_menu_action(
     )[0]
     if not _line_role_menu_features_active() and (
         action in MENU_PLACEHOLDER_ACTIONS
+        or action in STAFF_MENU_ACTIONS
         or action in {"start_binding", "start_adoption_matching", "back_to_default_menu"}
     ):
         await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
@@ -278,6 +293,9 @@ async def _handle_menu_action(
     if action == "start_adoption_matching":
         # 正式領養流程必須在 membership resolution 前由 adoption router 處理。
         return False
+    if action in STAFF_MENU_ACTIONS:
+        # Staff action 必須先經過 server-side binding/membership/shelter resolution。
+        return False
     if action == "back_to_default_menu":
         # 志工／領養人選單裡的「返回主選單」：讓有個別身份的人可以自由切回去，
         # 重新選志工服務或領養流程，不用退出好友重加。
@@ -292,6 +310,65 @@ async def _handle_menu_action(
     if placeholder is None:
         return False
     await _reply(line, event, [_text(placeholder)])
+    return True
+
+
+async def _handle_staff_menu_action(
+    session,
+    line: LineMessagingPort,
+    event: dict,
+    *,
+    organization_id: UUID,
+    role: str,
+) -> bool:
+    if event.get("type") != "postback":
+        return False
+    action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
+        "action", [""]
+    )[0]
+    if action not in STAFF_MENU_ACTIONS:
+        return False
+    if role not in {LineRole.STAFF, LineRole.SHELTER_ADMIN}:
+        raise DomainError("staff_access_required", "需要目前收容所的工作人員權限", 403)
+    if action == "staff_animal_list":
+        animals = await AnimalRepository(session, organization_id).list_active()
+        rows = [
+            f"• {animal.name}（{animal.shelter_number or '無收容編號'}）" for animal in animals[:10]
+        ]
+        suffix = f"\n另有 {len(animals) - 10} 隻，請至管理介面查看。" if len(animals) > 10 else ""
+        text = "目前沒有 active 動物。" if not rows else "目前動物：\n" + "\n".join(rows) + suffix
+        await _reply(line, event, [_text(text)])
+        return True
+    if action == "staff_change_status":
+        await _reply(
+            line, event, [_text("為避免誤改資料，請先在動物清單確認個體，再至管理介面變更狀態。")]
+        )
+        return True
+    if action not in MENU_LIFF_ACTIONS:
+        return False
+    liff_id = get_settings().line_staff_liff_id.strip()
+    if not liff_id:
+        await _reply(line, event, [_text("工作人員 LIFF 尚未設定，請聯繫系統管理員。")])
+        return True
+    uri = f"https://liff.line.me/{liff_id}?{urlencode({'action': action})}"
+    await _reply(
+        line,
+        event,
+        [
+            {
+                "type": "text",
+                "text": "已驗證目前收容所權限，請開啟工作人員表單。",
+                "quickReply": {
+                    "items": [
+                        {
+                            "type": "action",
+                            "action": {"type": "uri", "label": "開啟表單", "uri": uri},
+                        }
+                    ]
+                },
+            }
+        ],
+    )
     return True
 
 
@@ -1388,10 +1465,23 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
-                    user_id, organization_id, membership_id = await _resolve_context(
-                        session, line_user_id
-                    )
+                    (
+                        user_id,
+                        organization_id,
+                        membership_id,
+                        membership_role,
+                    ) = await _resolve_context(session, line_user_id)
                     if event.get("type") == "postback":
+                        if await _handle_staff_menu_action(
+                            session,
+                            line,
+                            event,
+                            organization_id=organization_id,
+                            role=membership_role,
+                        ):
+                            await identity.complete_event(stored_event)
+                            results.append({"webhook_event_id": event_id, "status": "processed"})
+                            continue
                         report_id_to_dispatch = await _handle_postback(
                             session,
                             line,

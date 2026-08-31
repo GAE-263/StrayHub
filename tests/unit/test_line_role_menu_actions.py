@@ -3,12 +3,16 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from services.api.app.api import line_webhook
+from services.api.app.api.errors import DomainError
 from services.api.app.application.line_menu_actions import (
     BACK_TO_DEFAULT_MENU_ACTION,
+    MENU_LIFF_ACTIONS,
     MENU_PLACEHOLDER_ACTIONS,
+    STAFF_MENU_ACTIONS,
 )
 from services.api.app.application.line_rich_menu_routing import (
     MENU_ADOPTER,
@@ -28,6 +32,7 @@ WEBHOOK_HANDLED_ACTIONS = {
     "start_volunteer_application",
     "start_adoption_matching",
     BACK_TO_DEFAULT_MENU_ACTION,
+    *STAFF_MENU_ACTIONS,
 }
 
 
@@ -45,6 +50,87 @@ async def test_every_menu_action_gets_its_placeholder_reply(action: str) -> None
 
     assert handled is True
     assert line.replies[0][1][0]["text"] == MENU_PLACEHOLDER_ACTIONS[action]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", sorted(MENU_LIFF_ACTIONS))
+async def test_staff_liff_action_waits_for_server_side_context(action: str) -> None:
+    line = MockLineAdapter()
+
+    handled = await line_webhook._handle_menu_action(line, _postback_event(f"action={action}"))
+
+    assert handled is False
+    assert line.replies == []
+
+
+@pytest.mark.asyncio
+async def test_staff_liff_action_requires_staff_role() -> None:
+    line = MockLineAdapter()
+
+    with pytest.raises(DomainError) as caught:
+        await line_webhook._handle_staff_menu_action(
+            None,
+            line,
+            _postback_event("action=staff_create_animal"),
+            organization_id=uuid4(),
+            role=LineRole.VOLUNTEER,
+        )
+
+    assert getattr(caught.value, "code", None) == "staff_access_required"
+    assert line.replies == []
+
+
+@pytest.mark.asyncio
+async def test_staff_liff_action_uses_configured_liff_after_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(line_staff_liff_id="staff-liff-id"),
+    )
+    line = MockLineAdapter()
+
+    handled = await line_webhook._handle_staff_menu_action(
+        None,
+        line,
+        _postback_event("action=staff_update_health"),
+        organization_id=uuid4(),
+        role=LineRole.SHELTER_ADMIN,
+    )
+
+    assert handled is True
+    uri = line.replies[0][1][0]["quickReply"]["items"][0]["action"]["uri"]
+    assert uri == ("https://liff.line.me/staff-liff-id?action=staff_update_health")
+
+
+@pytest.mark.asyncio
+async def test_staff_animal_list_is_scoped_after_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = uuid4()
+
+    class Repository:
+        def __init__(self, session, scoped_organization_id):
+            assert session == "session"
+            assert scoped_organization_id == organization_id
+
+        async def list_active(self):
+            return [SimpleNamespace(name="小黑", shelter_number="A-1")]
+
+    monkeypatch.setattr(line_webhook, "AnimalRepository", Repository)
+    line = MockLineAdapter()
+
+    handled = await line_webhook._handle_staff_menu_action(
+        "session",
+        line,
+        _postback_event("action=staff_animal_list"),
+        organization_id=organization_id,
+        role=LineRole.STAFF,
+    )
+
+    assert handled is True
+    assert "小黑（A-1）" in line.replies[0][1][0]["text"]
 
 
 @pytest.mark.asyncio

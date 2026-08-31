@@ -18,6 +18,7 @@ from services.api.app.persistence.models.identity import (
     OrganizationMembership,
     RefreshTokenRecord,
     SessionRecord,
+    WebhookSession,
 )
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -203,7 +204,9 @@ class SessionService:
             "memberships": [serialize_membership(membership) for membership in memberships],
         }
 
-    async def bind_line_identity(self, *, id_token: str) -> dict:
+    async def bind_line_identity(
+        self, *, id_token: str, organization_id: UUID | None = None
+    ) -> dict:
         """Preserve the existing LINE binding endpoint independently of LIFF entry exchange."""
         if self.line_verifier is None:
             raise DomainError("line_not_configured", "LINE 身分驗證尚未設定", 503)
@@ -215,12 +218,36 @@ class SessionService:
         if user is None or user.status != "active":
             raise DomainError("line_binding_invalid", "LINE 身分綁定無效", 403)
         await self.repository.set_authentication_user_scope(user.id)
-        memberships = await self.repository.memberships(user.id, active_only=True)
-        if len(memberships) != 1:
-            raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
-        organization = await self.repository.get_organization(memberships[0].organization_id)
+        available = await self.repository.effective_organization_access(user.id)
+        if not available:
+            raise DomainError("shelter_context_required", "沒有可使用的收容所權限", 409)
+        if organization_id is None and len(available) > 1:
+            return {
+                "state": "selection_required",
+                "organizations": [
+                    {
+                        "id": organization.id,
+                        "code": organization.code,
+                        "name": organization.name,
+                        "role": membership.role,
+                    }
+                    for membership, organization in available
+                ],
+            }
+        selected = next(
+            (
+                (membership, organization)
+                for membership, organization in available
+                if organization.id == organization_id
+            ),
+            available[0] if organization_id is None and len(available) == 1 else None,
+        )
+        if selected is None:
+            raise DomainError("shelter_context_denied", "無法使用指定收容所", 403)
+        membership, organization = selected
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)
+        await self.repository.set_authentication_context_scope(user.id, organization.id)
         session = SessionRecord(
             user_id=user.id,
             active_organization_id=organization.id,
@@ -228,10 +255,20 @@ class SessionService:
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
         )
         await self.repository.add(session)
+        await self.repository.revoke_active_webhook_sessions(user.id)
+        await self.repository.add(
+            WebhookSession(
+                user_id=user.id,
+                organization_id=organization.id,
+                status="active",
+                expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            )
+        )
         issued = await self._issue_session(user.id, session)
+        issued["organization_id"] = organization.id
         await self._link_role_rich_menu(
             line_user_id,
-            memberships[0].role,
+            membership.role,
             organization_selected=True,
         )
         return issued

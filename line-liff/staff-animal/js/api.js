@@ -32,7 +32,7 @@ async function handleJson(res, errorMessage) {
 //    正式流程：LIFF 取得 id_token → 後端 POST /v1/line/bind 綁定並回傳
 //    session 與角色。這裡沿用「回傳角色」的介面，工作人員角色才可用本 LIFF。
 // ------------------------------------------------------------
-export async function verifyUserRole({ profile, idToken }) {
+export async function verifyUserRole({ profile, idToken }, organizationId = null) {
   if (CONFIG.MOCK_MODE) {
     await mockDelay();
     accessToken = "local-memory-only-token";
@@ -47,14 +47,26 @@ export async function verifyUserRole({ profile, idToken }) {
   const res = await fetch(`${CONFIG.API_BASE_URL}/line/bind`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_token: idToken }),
+    body: JSON.stringify({
+      id_token: idToken,
+      ...(organizationId ? { organization_id: organizationId } : {}),
+    }),
   });
   const session = await handleJson(res, "身分驗證失敗或尚未選定收容所");
+  if (session.state === "selection_required") {
+    const organizations = session.organizations.filter((item) =>
+      ["STAFF", "SHELTER_ADMIN"].includes(item.role)
+    );
+    if (!organizations.length) throw new Error("此帳號沒有工作人員權限");
+    return { requiresOrganizationSelection: true, organizations };
+  }
   accessToken = session.access_token;
   const me = await fetch(`${CONFIG.API_BASE_URL}/auth/me`, { headers: authHeaders() });
   const identity = await handleJson(me, "無法確認工作人員權限");
-  const membership = identity.memberships.find((item) =>
-    ["STAFF", "SHELTER_ADMIN"].includes(item.role)
+  const membership = identity.memberships.find(
+    (item) =>
+      item.organization_id === session.organization_id &&
+      ["STAFF", "SHELTER_ADMIN"].includes(item.role)
   );
   if (!membership) {
     accessToken = null;
