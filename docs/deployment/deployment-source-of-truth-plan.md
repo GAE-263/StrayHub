@@ -685,6 +685,11 @@ Removed only after the gates pass:
 Phase E1 accepted the isolated host foundation, Phase E2 accepted its live least-privilege Secret
 Manager/KMS/GCS paths, and Phase E3 accepted systemd startup, recovery, reboot, and backup scheduling.
 Phase E4 kept DNS and trusted TLS on the existing old edge and accepted the live single-edge routing,
-edge-only Web/API firewall, OS Login/IAP access, and reboot persistence. Phase E5 now accepts the
-full infrastructure and authenticated synthetic volunteer flow. Phase F owns legacy cleanup and CI
-replacement; it remains not started pending the E5 final review and safe commit.
+edge-only Web/API firewall, OS Login/IAP access, and reboot persistence. Phase E5 accepts the full
+infrastructure and authenticated synthetic volunteer flow. Phase F1/F2 ownership and release gates
+and the F3 immutable release pipeline are committed. F4 has provisioned the dedicated registry and
+restricted GitHub WIF boundary. A workflow-only commit enables manual dispatch from `main` while
+pinning the artifact source to the reviewed SHA. GitHub run `33354828878` published the first exact
+digest bundle, and release `20260831T034951Z-38ab34dc6aaf` is active with matching runtime digests
+and authenticated acceptance. The historical deployment remains retained but is not a genuine
+immutable N-1. Legacy cleanup stays blocked and no legacy resource has been deleted.

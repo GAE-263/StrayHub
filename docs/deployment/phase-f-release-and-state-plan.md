@@ -222,3 +222,40 @@ procedure, N/N-1 retention, receipts, rollback refusal, and roll-forward rules a
 
 F4 may provision the dedicated registry/WIF/IAM and exercise publication only through a separately
 reviewed infrastructure task. Cloud SQL stays `UNKNOWN`; deletion safety stays `BLOCKED`.
+
+## Phase F4 secure publication checkpoint
+
+Status: **READY** — first immutable release accepted; deletion remains blocked.
+
+- F3/F4 publication-fix source `38ab34dc6aaff78e0f3a9f20dbf954a071fb355a` is pushed and verified on
+  `review/system_over_all`.
+- The dedicated `asia-east1` Docker repository `strayhub`, separate publisher/deployer service
+  accounts, and repository/branch/environment-restricted GitHub WIF pool/provider exist.
+- Artifact IAM is resource-level: publisher writer and canonical VM runtime reader. The reserved
+  deployer has WIF impersonation for the `production` environment but no project/VM access role.
+- IAM Credentials and Security Token Service APIs were enabled for short-lived federation. No
+  service-account JSON key exists.
+- No Terraform root or legacy Terraform was changed; these operator-created resources require
+  future import into a separately reviewed platform owner.
+- Default-branch commit `82af90e3f45ef2841d69ddbc87f353bc0019fd2b` adds only the release
+  workflow to `main`. It requires and verifies the exact F3 source SHA before build or publication.
+- The WIF provider now trusts the `main` workflow ref while retaining repository and
+  `release-publication`/`production` environment restrictions.
+- Workflow run `33354828878` passed verification, OIDC/WIF, exact-SHA publication, bundle validation,
+  and artifact upload. No local publication fallback was used.
+- Release `20260831T034951Z-38ab34dc6aaf` is active on GCE. Manifest and running digests match:
+  API `sha256:febfd99365a536c4063b0b6d1351cd3ea984118fb1f067899c1e1223170dad83`,
+  Worker `sha256:9234c5d4dda3c53f59bb6af15fee957fdb6cbced490a8074318feca71872ad4f`,
+  Web `sha256:56ee756e8cab60d0afe6f87248a8273b78ecaae0221d2b117bae1bd83cd68203`.
+- Production preflight, migration head `0037_animal_external_sources`, systemd/public health, and
+  authenticated tenant/volunteer/RLS acceptance passed.
+- The historical `e702d7d-e3` release directory remains retained but is not a genuine immutable
+  N-1. Live rollback remains deferred. No legacy deletion was performed.
+
+The prior run proved OIDC and three image pushes but failed before bundle completion when the auth
+action's temporary `gha-creds-*.json` made the checkout appear dirty. The new trusted source ignores
+only that pattern and does not weaken the clean-tree validator. The failed run is non-canonical.
+
+F4 is complete for the first immutable release. F5 may review ownership and release gates, but
+deletion safety remains **BLOCKED** until a genuine compatible N/N-1 pair and all independent legacy
+absence/ownership gates exist.

@@ -173,3 +173,42 @@ manufacture a previous release or weaken the compatibility gate for acceptance.
   authentication cookies, database URLs, and credentials must never be logged or archived.
 - Cloud SQL remains `UNKNOWN`. Cloud Run/SQL/IAM/WIF/registry deletion, shared-resource imports,
   DNS/TLS changes, and all legacy cleanup remain prohibited.
+
+## Phase F4 first immutable release
+
+F3/F4 publication-fix checkpoint `38ab34dc6aaff78e0f3a9f20dbf954a071fb355a` is pushed on
+`review/system_over_all` and is the only approved F4 source revision. The dedicated Docker
+repository is `asia-east1-docker.pkg.dev/canvas-primacy-502703-k1/strayhub`. Its writer is
+`strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com`; the canonical VM
+runtime identity has repository-level reader only.
+
+GitHub federation uses pool `github-strayhub` and provider `github`. The provider accepts only
+`GAE-263/StrayHub`, `refs/heads/main`, and the `release-publication` or
+`production` environment. Environment-specific principal sets separately impersonate the artifact
+publisher and the reserved `strayhub-gce-deployer` identity. Neither identity has a user-managed
+service-account key. The deployer currently has no project or VM role; first deployment remains an
+operator action through the accepted OS Login/IAP boundary.
+
+Default-branch workflow commit `82af90e3f45ef2841d69ddbc87f353bc0019fd2b` adds only
+`.github/workflows/gce-release.yml` to `main`. The workflow requires the full trusted source input,
+checks out `38ab34dc6aaff78e0f3a9f20dbf954a071fb355a`, verifies `HEAD`, and uses that revision for all
+three images and the manifest. The WIF provider trusts the default-branch workflow ref
+`refs/heads/main`; repository and environment restrictions remain unchanged.
+
+The first publication attempt authenticated through WIF and pushed all three images but failed
+before bundle completion because `google-github-actions/auth` created `gha-creds-*.json` in the
+checkout. The trusted source now ignores only that documented temporary credential pattern; the
+clean-tree release gate remains unchanged. Images from the failed run are non-canonical and must not
+be used by a release.
+
+Workflow run `33354828878` rebuilt the fixed source, exchanged GitHub OIDC through WIF, impersonated
+the dedicated publisher, pushed API/Worker/Web, validated the release bundle, and uploaded artifact
+`strayhub-gce-release-38ab34dc6aaff78e0f3a9f20dbf954a071fb355a`. The artifact ZIP digest is
+`sha256:eb4347e308f6f52033f8374386453cc70b81526ba8a7d32833e3ef4ecb582c55`.
+
+Release `20260831T034951Z-38ab34dc6aaf` was deployed through the canonical IAP/operator script after
+an isolated production preflight. The current pointer, receipt, and running API/Worker/Web image
+references all match the manifest exactly. Authenticated synthetic acceptance passed login,
+tenant/RLS isolation, volunteer authorization, QR-first reporting, care-report creation, and the
+cross-shelter denial. The historical `e702d7d-e3` directory is retained but is not represented as a
+genuine immutable N-1, so live rollback remains deferred.
