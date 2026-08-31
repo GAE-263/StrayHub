@@ -401,6 +401,20 @@ def validate_rollback(current_manifest: Path, target_release: str, receipt_path:
         raise ReleaseError(f"rollback refused: schema compatibility is {compatibility}")
 
 
+def validate_rollforward(current_manifest: Path, target_manifest: Path, receipt_path: Path) -> None:
+    current = load_manifest(current_manifest)
+    target = load_manifest(target_manifest)
+    receipt = load_receipt(receipt_path)
+    if receipt["release_id"] != current["release_id"]:
+        raise ReleaseError("current receipt and manifest disagree")
+    if receipt["previous_release_id"] != target["release_id"]:
+        raise ReleaseError("roll-forward target is not the recorded previous release")
+    if target["created_at"] <= current["created_at"]:
+        raise ReleaseError("roll-forward target is not newer than current release")
+    if target["migration_revision"] != current["migration_revision"]:
+        raise ReleaseError("roll-forward requires the same migration revision")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -466,6 +480,11 @@ def build_parser() -> argparse.ArgumentParser:
     rollback.add_argument("--current-manifest", type=Path, required=True)
     rollback.add_argument("--target-release", required=True)
     rollback.add_argument("--receipt", type=Path, required=True)
+
+    rollforward = subparsers.add_parser("validate-rollforward")
+    rollforward.add_argument("--current-manifest", type=Path, required=True)
+    rollforward.add_argument("--target-manifest", type=Path, required=True)
+    rollforward.add_argument("--receipt", type=Path, required=True)
     return parser
 
 
@@ -498,6 +517,10 @@ def main() -> int:
         elif args.command == "validate-rollback":
             validate_rollback(args.current_manifest, args.target_release, args.receipt)
             print(f"rollback compatibility valid: {args.target_release}")
+        elif args.command == "validate-rollforward":
+            validate_rollforward(args.current_manifest, args.target_manifest, args.receipt)
+            target = load_manifest(args.target_manifest)
+            print(f"roll-forward compatibility valid: {target['release_id']}")
         else:  # pragma: no cover
             raise ReleaseError("unsupported command")
     except (OSError, ReleaseError, tarfile.TarError) as exc:

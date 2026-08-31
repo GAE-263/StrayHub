@@ -702,11 +702,18 @@ Manager/KMS/GCS paths, and Phase E3 accepted systemd startup, recovery, reboot, 
 Phase E4 kept DNS and trusted TLS on the existing old edge and accepted the live single-edge routing,
 edge-only Web/API firewall, OS Login/IAP access, and reboot persistence. Phase E5 accepts the full
 infrastructure and authenticated synthetic volunteer flow. Phase F1/F2 ownership and release gates
-and the F3 immutable release pipeline are committed. F4 has provisioned the dedicated registry and
-restricted GitHub WIF boundary. A workflow-only commit enables manual dispatch from `main` while
-pinning the artifact source to the reviewed SHA. GitHub run `33354828878` published the first exact
-digest bundle, and release `20260831T034951Z-38ab34dc6aaf` is active with matching runtime digests
-and authenticated acceptance. The historical deployment remains retained but is not a genuine
-immutable N-1. F5's read-only inventory and proposed removal sequence are documented, but Cloud SQL,
-legacy state/bucket ownership, platform imports, legacy operator-path retirement, and genuine N-1
-remain hard blockers. Legacy cleanup stays blocked and no legacy resource has been deleted.
+and the F3 immutable release pipeline are committed. F4 provisioned the dedicated registry and
+restricted GitHub WIF boundary, then deployed the first immutable release.
+
+F5b has now adopted the retained Secret Manager/KMS/GCS/IAM resources into the isolated
+`PLATFORM_TERRAFORM` root with 29 addresses and a final no-change plan. Default-branch workflow
+commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` fail-closes the four legacy mutation helpers and
+pins publication to reviewed source `5f0664f0a63994c7be113473e9e31906242b6b77`. GitHub run
+`33362441959` published release `20260831T060436Z-5f0664f0a639`; exact-digest deployment,
+authenticated acceptance, fresh backup `20260831T062155Z-e3daily2165`, N -> N-1 rollback and
+N-1 -> N roll-forward all passed without a database migration or downgrade. Production is back on
+N with matching receipt and digests, while `20260831T034951Z-38ab34dc6aaf` remains the genuine N-1.
+
+Legacy cleanup still stays blocked: Cloud SQL, the legacy Terraform backend/state bucket, and the
+legacy runtime GCS bucket remain `UNKNOWN`. No legacy resource has been deleted and Phase F6 has not
+started.

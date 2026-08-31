@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -175,12 +176,75 @@ def test_rollback_accepts_only_recorded_previous_release_when_explicitly_safe(
         )
 
 
+def test_rollforward_accepts_only_recorded_newer_release_at_same_migration(
+    tmp_path: Path,
+) -> None:
+    current_artifact = build_artifact(tmp_path / "current")
+    target_artifact = build_artifact(tmp_path / "target")
+    current_manifest = current_artifact / "release-manifest.json"
+    target_manifest = target_artifact / "release-manifest.json"
+    current = json.loads(current_manifest.read_text(encoding="utf-8"))
+    current["release_id"] = PREVIOUS_RELEASE
+    current["git_sha"] = "b" * 40
+    current["created_at"] = "2026-08-30T12:00:00Z"
+    current_manifest.write_text(json.dumps(current), encoding="utf-8")
+    receipt = tmp_path / "current.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "release_id": PREVIOUS_RELEASE,
+                "previous_release_id": RELEASE_ID,
+                "verification": "passed",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    release_manifest.validate_rollforward(current_manifest, target_manifest, receipt)
+
+    original_argv = sys.argv
+    sys.argv = [
+        str(TOOL_PATH),
+        "validate-rollforward",
+        "--current-manifest",
+        str(current_manifest),
+        "--target-manifest",
+        str(target_manifest),
+        "--receipt",
+        str(receipt),
+    ]
+    try:
+        assert release_manifest.main() == 0
+    finally:
+        sys.argv = original_argv
+
+    wrong_receipt = json.loads(receipt.read_text(encoding="utf-8"))
+    wrong_receipt["previous_release_id"] = f"20260829T120000Z-{'c' * 12}"
+    receipt.write_text(json.dumps(wrong_receipt), encoding="utf-8")
+    with pytest.raises(release_manifest.ReleaseError, match="not the recorded previous release"):
+        release_manifest.validate_rollforward(current_manifest, target_manifest, receipt)
+    wrong_receipt["previous_release_id"] = RELEASE_ID
+    receipt.write_text(json.dumps(wrong_receipt), encoding="utf-8")
+
+    target = json.loads(target_manifest.read_text(encoding="utf-8"))
+    target["created_at"] = current["created_at"]
+    target_manifest.write_text(json.dumps(target), encoding="utf-8")
+    with pytest.raises(release_manifest.ReleaseError, match="not newer"):
+        release_manifest.validate_rollforward(current_manifest, target_manifest, receipt)
+    target["created_at"] = "2026-08-31T12:00:00Z"
+    target["migration_revision"] = "0038_incompatible"
+    target_manifest.write_text(json.dumps(target), encoding="utf-8")
+    with pytest.raises(release_manifest.ReleaseError, match="same migration revision"):
+        release_manifest.validate_rollforward(current_manifest, target_manifest, receipt)
+
+
 def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> None:
     compose = (ROOT / "infra/gce/docker-compose.production.yml").read_text(encoding="utf-8")
     service = (ROOT / "infra/gce/systemd/strayhub.service").read_text(encoding="utf-8")
     migration = (ROOT / "infra/gce/systemd/strayhub-migrate.service").read_text(encoding="utf-8")
     deploy = (ROOT / "infra/gce/scripts/deploy-release.sh").read_text(encoding="utf-8")
     rollback = (ROOT / "infra/gce/scripts/rollback-release.sh").read_text(encoding="utf-8")
+    rollforward = (ROOT / "infra/gce/scripts/rollforward-release.sh").read_text(encoding="utf-8")
 
     for variable in ("STRAYHUB_API_IMAGE", "STRAYHUB_WORKER_IMAGE", "STRAYHUB_WEB_IMAGE"):
         assert variable in compose
@@ -192,15 +256,23 @@ def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> No
     assert "verify-systemd-runtime.sh" in deploy
     assert "alembic downgrade" not in deploy.lower()
     assert "validate-rollback" in rollback
+    assert "validate-rollforward" in rollforward
     assert "alembic downgrade" not in rollback.lower()
     assert "down -v" not in deploy
     assert "down -v" not in rollback
+    assert "down -v" not in rollforward
     assert deploy.index("validate-artifact") < deploy.index("systemctl stop strayhub.service")
     assert deploy.index("production-preflight.sh") < deploy.index("systemctl stop strayhub.service")
     assert deploy.index("--profile tools run --rm migration") < deploy.index(
         'mv -Tf "$temporary_link"'
     )
     assert rollback.index("validate-rollback") < rollback.index("systemctl stop strayhub.service")
+    assert rollforward.index("validate-rollforward") < rollforward.index(
+        "systemctl stop strayhub.service"
+    )
+    assert rollforward.index("temporary roll-forward pointer exists") < rollforward.index(
+        "systemctl stop strayhub.service"
+    )
 
 
 def test_gce_release_workflow_has_no_automatic_production_deploy() -> None:

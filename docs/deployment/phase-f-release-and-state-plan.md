@@ -315,6 +315,36 @@ now preserves them without an adoption write. The final plan is `No changes` wit
 See [`platform-terraform.md`](platform-terraform.md) for the complete import ledger and operating
 rules.
 
-This resolves the shared-resource ownership blocker. Cloud SQL, the externally supplied legacy
-backend/runtime bucket identities, default-branch legacy mutation retirement, and a genuine N/N-1
-pair remain independent blockers. No legacy infrastructure was deleted.
+This resolves the shared-resource ownership blocker. The outcome below also resolves default-branch
+legacy mutation retirement and the genuine N/N-1 drill; Cloud SQL and the externally supplied
+legacy backend/runtime bucket identities remain independent blockers. No legacy infrastructure was
+deleted.
+
+## Phase F5b immutable release and rollback outcome
+
+Reviewed source `5f0664f0a63994c7be113473e9e31906242b6b77` contains no application,
+Compose-runtime, authentication, tenant/RLS, LINE/LIFF, model, or Alembic change. Default-branch
+commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` pins that exact source and fail-closes the legacy
+operator entrypoints. GitHub Actions run `33362441959` passed verification, OIDC/WIF, registry
+authentication, all three exact-SHA image publications, release-bundle validation and artifact
+upload. The artifact ZIP checksum is
+`sha256:a5e5d511f99ee3925934961509017bc5388d2cc107d77ca6e273b699f6ed300e`.
+
+Release N is `20260831T060436Z-5f0664f0a639`, with API
+`sha256:3236bc21319cdd8ae284588a9535fe23a73817dc818ccb72d439794ffdee2008`, Worker
+`sha256:77e6075ae1856df0ff46772d3a7418ba634d2c18d636b608f618e243f7dd776b`, and Web
+`sha256:9642600c8280028ea18ff6f40977d925382e4e6ebcff1623ebe242ef09b1624f`. N-1 remains
+`20260831T034951Z-38ab34dc6aaf`. Both declare `0037_animal_external_sources`, so the reviewed
+compatibility is `backward-compatible-with-previous`.
+
+After N deployment and authenticated acceptance, backup `20260831T062155Z-e3daily2165` passed
+PostgreSQL/MinIO capture, manifest/checksum checks, GCS upload and `_COMPLETE`. The canonical
+rollback tool then switched N -> N-1 with no database downgrade. Exact N-1 digests and full
+authenticated tenant/RLS/volunteer acceptance passed. A same-migration, receipt-bound roll-forward
+tool switched N-1 -> N after exact pulls and isolated production preflight; final N digests,
+systemd/runtime health and authenticated acceptance passed. Production is on N and the receipt again
+records N-1.
+
+The immutable release/rollback blocker is resolved. F6 remains blocked independently because Cloud
+SQL, the legacy Terraform backend/state bucket and legacy runtime GCS bucket are still `UNKNOWN`.
+No legacy infrastructure was deleted.

@@ -259,18 +259,30 @@ Admin/Cloud Asset/service-networking APIs remain disabled, repository history ne
 backend or runtime bucket name, and the active project contains only the canonical backup and new
 platform-state buckets. Cloud SQL, legacy backend and legacy runtime GCS therefore remain `UNKNOWN`.
 
+Default-branch commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` now contains that exact
+retirement, so repository automation can no longer redeploy the legacy stack and the final legacy
+redeploy risk is `NO`. The current release/publication workflow remains enabled and exact-SHA
+pinned.
+
+F5b also established a genuine immutable pair. N is
+`20260831T060436Z-5f0664f0a639`; N-1 is `20260831T034951Z-38ab34dc6aaf`. Both use migration head
+`0037_animal_external_sources`. Exact-digest N deployment, fresh backup
+`20260831T062155Z-e3daily2165`, N -> N-1 rollback, N-1 authenticated tenant/RLS/volunteer
+acceptance, roll-forward to N, and final N acceptance all passed. No database downgrade, volume
+removal, DNS/TLS change, legacy mutation, or legacy deletion occurred.
+
 ## Phase F deletion hard gates
 
 - [x] replacement GCE CI release/publication gate exists
 - [x] production GCE deployment can be reproduced
-- [ ] Terraform state ownership reviewed
-- [ ] shared resources identified and protected
+- [x] Terraform state ownership reviewed
+- [x] shared resources identified and protected
 - [x] rollback owner recorded
 - [x] rollback artifact/release strategy exists
 - [x] legacy deployment no longer receives production traffic
-- [ ] legacy CI cannot redeploy unexpectedly
-- [ ] candidate deletion plan reviewed
-- [ ] terraform plan shows no unintended retained-resource changes
+- [x] legacy CI cannot redeploy unexpectedly
+- [x] candidate deletion plan reviewed
+- [x] terraform plan shows no unintended retained-resource changes
 - [x] backup/restore evidence remains valid
 
 The traffic gate is supported by DNS resolving to the accepted edge, its upstream configuration

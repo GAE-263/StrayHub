@@ -159,8 +159,21 @@ database, atomically switches only application artifacts, and repeats local/publ
 If `N-1` activation fails, the script attempts roll-forward to preserved `N`. A new immutable fixed
 release is the preferred recovery whenever schema compatibility is unsafe or unknown.
 
-Live rollback remains **DEFERRED** until two genuine immutable, compatible releases exist. Do not
-manufacture a previous release or weaken the compatibility gate for acceptance.
+After a successful rollback, reactivate only the receipt's recorded newer release with:
+
+```bash
+sudo /PATH/TO/rollforward-release.sh \
+  --target-release "$RECORDED_NEWER_RELEASE_ID" \
+  --deployment-role "StrayHub production deployment operator" \
+  --confirm-rollforward ROLLFORWARD_STRAYHUB_APPLICATION
+```
+
+The roll-forward command requires validated immutable directories, the receipt's exact target, a
+strictly newer manifest and the same migration revision. It pulls exact digests and passes isolated
+production preflight before stopping the application, performs no migration, switches the pointer
+atomically, verifies local/public health, and writes a new receipt. A failed activation restores the
+preserved rollback release. Never use it to skip a forward migration or to select an arbitrary
+release.
 
 ## Failure and security rules
 
@@ -230,3 +243,27 @@ and refuse any digest, checksum, compatibility, or backup-preflight failure.
 After the second release is deployed and accepted, define N as its exact release ID and retain
 `20260831T034951Z-38ab34dc6aaf` as N-1. A live N -> N-1 -> N drill remains separately gated on a
 fresh completed backup and must never run before the second release is healthy.
+
+## Phase F5b second immutable release and live drill
+
+Source `5f0664f0a63994c7be113473e9e31906242b6b77` was published by GitHub Actions run
+`33362441959` after OIDC/WIF, registry authentication, release verification and artifact upload all
+passed. Artifact checksum:
+`sha256:a5e5d511f99ee3925934961509017bc5388d2cc107d77ca6e273b699f6ed300e`.
+
+Release N `20260831T060436Z-5f0664f0a639` uses exact API
+`sha256:3236bc21319cdd8ae284588a9535fe23a73817dc818ccb72d439794ffdee2008`, Worker
+`sha256:77e6075ae1856df0ff46772d3a7418ba634d2c18d636b608f618e243f7dd776b`, and Web
+`sha256:9642600c8280028ea18ff6f40977d925382e4e6ebcff1623ebe242ef09b1624f`. Deployment preflight,
+migration-head verification, runtime health and authenticated acceptance passed.
+
+Fresh backup `20260831T062155Z-e3daily2165` passed through GCS `_COMPLETE`. The live drill then
+passed N -> N-1, exact N-1 digest/runtime/authenticated acceptance, N-1 -> N roll-forward, and final
+exact N digest/runtime/authenticated acceptance. Database migration and downgrade were both NONE;
+named volumes, DNS/TLS and legacy infrastructure were unchanged. Production is back on N and both
+immutable releases remain retained.
+
+The reusable E5 verifier's original fixed idempotency key collided with its historical report. The
+F5b drill used release-specific synthetic idempotency keys and the committed LINE draft-cancel API;
+no DB row was manually deleted and no credential/token was logged. Future acceptance invocations
+must continue using a unique reviewed synthetic run key.

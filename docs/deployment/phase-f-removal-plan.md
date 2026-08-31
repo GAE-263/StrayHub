@@ -37,16 +37,16 @@ and the bounded runtime verifier passed API, Web, Worker, PostgreSQL, and MinIO.
 | --- | --- | --- |
 | Cloud SQL | `CLOUD_SQL_UNKNOWN` | Cloud SQL Admin and Cloud Asset APIs are not enabled; F5 did not enable them. No state, private-service peering, reserved global address, or runtime reference was found, but that is not an API-level absence proof. |
 | Legacy production traffic | `NONE` | DNS resolves to the retained nginx edge; live nginx sends Web/API traffic only to `34.81.77.204:3000/8080`; public Web, health, volunteer route and LINE webhook structural checks reached that path. |
-| Legacy CI/operator redeploy risk | `YES` | The demo workflow does not deploy, but `infra/gcp-demo/apply.sh` can apply the obsolete root when `GCP_DEMO_APPLY=1`; `migrate.sh`, `seed-demo.sh`, and `sync-line.sh` can execute legacy Cloud Run jobs. |
-| Shared-resource ownership | `PARTIAL` | Current consumers and future owners are known, but the platform Terraform root/backend and imports do not yet exist. |
+| Legacy CI/operator redeploy risk | `NO` | Default-branch commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` removes OIDC from the legacy validation workflow and makes all four legacy mutation helpers unconditional fail-closed stubs. |
+| Shared-resource ownership | `PASS` | `PLATFORM_TERRAFORM` owns 29 retained Secret Manager/KMS/GCS/IAM addresses with a final no-change plan and no secret values or versions in state. |
 | Terraform state ownership | `PARTIAL` | Current GCE local state is known and no-change; the legacy backend bucket/state remains unavailable and externally unknown. |
-| State migration | `STATE_MIGRATION_FIRST` | Retained Secret Manager/KMS/GCS/IAM must be adopted by an isolated platform owner before legacy source can be retired safely. |
+| State migration | `PARTIAL` | Retained shared ownership is adopted safely; the unknown legacy backend/state identity still prevents a trustworthy legacy disposition. |
 | Destroy-plan review | `NOT_AVAILABLE` | There is no usable legacy state. Initializing or planning the legacy root with guessed backend/inputs could create a false or dangerous plan. |
-| N/N-1 | `SECOND_IMMUTABLE_RELEASE_REQUIRED` | Only immutable N exists. The older directory lacks accepted immutable provenance and schema compatibility, so it is not rollback evidence. |
-| Backup/restore | `PASS` | PostgreSQL/MinIO live restore evidence exists; the timer is enabled/active, the latest local manifest validates, and its GCS prefix has `_COMPLETE`. A new backup is still mandatory immediately before F6. |
+| N/N-1 | `PASS` | N `20260831T060436Z-5f0664f0a639` and N-1 `20260831T034951Z-38ab34dc6aaf` are genuine immutable releases; rollback/roll-forward and authenticated acceptance passed. |
+| Backup/restore | `PASS` | PostgreSQL/MinIO restore evidence remains valid; fresh backup `20260831T062155Z-e3daily2165` passed manifest/checksum, GCS upload and `_COMPLETE`. |
 
-Because Cloud SQL, legacy state, platform ownership, redeploy retirement, and genuine N-1 are not
-closed, deletion safety and F6 entry are **BLOCKED**.
+Because Cloud SQL, the legacy backend/state bucket and legacy runtime GCS identity remain unknown,
+deletion safety and F6 entry are **BLOCKED**.
 
 ### F5b ownership update
 
@@ -217,14 +217,20 @@ legacy resources with shared secrets, KMS IAM and project APIs.
 - [x] current Artifact Registry/WIF/IAM explicitly protected
 - [x] shared Secret/KMS/GCS/IAM ownership adopted and zero-change
 - [x] legacy CI/operator redeploy path identified
-- [ ] legacy redeploy path retired on the default branch
+- [x] legacy redeploy path retired on the default branch
 - [ ] legacy Terraform/backend state risk fully resolved
-- [ ] genuine compatible immutable N/N-1 exists
+- [x] genuine compatible immutable N/N-1 exists
 - [x] no current/shared resource appears in the proposed deletion plan
 - [x] unrelated resources are excluded
 - [x] backup/restore readiness confirmed
-- [x] fresh pre-removal backup is required
+- [x] fresh pre-removal backup `20260831T062155Z-e3daily2165` completed
 - [x] dependency-ordered removal and stop conditions are defined
 - [x] post-removal acceptance plan is defined
 
 Only evidence-backed gates are checked. Phase F6 entry remains **BLOCKED**.
+
+F5b passed the genuine N -> N-1 -> N drill with exact running digests and authenticated
+tenant/RLS/volunteer acceptance at each switched state. The roll-forward used the recorded newer
+release only, required equal migration revision, and performed no migration or database downgrade.
+These results do not weaken the three unresolved identity gates: Cloud SQL, the legacy Terraform
+backend/state bucket, and legacy runtime GCS all remain `UNKNOWN`.
