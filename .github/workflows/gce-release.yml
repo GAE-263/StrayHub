@@ -1,0 +1,207 @@
+name: GCE Immutable Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Full reviewed Git SHA to build and publish
+        required: true
+        type: string
+      publish:
+        description: Publish immutable release images and bundle after verification
+        required: true
+        default: false
+        type: boolean
+      schema_compatibility:
+        description: Reviewed rollback compatibility for the release
+        required: true
+        default: unknown
+        type: choice
+        options:
+          - unknown
+          - forward-only
+          - backward-compatible-with-previous
+
+permissions:
+  contents: read
+
+env:
+  TRUSTED_F4_SOURCE_REVISION: 0f5994487f5fb11a1edd6dc36087902ec6b257f5
+  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github
+  GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT: strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com
+  GCP_ARTIFACT_REGISTRY: asia-east1-docker.pkg.dev/canvas-primacy-502703-k1/strayhub
+
+jobs:
+  verify-release:
+    name: Verify GCE release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_revision }}
+
+      - name: Verify exact reviewed source revision
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_REVISION" == "$TRUSTED_F4_SOURCE_REVISION" ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REVISION" ]]
+          [[ -z "$(git status --porcelain)" ]]
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - run: uv sync --dev
+
+      - name: Python quality and release contracts
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest \
+            tests/contract/test_gce_release_contract.py \
+            tests/contract/test_gce_production_compose_contract.py \
+            tests/contract/test_gce_systemd_contract.py
+
+      - name: Shell syntax and lint
+        run: |
+          bash -n scripts/build-release-bundle.sh
+          bash -n infra/gce/scripts/deploy-release.sh
+          bash -n infra/gce/scripts/rollback-release.sh
+          shellcheck \
+            scripts/build-release-bundle.sh \
+            infra/gce/scripts/deploy-release.sh \
+            infra/gce/scripts/rollback-release.sh
+
+      - name: Production Compose and preflight contract
+        run: |
+          ./infra/gce/scripts/preflight.sh
+          docker compose \
+            -f infra/gce/docker-compose.production.yml \
+            --env-file infra/gce/.env.production.example \
+            config --quiet
+
+      - name: Terraform validation without backend access
+        run: |
+          terraform fmt -check -recursive infra/gce/terraform infra/gcp-demo/terraform
+          terraform -chdir=infra/gce/terraform init -backend=false -input=false
+          terraform -chdir=infra/gce/terraform validate
+          terraform -chdir=infra/gcp-demo/terraform init -backend=false -input=false
+          terraform -chdir=infra/gcp-demo/terraform validate
+
+      - name: Repository-native secret scan
+        run: |
+          ! rg -n --hidden \
+            --glob '!.git/**' \
+            --glob '!node_modules/**' \
+            --glob '!**/.venv/**' \
+            --glob '!**/.terraform/**' \
+            --glob '!**/*.lock' \
+            '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----)' \
+            .
+
+      - name: Build clean-SHA images without publication
+        env:
+          REVISION: ${{ inputs.source_revision }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            -f infra/gcp-demo/Dockerfile.api -t "strayhub-api:$REVISION" .
+          docker build \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            -f infra/gcp-demo/Dockerfile.worker -t "strayhub-worker:$REVISION" .
+          docker build \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            -f infra/gcp-demo/Dockerfile.web -t "strayhub-web:$REVISION" .
+
+  publish-release:
+    name: Publish immutable release candidate
+    needs: verify-release
+    if: >-
+      ${{ inputs.publish &&
+          inputs.source_revision == '0f5994487f5fb11a1edd6dc36087902ec6b257f5' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_revision }}
+
+      - name: Verify exact reviewed source revision
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          [[ "$SOURCE_REVISION" == "$TRUSTED_F4_SOURCE_REVISION" ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REVISION" ]]
+          [[ -z "$(git status --porcelain)" ]]
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authenticate Docker to the dedicated registry
+        env:
+          REGISTRY: ${{ env.GCP_ARTIFACT_REGISTRY }}
+        run: |
+          registry_host="${REGISTRY%%/*}"
+          gcloud auth configure-docker "$registry_host" --quiet
+
+      - name: Build and push exact Git SHA images
+        id: images
+        env:
+          REGISTRY: ${{ env.GCP_ARTIFACT_REGISTRY }}
+          REVISION: ${{ inputs.source_revision }}
+        run: |
+          for service in api worker web; do
+            image="$REGISTRY/strayhub-$service:$REVISION"
+            docker build \
+              --label "org.opencontainers.image.revision=$REVISION" \
+              --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+              -f "infra/gcp-demo/Dockerfile.$service" -t "$image" .
+            docker push "$image"
+            reference="$(docker inspect --format='{{index .RepoDigests 0}}' "$image")"
+            [[ "$reference" == *@sha256:* ]]
+            printf '%s_image=%s\n' "$service" "$reference" >>"$GITHUB_OUTPUT"
+          done
+
+      - name: Build and validate immutable release bundle
+        env:
+          API_IMAGE: ${{ steps.images.outputs.api_image }}
+          WORKER_IMAGE: ${{ steps.images.outputs.worker_image }}
+          WEB_IMAGE: ${{ steps.images.outputs.web_image }}
+          REVISION: ${{ inputs.source_revision }}
+          SCHEMA_COMPATIBILITY: ${{ inputs.schema_compatibility }}
+        run: |
+          chmod +x scripts/build-release-bundle.sh infra/gce/scripts/release-manifest.py
+          ./scripts/build-release-bundle.sh \
+            --git-sha "$REVISION" \
+            --api-image "$API_IMAGE" \
+            --worker-image "$WORKER_IMAGE" \
+            --web-image "$WEB_IMAGE" \
+            --schema-compatibility "$SCHEMA_COMPATIBILITY" \
+            --ci-run-id "${{ github.run_id }}" \
+            --ci-workflow "${{ github.workflow }}" \
+            --output-dir release-bundle
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strayhub-gce-release-${{ inputs.source_revision }}
+          path: release-bundle/
+          if-no-files-found: error
+          retention-days: 30
