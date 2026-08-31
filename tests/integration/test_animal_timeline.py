@@ -84,3 +84,47 @@ async def test_timeline_date_range_returns_requested_days_and_no_report_state() 
     assert [day.state for day in days] == ["no_report", "has_report", "no_report"]
     assert days[1].report_count == 1
     assert repository.calls == [(date(2026, 8, 1), date(2026, 8, 3))]
+
+
+@pytest.mark.asyncio
+async def test_timeline_report_carries_its_stool_analysis_for_staff() -> None:
+    """歷程卡片要能直接顯示便便判讀（含未覆核的），不用繞去覆核佇列。"""
+    from services.api.app.api.animal_timeline import _serialize_day
+
+    animal_id = uuid4()
+    submitted = datetime(2026, 8, 30, 9, 18, tzinfo=timezone.utc)
+    report = SimpleNamespace(
+        id=uuid4(),
+        animal_id=animal_id,
+        submitted_at=submitted,
+        volunteer_user_id=uuid4(),
+        animal_name_snapshot="獒瓦蛤",
+        shelter_number_snapshot="MTF-1",
+        note=None,
+        answers={"defecation": "defecation.abnormal"},
+        answer_snapshots=None,
+        status="saved",
+        ai_job_status="succeeded",
+    )
+    repository = _TimelineRepository([report])
+    days = await TimelineService(repository).date_range(
+        animal_id=animal_id, start_date=date(2026, 8, 30), end_date=date(2026, 8, 30)
+    )
+    analysis = {
+        "recognized": True,
+        "score": 2,
+        "score_label": "偏硬",
+        "has_abnormalities": False,
+        "abnormality_details": "未見明顯異常",
+        "assessment": "偏乾狀態",
+        "recommendation": "增加飲水量",
+        "review_status": "succeeded",
+        "human_reviewed": False,
+    }
+
+    serialized = _serialize_day(days[0], stool_by_report={report.id: analysis})
+
+    assert serialized["reports"][0]["stool_analysis"] == analysis
+    # 沒有判讀的回報要維持 None，前端才不會渲染空區塊。
+    without = _serialize_day(days[0], stool_by_report={})
+    assert without["reports"][0]["stool_analysis"] is None

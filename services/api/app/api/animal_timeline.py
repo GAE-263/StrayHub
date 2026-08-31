@@ -59,7 +59,9 @@ class TimelineResponse(BaseModel):
     open_reminders: list[TimelineEventResponse]
 
 
-def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
+def _serialize_day(
+    day, *, media_by_report: dict | None = None, stool_by_report: dict | None = None
+) -> dict:
     return {
         "date": day.date.isoformat(),
         "has_report": day.has_report,
@@ -77,6 +79,7 @@ def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
                 "observation_snapshots": report.answer_snapshots,
                 "status": report.status,
                 "ai_job_status": report.ai_job_status,
+                "stool_analysis": (stool_by_report or {}).get(report.id),
                 "media_ids": [
                     str(media.id) for media in (media_by_report or {}).get(report.id, [])
                 ],
@@ -240,11 +243,14 @@ async def animal_timeline(
                     "summary": action.reason or action.result_note or "",
                 }
             )
-    media_by_report = await TimelineRepository(session, context.organization_id).media_for_reports(
-        [report.id for day in days for report in day.reports]
-    )
+    report_ids = [report.id for day in days for report in day.reports]
+    media_by_report = await repository.media_for_reports(report_ids)
+    stool_by_report = await repository.stool_analyses_for_reports(report_ids)
     return {
-        "days": [_serialize_day(day, media_by_report=media_by_report) for day in days],
+        "days": [
+            _serialize_day(day, media_by_report=media_by_report, stool_by_report=stool_by_report)
+            for day in days
+        ],
         "animal_id": str(animalId),
         "organization_timezone": organization.timezone,
         "open_reminders": [item for day in days for item in day.scheduled],

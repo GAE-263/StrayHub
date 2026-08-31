@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.persistence.models.ai_job import AIProcessingJob
+from services.api.app.persistence.models.ai_observation import AIObservation
 from services.api.app.persistence.models.care_report import CareReport, CareReportMedia, MediaAsset
 from services.api.app.persistence.models.medical_care import (
     CareReminderAction,
@@ -59,6 +61,46 @@ class TimelineRepository:
         for report_id, media in result.all():
             media_by_report.setdefault(report_id, []).append(media)
         return media_by_report
+
+    async def stool_analyses_for_reports(self, report_ids: list[UUID]) -> dict[UUID, dict]:
+        """Latest stool-analysis observation per report, review state included.
+
+        便便判讀存在 AIObservation.raw_ai_output（帶 "recognized" 鍵的完整
+        供應商回應）；mock 或其他供應商的輸出沒有這個鍵，直接略過。歷程是
+        staff/admin 專用畫面，跟 AI 覆核佇列同一群觀眾，未覆核的判讀也一併
+        給出，由前端標示覆核狀態。
+        """
+        if not report_ids:
+            return {}
+        result = await self.session.execute(
+            select(AIProcessingJob.target_id, AIObservation)
+            .join(AIProcessingJob, AIProcessingJob.id == AIObservation.job_id)
+            .where(
+                AIObservation.organization_id == self.organization_id,
+                AIProcessingJob.target_type == "care_report",
+                AIProcessingJob.target_id.in_(report_ids),
+            )
+            .order_by(AIObservation.created_at)
+        )
+        analyses: dict[UUID, dict] = {}
+        for report_id, observation in result.all():
+            payload = observation.raw_ai_output
+            if not isinstance(payload, dict) or "recognized" not in payload:
+                continue
+            # Later rows overwrite earlier ones: a retried job's fresh
+            # observation supersedes the stale attempt.
+            analyses[report_id] = {
+                "recognized": bool(payload.get("recognized")),
+                "score": payload.get("score"),
+                "score_label": payload.get("score_label"),
+                "has_abnormalities": bool(payload.get("has_abnormalities")),
+                "abnormality_details": payload.get("abnormality_details"),
+                "assessment": payload.get("assessment"),
+                "recommendation": payload.get("recommendation"),
+                "review_status": observation.status,
+                "human_reviewed": observation.human_review_result is not None,
+            }
+        return analyses
 
     async def medical_records(
         self, *, animal_id: UUID, start_date: date, end_date: date, timezone_name: str
