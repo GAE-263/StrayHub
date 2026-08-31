@@ -268,26 +268,12 @@ MinIO／GCS Adapter Contract、Frontend Test／Typecheck／Build、OpenAPI Gener
 工作台 Gate：角色導航、Context 顯示與 API 授權一致；工作人員可在三次主要操作內進入指定
 Timeline；A／B 租戶資料不混用；所有正式資料仍由 CRM 讀取；未完成時不得宣稱管理入口完成。
 
-## 15. GCP Demo 部署後驗證
+## 15. 現行部署驗證
 
-部署前先驗證唯一 Terraform 來源：
-
-```bash
-terraform fmt -check -recursive infra/gcp-demo/terraform
-terraform -chdir=infra/gcp-demo/terraform validate
-```
-
-Cloud Run、Cloud SQL、Cloud Storage、IAM、Service Account、Artifact Registry 與 Cloud Logging 均必須由 `infra/gcp-demo/terraform/` 建立；不得直接套用 `cloud-run-*.yaml`。接著重新執行空 Cloud SQL 的 migration 驗證；部署後重新執行：
-
-1. Database Migration 驗證。
-2. Cloud Storage 權限與 Signed URL 驗證。
-3. LINE Webhook HTTPS、Signature、Event Idempotency 與 Rich Menu 驗證。
-4. LIFF HTTPS 與真正 LINE 身分受控驗證。
-5. QR Code 流程驗證。
-6. Shelter A／B 資料隔離驗證。
-7. AI 失敗降級驗證。
-8. Cloud SQL 連線、IAM、Service Account 與 Cloud Logging 可追溯性驗證。
-9. 正式 `LineMessagingApiAdapter` 的 Reply Message、Image Content 與 Rich Menu 發布／綁定驗證。
+舊 GCP Demo／Cloud Run 部署設計從未建立，已在 Phase F6 移除，不得執行其歷史 Terraform
+或 helper 指令。現行 GCE + Compose、共享平台 Terraform 與 immutable release 驗證請依
+[`docs/deployment/deployment-source-of-truth-plan.md`](../../docs/deployment/deployment-source-of-truth-plan.md)
+與 [`docs/deployment/gce-release-process.md`](../../docs/deployment/gce-release-process.md) 執行。
 
 本機通過只代表本機流程可用，不代表 GCP 專屬整合完成。任何 Demo 失敗都必須保留失敗證據與環境資訊，不能以本機結果代替。
 

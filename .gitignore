@@ -3,6 +3,10 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+!infra/gce/.env.production.example
+!infra/gce/.env.production.template
+infra/gce/verification/generated/
+infra/gce/backup/generated/
 .venv/
 venv/
 __pycache__/
@@ -20,6 +24,7 @@ apps/web/out/
 .terraform/
 *.tfstate*
 *.tfvars
+*.tfplan
 .idea/
 .vscode/
 *.log
@@ -30,4 +35,9 @@ test-results/
 apps/web/test-results/
 playwright-report/
 screenshots/
+/release-bundle/
+
+# google-github-actions/auth temporary credentials
+gha-creds-*.json
 AGENTS.md
+/rose

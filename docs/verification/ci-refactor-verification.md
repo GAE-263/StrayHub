@@ -1,5 +1,10 @@
 # CI Refactor Verification Record
 
+> Historical evidence only. This record describes the retired, never-instantiated GCP Demo build
+> gate at the time it was verified. Phase F6 removed that source and workflow. The commands and
+> paths below must not be rerun; current release validation is owned by
+> `.github/workflows/gce-release.yml` and the GCE deployment contract tests.
+
 ## Verification Identity
 
 - Date: 2026-08-28 20:45:09–20:53:08 CST (Asia/Taipei)

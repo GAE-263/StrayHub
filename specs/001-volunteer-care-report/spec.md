@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-05
 
-**Status**: In Progress — 297/308 項任務已完成，尚有 11 項未完成；最新 Analyze 結果為 CRITICAL = 0、HIGH = 0。Feature 尚未達到 Feature Completion；GCP Demo Deployment 另有 T243～T244 部署驗證尚未完成，不能視為可部署產品。
+**Status**: In Progress — 299/308 項任務已完成，尚有 9 項未完成；最新 Analyze 結果為 CRITICAL = 0、HIGH = 0。Feature 尚未達到 Feature Completion。從未建立的歷史 GCP Demo Deployment 已在 Phase F6 退役，T243～T244 取消且不列入剩餘工作。
 
 **Input**: User description: 建立「浪浪森友會」第一個功能規格：志工日常照護回報與動物近期歷程。
 
@@ -642,9 +642,10 @@ Number 的 Animal 仍可透過 CRM 正式識別建立候選查詢。QR Code 掃�
 
 Feature Completion 不以 GCP 資源是否建立為必要條件；但未通過上述任一 Gate，不得宣稱 Feature 完成。
 
-### GCP Demo Deployment
+### GCP Demo Deployment（歷史、已取消）
 
-GCP Demo 是獨立的部署分支，對應 T239～T244，且必須先通過 T238 的部署前硬 Gate。T239～T244 通過只代表以虛構資料完成 GCP Demo 的建立、Migration、Seed、LINE 設定與環境 Smoke Test；不得取代本機品質、管理工作台或真人驗收，也不得因此將 Feature 標記為完成。反之，Feature Completion 通過也不代表已完成 GCP Demo Deployment；真實 GCP IAM、Signed URL、Cloud SQL、HTTPS 與 LINE 行為仍須依 T239～T244 驗證。
+這個獨立 Cloud Run／Cloud SQL 分支從未實際建立，已在 Phase F6 移除。T239～T244 只保留
+歷史追溯，不是 Feature Completion 的前置條件，也不得作為重建第二套部署路徑的指引。
 
 ## Out of Scope
 

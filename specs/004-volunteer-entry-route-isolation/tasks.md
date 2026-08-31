@@ -11,7 +11,7 @@
 **目的**：準備 LIFF runtime dependency、canonical contract 與 P0 測試入口。
 
 - [ ] T001 [P] 在 `apps/web/package.json` 與 `apps/web/package-lock.json` 加入與鎖定 `@line/liff` dependency，保留既有 Next.js／React 版本相容性
-- [ ] T002 [P] 在 `apps/web/next.config.ts` 與 `infra/gcp-demo/terraform/cloud-run.tf` 對齊 server runtime `LIFF_ID` 注入，確保正式 LIFF ID 不需暴露為授權 secret
+- [ ] T002 [P] 在 `apps/web/next.config.ts` 與現行 GCE runtime environment contract 對齊 server runtime `LIFF_ID` 注入，確保正式 LIFF ID 不需暴露為授權 secret
 - [ ] T003 在 `specs/001-volunteer-care-report/contracts/openapi.yaml` 更新 `LiffExchangeRequest` 為必填 `id_token` + `shelter_entry_reference`，並依 canonical workflow 重新生成 `packages/contracts/src/openapi.ts`
 - [ ] T004 [P] 在 `apps/web/package.json` 將 `e2e/liff-route-isolation.spec.ts` 納入 P0 browser、a11y 與必要的 visual test scripts
 

@@ -20,7 +20,7 @@ Task 16只建立可執行的流程與遮罩後記錄格式；在沒有真實LIFF
 | API tunnel             | Next.js `/v1/[...path]` server proxy                | `API_BASE_URL`                                | HTTPS；轉發`127.0.0.1:8001`；不可是localhost或空值                     |
 | LIFF runtime           | `apps/web/app/(volunteer)/volunteer-entry/page.tsx` | `LIFF_ID`                                     | 使用LIFF Console中與LINE Login channel綁定的LIFF ID；Next.js啟動時讀取 |
 | Rich Menu base         | `scripts/sync_line_rich_menu.py`                    | `LIFF_BASE_URL`                               | 必須是`https://liff.line.me/<LIFF_ID>`，不可帶path、query或fragment    |
-| Rich Menu entry        | `infra/gcp-demo/line-rich-menu.yaml`                | `SHELTER_ENTRY_REFERENCE`                     | 只在受控shell handoff提供一次；產生`/volunteer-entry?entry=...`        |
+| Rich Menu entry        | `infra/gce/line-rich-menu.yaml`                     | `SHELTER_ENTRY_REFERENCE`                     | 只在受控shell handoff提供一次；產生`/volunteer-entry?entry=...`        |
 | LINE identity verifier | FastAPI runtime                                     | `LINE_LOGIN_CHANNEL_ID`與對應Secret reference | 必須與LIFF App所屬LINE Login channel一致；不把Secret寫入本文件         |
 
 `NEXT_PUBLIC_LIFF_ID`與`NEXT_PUBLIC_API_BASE_URL`不是目前volunteer entry runtime的source of truth；不要用它們取代server runtime的`LIFF_ID`與`API_BASE_URL`。
@@ -113,7 +113,7 @@ LIFF_BASE_URL="${LIFF_BASE_URL}" \
 SHELTER_ENTRY_REFERENCE="<RAW_REFERENCE_ONLY_IN_CONTROLLED_SHELL>" \
 API_BASE_URL="${PUBLIC_API_ORIGIN}" \
 $HOME/.local/bin/uv run python scripts/sync_line_rich_menu.py \
-  --config infra/gcp-demo/line-rich-menu.yaml
+  --config infra/gce/line-rich-menu.yaml
 ```
 
 預期輸出：

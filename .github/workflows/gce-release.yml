@@ -1,12 +1,35 @@
 name: GCE Immutable Release
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/gce-release.yml"
+      - "infra/gce/**"
+      - "infra/gcp-platform/**"
+      - "infra/gce/images/Dockerfile.*"
+      - "scripts/build-release-bundle.sh"
+      - "scripts/verify_acceptance_live.py"
+      - "services/**"
+      - "tests/contract/test_gce_release_contract.py"
+      - "tests/contract/test_gcp_platform_terraform_contract.py"
+      - "pyproject.toml"
+      - "uv.lock"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/gce-release.yml"
+      - "infra/gce/**"
+      - "infra/gcp-platform/**"
+      - "infra/gce/images/Dockerfile.*"
+      - "scripts/build-release-bundle.sh"
+      - "scripts/verify_acceptance_live.py"
+      - "services/**"
+      - "tests/contract/test_gce_release_contract.py"
+      - "tests/contract/test_gcp_platform_terraform_contract.py"
+      - "pyproject.toml"
+      - "uv.lock"
   workflow_dispatch:
     inputs:
-      source_revision:
-        description: Full reviewed Git SHA to build and publish
-        required: true
-        type: string
       publish:
         description: Publish immutable release images and bundle after verification
         required: true
@@ -25,12 +48,6 @@ on:
 permissions:
   contents: read
 
-env:
-  TRUSTED_F4_SOURCE_REVISION: 5f0664f0a63994c7be113473e9e31906242b6b77
-  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github
-  GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT: strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com
-  GCP_ARTIFACT_REGISTRY: asia-east1-docker.pkg.dev/canvas-primacy-502703-k1/strayhub
-
 jobs:
   verify-release:
     name: Verify GCE release candidate
@@ -39,16 +56,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.source_revision }}
-
-      - name: Verify exact reviewed source revision
-        env:
-          SOURCE_REVISION: ${{ inputs.source_revision }}
-        run: |
-          [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$SOURCE_REVISION" == "$TRUSTED_F4_SOURCE_REVISION" ]]
-          [[ "$(git rev-parse HEAD)" == "$SOURCE_REVISION" ]]
-          [[ -z "$(git status --porcelain)" ]]
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -92,12 +99,9 @@ jobs:
         run: |
           terraform fmt -check -recursive \
             infra/gce/terraform \
-            infra/gcp-demo/terraform \
             infra/gcp-platform/terraform
           terraform -chdir=infra/gce/terraform init -backend=false -input=false
           terraform -chdir=infra/gce/terraform validate
-          terraform -chdir=infra/gcp-demo/terraform init -backend=false -input=false
-          terraform -chdir=infra/gcp-demo/terraform validate
           terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
           terraform -chdir=infra/gcp-platform/terraform validate
 
@@ -114,27 +118,29 @@ jobs:
 
       - name: Build clean-SHA images without publication
         env:
-          REVISION: ${{ inputs.source_revision }}
+          REVISION: ${{ github.sha }}
         run: |
           docker build \
             --label "org.opencontainers.image.revision=$REVISION" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gcp-demo/Dockerfile.api -t "strayhub-api:$REVISION" .
+            -f infra/gce/images/Dockerfile.api -t "strayhub-api:$REVISION" .
           docker build \
             --label "org.opencontainers.image.revision=$REVISION" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gcp-demo/Dockerfile.worker -t "strayhub-worker:$REVISION" .
+            -f infra/gce/images/Dockerfile.worker -t "strayhub-worker:$REVISION" .
           docker build \
             --label "org.opencontainers.image.revision=$REVISION" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gcp-demo/Dockerfile.web -t "strayhub-web:$REVISION" .
+            -f infra/gce/images/Dockerfile.web -t "strayhub-web:$REVISION" .
 
   publish-release:
     name: Publish immutable release candidate
     needs: verify-release
     if: >-
-      ${{ inputs.publish &&
-          inputs.source_revision == '5f0664f0a63994c7be113473e9e31906242b6b77' }}
+      ${{ github.event_name == 'workflow_dispatch' && inputs.publish &&
+          vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' &&
+          vars.GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT != '' &&
+          vars.GCP_ARTIFACT_REGISTRY != '' }}
     runs-on: ubuntu-latest
     environment: release-publication
     permissions:
@@ -144,26 +150,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.source_revision }}
-
-      - name: Verify exact reviewed source revision
-        env:
-          SOURCE_REVISION: ${{ inputs.source_revision }}
-        run: |
-          [[ "$SOURCE_REVISION" == "$TRUSTED_F4_SOURCE_REVISION" ]]
-          [[ "$(git rev-parse HEAD)" == "$SOURCE_REVISION" ]]
-          [[ -z "$(git status --porcelain)" ]]
 
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ env.GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Authenticate Docker to the dedicated registry
         env:
-          REGISTRY: ${{ env.GCP_ARTIFACT_REGISTRY }}
+          REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
         run: |
           registry_host="${REGISTRY%%/*}"
           gcloud auth configure-docker "$registry_host" --quiet
@@ -171,15 +168,15 @@ jobs:
       - name: Build and push exact Git SHA images
         id: images
         env:
-          REGISTRY: ${{ env.GCP_ARTIFACT_REGISTRY }}
-          REVISION: ${{ inputs.source_revision }}
+          REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+          REVISION: ${{ github.sha }}
         run: |
           for service in api worker web; do
             image="$REGISTRY/strayhub-$service:$REVISION"
             docker build \
               --label "org.opencontainers.image.revision=$REVISION" \
               --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-              -f "infra/gcp-demo/Dockerfile.$service" -t "$image" .
+              -f "infra/gce/images/Dockerfile.$service" -t "$image" .
             docker push "$image"
             reference="$(docker inspect --format='{{index .RepoDigests 0}}' "$image")"
             [[ "$reference" == *@sha256:* ]]
@@ -191,12 +188,11 @@ jobs:
           API_IMAGE: ${{ steps.images.outputs.api_image }}
           WORKER_IMAGE: ${{ steps.images.outputs.worker_image }}
           WEB_IMAGE: ${{ steps.images.outputs.web_image }}
-          REVISION: ${{ inputs.source_revision }}
           SCHEMA_COMPATIBILITY: ${{ inputs.schema_compatibility }}
         run: |
           chmod +x scripts/build-release-bundle.sh infra/gce/scripts/release-manifest.py
           ./scripts/build-release-bundle.sh \
-            --git-sha "$REVISION" \
+            --git-sha "${{ github.sha }}" \
             --api-image "$API_IMAGE" \
             --worker-image "$WORKER_IMAGE" \
             --web-image "$WEB_IMAGE" \
@@ -207,7 +203,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: strayhub-gce-release-${{ inputs.source_revision }}
+          name: strayhub-gce-release-${{ github.sha }}
           path: release-bundle/
           if-no-files-found: error
           retention-days: 30

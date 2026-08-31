@@ -1,0 +1,350 @@
+# Phase F2 State Ownership and Release Gate Plan
+
+Status: **READY**
+
+Deletion safety: **BLOCKED**
+
+Infrastructure mutation: **NONE**
+
+Terraform mutation: **NONE**
+
+Accepted E5 checkpoint:
+`a065366837f4fe44e52a067c0a191fc61e1fc702`
+
+`READY` means F3 may implement the missing release gates. It does not authorize legacy deletion,
+state changes, API enablement, or production changes.
+
+## Legacy remote state discovery
+
+| Field | Result |
+| --- | --- |
+| Backend type | GCS declaration only |
+| Bucket | `NOT_CONFIGURED_OR_DISCOVERABLE` |
+| Prefix | `strayhub/gcp-demo` |
+| State object | `NONE_DISCOVERED` |
+| Last modified / generation | Not applicable |
+| Ownership confidence | `HIGH` within repository history and the accepted active project; external/other-project state remains excluded and unknown |
+
+Evidence:
+
+- Repository history introduced the backend with a pre-deployment prohibition and never recorded a
+  bucket. An operator would have had to supply `-backend-config=bucket=...`.
+- The workflow, deploy gate, and `apply.sh` all initialize with `-backend=false`; no matching
+  invocation exists in history.
+- There is no legacy local state or `.terraform/terraform.tfstate` backend metadata.
+- The active project has one bucket,
+  `strayhub-backups-canvas-primacy-502703-k1`. Its only top-level prefix is
+  `strayhub-backups/`; `strayhub/gcp-demo/**` matches no objects.
+- No matching StrayHub Cloud Run service/job, service account, WIF pool, Artifact Registry, logging
+  bucket/metric, load balancer, or Compute certificate was found in the active project.
+- GitHub variable names could not be queried because `gh` is not installed. The workflow itself has
+  no backend input and never authenticates or deploys.
+
+The bounded conclusion is that no legacy state is available in the repository or accepted project,
+with strong evidence the proposed demo root was never initialized or applied. This is not authority
+to search unrelated projects. If an external backend is later produced, reopen all state conclusions
+before any plan.
+
+## Legacy state classification
+
+No legacy state addresses were discovered. These are source declarations, not state contents:
+
+| Classification | Declarations |
+| --- | --- |
+| `LEGACY_EXCLUSIVE` | Cloud Run services/job/public IAM; Cloud SQL/database/users; demo VPC/private service access; runtime-media GCS; legacy service accounts/WIF/Artifact Registry/observability |
+| `SHARED_WITH_GCE` | Secret Manager data/IAM declarations, existing KMS-key IAM declaration, project service declarations |
+| `RETAINED_CURRENT` | None owned by a discovered legacy state; accepted GCE/manual resources remain outside it |
+| `UNKNOWN` | Any backend/state supplied outside repository history or outside the accepted project |
+
+The legacy root cannot be destroyed safely. Initializing it against an unknown backend or applying
+its declarations could create obsolete infrastructure or alter shared IAM.
+
+## Cloud SQL status
+
+Status: **CLOUD_SQL_UNKNOWN**
+
+The canonical runtime uses PostgreSQL on `strayhub-gce`; no legacy state or Cloud Run runtime was
+found. However, both Cloud SQL and Cloud Asset APIs are disabled and were not enabled for F2. This
+does not prove absence, so Cloud SQL remains held outside every deletion task.
+
+## Shared-resource future ownership
+
+`PLATFORM_TERRAFORM` means a future isolated managed-services root, separate from current GCE host
+state and all legacy runtime declarations.
+
+| Resource | Current Terraform owner | Runtime consumer | Future owner | Later state action | Delete? |
+| --- | --- | --- | --- | --- | --- |
+| 11 `strayhub-prod-*` secrets | None; manual | GCE secret staging | `PLATFORM_TERRAFORM` | Import metadata/IAM; keep values/versions outside state pending design | No |
+| Secret-level accessor bindings | None; manual | `strayhub-gce-sa` | `PLATFORM_TERRAFORM` | Exact member import/adoption after policy comparison | No |
+| `strayhub-pii` keyring | None; manual | Platform boundary | `PLATFORM_TERRAFORM` | `RESOURCE_IMPORT_REQUIRED` | No |
+| `pii-encryption` CryptoKey and binding | None; manual | API through VM ADC | `PLATFORM_TERRAFORM` | Import key and exact member; preserve versions/rotation | No |
+| GCS backup bucket and bindings | None; manual | Host backup/restore | `PLATFORM_TERRAFORM` | Import after matching PAP, uniform access, retention, lifecycle and IAM | No |
+| DNS | External/manual | Public users and LINE/LIFF | `MANUAL_RETAIN` | None until provider ownership is accepted | No |
+| Edge VM/address/nginx/TLS | None; manual | Public routing/TLS | `MANUAL_RETAIN` | Record role ownership and config checksum | No |
+| GCE host foundation | Current local GCE state | Canonical runtime | `GCE_TERRAFORM` | Remote backend is a separate decision | No |
+
+F2 performed no import, state movement, IAM change, or Terraform source change.
+
+## Unrelated-resource boundary
+
+`rrapi-20260813`, `rr-test`, `rr-api-firewall`, `rrbot`, `rrbot-9527`, and `car-930` are
+`EXCLUDED_FROM_STRAYHUB_DELETION_SCOPE`. The default VPC, default firewalls, and default Compute
+service account remain held because current and unrelated workloads share them.
+
+## Current GCE release source of truth
+
+| Release field | Current evidence | Result |
+| --- | --- | --- |
+| Source commit | Directory suggests `e702d7d`, but contains later E4/E5 changes and no Git/revision marker | `FAIL` provenance |
+| Release/active path | Sole directory `/opt/strayhub/releases/e702d7d-e3`; `current` points there | Operationally known |
+| Build process | Compose builds three legacy Dockerfiles from the copied checkout | Manual state dependency |
+| Registry | No StrayHub registry or pullable fully qualified image reference | `FAIL` |
+| Image identity | Mutable `strayhub-{api,worker,web}:b1`; local content IDs exist without Git labels | Not reproducible |
+| Compose | Active release copy of `docker-compose.production.yml` | Known, not revision-marked |
+| Config/secrets | Protected host config; Secret Manager atomic staging | Accepted |
+| Migration | systemd production preflight then one-shot Compose Alembic | Accepted |
+| Activation/health | systemd Compose start then bounded local/public verifier | Accepted |
+| Acceptance | Contracts and E5 evidence exist but are not linked to a manifest | Partial |
+
+Current GCE release reproducibility is **PARTIAL**. Runtime orchestration is deterministic, but
+source, image publication, copy procedure, and release identity are not. The directory name must not
+be claimed as the actual Git SHA.
+
+## Immutable release identity
+
+Use `<UTC timestamp>-<12-char Git SHA>` as `release_id`. Identity is the exact Git SHA plus
+digest-pinned API/Worker/Web images plus `release-manifest.json`. The non-secret manifest records:
+
+```text
+release_id, full git_sha, created_at, build_run
+api/worker/web registry@sha256 digests
+compose_sha256, deployment_bundle_sha256
+migration_revision and reviewed schema compatibility range
+expected edge_config_sha256
+```
+
+Every `/opt/strayhub/releases/<release-id>/` must be created from a clean commit and contain the
+manifest/checksum, a `REVISION` file, exact deployment bundle, and digest-pinned Compose override.
+It must contain no env file, secret, credential, private key, backup, or Terraform state. Record
+PostgreSQL/MinIO/mc base-image digests too. Release directories become immutable; `current` is the
+only mutable pointer. Retain current `N` and compatible `N-1` with both manifests.
+
+## Replacement CI and release gate
+
+### Stage 1: PR build gate
+
+Reuse current CI and add a GCE release-candidate job requiring Python migrations/tests, Ruff,
+frontend tests/typecheck/format/build, contract generation, security/tenant/deployment contracts,
+critical E2E, repository secret scan, production Compose/preflight with synthetic inputs, and
+current-GCE Terraform format/validate without backend mutation. Build all three images from a clean
+tree with OCI source/revision/created labels. PR jobs do not authenticate to production or deploy.
+
+### Stage 2: immutable publication
+
+After an accepted protected-branch commit, use GitHub OIDC/WIF—not a JSON key—to push to a dedicated
+StrayHub Artifact Registry, resolve all registry digests, create the exact deployment bundle and
+manifest, verify checksums, and retain provenance for `N` and `N-1`. `rrbot-9527` is excluded. The
+repository and least-privilege publisher identity require separately reviewed F3 infrastructure.
+
+### Stage 3: manually approved production release
+
+Require a protected production-environment approval. Deploy only a previously published manifest,
+never rebuild. Use short-lived federation with an approved OS Login/IAP mechanism, or an operator
+fetch through IAP; never store SSH private keys in GitHub. A future reviewed repo script must:
+
+1. verify revision, checksums, image digests, configuration references, free space, backup freshness,
+   current migration head, and schema compatibility;
+2. stage a new release directory and atomically fetch secrets;
+3. run production preflight and the existing one-shot migration;
+4. atomically switch `current`, install repo units if changed, start and run bounded local/public
+   health and smoke tests; and
+5. write a non-secret receipt linking approval, manifest, prior release and results.
+
+An ad hoc SSH transcript is not a deployment source. Automatic production deploy is not required;
+immutable build/publish, approval, and reproducible operator deployment are.
+
+## Rollback ownership and strategy
+
+```text
+ROLLBACK_OWNER: StrayHub production deployment operator role
+ROLLBACK_APPROVER: protected production reviewer / incident lead role
+ROLLBACK_TRIGGER: failed post-deploy health, critical regression, or approved incident
+ROLLBACK_COMMAND_SOURCE: future reviewed GCE release-management script
+ROLLBACK_VERIFICATION: manifest/digest/schema gate plus app, Worker, DB, MinIO, timer health
+ROLL_FORWARD: publish and deploy a new immutable manifest through the same gate
+```
+
+`N` and `N-1` both require Git SHA, registry digests, manifest, deployment bundle, Compose,
+migration revision and explicit schema range. If the current DB head is not inside `N-1`'s reviewed
+range—or is unknown—STOP and prefer roll-forward. Never run Alembic downgrade, restore DB
+automatically, delete volumes, or change DNS/IAM/secrets. Preserve `N`, stop only the app unit,
+atomically switch to verified `N-1`, then verify. The edge remains unchanged unless independently
+versioned and approved.
+
+## State migration decision
+
+Decision: **RESOURCE_IMPORT_REQUIRED** for retained managed services.
+
+Future sequence: create an isolated platform root/backend; encode exact live configuration and
+lifecycle protection; import one resource/IAM group at a time without secret values; require a
+zero-change plan after each import; keep GCE host state isolated and never initialize the legacy
+root. If legacy remote state appears, stop and redesign as `STATE_SPLIT_REQUIRED`.
+
+## F3 entry gates
+
+- [x] legacy state conclusively unavailable in the bounded source of truth
+- [x] retained/shared ownership and proposed adoption understood
+- [x] Cloud SQL status explicitly held as `UNKNOWN` and excluded from F3/deletion
+- [x] unrelated project resources excluded
+- [x] canonical GCE deployment process documented
+- [x] immutable artifact design agreed for implementation
+- [x] rollback owner role and artifact requirements defined
+- [x] replacement CI/release design documented
+- [x] no production infrastructure mutation performed
+
+F3 entry is **READY** for release/CI implementation only. Cloud SQL and deletion remain blocked.
+
+## Phase F3 implementation checkpoint
+
+Status: **READY** for review; no production release performed.
+
+F3 implements the design with `release-manifest.py`, `build-release-bundle.sh`, digest-selectable
+production Compose, fail-closed production preflight/systemd wiring, canonical deploy and rollback
+entrypoints, release contracts, and `.github/workflows/gce-release.yml`. The workflow verifies and
+builds on pull requests; immutable publication remains manually dispatched behind the
+`release-publication` environment and separately provisioned WIF/registry variables. It contains no
+automatic GCE deployment.
+
+The local synthetic bundle drill generated and revalidated a manifest, deterministic bundle, and
+checksums with three synthetic registry digests. No release was deployed or published. Full operator
+procedure, N/N-1 retention, receipts, rollback refusal, and roll-forward rules are in
+[`gce-release-process.md`](gce-release-process.md).
+
+F4 may provision the dedicated registry/WIF/IAM and exercise publication only through a separately
+reviewed infrastructure task. Cloud SQL stays `UNKNOWN`; deletion safety stays `BLOCKED`.
+
+## Phase F4 secure publication checkpoint
+
+Status: **READY** — first immutable release accepted; deletion remains blocked.
+
+- F3/F4 publication-fix source `38ab34dc6aaff78e0f3a9f20dbf954a071fb355a` is pushed and verified on
+  `review/system_over_all`.
+- The dedicated `asia-east1` Docker repository `strayhub`, separate publisher/deployer service
+  accounts, and repository/branch/environment-restricted GitHub WIF pool/provider exist.
+- Artifact IAM is resource-level: publisher writer and canonical VM runtime reader. The reserved
+  deployer has WIF impersonation for the `production` environment but no project/VM access role.
+- IAM Credentials and Security Token Service APIs were enabled for short-lived federation. No
+  service-account JSON key exists.
+- No Terraform root or legacy Terraform was changed; these operator-created resources require
+  future import into a separately reviewed platform owner.
+- Default-branch commit `82af90e3f45ef2841d69ddbc87f353bc0019fd2b` adds only the release
+  workflow to `main`. It requires and verifies the exact F3 source SHA before build or publication.
+- The WIF provider now trusts the `main` workflow ref while retaining repository and
+  `release-publication`/`production` environment restrictions.
+- Workflow run `33354828878` passed verification, OIDC/WIF, exact-SHA publication, bundle validation,
+  and artifact upload. No local publication fallback was used.
+- Release `20260831T034951Z-38ab34dc6aaf` is active on GCE. Manifest and running digests match:
+  API `sha256:febfd99365a536c4063b0b6d1351cd3ea984118fb1f067899c1e1223170dad83`,
+  Worker `sha256:9234c5d4dda3c53f59bb6af15fee957fdb6cbced490a8074318feca71872ad4f`,
+  Web `sha256:56ee756e8cab60d0afe6f87248a8273b78ecaae0221d2b117bae1bd83cd68203`.
+- Production preflight, migration head `0037_animal_external_sources`, systemd/public health, and
+  authenticated tenant/volunteer/RLS acceptance passed.
+- The historical `e702d7d-e3` release directory remains retained but is not a genuine immutable
+  N-1. Live rollback remains deferred. No legacy deletion was performed.
+
+The prior run proved OIDC and three image pushes but failed before bundle completion when the auth
+action's temporary `gha-creds-*.json` made the checkout appear dirty. The new trusted source ignores
+only that pattern and does not weaken the clean-tree validator. The failed run is non-canonical.
+
+F4 is complete for the first immutable release. F5 may review ownership and release gates, but
+deletion safety remains **BLOCKED** until a genuine compatible N/N-1 pair and all independent legacy
+absence/ownership gates exist.
+
+## Phase F5 deletion-readiness decision
+
+Status: **BLOCKED**
+
+F5 reverified immutable N on the live GCE host: release, receipt, source, migration head and all
+three running image digests match the F4 manifest. The current GCE local state also produced a
+read-only no-change plan. No second genuine immutable release exists, so the decision is
+`SECOND_IMMUTABLE_RELEASE_REQUIRED`, not a claim that the historical `e702d7d-e3` directory is N-1.
+
+Legacy remote state remains unavailable. The backend bucket was never recorded, no local backend
+metadata/state exists, and the sole active-project bucket has no `strayhub/gcp-demo` objects. This
+bounded evidence does not rule out an externally supplied bucket or other project. Consequently a
+legacy destroy plan is `NOT_AVAILABLE`; F5 did not initialize a guessed backend or run a synthetic
+destroy plan.
+
+Cloud SQL remains `CLOUD_SQL_UNKNOWN`. Its Admin API and Cloud Asset API are not enabled. The
+canonical runtime uses local Compose PostgreSQL, and the active project exposes no service-network
+peering or reserved global address, but deletion readiness requires a positive resource-status
+resolution rather than inference. An externally named legacy runtime-media bucket is also unknown.
+
+The retained ownership target remains:
+
+- `GCE_TERRAFORM` for the current host foundation;
+- `PLATFORM_TERRAFORM` for Secret Manager metadata/exact IAM, KMS, backup GCS and exact IAM; and
+- `MANUAL_RETAIN` for edge/DNS/TLS.
+
+This target is not implemented. F5 therefore returns shared ownership `PARTIAL`, Terraform state
+ownership `PARTIAL`, and `STATE_MIGRATION_FIRST`. Imports must occur only in a separately approved
+phase, one exact resource/member at a time, with a zero-change plan; secret values and versions must
+not enter state. If legacy state appears, stop and redesign as a state split.
+
+Backup/restore readiness remains `PASS`: the persistent timer is active, the latest local manifest
+`20260831T030530Z-e3daily4507` validates, and GCS contains its `_COMPLETE` marker. The accepted E5
+non-empty PostgreSQL/MinIO GCS restore drill remains the restore evidence. F6 must still begin with
+a fresh backup, manifest/checksum and `_COMPLETE` verification, followed by review of the accepted
+isolated restore evidence/procedure.
+
+See [`phase-f-removal-plan.md`](phase-f-removal-plan.md) for the protected-resource inventory,
+operator-path risk, exact F6 stop conditions, and unchecked hard gates. F5 performed no import,
+state movement, apply, destroy, IAM/API change, production mutation, or deletion.
+
+## Phase F5b retained-resource adoption checkpoint
+
+`PLATFORM_TERRAFORM` now exists at `infra/gcp-platform/terraform` with a dedicated private GCS
+backend. It owns 29 exact retained addresses: the state and backup buckets, eleven secret metadata
+resources, eleven exact secret IAM members, the KMS keyring/key/member, and two exact backup-bucket
+IAM members. Critical retained resources use `prevent_destroy`; secret values and versions are not
+managed.
+
+The first import plan contained only 13 label-adoption writes and no create/delete action. It was
+not applied. Existing labels are exposed by the provider as `effective_labels`, so the declaration
+now preserves them without an adoption write. The final plan is `No changes` with exit code zero.
+See [`platform-terraform.md`](platform-terraform.md) for the complete import ledger and operating
+rules.
+
+This resolves the shared-resource ownership blocker. The outcome below also resolves default-branch
+legacy mutation retirement and the genuine N/N-1 drill; Cloud SQL and the externally supplied
+legacy backend/runtime bucket identities remain independent blockers. No legacy infrastructure was
+deleted.
+
+## Phase F5b immutable release and rollback outcome
+
+Reviewed source `5f0664f0a63994c7be113473e9e31906242b6b77` contains no application,
+Compose-runtime, authentication, tenant/RLS, LINE/LIFF, model, or Alembic change. Default-branch
+commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` pins that exact source and fail-closes the legacy
+operator entrypoints. GitHub Actions run `33362441959` passed verification, OIDC/WIF, registry
+authentication, all three exact-SHA image publications, release-bundle validation and artifact
+upload. The artifact ZIP checksum is
+`sha256:a5e5d511f99ee3925934961509017bc5388d2cc107d77ca6e273b699f6ed300e`.
+
+Release N is `20260831T060436Z-5f0664f0a639`, with API
+`sha256:3236bc21319cdd8ae284588a9535fe23a73817dc818ccb72d439794ffdee2008`, Worker
+`sha256:77e6075ae1856df0ff46772d3a7418ba634d2c18d636b608f618e243f7dd776b`, and Web
+`sha256:9642600c8280028ea18ff6f40977d925382e4e6ebcff1623ebe242ef09b1624f`. N-1 remains
+`20260831T034951Z-38ab34dc6aaf`. Both declare `0037_animal_external_sources`, so the reviewed
+compatibility is `backward-compatible-with-previous`.
+
+After N deployment and authenticated acceptance, backup `20260831T062155Z-e3daily2165` passed
+PostgreSQL/MinIO capture, manifest/checksum checks, GCS upload and `_COMPLETE`. The canonical
+rollback tool then switched N -> N-1 with no database downgrade. Exact N-1 digests and full
+authenticated tenant/RLS/volunteer acceptance passed. A same-migration, receipt-bound roll-forward
+tool switched N-1 -> N after exact pulls and isolated production preflight; final N digests,
+systemd/runtime health and authenticated acceptance passed. Production is on N and the receipt again
+records N-1.
+
+The immutable release/rollback blocker is resolved. F6 remains blocked independently because Cloud
+SQL, the legacy Terraform backend/state bucket and legacy runtime GCS bucket are still `UNKNOWN`.
+No legacy infrastructure was deleted.

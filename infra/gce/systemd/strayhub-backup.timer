@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the StrayHub backup once daily
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+AccuracySec=1m
+Unit=strayhub-backup.service
+
+[Install]
+WantedBy=timers.target

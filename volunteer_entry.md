@@ -84,7 +84,7 @@ Task 2–7已提交。Task 8已完成LIFF init/login、identity exchange、四�
 | Task 4 Entry expiration | `services/api/app/persistence/models/volunteer_access.py`、`services/api/migrations/versions/0030_volunteer_entry_reference_expiration.py`、`tests/security/test_volunteer_entry_reference_expiration.py` |
 | Task 5 Exchange states | `services/api/app/application/authentication/session_service.py`、`services/api/app/persistence/repositories/authentication_repository.py`、`services/api/app/infrastructure/line/entry_reference_adapter.py`、`tests/unit/test_liff_exchange_states.py`、`tests/integration/test_authentication_session.py` |
 | Task 8 Frontend bootstrap | `apps/web/package.json`、`apps/web/package-lock.json`、`apps/web/app/(volunteer)/volunteer-entry/`、`apps/web/app/(volunteer-onboarding)/volunteer-application/page.tsx` |
-| Task 13 Rich Menu | `.env.example`、`scripts/sync_line_rich_menu.py`、`infra/local/line-rich-menu.yaml`、`infra/gcp-demo/line-rich-menu.yaml`、`tests/unit/test_sync_line_rich_menu.py` |
+| Task 13 Rich Menu | `.env.example`、`scripts/sync_line_rich_menu.py`、`infra/local/line-rich-menu.yaml`、`infra/gce/line-rich-menu.yaml`、`tests/unit/test_sync_line_rich_menu.py` |
 
 ### Reconciliation 發現
 

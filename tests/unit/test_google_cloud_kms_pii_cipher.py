@@ -62,6 +62,14 @@ class _FakeKmsClient:
         )
 
 
+class _PermissionDeniedKmsClient:
+    def encrypt(self, *, request):
+        raise PermissionError("synthetic KMS permission denied")
+
+    def decrypt(self, *, request):
+        raise PermissionError("synthetic KMS permission denied")
+
+
 @pytest.fixture
 def kms_key_name() -> str:
     return "projects/test-project/locations/asia-east1/keyRings/pii/cryptoKeys/volunteer"
@@ -205,6 +213,19 @@ def test_kms_provider_failures_are_safe_and_never_fall_back(
     assert "Synthetic Applicant" not in str(encrypt_error.value)
 
 
+def test_kms_permission_denied_fails_closed_without_plaintext(
+    kms_key_name: str, context: PiiContext
+) -> None:
+    cipher = GoogleCloudKmsPiiCipher(kms_key_name, _PermissionDeniedKmsClient())
+
+    with pytest.raises(DomainError) as error:
+        cipher.encrypt("Synthetic Applicant", context=context)
+
+    assert error.value.code == "pii_provider_unavailable"
+    assert error.value.status_code == 503
+    assert "Synthetic Applicant" not in str(error.value)
+
+
 def test_kms_decrypt_failure_is_safe(kms_key_name: str, context: PiiContext) -> None:
     client = _FakeKmsClient(kms_key_name)
     cipher = GoogleCloudKmsPiiCipher(kms_key_name, client)
@@ -216,6 +237,38 @@ def test_kms_decrypt_failure_is_safe(kms_key_name: str, context: PiiContext) -> 
 
     assert error.value.status_code == 503
     assert "Synthetic Applicant" not in str(error.value)
+
+
+def test_kms_permission_denied_on_decrypt_fails_closed(
+    kms_key_name: str, context: PiiContext
+) -> None:
+    encrypted = GoogleCloudKmsPiiCipher(kms_key_name, _FakeKmsClient(kms_key_name)).encrypt(
+        "Synthetic Applicant", context=context
+    )
+    cipher = GoogleCloudKmsPiiCipher(kms_key_name, _PermissionDeniedKmsClient())
+
+    with pytest.raises(DomainError) as error:
+        cipher.decrypt(encrypted, context=context)
+
+    assert error.value.code == "pii_ciphertext_invalid"
+    assert error.value.status_code == 503
+    assert "Synthetic Applicant" not in str(error.value)
+
+
+def test_kms_malformed_ciphertext_fails_closed(kms_key_name: str, context: PiiContext) -> None:
+    malformed = EncryptedPii(
+        ciphertext=b"synthetic-malformed-ciphertext",
+        algorithm=GoogleCloudKmsPiiCipher.algorithm,
+        key_version=f"{kms_key_name}/cryptoKeyVersions/1",
+    )
+    cipher = GoogleCloudKmsPiiCipher(kms_key_name, _FakeKmsClient(kms_key_name))
+
+    with pytest.raises(DomainError) as error:
+        cipher.decrypt(malformed, context=context)
+
+    assert error.value.code == "pii_ciphertext_invalid"
+    assert error.value.status_code == 503
+    assert "synthetic-malformed-ciphertext" not in str(error.value)
 
 
 class _ProfileRepository:

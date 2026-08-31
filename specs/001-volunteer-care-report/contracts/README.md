@@ -10,4 +10,4 @@
 - [Object Storage 契約](object-storage.md)
 - [AI 非同步 Job 契約](async-ai.md)
 - [LINE／LIFF 與 Mock Context 契約](line-liff.md)
-- [GCP Demo 環境契約](gcp-demo.md)
+- [已退役 GCP Demo 歷史](../../../docs/deployment/history/legacy-gcp-demo.md)

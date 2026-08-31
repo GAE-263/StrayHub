@@ -1,0 +1,23 @@
+[Unit]
+Description=StrayHub production Docker Compose runtime
+Wants=network-online.target
+Requires=docker.service strayhub-secrets.service strayhub-migrate.service
+After=network-online.target docker.service strayhub-secrets.service strayhub-migrate.service
+
+[Service]
+Type=oneshot
+User=strayhub
+Group=strayhub
+SupplementaryGroups=docker
+WorkingDirectory=/opt/strayhub/current
+ExecStart=/usr/bin/docker compose --project-name strayhub-production --file /opt/strayhub/current/infra/gce/docker-compose.production.yml --env-file /etc/strayhub/production.env --env-file /var/lib/strayhub/secrets/current/runtime.env --env-file /opt/strayhub/current/image-digests.env up --no-build -d postgres minio minio-bootstrap api worker web
+ExecStartPost=/opt/strayhub/current/infra/gce/scripts/verify-systemd-runtime.sh --config-env /etc/strayhub/production.env --secrets-env /var/lib/strayhub/secrets/current/runtime.env --image-env /opt/strayhub/current/image-digests.env --timeout 180
+ExecStop=/usr/bin/docker compose --project-name strayhub-production --file /opt/strayhub/current/infra/gce/docker-compose.production.yml --env-file /etc/strayhub/production.env --env-file /var/lib/strayhub/secrets/current/runtime.env --env-file /opt/strayhub/current/image-digests.env stop --timeout 30
+RemainAfterExit=yes
+TimeoutStartSec=600
+TimeoutStopSec=90
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

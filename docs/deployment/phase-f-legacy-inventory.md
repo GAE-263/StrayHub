@@ -1,0 +1,385 @@
+# Phase F1 Legacy / Terraform Ownership Inventory
+
+Status: **READY** (F1 inventory; supplemented by F2)
+
+Migration: **NONE**
+
+Infrastructure mutation: **NONE**
+
+Terraform mutation: **NONE**
+Inventory date: 2026-08-31
+
+This is a read-only ownership record. It does not authorize deletion, state migration, API
+disablement, IAM changes, or production traffic changes. `SAFE TO DELETE` is deliberately not a
+classification in this inventory.
+
+## Accepted E5 checkpoint
+
+```text
+a065366837f4fe44e52a067c0a191fc61e1fc702
+feat(deploy): add guarded acceptance identity bootstrap
+```
+
+The repository was clean at that checkpoint before this document was added.
+
+## Current accepted architecture
+
+```text
+Internet -> strayhub.enadv.quest -> nginx VM 34.10.249.63 :80/:443
+                                      |-> strayhub-gce 34.81.77.204:3000 -> Web
+                                      `-> strayhub-gce 34.81.77.204:8080 -> API
+
+strayhub-gce private Compose network
+  -> Worker
+  -> PostgreSQL 16 on a named volume
+  -> MinIO runtime media on a named volume
+```
+
+The public A record resolves to `34.10.249.63`. The edge VM
+`nginx-20260820-033352`, its static address `rrapi-nginx`, nginx configuration, and Let's Encrypt
+certificate are manually managed and remain part of the accepted architecture. The application VM,
+reserved address, dedicated network/subnet, two ingress rules, and VM service account are in the
+isolated `infra/gce/terraform` local state. Application release installation, Compose, systemd,
+Secret Manager grants, KMS grant, GCS bucket/grants, public edge, DNS, and TLS are not owned by that
+state.
+
+The canonical checkout is `/opt/strayhub/current`; the accepted release inventory contained
+`/opt/strayhub/releases/e702d7d-e3`. Runtime supervision is owned by `strayhub-secrets.service`,
+`strayhub-migrate.service`, and `strayhub.service`. Backups are owned by
+`strayhub-backup.service` and `strayhub-backup.timer`.
+
+## Removal classification
+
+| Resource or boundary | Management owner | Classification | Removal prerequisite / evidence |
+| --- | --- | --- | --- |
+| `strayhub-gce` VM and boot disk | Current GCE Terraform | `KEEP_CURRENT` | Accepted application host; never a legacy cleanup target |
+| `strayhub-gce-ip` (`34.81.77.204`) | Current GCE Terraform | `KEEP_CURRENT` | Edge upstream and accepted static application address |
+| `strayhub-gce-vpc` and `strayhub-gce-subnet` | Current GCE Terraform | `KEEP_CURRENT` | Canonical VM network |
+| `strayhub-gce-allow-edge-upstreams` and `strayhub-gce-allow-iap-ssh` | Current GCE Terraform | `KEEP_CURRENT` | Canonical source-restricted Web/API and IAP SSH ingress |
+| `strayhub-gce-sa` | Current GCE Terraform; grants manual | `KEEP_CURRENT` | VM ADC identity for all accepted managed-service access |
+| Compose, named PostgreSQL/MinIO volumes, Worker, systemd units, release paths | Repo/operator managed on VM | `KEEP_CURRENT` | Accepted runtime and persistent data |
+| `nginx-20260820-033352` and address `rrapi-nginx` (`34.10.249.63`) | Manual, outside repo Terraform | `KEEP_CURRENT` | Sole public DNS/TLS/routing edge; its name is not evidence of legacy status |
+| `strayhub.enadv.quest` DNS and edge certificate | Manual/external DNS and edge Certbot | `KEEP_CURRENT` | Live traffic and trusted TLS depend on them; Cloud DNS API is disabled in this project |
+| Eleven `strayhub-prod-*` Secret Manager secrets | Manual managed-service setup | `KEEP_SHARED` | Current VM has resource-level Secret Accessor on each; secrets and values are never deletion candidates |
+| `strayhub-pii/pii-encryption` KMS key | Manual managed-service setup | `KEEP_SHARED` | Current VM has key-scoped Encrypter/Decrypter; live PII path depends on it |
+| `strayhub-backups-canvas-primacy-502703-k1` | Manual managed-service setup | `KEEP_SHARED` | Current backup target; current VM has objectCreator/objectViewer |
+| Default VPC, default firewall rules, and default Compute service account | GCP default/manual | `HOLD_NEEDS_VERIFICATION` | Current edge and unrelated workloads use this boundary; ownership is mixed |
+| `infra/gcp-demo` Cloud Run services/job and public invoker IAM declarations | Legacy Terraform source | `LEGACY_CANDIDATE` | No matching live StrayHub Cloud Run service was found; still require remote-state proof and reviewed plan |
+| `infra/gcp-demo` Cloud SQL, database/users, demo VPC and private-service-access declarations | Legacy Terraform source | `LEGACY_CANDIDATE` | Canonical DB is local PostgreSQL; Cloud SQL API is disabled, so remote-state/live ownership must still be proven |
+| `infra/gcp-demo` runtime GCS bucket/IAM/signed-URL declarations | Legacy Terraform source | `LEGACY_CANDIDATE` | Canonical media is MinIO and backup bucket is different; prove remote state cannot affect retained bucket/IAM |
+| Legacy Cloud Run service accounts and their project/Secret/KMS IAM declarations | Legacy Terraform source | `LEGACY_CANDIDATE` | Matching service accounts were not found live; prove state and remove only bindings for retired principals |
+| Legacy GitHub WIF pool/provider and Artifact Registry writer | Legacy Terraform source | `LEGACY_CANDIDATE` | No matching pool or `strayhub-demo` repository was found; replacement delivery gate must exist first |
+| Legacy `strayhub-demo` Artifact Registry, logging bucket, and Cloud Run error metric declarations | Legacy Terraform source | `LEGACY_CANDIDATE` | Matching resources were not found; verify remote state and replacement observability/image ownership |
+| Legacy `google_project_service.required` addresses | Legacy Terraform source | `HOLD_NEEDS_VERIFICATION` | APIs are project-shared; `disable_on_destroy=false`, but service ownership must not be treated as legacy-exclusive |
+| Legacy Secret Manager data sources | External references from legacy Terraform | `KEEP_SHARED` | Data sources do not create secrets; never delete referenced secrets as legacy cleanup |
+| Legacy KMS key variable/binding | Existing key plus legacy-principal binding | `KEEP_SHARED` | Retain key; only a proven retired principal's binding can become a candidate |
+| Legacy GCS backend and `strayhub/gcp-demo` prefix | Bucket identity absent from repo | `HOLD_NEEDS_VERIFICATION` | Locate backend configuration and inspect state metadata before changing source or state |
+| `.github/workflows/demo-build.yml`, legacy deploy scripts, and GCP-demo IaC contracts | Repository CI/operations | `LEGACY_CANDIDATE` | Replace current validation/image gate and disable mutation paths before removal |
+| `rrapi-20260813`, `rr-test`, `rr-api-firewall`, `rrbot`, `rrbot-9527`, and `car-930` identity | Other live workloads | `UNKNOWN` | Names and live presence do not prove StrayHub ownership; exclude from every Phase F deletion plan |
+
+## Terraform ownership
+
+### Current GCE state
+
+`infra/gce/terraform/versions.tf` uses a local backend at `terraform.tfstate`. The state and plan
+artifacts are Git-ignored. The existing saved `e1c-final.tfplan` reports `No changes`; it was read,
+not regenerated or applied. The checked state contains exactly:
+
+| Terraform address | GCP resource | Purpose | Classification | Safe to remove later? |
+| --- | --- | --- | --- | --- |
+| `data.google_compute_image.ubuntu_lts` | Ubuntu image lookup | Boot image selection | `KEEP_CURRENT` | No |
+| `google_compute_address.gce` | `strayhub-gce-ip` | Static application address | `KEEP_CURRENT` | No |
+| `google_compute_firewall.edge_upstreams` | Edge-only TCP 3000/8080 | Public-edge upstream | `KEEP_CURRENT` | No |
+| `google_compute_firewall.iap_ssh` | IAP TCP 22 | Administrative access | `KEEP_CURRENT` | No |
+| `google_compute_instance.gce` | `strayhub-gce` | Application host | `KEEP_CURRENT` | No |
+| `google_compute_network.gce` | `strayhub-gce-vpc` | Dedicated network | `KEEP_CURRENT` | No |
+| `google_compute_subnetwork.gce` | `strayhub-gce-subnet` | `10.42.0.0/24` subnet | `KEEP_CURRENT` | No |
+| `google_service_account.runtime` | `strayhub-gce-sa` | VM ADC identity | `KEEP_CURRENT` | No |
+
+The VM resource has a lifecycle precondition for IAP compatibility, but neither Terraform tree has
+`prevent_destroy`. The current state does not own the edge, DNS/TLS, Secret Manager secrets or
+grants, KMS key or grant, backup bucket or grants, application release, Compose data, or systemd.
+
+### Legacy GCP-demo Terraform
+
+`infra/gcp-demo/terraform` declares a GCS backend prefix `strayhub/gcp-demo`, but the backend bucket
+is intentionally supplied outside the repository. Repository gates initialize it with
+`-backend=false`; no local legacy state is present. Consequently the following are declarations,
+not proof that the resources exist in the active project or are present in a reachable state:
+
+| Terraform address/group | Declared GCP purpose | Classification |
+| --- | --- | --- |
+| `google_project_service.required[*]` | Eleven project APIs | `HOLD_NEEDS_VERIFICATION` |
+| `data.google_secret_manager_secret.runtime[*]` | Existing runtime secrets | `KEEP_SHARED` |
+| `google_cloud_run_v2_service.{web,api,worker}` | Legacy runtime | `LEGACY_CANDIDATE` |
+| `google_cloud_run_v2_job.migration` | Legacy Alembic job | `LEGACY_CANDIDATE` |
+| `google_cloud_run_v2_service_iam_member.*` | Legacy public ingress | `LEGACY_CANDIDATE` |
+| `google_compute_network.demo`, `google_compute_global_address.private_service_access`, `google_service_networking_connection.private_service_access` | Legacy Cloud SQL network path | `LEGACY_CANDIDATE` |
+| `google_sql_database_instance.demo`, `google_sql_database.crm`, `google_sql_user.{runtime,migration}` | Legacy database | `LEGACY_CANDIDATE` |
+| `google_storage_bucket.private`, bucket/runtime IAM, signed-URL IAM | Legacy runtime media | `LEGACY_CANDIDATE` |
+| `google_service_account.runtime[*]` and project IAM groups | Legacy runtime identities | `LEGACY_CANDIDATE` |
+| `google_kms_crypto_key_iam_member.api_volunteer_pii` | Binding on an existing/shared key | `KEEP_SHARED` key; candidate binding only after principal proof |
+| `google_secret_manager_secret_iam_member.runtime[*]` | Bindings on existing/shared secrets | `KEEP_SHARED` secrets; candidate bindings only after principal proof |
+| `google_iam_workload_identity_pool.github`, provider, and writer IAM | Legacy GitHub delivery identity | `LEGACY_CANDIDATE` after CI replacement |
+| `google_artifact_registry_repository.containers` | Legacy image repository | `LEGACY_CANDIDATE` after image provenance review |
+| `google_logging_project_bucket_config.demo`, `google_logging_metric.cloud_run_errors` | Legacy observability | `LEGACY_CANDIDATE` after logging review |
+
+There are no modules or workspace selection in either tree. Both pin Google provider `~> 6.0` and
+Terraform `>= 1.6.0, < 2.0.0`.
+
+## Read-only live inventory evidence
+
+The active project is `canvas-primacy-502703-k1`.
+
+- Current: `strayhub-gce` is running at `34.81.77.204`; its dedicated address, VPC/subnet,
+  firewall rules, and service account match the current state.
+- Current manual edge: `nginx-20260820-033352` is running at `34.10.249.63`, and public DNS resolves
+  there.
+- Managed services: exactly eleven named `strayhub-prod-*` secrets, KMS key
+  `strayhub-pii/pii-encryption`, and backup bucket
+  `strayhub-backups-canvas-primacy-502703-k1` were found. The VM identity has only the documented
+  resource-level Secret Accessor, KMS Encrypter/Decrypter, and bucket objectCreator/objectViewer
+  grants; it has no project-level role from these checks.
+- Legacy names absent: no `strayhub-demo-*` Cloud Run service/job, service account, Artifact
+  Registry, WIF pool, logging bucket, error metric, load-balancer backend, URL map, forwarding rule,
+  target proxy, or Compute SSL certificate was found.
+- Cloud SQL and Cloud DNS APIs are disabled. They were not enabled for inventory. This prevents a
+  complete API-level absence proof and leaves remote-state/DNS ownership on hold.
+- The only Artifact Registry found was `rrbot-9527`; the only Cloud Run service found was `rrbot`.
+  Other `rr*` compute/network resources and `car-930` are classified `UNKNOWN`, not legacy.
+
+Live absence is not deletion authorization. A resource may exist in another project/region or in a
+remote state whose backend bucket is not recorded here.
+
+## CI and deployment ownership
+
+`.github/workflows/demo-build.yml` does not deploy: it formats and validates legacy Terraform with
+the backend disabled, scans `infra/gcp-demo`, builds its API/Worker/Web images locally, and uploads
+metadata. It neither authenticates to GCP nor pushes images. `.github/workflows/ci.yml` is the
+primary test/quality gate and still runs contracts that require the legacy IaC shape.
+
+No workflow deploys the accepted GCE architecture. The accepted host is released manually through
+repo-owned scripts, Compose, and systemd. `infra/gcp-demo/apply.sh` remains a manual production
+mutation path guarded by `GCP_DEMO_APPLY=1`; its migration, seed, and LINE sync helpers target the
+legacy Cloud Run design. Therefore legacy CI/files cannot be removed until a GCE build/release gate
+exists, while the legacy manual mutation path must be retired or made uncallable before cleanup.
+The live `rrbot-9527` repository is unrelated/unknown and is not a StrayHub replacement registry.
+
+## Terraform state risks
+
+1. The current local state is clear but narrow: it owns only the GCE host foundation.
+2. F2 found no legacy backend bucket or state in repository history, local metadata, or the accepted
+   project. The sole project bucket has no `strayhub/gcp-demo` prefix. An external/other-project
+   backend remains excluded and unknown; if produced later, it may mix legacy-exclusive resources
+   with shared Secret/KMS IAM and project APIs.
+3. Removing legacy source and later applying its state could destroy legacy resources, remove IAM
+   from shared resources, or leave orphaned objects. Source deletion must follow—not precede—a state
+   disposition plan.
+4. Current live resources absent from current Terraform include the public edge/address, DNS/TLS,
+   Secret/KMS/GCS resources and IAM, systemd, releases, and runtime data.
+5. Several legacy declarations do not correspond to resources visible in the active project, but
+   that does not prove the remote state is empty, uses this project, or is authoritative.
+6. F2 proposes a separate platform Terraform owner and future imports for manually retained Secret
+   Manager, KMS, GCS, and resource-IAM objects. If legacy state is later discovered with retained
+   addresses, the decision changes to a state split. No state action is authorized yet.
+
+Ownership is clear enough to implement F3 release gates, but not to run a destructive plan. Cloud
+SQL remains `UNKNOWN` because both Cloud SQL and Cloud Asset APIs are disabled and were not enabled
+for discovery. See [`phase-f-release-and-state-plan.md`](phase-f-release-and-state-plan.md).
+
+## Phase F2 outcome and Phase F3 prerequisites
+
+F2 remained non-destructive and produced the ownership and release design linked above. F3 should:
+
+1. implement the replacement GCE build/release gate with immutable image and release provenance;
+2. create a reproducible deployment and schema-compatible rollback/roll-forward artifact pair;
+3. provision a dedicated registry and short-lived CI identity only after separate review;
+4. keep Cloud SQL and all unrelated resources explicitly held;
+5. make no legacy state or deletion change; and
+6. leave candidate deletion planning for a separately reviewed later task.
+
+No destructive Phase F task should begin merely because F1/F2 are `READY`.
+
+## Phase F5 final inventory checkpoint
+
+Status: **BLOCKED** for destructive cleanup. This section supersedes the earlier preliminary
+classification where live F4 evidence now exists; it does not rewrite the historical F1 findings.
+
+F5 verified release `20260831T034951Z-38ab34dc6aaf` and all three running image digests against its
+manifest. DNS resolves to the retained nginx edge at `34.10.249.63`, whose live configuration sends
+Web/API traffic only to `strayhub-gce` at `34.81.77.204:3000/8080`. The application, Worker,
+PostgreSQL, MinIO, systemd unit, and backup timer are healthy. The runtime database endpoint is the
+Compose `postgres` service and the runtime role remains `strayhub_app`.
+
+The active project contains no matching `strayhub-demo-*` Cloud Run service/job, service account,
+WIF pool, Artifact Registry, VPC/private-service-access boundary, logging bucket, or logging metric.
+Those absent identities are not live deletion targets; their source declarations are
+`LEGACY_SAFE_CANDIDATE` only after all F6 gates. The project contains only the unrelated Cloud Run
+service `rrbot`, unrelated registry `rrbot-9527`, and the explicitly excluded `rr*`/`car-930`
+resources alongside current StrayHub infrastructure.
+
+Cloud SQL remains `CLOUD_SQL_UNKNOWN`: Cloud SQL Admin and Cloud Asset APIs are not enabled, and F5
+did not enable them. No legacy state, service-networking peering, reserved global address, Cloud Run
+consumer, or current runtime reference was found, but those negative signals do not prove API-level
+absence. The externally supplied runtime-GCS bucket identity and the legacy GCS backend bucket also
+remain unknown. Therefore the preliminary `LEGACY_CANDIDATE` labels for Cloud SQL/runtime GCS are
+now conservatively `UNKNOWN`, and project APIs/default shared resources are `HOLD`.
+
+The legacy CI redeploy answer is `YES`: `.github/workflows/demo-build.yml` itself performs no GCP
+authentication, push, apply, or deploy, but `infra/gcp-demo/apply.sh` can apply the obsolete root
+under `GCP_DEMO_APPLY=1`; `migrate.sh`, `seed-demo.sh`, and `sync-line.sh` can execute its Cloud Run
+jobs. F6 must first retire these operator paths and replace legacy-shape CI assertions on the
+default branch. No path was disabled during F5.
+
+Current GCE local state still contains exactly the eight previously recorded addresses. A live
+read-only plan reported no changes. There is still no usable legacy state, so a legacy destroy plan
+is `NOT_AVAILABLE`; no guessed backend was initialized. Shared ownership is only partial until an
+isolated `PLATFORM_TERRAFORM` root adopts exact Secret Manager/KMS/GCS/IAM resources with zero-change
+plans. The required decision is `STATE_MIGRATION_FIRST`.
+
+The complete resource matrix, protected-resource list, hard gates, and exact dependency-ordered F6
+proposal are in [`phase-f-removal-plan.md`](phase-f-removal-plan.md). F6 remains blocked by Cloud SQL,
+legacy backend/runtime-bucket identity, incomplete platform ownership, callable legacy operator
+paths, and the absence of a genuine compatible immutable N-1.
+
+### Phase F5b update
+
+The retained-resource ownership blocker is resolved: `PLATFORM_TERRAFORM` uses a dedicated private
+backend and has imported 29 exact Secret Manager/KMS/GCS/IAM addresses with a final no-change plan.
+The state contains no secret values or versions. The complete ledger is in
+[`platform-terraform.md`](platform-terraform.md).
+
+The F5b source branch also converts all four `infra/gcp-demo` mutation helpers to unconditional
+fail-closed stubs and removes OIDC permission from the validation-only demo workflow. This becomes
+`Legacy redeploy risk: NO` only after the same reviewed retirement is present on the default branch;
+until then the project-wide result remains `YES`.
+
+Refreshed read-only discovery still cannot prove absence outside the accepted project: Cloud SQL
+Admin/Cloud Asset/service-networking APIs remain disabled, repository history never recorded a
+backend or runtime bucket name, and the active project contains only the canonical backup and new
+platform-state buckets. Cloud SQL, legacy backend and legacy runtime GCS therefore remain `UNKNOWN`.
+
+Default-branch commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` now contains that exact
+retirement, so repository automation can no longer redeploy the legacy stack and the final legacy
+redeploy risk is `NO`. The current release/publication workflow remains enabled and exact-SHA
+pinned.
+
+F5b also established a genuine immutable pair. N is
+`20260831T060436Z-5f0664f0a639`; N-1 is `20260831T034951Z-38ab34dc6aaf`. Both use migration head
+`0037_animal_external_sources`. Exact-digest N deployment, fresh backup
+`20260831T062155Z-e3daily2165`, N -> N-1 rollback, N-1 authenticated tenant/RLS/volunteer
+acceptance, roll-forward to N, and final N acceptance all passed. No database downgrade, volume
+removal, DNS/TLS change, legacy mutation, or legacy deletion occurred.
+
+### Phase F5c final resource discovery
+
+F5c repeated the three unresolved identity searches without enabling an API or changing GCP. The
+accepted project `canvas-primacy-502703-k1` was created on 2026-07-17, so its available 60-day
+Admin Activity audit window covers the project's full lifetime and the 2026-08-09 introduction of
+the legacy Terraform source.
+
+At accepted-project scope, the evidence is conclusive:
+
+- Cloud SQL Admin, Cloud Asset, and Service Networking remain disabled. The full-lifetime Admin
+  Activity search has no Cloud SQL service event, no `sqladmin.googleapis.com` enablement event,
+  and no reference to the default declared instance `strayhub-demo-postgres`. Project IAM has no
+  Cloud SQL service-agent binding, and compute inventory has no private-service address, peering,
+  or peering route. The legacy deployment evidence is still `T239` pending. A legacy Cloud SQL
+  declaration targeted at this accepted project is therefore `DECLARED_BUT_ABSENT`.
+- Storage Admin Activity contains only creation of the canonical backup bucket on 2026-08-30 and
+  the platform-state bucket on 2026-08-31. Those are also the only current project buckets. Neither
+  contains an object under `strayhub/gcp-demo/`; their visible top-level prefixes are the protected
+  backup and platform-state paths. The template-only name `strayhub-demo-private` returns `404`.
+- Repository history contains no tracked `terraform.tfvars`, backend config, legacy state, backend
+  bucket value, runtime bucket value, or production project value. The original workflow always
+  used `terraform init -backend=false`; the historical manual plan/apply helper also used
+  `-backend=false`. Its deployment evidence was never changed from pending.
+
+The final cross-project classifications nevertheless remain fail-closed. `project_id`,
+`name_prefix`, the GCS backend bucket, and `gcs_bucket_name` were explicitly external inputs. The
+single authenticated account can inspect three projects and found no additional buckets, but the
+repository cannot prove that a now-inaccessible project/account was never supplied. Under the F5c
+absence standard this means:
+
+| Boundary | Accepted-project correlation | Final classification |
+| --- | --- | --- |
+| Cloud SQL | `DECLARED_BUT_ABSENT` | `CLOUD_SQL_UNKNOWN` |
+| GCS backend with prefix `strayhub/gcp-demo` | no matching bucket/object; external bucket identity unresolved | `UNKNOWN` |
+| Runtime GCS | no matching bucket; external project/bucket identity unresolved | `UNKNOWN` |
+
+No live legacy resource, state object, new `LEGACY_SAFE_CANDIDATE`, or `LEGACY_DATA_HOLD` was
+discovered. Existing `KEEP_CURRENT`, `KEEP_SHARED`, and `EXCLUDED` protections are unchanged. The
+remaining proof requires the historical operator/organization records that supplied the external
+Terraform inputs, or equivalent organization-wide inventory; it cannot be manufactured from the
+repository. Deletion safety and Phase F6 entry remain **BLOCKED**.
+
+### Phase F5d historical project and organization inventory
+
+F5d obtained the missing historical scope without changing GCP. The sole configured gcloud account
+has organization-administrator access to organization `710298876843`. Complete project enumeration
+shows exactly two active organization projects and no folders. One additional account-visible
+project is a Gemini-only project outside the organization and has no StrayHub repository, operator,
+service, or resource correlation.
+
+| Candidate project | Evidence | Confidence | Inspected |
+| --- | --- | --- | --- |
+| `canvas-primacy-502703-k1` | Sole configured/current StrayHub project and only project with current StrayHub resources; no legacy activity | `HIGH` candidate, not evidence of legacy use | Yes |
+| `project-a3abfe87-0279-4c0b-81d` | Second and only other organization project; no repository/operator link or relevant resource/service activity | `LOW` | Yes |
+| `gen-lang-client-0758576890` | Account-visible, outside the organization, Gemini-only label/service, no StrayHub correlation | `LOW`; `EXCLUDED` | Yes |
+
+Both organization projects were created on 2026-07-17. Their full-lifetime Admin Activity has no
+`strayhub-demo` event, Cloud SQL event, or Cloud SQL API enablement. The second project has no
+relevant API or bucket. The accepted project contains only the current protected StrayHub and
+explicitly excluded resources already recorded above. Organization-level Cloud Asset search was
+unavailable because the API remains disabled; it was not enabled. Complete organization project
+enumeration, per-project resource/service inventory, and full-project-lifetime audit evidence were
+used instead.
+
+Repository and complete Git history, tracked/ignored local Terraform metadata, shell history, and
+available gcloud logs contain no legacy project input, backend bucket, runtime bucket, remote state,
+`GCP_DEMO_APPLY=1` execution, or successful T239 evidence. Historical CI and the manual helper both
+used `terraform init -backend=false`, and `infra/gcp-demo/deployment-evidence.md` has remained
+pending since creation.
+
+The historical identity is therefore `RESOLVED` as **no legacy deployment project used**. The
+legacy root was implemented and validated but never applied:
+
+| Boundary | F5d classification | Resource disposition |
+| --- | --- | --- |
+| Cloud SQL | `ABSENT_PROVEN` | source declaration only; no live deletion target |
+| Backend/state | `ABSENT_PROVEN` | source backend block only; no bucket or state object |
+| Runtime GCS | `ABSENT_PROVEN` | source declaration only; no data-bearing bucket |
+
+No `LEGACY_DATA_HOLD` was found. The Cloud SQL, backend, and runtime-GCS source declarations join
+the existing repository-only `LEGACY_SAFE_CANDIDATE` set. `KEEP_CURRENT`, `KEEP_SHARED`, and
+`EXCLUDED` remain unchanged. Deletion safety and F6 entry are **READY** only for a separately
+authorized repository cleanup; the live GCP deletion manifest is empty.
+
+## Phase F deletion hard gates
+
+- [x] replacement GCE CI release/publication gate exists
+- [x] production GCE deployment can be reproduced
+- [x] Terraform state ownership reviewed
+- [x] shared resources identified and protected
+- [x] rollback owner recorded
+- [x] rollback artifact/release strategy exists
+- [x] legacy deployment no longer receives production traffic
+- [x] legacy CI cannot redeploy unexpectedly
+- [x] candidate deletion plan reviewed
+- [x] terraform plan shows no unintended retained-resource changes
+- [x] backup/restore evidence remains valid
+- [x] historical legacy project scope resolved
+- [x] Cloud SQL, backend/state, and runtime GCS absence proven
+
+The traffic gate is supported by DNS resolving to the accepted edge, its upstream configuration
+targeting `strayhub-gce`, and the absence of any StrayHub Cloud Run service in the active project.
+The backup/restore gate is supported by the accepted E5 checkpoint. F5d resolves the last identity
+gates; F6 still requires separate authorization and is limited to repository-source cleanup.
+
+## Phase F6 disposition
+
+The separately authorized F6 cleanup removed the repository-only `LEGACY_SAFE_CANDIDATE` source.
+Required API/Worker/Web Dockerfiles and the LINE Rich Menu input were preserved under `infra/gce/`;
+historical evidence remains in `docs/deployment/history/legacy-gcp-demo.md`. There was no live
+resource target and no infrastructure mutation or deletion. All `KEEP_CURRENT`, `KEEP_SHARED`, and
+`EXCLUDED` classifications remain unchanged.

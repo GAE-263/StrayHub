@@ -248,7 +248,11 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 
 一般 LIFF 與 Bot 流程開發使用 Mock LIFF Context、Mock LINE Webhook Payload、Signature Test Helper、`MockLineAdapter`、Postback／Image／Redelivery Fixture。需要驗證真正 LINE 身分、Webhook、Rich Menu、LIFF URL 或 LIFF Browser 行為時，才啟用 `LineMessagingApiAdapter` 並使用 LINE 官方建議的 HTTPS 本機開發環境或受控 Demo 入口。Webhook 事件處理不得在一般單元測試呼叫真實 LINE API；圖片內容取得、Reply Token、Push Message 與 Rich Menu API 以 Adapter／Contract Test 隔離。不得要求所有日常前端開發都透過已部署的 GCP 環境進行。
 
-### Demo 部署門檻（GCP Demo Deployment Gate）
+### Demo 部署門檻（歷史、已退役）
+
+> Phase F6 已移除這個從未實際建立的 GCP Demo／Cloud Run source。以下內容只保留原始
+> 設計決策的歷史脈絡，不是可執行的部署指引。現行部署 source of truth 請見
+> `docs/deployment/deployment-source-of-truth-plan.md`。
 
 以下條件屬於 GCP Demo Deployment Gate，不代表 Feature Completion；只有全部滿足後，才部署至 GCP Demo：
 
@@ -262,7 +266,7 @@ Docker Compose 用於啟動 PostgreSQL、MinIO 及其他必要的本機基礎服
 - Organization A／B 資料隔離測試通過。
 - MinIO Storage Adapter 測試通過。
 - GCS Storage Adapter Contract Test 通過。
-- `terraform fmt -check -recursive infra/gcp-demo/terraform` 與 `terraform -chdir=infra/gcp-demo/terraform validate` 通過；在 Terraform 設定尚未加入前，CI 的 Terraform Job 以 Path Filter 明確跳過，不得因目錄不存在阻擋本機 Setup。
+- 歷史 Terraform format/validate gate 曾通過；其 source 已退役且不得重建或執行。
 - 不含真實個資或正式收容所敏感資料。
 
 ### GCP Demo 環境
@@ -278,7 +282,9 @@ Demo 前才建立：
 - Artifact Registry
 - Cloud Logging
 
-上述 GCP 資源全部由 `infra/gcp-demo/terraform/` 的 Terraform 設定建立與更新，包含三個 Cloud Run 執行單元及其 Service Account、IAM、環境設定與 Cloud SQL／Cloud Storage 關聯。`cloud-run-*.yaml` 不作為正式部署來源；若產生診斷或匯出用 YAML，必須視為可重建產物且不得由部署流程直接套用。LINE Rich Menu 設定不屬於 GCP 資源，可使用獨立的環境設定檔，但不得承載授權資訊。GCP Demo 只使用虛構資料或合法公開資料。
+這套規劃從未實際建立，已在 Phase F6 移除；不得使用本節重建 Cloud Run、Cloud SQL 或
+runtime GCS。LINE Rich Menu 的現行版本化輸入位於 `infra/gce/line-rich-menu.yaml`，且不得
+承載授權資訊。
 
 部署後必須重新執行：
 
@@ -402,7 +408,7 @@ specs/001-volunteer-care-report/validation/
 └── staff-usability-evidence.md  # SC-006／SC-014 去識別化證據
 ```
 
-**結構決策**：採 `apps/web`、`services/api` 與 `services/worker` 的分離結構。FastAPI 程式碼固定置於 `services/api/app/`，Alembic 固定置於 `services/api/migrations/`；Worker 啟動入口固定為 `services/worker/worker.py`，其 Session、Repository、Adapter 與 Handler 固定置於 `services/worker/app/`。`contracts/openapi.yaml` 是前後端正式 API Contract，`packages/contracts/src/openapi.ts` 只是其生成型別；`infra/local` 服務本機優先策略；`infra/gcp-demo/terraform/` 是所有 GCP Demo 資源的唯一 IaC 來源。`tests/security` 驗證單一安全控制，`tests/isolation` 以真實 PostgreSQL 專測跨租戶矩陣，`tests/e2e` 專測跨程序垂直流程，`tests/fixtures` 只保存非正式、虛構測試輸入。後續 Tasks 不得再建立與此結構平行的第二套 Migration、Worker Persistence、Contract Types 或 Cloud Run 部署路徑。
+**結構決策**：採 `apps/web`、`services/api` 與 `services/worker` 的分離結構。FastAPI 程式碼固定置於 `services/api/app/`，Alembic 固定置於 `services/api/migrations/`；Worker 啟動入口固定為 `services/worker/worker.py`，其 Session、Repository、Adapter 與 Handler 固定置於 `services/worker/app/`。`contracts/openapi.yaml` 是前後端正式 API Contract，`packages/contracts/src/openapi.ts` 只是其生成型別；`infra/local` 服務本機優先策略；歷史 GCP Demo IaC 已在 Phase F6 退役。`tests/security` 驗證單一安全控制，`tests/isolation` 以真實 PostgreSQL 專測跨租戶矩陣，`tests/e2e` 專測跨程序垂直流程，`tests/fixtures` 只保存非正式、虛構測試輸入。後續 Tasks 不得再建立與此結構平行的第二套 Migration、Worker Persistence、Contract Types 或 Cloud Run 部署路徑。
 
 ## 複雜度追蹤
 

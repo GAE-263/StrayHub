@@ -1,0 +1,13 @@
+# Copy to an ignored terraform.tfvars only after confirming the active account and project.
+project_id = "canvas-primacy-502703-k1"
+region     = "asia-east1"
+zone       = "asia-east1-b"
+
+# Optional reviewed overrides:
+# environment       = "production"
+# instance_name     = "strayhub-gce"
+# machine_type      = "e2-medium"
+# boot_disk_size_gb = 30
+# edge_source_cidr  = "34.10.249.63/32"
+# web_upstream_port = 3000
+# api_upstream_port = 8080

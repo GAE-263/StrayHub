@@ -1,0 +1,20 @@
+[Unit]
+Description=StrayHub PostgreSQL and MinIO backup upload
+Wants=network-online.target
+Requires=docker.service strayhub-secrets.service strayhub.service
+After=network-online.target docker.service strayhub-secrets.service strayhub.service
+
+[Service]
+Type=oneshot
+User=strayhub
+Group=strayhub
+SupplementaryGroups=docker
+WorkingDirectory=/opt/strayhub/current
+EnvironmentFile=/var/lib/strayhub/secrets/current/runtime.env
+# Use the SDK entrypoint directly so the non-root system user does not cross the
+# snap launcher, which rejects this system user's home outside /home.
+Environment=PATH=/snap/google-cloud-cli/current/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/strayhub/current/infra/gce/scripts/run-systemd-backup.sh --config-env /etc/strayhub/production.env --output-root /var/lib/strayhub/backups --project-name strayhub-production --lock-file /run/lock/strayhub-backup.lock
+TimeoutStartSec=1800
+NoNewPrivileges=true
+PrivateTmp=true
