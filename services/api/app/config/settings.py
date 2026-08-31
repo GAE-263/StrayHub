@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     ai_endpoint: str | None = None
     ai_api_key: str | None = None
     ai_timeout_seconds: float = Field(default=30.0, gt=0)
+    # 組員的便便判讀服務（Cloud Run + Gemini）。URL 與金鑰都設定時 Worker
+    # 才會啟用；金鑰另行索取，不進版控。文件建議 timeout 30 秒（含冷啟動）。
+    stool_api_url: str | None = None
+    stool_api_key: str | None = None
+    stool_timeout_seconds: float = Field(default=30.0, gt=0)
 
 
 @lru_cache(maxsize=1)

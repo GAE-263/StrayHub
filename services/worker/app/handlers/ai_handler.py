@@ -6,7 +6,11 @@ from typing import Any
 
 from services.api.app.api.errors import DomainError
 from services.worker.app.handlers.ai_validation import validate_ai_output
-from services.worker.app.infrastructure.ai_port import AIClientPort, AIRequestVersion
+from services.worker.app.infrastructure.ai_port import (
+    AIAnalysisEnvelope,
+    AIClientPort,
+    AIRequestVersion,
+)
 
 
 class AIJobHandler:
@@ -59,11 +63,19 @@ class AIJobHandler:
                 image_bytes=cleaned_images,
                 version=version,
             )
-            job.raw_ai_output = output
-            validated = validate_ai_output(output, allowed_codes=allowed_codes)
+            # 供應商可用信封把「完整原始回應」與「正式建議」分開：raw 原樣
+            # 保存供授權覆核，只有 formal 走治理驗證。普通 dict 走原本路徑。
+            if isinstance(output, AIAnalysisEnvelope):
+                raw_output: object = output.raw
+                formal_output: object = output.formal
+            else:
+                raw_output = output
+                formal_output = output
+            job.raw_ai_output = raw_output
+            validated = validate_ai_output(formal_output, allowed_codes=allowed_codes)
             job.validation_result = {"status": "valid"}
             if observation is not None:
-                observation.raw_ai_output = output
+                observation.raw_ai_output = raw_output
                 observation.validated_ai_observation = validated
                 observation.status = "succeeded"
             job.status = "succeeded"

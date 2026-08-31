@@ -32,6 +32,7 @@ from services.worker.app.handlers.ai_handler import AIJobHandler
 from services.worker.app.infrastructure.ai_adapter import AIAdapter
 from services.worker.app.infrastructure.ai_port import AIClientPort
 from services.worker.app.infrastructure.mock_ai_adapter import MockAIAdapter
+from services.worker.app.infrastructure.stool_analysis_adapter import StoolAnalysisAdapter
 from services.worker.app.persistence.job_repository import WorkerJobRepository
 
 # 認領後超過這個時間仍是 running 的 Job 視為 Worker 中斷，交還給下一輪。
@@ -55,8 +56,18 @@ def _retry_available_at(retry_count: int) -> datetime:
 
 
 def build_ai_client() -> AIClientPort:
-    """依設定選擇 AI 供應商；預設的 mock 讓本機展示不需要外部服務。"""
+    """依設定選擇 AI 供應商；預設的 mock 讓本機展示不需要外部服務。
+
+    STOOL_API_URL 與 STOOL_API_KEY 同時設定時啟用組員的便便判讀服務，
+    優先於 mock——把金鑰填進 .env、重啟 Worker 就生效，拿掉金鑰即停用。
+    """
     settings = get_settings()
+    if settings.stool_api_url and settings.stool_api_key:
+        return StoolAnalysisAdapter(
+            endpoint=settings.stool_api_url,
+            api_key=settings.stool_api_key,
+            timeout_seconds=settings.stool_timeout_seconds,
+        )
     if settings.ai_provider == "mock":
         return MockAIAdapter()
     return AIAdapter(
@@ -210,6 +221,11 @@ class AIJobRunner:
             .order_by(MediaAsset.created_at)
         )
         media_assets = list(media_result.scalars())
+        # 供應商只看得懂特定 subject 的照片時（例如便便判讀只收 stool），
+        # 在下載前先過濾，其餘照片不必從物件儲存抓回來。
+        image_subject = getattr(self.client, "image_subject", None)
+        if image_subject is not None:
+            media_assets = [asset for asset in media_assets if asset.subject == image_subject]
         scope = ObjectScope(organization_id)
         images = [
             await self.storage.get(scope=scope, key=asset.object_key) for asset in media_assets
