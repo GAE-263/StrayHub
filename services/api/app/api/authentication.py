@@ -177,12 +177,14 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
             settings.auth_jwt_previous_public_key
         )
     rich_menu_router = None
-    registry = build_registry(
-        default=settings.line_rich_menu_default_id,
-        volunteer=settings.line_rich_menu_volunteer_id,
-        adopter=settings.line_rich_menu_adopter_id,
-        staff=settings.line_rich_menu_staff_id,
-    )
+    registry = build_registry()
+    if settings.line_role_menu_features_active():
+        registry = build_registry(
+            default=settings.line_rich_menu_default_id,
+            volunteer=settings.line_rich_menu_volunteer_id,
+            adopter=settings.line_rich_menu_adopter_id,
+            staff=settings.line_rich_menu_staff_id,
+        )
     if registry.menu_ids:
         from services.api.app.infrastructure.line.messaging_api_adapter import (
             LineMessagingApiAdapter,

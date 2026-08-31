@@ -44,6 +44,61 @@ def test_safe_non_local_configuration_passes_with_optional_ai_disabled() -> None
     assert safe_non_local_settings().validate_runtime_safety().app_env == "production"
 
 
+def test_line_role_menu_features_are_local_by_default_and_fail_closed_nonlocal() -> None:
+    assert Settings(_env_file=None, app_env="local").line_role_menu_features_active() is True
+    assert safe_non_local_settings().line_role_menu_features_active() is False
+    assert (
+        safe_non_local_settings(
+            line_role_menu_features_enabled=True
+        ).line_role_menu_features_active()
+        is True
+    )
+
+
+def test_enabled_line_role_menu_features_require_complete_release_evidence() -> None:
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        safe_non_local_settings(line_role_menu_features_enabled=True).validate_runtime_safety()
+
+    message = str(caught.value)
+    for field in (
+        "WEB_PUBLIC_BASE_URL",
+        "LINE_RICH_MENU_DEFAULT_ID",
+        "LINE_RICH_MENU_VOLUNTEER_ID",
+        "LINE_RICH_MENU_STAFF_ID",
+        "LINE_STAFF_LIFF_ID",
+        "LINE_ROLE_MENU_SMOKE_EVIDENCE",
+    ):
+        assert field in message
+
+
+def test_enabled_line_role_menu_features_accept_complete_safe_contract() -> None:
+    settings = safe_non_local_settings(
+        line_role_menu_features_enabled=True,
+        web_public_base_url="https://strayhub.enadv.quest",
+        line_rich_menu_default_id="richmenu-default-production",
+        line_rich_menu_volunteer_id="richmenu-volunteer-production",
+        line_rich_menu_staff_id="richmenu-staff-production",
+        line_staff_liff_id="1234567890-StaffLiff",
+        line_role_menu_smoke_evidence=f"verified-20260901-{'a' * 40}",
+    )
+
+    assert settings.validate_runtime_safety() is settings
+
+
+def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        line_role_menu_features_enabled=True,
+        line_channel_access_token="production-line-access-token",
+        line_rich_menu_default_id="richmenu-default-production",
+        line_rich_menu_volunteer_id="richmenu-volunteer-production",
+    )
+
+    assert settings.validate_runtime_safety(process="worker") is settings
+
+
 @pytest.mark.parametrize("process", ["worker", "migration"])
 def test_non_api_process_policy_requires_only_its_database(process: str) -> None:
     settings = Settings(

@@ -151,9 +151,15 @@ def _volunteer_application_liff_url() -> str:
     return f"https://liff.line.me/{get_settings().liff_id}"
 
 
+def _line_role_menu_features_active() -> bool:
+    return get_settings().line_role_menu_features_active()
+
+
 def _rich_menu_router() -> RichMenuRoutingService | None:
     """四個 richMenuId 都沒設定時回 None，選單切換為 no-op。"""
     settings = get_settings()
+    if not _line_role_menu_features_active():
+        return None
     registry = build_registry(
         default=settings.line_rich_menu_default_id,
         volunteer=settings.line_rich_menu_volunteer_id,
@@ -250,6 +256,12 @@ async def _handle_menu_action(
     action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
         "action", [""]
     )[0]
+    if not _line_role_menu_features_active() and (
+        action in MENU_PLACEHOLDER_ACTIONS
+        or action in {"start_binding", "start_adoption_matching", "back_to_default_menu"}
+    ):
+        await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
+        return True
     if action == "start_binding":
         # 目前沒有專屬的綁定 LIFF 頁；工作人員綁定走 scripts/bind_line_account.py，
         # 志工走報名流程。實際入口待產品決定後接上。
@@ -301,6 +313,9 @@ async def _handle_public_volunteer_application_entry(
     is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
     if not is_text_command and not is_postback_command:
         return False
+    if not _line_role_menu_features_active():
+        await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
+        return True
     line_user_id = event.get("source", {}).get("userId")
     if await _switch_menu_to_volunteer_if_active(session, line_user_id):
         await _reply(
@@ -455,6 +470,8 @@ async def _get_or_create_adopter_identity(session, line_user_id: str) -> UUID:
 
 
 async def _active_adoption_draft(session, line_user_id: str):
+    if not _line_role_menu_features_active():
+        return None
     binding = await LineWebhookRepository(session).binding(line_user_id)
     if binding is None:
         return None

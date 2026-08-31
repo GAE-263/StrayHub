@@ -40,6 +40,42 @@ without introducing a service-account JSON or application-side GCS dependency.
 | `AI_PROVIDER` | API | Non-secret | Verification env; `mock` | Compose non-secret env/config |
 | `AI_API_KEY` | API when external AI is selected | Secret | Not set because Phase B1 uses mock AI | Secret Manager → optional staged `runtime.env` entry |
 
+### LINE role-menu release gate
+
+The existing LINE webhook credentials remain required because they also serve the pre-existing care
+workflow. The integrated role-menu, adoption-conversation, and staff-menu behavior has a separate
+fail-closed release gate. `LINE_ROLE_MENU_FEATURES_ENABLED` defaults to `false` in both checked-in
+GCE environments. Local/test runtimes may exercise the integration without changing that production
+default. Every non-local runtime disables role-menu switching and public adoption/volunteer entry
+unless the flag is explicitly true.
+
+| Field | Consumer | Classification | Local default | Production rule / source |
+| --- | --- | --- | --- | --- |
+| `LINE_ROLE_MENU_FEATURES_ENABLED` | API, Worker | Non-secret boolean | `false`; local/test behavior remains available | Compose config; must be exactly `true` or `false`, default `false` |
+| `LINE_CHANNEL_ID` | API | Non-secret channel identifier | Synthetic/fake local ID | Existing required Compose config; non-placeholder |
+| `LINE_CHANNEL_SECRET` | API | Secret | Synthetic/fake local secret | Existing required Secret Manager key `line-channel-secret` |
+| `LINE_CHANNEL_ACCESS_TOKEN` | API, Worker | Secret | Synthetic/fake local token | Existing required Secret Manager key `line-channel-access-token`; Worker receives it only for post-commit menu switching |
+| `LIFF_ID` | API, Web | Non-secret volunteer LIFF ID | Synthetic/fake local ID | Existing required Compose config; non-placeholder |
+| `WEB_PUBLIC_BASE_URL` | API / release preflight | Non-secret public origin | Empty | Required only when enabled; absolute HTTPS, non-loopback, reviewed origin |
+| `LINE_RICH_MENU_DEFAULT_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
+| `LINE_RICH_MENU_VOLUNTEER_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
+| `LINE_RICH_MENU_STAFF_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
+| `LINE_STAFF_LIFF_ID` | API / release preflight | Non-secret staff LIFF ID | Empty | Required only when enabled; Compose config, non-placeholder |
+| `LINE_ROLE_MENU_SMOKE_EVIDENCE` | API / release preflight | Non-secret release evidence | Empty | Required only when enabled; `verified-YYYYMMDD-<40-char-tested-git-sha>` |
+
+`LINE_RICH_MENU_ADOPTER_ID` is intentionally not a production requirement: the approved public
+menu enters the adoption conversation directly, and there is no completed-adoption lifecycle that
+authorizes switching to a persistent adopter menu yet. Adding that lifecycle requires a separate
+review. Enabling the gate requires all existing LINE credentials plus every conditional field above;
+application startup and production preflight reject a partial configuration.
+
+The repository's `line-liff/adopter/index.html` is a local mock only. The former
+`apps/web/public/adoption-entry/index.html` route and `_adoption_entry_message` placeholder were
+removed when the real conversation was integrated. The GCE Web image and release bundle do not copy
+`line-liff/`, and nginx/systemd define no alias for `line-liff/serve-demo.sh` or either mock page.
+Before the gate can be enabled, the staff LIFF ID must point at a separately reviewed production
+artifact under `WEB_PUBLIC_BASE_URL`, and the exact release commit must pass real LINE smoke.
+
 Optional previous JWT key material and its reference follow the same Secret Manager/non-secret
 identifier split when rotation enables them. External AI endpoint/model fields become Compose
 non-secret env/config when an external provider is selected; the existing fail-fast policy then also

@@ -14,7 +14,11 @@ def test_bot_application_entry_opens_one_shared_liff_without_shelter_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        line_webhook, "get_settings", lambda: SimpleNamespace(liff_id="shared-liff-id")
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            liff_id="shared-liff-id", line_role_menu_features_active=lambda: True
+        ),
     )
 
     message = line_webhook._volunteer_application_entry_message()
@@ -46,7 +50,11 @@ async def test_public_application_command_does_not_require_existing_membership(
     monkeypatch: pytest.MonkeyPatch, event: dict
 ) -> None:
     monkeypatch.setattr(
-        line_webhook, "get_settings", lambda: SimpleNamespace(liff_id="shared-liff-id")
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            liff_id="shared-liff-id", line_role_menu_features_active=lambda: True
+        ),
     )
     line = MockLineAdapter()
 
@@ -91,7 +99,11 @@ async def test_start_volunteer_application_falls_back_to_liff_entry_when_not_act
 
     monkeypatch.setattr(line_webhook, "_switch_menu_to_volunteer_if_active", fake_switch)
     monkeypatch.setattr(
-        line_webhook, "get_settings", lambda: SimpleNamespace(liff_id="shared-liff-id")
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            liff_id="shared-liff-id", line_role_menu_features_active=lambda: True
+        ),
     )
     line = MockLineAdapter()
     event = {

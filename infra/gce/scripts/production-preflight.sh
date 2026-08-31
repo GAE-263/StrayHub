@@ -81,6 +81,7 @@ fi
 required_config=(
   APP_ENV POSTGRES_DB POSTGRES_USER POSTGRES_RUNTIME_USER MINIO_ENDPOINT MINIO_BUCKET
   LINE_CHANNEL_ID LIFF_ID AUTH_JWT_ISSUER AUTH_JWT_AUDIENCE
+  LINE_ROLE_MENU_FEATURES_ENABLED
   AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE
   AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE
   PII_ENCRYPTION_PROVIDER PII_KMS_KEY_NAME AI_PROVIDER
@@ -100,6 +101,28 @@ done
   fail "E4_WEB_UPSTREAM_HOST_PORT must be 3000"
 [[ "$(env_value "$CONFIG_ENV" E4_API_UPSTREAM_HOST_PORT)" == "8080" ]] ||
   fail "E4_API_UPSTREAM_HOST_PORT must be 8080"
+
+line_features_enabled="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED)"
+[[ "$line_features_enabled" == "true" || "$line_features_enabled" == "false" ]] ||
+  fail "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false"
+if [[ "$line_features_enabled" == "true" ]]; then
+  required_line_config=(
+    WEB_PUBLIC_BASE_URL LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID
+    LINE_RICH_MENU_STAFF_ID LINE_STAFF_LIFF_ID LINE_ROLE_MENU_SMOKE_EVIDENCE
+  )
+  for key in "${required_line_config[@]}"; do
+    value="$(env_value "$CONFIG_ENV" "$key" 2>/dev/null || true)"
+    [[ -n "$value" ]] || fail "$key is required when LINE role-menu features are enabled"
+    [[ ! "$value" =~ (CHANGE|PLACEHOLDER|PROJECT_ID|\.example(\.(com|net|org))?|\.invalid|\.test|fake-|local-only-) ]] ||
+      fail "$key is unresolved"
+  done
+  public_url="$(env_value "$CONFIG_ENV" WEB_PUBLIC_BASE_URL)"
+  [[ "$public_url" =~ ^https://[^/[:space:]]+(/.*)?$ ]] ||
+    fail "WEB_PUBLIC_BASE_URL must be an absolute HTTPS URL"
+  smoke_evidence="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_SMOKE_EVIDENCE)"
+  [[ "$smoke_evidence" =~ ^verified-[0-9]{8}-[0-9a-f]{40}$ ]] ||
+    fail "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify the date and exact tested commit"
+fi
 kms_key_name="$(env_value "$CONFIG_ENV" PII_KMS_KEY_NAME)"
 [[ "$kms_key_name" =~ ^projects/[^/[:space:]]+/locations/[^/[:space:]]+/keyRings/[^/[:space:]]+/cryptoKeys/[^/[:space:]]+$ ]] ||
   fail "PII_KMS_KEY_NAME must be a full Cloud KMS CryptoKey resource name"

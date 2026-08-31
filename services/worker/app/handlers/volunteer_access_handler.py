@@ -40,9 +40,11 @@ logger = logging.getLogger(__name__)
 
 def _rich_menu_router() -> RichMenuRoutingService | None:
     """四個 richMenuId 都沒設定時回 None，選單退回即為 no-op。"""
-    from services.api.app.config.settings import get_settings
+    from services.api.app.config.settings import get_worker_settings
 
-    settings = get_settings()
+    settings = get_worker_settings()
+    if not settings.line_role_menu_features_active():
+        return None
     registry = build_registry(
         default=settings.line_rich_menu_default_id,
         volunteer=settings.line_rich_menu_volunteer_id,

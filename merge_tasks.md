@@ -406,14 +406,27 @@ Manifest security constraints：
 
 **Independent Test**：local 缺少 role menu ID 時 webhook graceful no-op；production 部署後新 LINE 功能預設停用，只有明確 enable 且 secrets、IDs、preflight、真實 smoke 齊備才可啟用；缺少任何必要設定時 fail closed；mock／placeholder URL 無 production route。
 
-- [ ] T050 [P] [US4] 建立 LINE env inventory，逐項標記 secret／non-secret、API／worker／web consumer、local default、production requiredness、Secret Manager key 與 production enable flag；enable flag 預設關閉並記錄於 `docs/deployment/production-config-contract.md`
-- [ ] T051 [US4] 同步 `infra/gce/.env.production.example`、`infra/gce/.env.production.template`、`infra/gce/secrets/production-secret-map.tsv` 與 `infra/gce/docker-compose.production.yml`；只加入實際 production 必需的 LINE 變數，禁止 fake value 被 production 接受
-- [ ] T052 [US4] 更新 `infra/gce/scripts/preflight.sh`、`infra/gce/scripts/production-preflight.sh` 與 `tests/contract/test_gce_secret_manager_contract.py`，驗證 production 預設停用；只有明確 enable 時才要求並驗證 credential、public URL、menu IDs、LIFF IDs 與已完成真實 smoke 的 release evidence，缺一即 fail closed
-- [ ] T053 [US4] 檢查 `apps/web/public/adoption-entry/index.html`、`line-liff/adopter/index.html` 與 `_adoption_entry_message` placeholder；正式 adoption conversation 上線後刪除 production route，若保留 demo 必須以 local-only flag 與 production contract 明確拒絕
-- [ ] T054 [P] [US4] 驗證 `infra/gce/nginx/strayhub.conf` 只暴露核准 API/web path，不為 local-only `line-liff/serve-demo.sh` 或 mock static page 新增 production alias
-- [ ] T055 [P] [US4] 驗證 `infra/gce/systemd/`、`scripts/build-release-bundle.sh`、`infra/gce/images/Dockerfile.api`、`Dockerfile.worker`、`Dockerfile.web` 的 env loading、asset packaging 與最小權限沒有因 LINE 內容退化
-- [ ] T056 [US4] 執行所有 `tests/contract/test_gce_*.py`、`tests/contract/test_single_edge_nginx_contract.py`、production compose config、shell syntax、Terraform validate 與 release bundle contract，結果記錄到 `merge_tasks.md`
-- [ ] T057 [US4] 執行 secret scan 與 tracked-file inspection，證明 LINE channel secret、access token、LIFF credential、ngrok URL、production DB URL、KMS material 均未進入 Git，結果記錄到 `merge_tasks.md`
+- [x] T050 [P] [US4] 建立 LINE env inventory，逐項標記 secret／non-secret、API／worker／web consumer、local default、production requiredness、Secret Manager key 與 production enable flag；enable flag 預設關閉並記錄於 `docs/deployment/production-config-contract.md`
+- [x] T051 [US4] 同步 `infra/gce/.env.production.example`、`infra/gce/.env.production.template`、`infra/gce/secrets/production-secret-map.tsv` 與 `infra/gce/docker-compose.production.yml`；只加入實際 production 必需的 LINE 變數，禁止 fake value 被 production 接受
+- [x] T052 [US4] 更新 `infra/gce/scripts/preflight.sh`、`infra/gce/scripts/production-preflight.sh` 與 `tests/contract/test_gce_secret_manager_contract.py`，驗證 production 預設停用；只有明確 enable 時才要求並驗證 credential、public URL、menu IDs、LIFF IDs 與已完成真實 smoke 的 release evidence，缺一即 fail closed
+- [x] T053 [US4] 檢查 `apps/web/public/adoption-entry/index.html`、`line-liff/adopter/index.html` 與 `_adoption_entry_message` placeholder；正式 adoption conversation 上線後刪除 production route，若保留 demo 必須以 local-only flag 與 production contract 明確拒絕
+- [x] T054 [P] [US4] 驗證 `infra/gce/nginx/strayhub.conf` 只暴露核准 API/web path，不為 local-only `line-liff/serve-demo.sh` 或 mock static page 新增 production alias
+- [x] T055 [P] [US4] 驗證 `infra/gce/systemd/`、`scripts/build-release-bundle.sh`、`infra/gce/images/Dockerfile.api`、`Dockerfile.worker`、`Dockerfile.web` 的 env loading、asset packaging 與最小權限沒有因 LINE 內容退化
+- [x] T056 [US4] 執行所有 `tests/contract/test_gce_*.py`、`tests/contract/test_single_edge_nginx_contract.py`、production compose config、shell syntax、Terraform validate 與 release bundle contract，結果記錄到 `merge_tasks.md`
+- [x] T057 [US4] 執行 secret scan 與 tracked-file inspection，證明 LINE channel secret、access token、LIFF credential、ngrok URL、production DB URL、KMS material 均未進入 Git，結果記錄到 `merge_tasks.md`
+
+### Phase 7 執行紀錄
+
+- 新增 `LINE_ROLE_MENU_FEATURES_ENABLED=false` production gate。local/test 可照常驗證；所有 non-local runtime 預設不建立 role-menu router，也不啟動公開 adoption／volunteer 入口。API/Worker 只有在明確 enable 後才使用新增選單行為。
+- 補齊 LINE env inventory 與 consumer：既有 channel secret/access token 仍沿用 Secret Manager；Worker 因 Phase 6 的 post-commit menu switch，新增最小的 access token、default/volunteer menu ID 與 feature flag 注入，不取得 channel secret、LIFF 或 KMS 設定。
+- production enable 的必要條件為 HTTPS public origin、default/volunteer/staff menu IDs、staff LIFF ID，以及 `verified-YYYYMMDD-<40-char-tested-git-sha>` 真實 smoke evidence。缺少、placeholder、loopback/reserved URL 或 evidence 格式錯誤時，Settings／preflight fail closed。synthetic GCE verification 強制 flag 維持 `false`。
+- adopter persistent menu ID 未列為 production required：目前只有正式 adoption conversation，尚無 adoption-completed lifecycle；送出 inquiry 不授予 adopter menu。`apps/web/public/adoption-entry/index.html` 與 `_adoption_entry_message` 已移除；`line-liff/adopter/index.html` 僅保留 local mock，GCE Web image、release bundle、nginx、systemd 均不封裝或暴露 `line-liff/`。
+- 找到並修正 production Worker 設定缺口：handler 改用 `get_worker_settings()`，避免以 API 完整設定驗證 Worker；enable 時才要求 post-commit menu switch 所需的 token/IDs。
+- Phase-focused regression：**166 passed**；其中完整 GCE + single-edge contract 為 **102 passed**。Targeted Ruff、format、`git diff --check`、四支 shell `bash -n`、production Compose config：PASS。
+- GCE 與 legacy GCP platform Terraform `fmt -check`／`validate`：PASS；GCE release bundle contract 已包含在 102 個 contract tests 並通過。synthetic `preflight.sh`：PASS；刻意把 flag 改為 true 且不提供條件欄位時：預期 FAIL。
+- Repository-native private-key/API-key scan：PASS。tracked-file inspection 只找到明確標示的 fake/local、placeholder、CI/local DB 與 `SYNTHETIC VERIFICATION ONLY` GCE fixture；未找到真實 LINE credential、真實 ngrok URL、production DB credential、service-account key 或 KMS key material。KMS resource name是非秘密識別，不是 key material。
+
+**Stop Gate 7：PASS（production feature remains disabled）。** 真實 LINE smoke evidence 尚未建立，因此 production flag 不得開啟；該人工 gate 於 Phase 8 追蹤，不影響 fail-closed contract 完成。
 
 **Stop Gate 7 / US4 acceptance**：GCE compose、nginx、systemd、Secret Manager、KMS、backup/restore、release/rollback、preflight 全部 PASS；mock LIFF 無 production path。
 

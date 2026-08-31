@@ -125,6 +125,7 @@ def test_production_template_is_nonsecret_and_distinct_from_b1_verification() ->
 
     assert "B1_VERIFICATION_ONLY=false" in template
     assert "APP_ENV=production" in template
+    assert "LINE_ROLE_MENU_FEATURES_ENABLED=false" in template
     assert "verification/generated" not in template
     assert "/var/lib/strayhub/secrets/current/jwt-private.pem" in template
     assert "/var/lib/strayhub/secrets/current/jwt-public.pem" in template
@@ -211,6 +212,15 @@ def test_compose_uses_generic_selected_jwt_files_and_scalar_secret_inputs() -> N
         "${AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE:"
     )
     assert api["environment"]["AI_API_KEY"] == "${AI_API_KEY:-}"
+    assert api["environment"]["LINE_ROLE_MENU_FEATURES_ENABLED"] == (
+        "${LINE_ROLE_MENU_FEATURES_ENABLED:-false}"
+    )
+    assert api["environment"]["LINE_ROLE_MENU_SMOKE_EVIDENCE"] == (
+        "${LINE_ROLE_MENU_SMOKE_EVIDENCE:-}"
+    )
+    assert compose["services"]["worker"]["environment"]["LINE_CHANNEL_ACCESS_TOKEN"] == (
+        "${LINE_CHANNEL_ACCESS_TOKEN:-}"
+    )
     assert compose["services"]["worker"]["environment"]["DATABASE_URL"].startswith(
         "${DATABASE_URL:"
     )
@@ -230,6 +240,11 @@ def test_production_preflight_enforces_mode_separation_and_consumption_checks() 
     assert 'validate_runtime_safety(process=\\"api\\")' in preflight
     assert 'validate_runtime_safety(process="worker")' in preflight
     assert 'validate_runtime_safety(process="migration")' in preflight
+    assert "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false" in preflight
+    assert "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify" in preflight
+    assert preflight.index('line_features_enabled" == "true"') < preflight.index(
+        'LINE_ROLE_MENU_SMOKE_EVIDENCE)"'
+    )
     assert '--env-file "$CONFIG_ENV"' in preflight
     assert '--env-file "$runtime_env"' in preflight
     assert preflight.index("stat -c '%a'") < preflight.index("stat -f '%Lp'")

@@ -94,6 +94,26 @@ async def test_start_binding_is_answered_without_membership() -> None:
 
 
 @pytest.mark.asyncio
+async def test_nonlocal_disabled_gate_rejects_new_menu_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DisabledSettings:
+        @staticmethod
+        def line_role_menu_features_active() -> bool:
+            return False
+
+    monkeypatch.setattr(line_webhook, "get_settings", lambda: DisabledSettings())
+    line = MockLineAdapter()
+
+    handled = await line_webhook._handle_menu_action(
+        line, _postback_event("action=start_adoption_matching&flow=adoption")
+    )
+
+    assert handled is True
+    assert line.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
+
+
+@pytest.mark.asyncio
 async def test_care_report_postbacks_are_left_to_the_draft_handler() -> None:
     """草稿流程的 action 不可被選單處理器吃掉。"""
     line = MockLineAdapter()
