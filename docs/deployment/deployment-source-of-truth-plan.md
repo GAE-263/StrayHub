@@ -733,3 +733,25 @@ never used. Consequently Cloud SQL remains `CLOUD_SQL_UNKNOWN`, the legacy backe
 `UNKNOWN`, and legacy runtime GCS remains `UNKNOWN`. No new live deletion candidate or data hold
 was found, no infrastructure was changed, and Phase F6 remains **BLOCKED** pending historical
 operator/organization evidence or equivalent organization-wide inventory.
+
+Phase F5d supplied that final historical scope. The configured operator account is administrator
+of organization `710298876843`, whose complete project enumeration contains two active projects and
+no folders. One additional account-visible project is Gemini-only and has no StrayHub correlation.
+Both organization projects have full-lifetime audit coverage from their 2026-07-17 creation, with
+no `strayhub-demo`, Cloud SQL, or Cloud SQL API-enablement event. The non-accepted organization
+project has no relevant API or bucket; the accepted project contains only the protected current and
+excluded resources already inventoried. Cloud Asset remained disabled and was not enabled.
+
+Complete repository/Git history and available operator evidence contain no legacy project input,
+backend bucket, runtime bucket, remote state, successful T239 evidence, or legacy apply execution.
+Historical CI and the manual helper both used `terraform init -backend=false`, and deployment
+evidence remained pending. The legacy design was therefore never applied to a GCP project:
+historical project identity is `RESOLVED` as none used, while Cloud SQL, backend/state, and runtime
+GCS are each `ABSENT_PROVEN`.
+
+Phase F6 entry is now **READY** only for separately authorized repository-source cleanup. Its live
+GCP deletion manifest is empty: do not run Terraform destroy, initialize a guessed backend, disable
+an API, change IAM, or delete a resource. The allowed future boundary is review/removal of the
+fail-closed legacy helpers, legacy Terraform source, validation-only workflow, obsolete contracts,
+and transitional documentation while preserving historical evidence and every `KEEP_CURRENT`,
+`KEEP_SHARED`, and `EXCLUDED` resource.

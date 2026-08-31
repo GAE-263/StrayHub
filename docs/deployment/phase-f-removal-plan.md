@@ -1,6 +1,6 @@
 # Phase F5 Legacy Deletion Readiness and F6 Removal Plan
 
-Status: **BLOCKED**
+Status: **READY FOR SEPARATELY AUTHORIZED F6 REPOSITORY CLEANUP**
 
 Inventory date: 2026-08-31
 
@@ -35,18 +35,19 @@ and the bounded runtime verifier passed API, Web, Worker, PostgreSQL, and MinIO.
 
 | Gate | Result | Reason |
 | --- | --- | --- |
-| Cloud SQL | `CLOUD_SQL_UNKNOWN` | Cloud SQL Admin and Cloud Asset APIs are not enabled; F5 did not enable them. No state, private-service peering, reserved global address, or runtime reference was found, but that is not an API-level absence proof. |
+| Cloud SQL | `ABSENT_PROVEN` | F5d resolved the historical operator scope: the complete two-project organization and all other projects visible to the sole configured account contain no legacy Cloud SQL activity or identity. |
 | Legacy production traffic | `NONE` | DNS resolves to the retained nginx edge; live nginx sends Web/API traffic only to `34.81.77.204:3000/8080`; public Web, health, volunteer route and LINE webhook structural checks reached that path. |
 | Legacy CI/operator redeploy risk | `NO` | Default-branch commit `f4237bd7e312927ea683a4e73ea32c17f797e95c` removes OIDC from the legacy validation workflow and makes all four legacy mutation helpers unconditional fail-closed stubs. |
 | Shared-resource ownership | `PASS` | `PLATFORM_TERRAFORM` owns 29 retained Secret Manager/KMS/GCS/IAM addresses with a final no-change plan and no secret values or versions in state. |
-| Terraform state ownership | `PARTIAL` | Current GCE local state is known and no-change; the legacy backend bucket/state remains unavailable and externally unknown. |
-| State migration | `PARTIAL` | Retained shared ownership is adopted safely; the unknown legacy backend/state identity still prevents a trustworthy legacy disposition. |
-| Destroy-plan review | `NOT_AVAILABLE` | There is no usable legacy state. Initializing or planning the legacy root with guessed backend/inputs could create a false or dangerous plan. |
+| Terraform state ownership | `PASS` | Current GCE and platform state are known; F5d proves no legacy backend bucket or state object was created in the resolved historical scope. |
+| State migration | `NOT_REQUIRED` | Retained shared ownership is adopted safely and there is no legacy state to split or migrate. |
+| Destroy-plan review | `NOT_REQUIRED` | No legacy state or live legacy resource exists. F6 must not manufacture a destroy plan from the source declarations. |
 | N/N-1 | `PASS` | N `20260831T060436Z-5f0664f0a639` and N-1 `20260831T034951Z-38ab34dc6aaf` are genuine immutable releases; rollback/roll-forward and authenticated acceptance passed. |
 | Backup/restore | `PASS` | PostgreSQL/MinIO restore evidence remains valid; fresh backup `20260831T062155Z-e3daily2165` passed manifest/checksum, GCS upload and `_COMPLETE`. |
 
-Because Cloud SQL, the legacy backend/state bucket and legacy runtime GCS identity remain unknown,
-deletion safety and F6 entry are **BLOCKED**.
+F5d resolves Cloud SQL, the legacy backend/state bucket, and legacy runtime GCS as
+`ABSENT_PROVEN`. Deletion safety and F6 entry are **READY** only for the separately reviewed
+repository-source cleanup boundary documented below; the live GCP deletion manifest is empty.
 
 ### F5b ownership update
 
@@ -55,10 +56,11 @@ dedicated state bucket. All 29 addresses were imported without live-resource cha
 plan is `No changes`. The platform ownership gate is resolved; see
 [`platform-terraform.md`](platform-terraform.md).
 
-The F5b source branch fail-closes all four legacy mutation helpers and hardens the legacy workflow
-to validation-only without OIDC. The redeploy gate remains unchecked until these exact changes are
-present on the default branch. Cloud SQL and external legacy backend/runtime GCS identities remain
-unknown, and no genuine immutable N-1 exists yet.
+The F5b source branch and default-branch commit
+`f4237bd7e312927ea683a4e73ea32c17f797e95c` fail-close all four legacy mutation helpers and harden
+the legacy workflow to validation-only without OIDC. The final redeploy risk is `NO`. F5b also
+established the genuine N/N-1 pair recorded above; F5d resolves the later historical identity
+questions.
 
 ## Evidence-backed resource inventory
 
@@ -91,10 +93,10 @@ active project; it is not evidence about an unknown external project or backend.
 | Legacy Artifact Registry | Expected `asia-east1/strayhub-demo`; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Only current `strayhub` and unrelated `rrbot-9527` exist | Remove source only after final registry inventory |
 | Legacy observability | Expected `strayhub-demo-logs` and `strayhub-demo-cloud-run-errors`; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Only standard logging buckets; no custom metric found | Remove source only after final logging inventory |
 | Legacy network/private service access | Expected `strayhub-demo-vpc` and address/peering; none found | None found | None | `LEGACY_SAFE_CANDIDATE` (source only) | Network/global-address/peering inventory has no match | Remove source only; do not touch current/default networks |
-| Cloud SQL/database/users | Expected `strayhub-demo-postgres`; exact identity unresolved | None in canonical runtime | None expected | `UNKNOWN` | API unavailable and no usable state; negative indirect evidence is insufficient | STOP until `PRESENT` or `ABSENT_PROVEN` |
-| Legacy runtime GCS | Bucket name is an externally required Terraform input | None in canonical runtime | None expected | `UNKNOWN` | Sole active-project bucket is canonical backup, but external bucket identity is unknown | STOP until exact identity, contents, retention, owner and state are proven |
-| Legacy backend/state | GCS bucket unknown, prefix `strayhub/gcp-demo` | None available | Historical evidence only | `UNKNOWN` | No bucket in repo/history/local backend metadata; no matching prefix in project bucket | STOP; do not init against a guessed bucket |
-| Legacy repo CI/operator paths | `demo-build.yml`, `infra/gcp-demo` apply/job helpers and IaC | Validation plus callable mutation paths | None after replacement | `LEGACY_SAFE_CANDIDATE` | Replacement release workflow exists, but manual path is still callable | First F6 repo change: retire fail-closed and replace remaining contracts |
+| Cloud SQL/database/users | No historical project contains a matching instance | None | None | `LEGACY_SAFE_CANDIDATE` (source only) | F5d organization/project lifetime audit, service, IAM and network correlation prove the declaration was never applied | Remove source only; no cloud deletion command |
+| Legacy runtime GCS | No historical project contains a legacy runtime bucket | None | None | `LEGACY_SAFE_CANDIDATE` (source only) | F5d complete bucket/lifetime activity inventory plus absent operator input and pending deployment evidence | Remove source only; never touch backup/platform buckets |
+| Legacy backend/state | No bucket or state object; historical prefix `strayhub/gcp-demo` was never initialized remotely | None | None | `LEGACY_SAFE_CANDIDATE` (source only) | CI and helper used `-backend=false`; no backend input, object, local metadata or historical operator command exists | Remove source only; do not initialize or plan the legacy root |
+| Legacy repo CI/operator paths | `demo-build.yml`, fail-closed `infra/gcp-demo` helpers and IaC | Validation only | None | `LEGACY_SAFE_CANDIDATE` (source only) | Default branch has no OIDC and every legacy mutation helper exits unconditionally | Remove obsolete workflow/source/contracts in separately reviewed F6 repository cleanup |
 | Unrelated resources | `rrapi-20260813`, `rr-test`, `rr-api-firewall`, `rrbot`, `rrbot-9527`, `car-930` | Other workloads/ownership unknown | Outside StrayHub | `EXCLUDED` | Live identities do not establish StrayHub ownership | Never include in Phase F commands |
 
 There are no proven live GCP legacy deletion candidates today. The `LEGACY_SAFE_CANDIDATE` rows are
@@ -212,13 +214,13 @@ legacy resources with shared secrets, KMS IAM and project APIs.
 ## F6 hard gates
 
 - [x] current immutable runtime digest matches manifest
-- [ ] Cloud SQL status resolved
+- [x] Cloud SQL status resolved
 - [x] production traffic uses only current GCE path
 - [x] current Artifact Registry/WIF/IAM explicitly protected
 - [x] shared Secret/KMS/GCS/IAM ownership adopted and zero-change
 - [x] legacy CI/operator redeploy path identified
 - [x] legacy redeploy path retired on the default branch
-- [ ] legacy Terraform/backend state risk fully resolved
+- [x] legacy Terraform/backend state risk fully resolved
 - [x] genuine compatible immutable N/N-1 exists
 - [x] no current/shared resource appears in the proposed deletion plan
 - [x] unrelated resources are excluded
@@ -227,7 +229,8 @@ legacy resources with shared secrets, KMS IAM and project APIs.
 - [x] dependency-ordered removal and stop conditions are defined
 - [x] post-removal acceptance plan is defined
 
-Only evidence-backed gates are checked. Phase F6 entry remains **BLOCKED**.
+Only evidence-backed gates are checked. Phase F6 entry is **READY** for a separately authorized
+repository-only cleanup; it does not authorize any live GCP deletion.
 
 F5b passed the genuine N -> N-1 -> N drill with exact running digests and authenticated
 tenant/RLS/volunteer acceptance at each switched state. The roll-forward used the recorded newer
@@ -270,3 +273,44 @@ There are no new live `LEGACY_SAFE_CANDIDATE` resources and no newly discovered
 `LEGACY_DATA_HOLD`; the unknown identities themselves remain hard holds. All `KEEP_CURRENT`,
 `KEEP_SHARED`, and `EXCLUDED` rows remain unchanged. Deletion safety and F6 entry remain
 **BLOCKED**.
+
+## Phase F5d historical inventory result
+
+F5d resolved the external-input uncertainty using the historical operator and organization scope.
+The sole configured gcloud account is an administrator of organization `710298876843`; complete
+project enumeration shows two active organization projects and no folders. One additional visible
+project is labeled and enabled only for the Gemini API and has no repository, operator, service, or
+resource correlation to StrayHub.
+
+The accepted project and the second organization project were both created on 2026-07-17. Their
+full-lifetime Admin Activity contains no `strayhub-demo` event, Cloud SQL event, or Cloud SQL API
+enablement. The second project has no relevant API or bucket; the accepted project contains only
+the canonical resources already protected by this plan. Cloud Asset organization search was not
+available because its API remains disabled, and F5d did not enable it. Organization-admin project
+enumeration, per-project service/resource inventory, and full-project-lifetime audit evidence were
+used instead.
+
+Repository and complete Git history contain no production legacy project, tfvars, backend config,
+backend bucket, runtime bucket, state, successful T239 evidence, or `GCP_DEMO_APPLY=1` execution.
+The original workflow and the historical operator helper both initialized with `-backend=false`.
+The local shell history contains only the accepted project selection and no legacy Terraform input
+or apply command. Local gcloud logs begin on 2026-08-29; their relevant StrayHub-demo matches are
+only current F5 discovery operations. The versioned deployment evidence has remained pending since
+its creation.
+
+This combined evidence resolves the historical deployment identity as **NONE USED**: the legacy
+Terraform stack was designed and validated but never applied. Therefore:
+
+| Boundary | F5d result |
+| --- | --- |
+| Historical project identity | `RESOLVED` — no project was used for the legacy deployment |
+| Cloud SQL | `ABSENT_PROVEN` |
+| Legacy backend/state | `ABSENT_PROVEN` |
+| Legacy runtime GCS | `ABSENT_PROVEN` |
+
+No live legacy resource or data-bearing hold exists. The F6 cloud deletion manifest is empty. The
+only new `LEGACY_SAFE_CANDIDATE` scope is repository source: fail-closed `infra/gcp-demo` helpers,
+legacy Terraform declarations, the validation-only legacy workflow, obsolete shape contracts, and
+transitional documentation. F6 must be a separately reviewed repository cleanup that preserves
+historical evidence and all current/shared/excluded resources. A broad `terraform destroy`, guessed
+backend initialization, API disablement, IAM change, or live resource deletion remains prohibited.

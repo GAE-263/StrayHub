@@ -313,6 +313,48 @@ remaining proof requires the historical operator/organization records that suppl
 Terraform inputs, or equivalent organization-wide inventory; it cannot be manufactured from the
 repository. Deletion safety and Phase F6 entry remain **BLOCKED**.
 
+### Phase F5d historical project and organization inventory
+
+F5d obtained the missing historical scope without changing GCP. The sole configured gcloud account
+has organization-administrator access to organization `710298876843`. Complete project enumeration
+shows exactly two active organization projects and no folders. One additional account-visible
+project is a Gemini-only project outside the organization and has no StrayHub repository, operator,
+service, or resource correlation.
+
+| Candidate project | Evidence | Confidence | Inspected |
+| --- | --- | --- | --- |
+| `canvas-primacy-502703-k1` | Sole configured/current StrayHub project and only project with current StrayHub resources; no legacy activity | `HIGH` candidate, not evidence of legacy use | Yes |
+| `project-a3abfe87-0279-4c0b-81d` | Second and only other organization project; no repository/operator link or relevant resource/service activity | `LOW` | Yes |
+| `gen-lang-client-0758576890` | Account-visible, outside the organization, Gemini-only label/service, no StrayHub correlation | `LOW`; `EXCLUDED` | Yes |
+
+Both organization projects were created on 2026-07-17. Their full-lifetime Admin Activity has no
+`strayhub-demo` event, Cloud SQL event, or Cloud SQL API enablement. The second project has no
+relevant API or bucket. The accepted project contains only the current protected StrayHub and
+explicitly excluded resources already recorded above. Organization-level Cloud Asset search was
+unavailable because the API remains disabled; it was not enabled. Complete organization project
+enumeration, per-project resource/service inventory, and full-project-lifetime audit evidence were
+used instead.
+
+Repository and complete Git history, tracked/ignored local Terraform metadata, shell history, and
+available gcloud logs contain no legacy project input, backend bucket, runtime bucket, remote state,
+`GCP_DEMO_APPLY=1` execution, or successful T239 evidence. Historical CI and the manual helper both
+used `terraform init -backend=false`, and `infra/gcp-demo/deployment-evidence.md` has remained
+pending since creation.
+
+The historical identity is therefore `RESOLVED` as **no legacy deployment project used**. The
+legacy root was implemented and validated but never applied:
+
+| Boundary | F5d classification | Resource disposition |
+| --- | --- | --- |
+| Cloud SQL | `ABSENT_PROVEN` | source declaration only; no live deletion target |
+| Backend/state | `ABSENT_PROVEN` | source backend block only; no bucket or state object |
+| Runtime GCS | `ABSENT_PROVEN` | source declaration only; no data-bearing bucket |
+
+No `LEGACY_DATA_HOLD` was found. The Cloud SQL, backend, and runtime-GCS source declarations join
+the existing repository-only `LEGACY_SAFE_CANDIDATE` set. `KEEP_CURRENT`, `KEEP_SHARED`, and
+`EXCLUDED` remain unchanged. Deletion safety and F6 entry are **READY** only for a separately
+authorized repository cleanup; the live GCP deletion manifest is empty.
+
 ## Phase F deletion hard gates
 
 - [x] replacement GCE CI release/publication gate exists
@@ -326,8 +368,10 @@ repository. Deletion safety and Phase F6 entry remain **BLOCKED**.
 - [x] candidate deletion plan reviewed
 - [x] terraform plan shows no unintended retained-resource changes
 - [x] backup/restore evidence remains valid
+- [x] historical legacy project scope resolved
+- [x] Cloud SQL, backend/state, and runtime GCS absence proven
 
 The traffic gate is supported by DNS resolving to the accepted edge, its upstream configuration
 targeting `strayhub-gce`, and the absence of any StrayHub Cloud Run service in the active project.
-The backup/restore gate is supported by the accepted E5 checkpoint. All unchecked gates remain
-blocking for deletion.
+The backup/restore gate is supported by the accepted E5 checkpoint. F5d resolves the last identity
+gates; F6 still requires separate authorization and is limited to repository-source cleanup.
