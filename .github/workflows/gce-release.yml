@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 env:
-  TRUSTED_F4_SOURCE_REVISION: 38ab34dc6aaff78e0f3a9f20dbf954a071fb355a
+  TRUSTED_F4_SOURCE_REVISION: 5f0664f0a63994c7be113473e9e31906242b6b77
   GCP_WORKLOAD_IDENTITY_PROVIDER: projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github
   GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT: strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com
   GCP_ARTIFACT_REGISTRY: asia-east1-docker.pkg.dev/canvas-primacy-502703-k1/strayhub
@@ -67,7 +67,8 @@ jobs:
           uv run pytest \
             tests/contract/test_gce_release_contract.py \
             tests/contract/test_gce_production_compose_contract.py \
-            tests/contract/test_gce_systemd_contract.py
+            tests/contract/test_gce_systemd_contract.py \
+            tests/contract/test_gcp_platform_terraform_contract.py
 
       - name: Shell syntax and lint
         run: |
@@ -89,11 +90,16 @@ jobs:
 
       - name: Terraform validation without backend access
         run: |
-          terraform fmt -check -recursive infra/gce/terraform infra/gcp-demo/terraform
+          terraform fmt -check -recursive \
+            infra/gce/terraform \
+            infra/gcp-demo/terraform \
+            infra/gcp-platform/terraform
           terraform -chdir=infra/gce/terraform init -backend=false -input=false
           terraform -chdir=infra/gce/terraform validate
           terraform -chdir=infra/gcp-demo/terraform init -backend=false -input=false
           terraform -chdir=infra/gcp-demo/terraform validate
+          terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
+          terraform -chdir=infra/gcp-platform/terraform validate
 
       - name: Repository-native secret scan
         run: |
@@ -128,7 +134,7 @@ jobs:
     needs: verify-release
     if: >-
       ${{ inputs.publish &&
-          inputs.source_revision == '38ab34dc6aaff78e0f3a9f20dbf954a071fb355a' }}
+          inputs.source_revision == '5f0664f0a63994c7be113473e9e31906242b6b77' }}
     runs-on: ubuntu-latest
     environment: release-publication
     permissions:

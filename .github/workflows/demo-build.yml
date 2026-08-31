@@ -1,4 +1,4 @@
-name: GCP Demo Build Gate
+name: Legacy GCP Demo Validation (No Deploy)
 
 on:
   pull_request:
@@ -23,7 +23,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   demo-build:
