@@ -36,5 +36,8 @@ apps/web/test-results/
 playwright-report/
 screenshots/
 /release-bundle/
+
+# google-github-actions/auth temporary credentials
+gha-creds-*.json
 AGENTS.md
 /rose
