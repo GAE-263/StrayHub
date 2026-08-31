@@ -1,6 +1,6 @@
 # Deployment Source-of-Truth Cleanup Plan
 
-Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E5 accepted; Phase F1-F2 design READY
+Status: Phase A, Phase B1-B4, Phase D1-D3, and live Phase E1-E5 accepted; Phase F1-F3 tooling READY
 Canonical decision date: 2026-08-29  
 Deletion authorized by this plan: **NO**
 
@@ -560,8 +560,14 @@ remain hard gates.
 Phase F2 found no configured/discoverable legacy state in repository history, local metadata, or the
 accepted project; Cloud SQL remains explicitly unknown because its API was not enabled. It assigns
 future retained-resource ownership and defines immutable releases, replacement CI, and rollback in
-[`phase-f-release-and-state-plan.md`](phase-f-release-and-state-plan.md). F3 may implement those
-gates but may not delete legacy infrastructure.
+[`phase-f-release-and-state-plan.md`](phase-f-release-and-state-plan.md). F3 implements those gates
+without authorizing legacy deletion.
+
+Phase F3 implements immutable Git/digest manifests, deterministic release bundles, exact-image
+Compose/systemd operation, fail-closed operator deploy/rollback tooling, release contracts, and a
+GCE verification/publication workflow. Publication remains gated on separately reviewed WIF,
+registry, and environment approval; no production deployment occurred. See
+[`gce-release-process.md`](gce-release-process.md). Deletion remains blocked.
 
 Only after every applicable gate is satisfied:
 

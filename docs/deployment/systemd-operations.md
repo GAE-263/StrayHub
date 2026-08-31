@@ -14,6 +14,12 @@ The non-secret config directory is `root:strayhub` mode `0750`, and
 `/var/lib/strayhub/{secrets,backups}` at mode `0700`; staged files remain `0600`. Unit files contain
 paths and resource names only, never passwords, tokens, JWT bodies, or service-account JSON.
 
+F3 immutable releases add `/opt/strayhub/current/image-digests.env`. It contains only exact
+`repository@sha256` references for API, Worker, and Web. The migration/runtime units include this
+file in Compose invocation, `strayhub.service` uses `--no-build`, and the health verifier proves the
+running containers use the expected references. Missing or mutable references fail before an F3
+release can start. Historical non-F3 release directories are not retroactively treated as immutable.
+
 Migration, runtime, health, and backup orchestration run as `strayhub`. The secret-fetch oneshot is
 the sole root unit because the host-packaged `gcloud` is snap-confined and rejects the bootstrap
 user's `/opt/strayhub` home. It performs only the existing read-only atomic fetch, then explicitly
@@ -167,7 +173,8 @@ sudo journalctl -u strayhub-backup --since today
 sudo -u strayhub docker compose --project-name strayhub-production \
   --file /opt/strayhub/current/infra/gce/docker-compose.production.yml \
   --env-file /etc/strayhub/production.env \
-  --env-file /var/lib/strayhub/secrets/current/runtime.env ps
+  --env-file /var/lib/strayhub/secrets/current/runtime.env \
+  --env-file /opt/strayhub/current/image-digests.env ps
 sudo -u strayhub docker logs --tail 100 strayhub-production-api-1
 ```
 
@@ -185,6 +192,11 @@ sudo systemctl stop strayhub
 Rollback installs a reviewed previous repo version and its repo-owned unit files, runs daemon-reload,
 then starts the unit again. Do not use volume deletion, revoke live IAM, alter DNS, or delete legacy
 infrastructure as an operational rollback.
+
+For F3 releases, use only the canonical deploy/rollback entrypoints documented in
+[`gce-release-process.md`](gce-release-process.md). Rollback is refused unless the successful receipt
+identifies the target as `N-1` and current `N` explicitly records backward compatibility. Neither
+entrypoint runs a database downgrade or deletes volumes.
 
 ## Phase E5 operational acceptance
 

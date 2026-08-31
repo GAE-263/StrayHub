@@ -60,7 +60,7 @@ services:
       - strayhub_runtime
 
   api:
-    image: strayhub-api:b1
+    image: ${STRAYHUB_API_IMAGE:-strayhub-api:b1}
     build:
       context: ../..
       dockerfile: infra/gcp-demo/Dockerfile.api
@@ -126,7 +126,7 @@ services:
       - strayhub_runtime
 
   migration:
-    image: strayhub-api:b1
+    image: ${STRAYHUB_API_IMAGE:-strayhub-api:b1}
     profiles: ["tools"]
     restart: "no"
     depends_on:
@@ -140,7 +140,7 @@ services:
       - strayhub_runtime
 
   worker:
-    image: strayhub-worker:b1
+    image: ${STRAYHUB_WORKER_IMAGE:-strayhub-worker:b1}
     build:
       context: ../..
       dockerfile: infra/gcp-demo/Dockerfile.worker
@@ -155,7 +155,7 @@ services:
       - strayhub_runtime
 
   web:
-    image: strayhub-web:b1
+    image: ${STRAYHUB_WEB_IMAGE:-strayhub-web:b1}
     build:
       context: ../..
       dockerfile: infra/gcp-demo/Dockerfile.web

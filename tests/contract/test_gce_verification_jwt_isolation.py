@@ -33,6 +33,7 @@ REFERENCE_ALLOWLIST = {
     "infra/gce/.env.production.template",
     "infra/gce/.env.production.example",
     "infra/gce/scripts/fetch-secrets.sh",
+    "infra/gce/scripts/deploy-release.sh",
     "infra/gce/scripts/generate-verification-jwt-keys.sh",
     "infra/gce/scripts/generate-verification-tls-cert.sh",
     "infra/gce/scripts/preflight.sh",

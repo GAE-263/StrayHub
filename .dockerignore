@@ -28,6 +28,7 @@ htmlcov/
 *.swp
 test-results/
 **/test-results/
+release-bundle/
 
 # Phase B1 JWT keys are generated after checkout and mounted from the host. No build context or
 # image may contain the ignored runtime material.

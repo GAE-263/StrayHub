@@ -7,9 +7,10 @@ COMPOSE_FILE="$ROOT_DIR/infra/gce/docker-compose.production.yml"
 CONFIG_ENV=""
 SECRETS_ROOT="/var/lib/strayhub/secrets"
 PROJECT_NAME="strayhub-d1-preflight-$$"
+IMAGE_ENV=""
 
 usage() {
-  echo "Usage: $0 --config-env PATH [--secrets-root PATH] [--project-name NAME]" >&2
+  echo "Usage: $0 --config-env PATH [--secrets-root PATH] [--project-name NAME] [--image-env PATH]" >&2
 }
 
 fail() {
@@ -22,6 +23,7 @@ while (($#)); do
     --config-env) CONFIG_ENV="${2:-}"; shift 2 ;;
     --secrets-root) SECRETS_ROOT="${2:-}"; shift 2 ;;
     --project-name) PROJECT_NAME="${2:-}"; shift 2 ;;
+    --image-env) IMAGE_ENV="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage; fail "unknown or incomplete argument: $1" ;;
   esac
@@ -32,6 +34,14 @@ command -v openssl >/dev/null || fail "openssl is required"
 [[ "$PROJECT_NAME" =~ ^strayhub-d1-preflight-[a-z0-9_-]{1,40}$ ]] ||
   fail "--project-name must use the isolated strayhub-d1-preflight-* prefix"
 [[ -f "$CONFIG_ENV" ]] || fail "--config-env must name a protected non-secret config file"
+if [[ -n "$IMAGE_ENV" ]]; then
+  [[ -f "$IMAGE_ENV" ]] || fail "--image-env must name an immutable image reference file"
+  for image_key in STRAYHUB_API_IMAGE STRAYHUB_WORKER_IMAGE STRAYHUB_WEB_IMAGE; do
+    image_value="$(awk -F= -v key="$image_key" '$1 == key {sub(/^[^=]*=/, ""); print; found = 1} END {exit !found}' "$IMAGE_ENV" 2>/dev/null || true)"
+    [[ "$image_value" =~ ^[a-z0-9][a-z0-9._/-]*[a-z0-9]@sha256:[0-9a-f]{64}$ ]] ||
+      fail "$image_key must use an exact repository@sha256 digest"
+  done
+fi
 [[ -d "$SECRETS_ROOT" ]] || fail "secret staging root does not exist"
 SECRETS_ROOT="$(cd "$SECRETS_ROOT" && pwd -P)"
 current="$SECRETS_ROOT/current"
@@ -116,7 +126,11 @@ done
 
 derived_public="$(mktemp "${TMPDIR:-/tmp}/strayhub-d1-public.XXXXXX")"
 compose=(docker compose --project-name "$PROJECT_NAME" --env-file "$CONFIG_ENV" \
-  --env-file "$runtime_env" -f "$COMPOSE_FILE")
+  --env-file "$runtime_env")
+if [[ -n "$IMAGE_ENV" ]]; then
+  compose+=(--env-file "$IMAGE_ENV")
+fi
+compose+=(-f "$COMPOSE_FILE")
 cleanup() {
   rm -f "$derived_public"
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -135,8 +149,7 @@ cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not 
 "${compose[@]}" run --rm --no-deps --entrypoint python worker -c \
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
   >/dev/null
-docker compose --project-name "$PROJECT_NAME" --profile tools --env-file "$CONFIG_ENV" \
-  --env-file "$runtime_env" -f "$COMPOSE_FILE" run --rm --no-deps --entrypoint python migration -c \
+"${compose[@]}" --profile tools run --rm --no-deps --entrypoint python migration -c \
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="migration")' \
   >/dev/null
 

@@ -203,3 +203,22 @@ root. If legacy remote state appears, stop and redesign as `STATE_SPLIT_REQUIRED
 - [x] no production infrastructure mutation performed
 
 F3 entry is **READY** for release/CI implementation only. Cloud SQL and deletion remain blocked.
+
+## Phase F3 implementation checkpoint
+
+Status: **READY** for review; no production release performed.
+
+F3 implements the design with `release-manifest.py`, `build-release-bundle.sh`, digest-selectable
+production Compose, fail-closed production preflight/systemd wiring, canonical deploy and rollback
+entrypoints, release contracts, and `.github/workflows/gce-release.yml`. The workflow verifies and
+builds on pull requests; immutable publication remains manually dispatched behind the
+`release-publication` environment and separately provisioned WIF/registry variables. It contains no
+automatic GCE deployment.
+
+The local synthetic bundle drill generated and revalidated a manifest, deterministic bundle, and
+checksums with three synthetic registry digests. No release was deployed or published. Full operator
+procedure, N/N-1 retention, receipts, rollback refusal, and roll-forward rules are in
+[`gce-release-process.md`](gce-release-process.md).
+
+F4 may provision the dedicated registry/WIF/IAM and exercise publication only through a separately
+reviewed infrastructure task. Cloud SQL stays `UNKNOWN`; deletion safety stays `BLOCKED`.

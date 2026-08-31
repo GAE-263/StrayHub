@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 COMPOSE_FILE="$ROOT_DIR/infra/gce/docker-compose.production.yml"
 CONFIG_ENV="/etc/strayhub/production.env"
 SECRETS_ENV="/var/lib/strayhub/secrets/current/runtime.env"
+IMAGE_ENV="$ROOT_DIR/image-digests.env"
 TIMEOUT=180
 
 fail() {
@@ -17,6 +18,7 @@ while (($#)); do
   case "$1" in
     --config-env) CONFIG_ENV="${2:-}"; shift 2 ;;
     --secrets-env) SECRETS_ENV="${2:-}"; shift 2 ;;
+    --image-env) IMAGE_ENV="${2:-}"; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
     *) fail "unknown or incomplete argument: $1" ;;
   esac
@@ -24,6 +26,7 @@ done
 
 [[ -f "$CONFIG_ENV" ]] || fail "production config is missing"
 [[ -f "$SECRETS_ENV" ]] || fail "staged runtime environment is missing"
+[[ -f "$IMAGE_ENV" ]] || fail "immutable image reference file is missing"
 [[ "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || fail "timeout must be 1-9999 seconds"
 command -v docker >/dev/null || fail "docker is required"
 command -v curl >/dev/null || fail "curl is required"
@@ -47,7 +50,26 @@ compose=(
   --file "$COMPOSE_FILE"
   --env-file "$CONFIG_ENV"
   --env-file "$SECRETS_ENV"
+  --env-file "$IMAGE_ENV"
 )
+
+image_env_value() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; found = 1} END {exit !found}' \
+    "$IMAGE_ENV"
+}
+
+verify_exact_image() {
+  local service="$1"
+  local key="$2"
+  local container_id expected actual
+  expected="$(image_env_value "$key")"
+  [[ "$expected" =~ ^[a-z0-9][a-z0-9._/-]*[a-z0-9]@sha256:[0-9a-f]{64}$ ]] || return 1
+  container_id="$("${compose[@]}" ps -q "$service")"
+  [[ -n "$container_id" ]] || return 1
+  actual="$(docker inspect --format '{{.Config.Image}}' "$container_id")"
+  [[ "$actual" == "$expected" ]]
+}
 
 container_ready() {
   local service="$1"
@@ -77,6 +99,9 @@ runtime_ready() {
   container_ready api true || return 1
   container_ready web true || return 1
   container_ready worker false || return 1
+  verify_exact_image api STRAYHUB_API_IMAGE || return 1
+  verify_exact_image worker STRAYHUB_WORKER_IMAGE || return 1
+  verify_exact_image web STRAYHUB_WEB_IMAGE || return 1
   [[ "$(endpoint_code "$api_port" /healthz)" == "200" ]] || return 1
   [[ "$(endpoint_code "$web_port" /)" == "200" ]] || return 1
   [[ "$(endpoint_code "$api_port" /v1/public/volunteer-organizations)" == "200" ]] || return 1
