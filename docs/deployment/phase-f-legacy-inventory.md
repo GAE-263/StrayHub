@@ -271,6 +271,48 @@ F5b also established a genuine immutable pair. N is
 acceptance, roll-forward to N, and final N acceptance all passed. No database downgrade, volume
 removal, DNS/TLS change, legacy mutation, or legacy deletion occurred.
 
+### Phase F5c final resource discovery
+
+F5c repeated the three unresolved identity searches without enabling an API or changing GCP. The
+accepted project `canvas-primacy-502703-k1` was created on 2026-07-17, so its available 60-day
+Admin Activity audit window covers the project's full lifetime and the 2026-08-09 introduction of
+the legacy Terraform source.
+
+At accepted-project scope, the evidence is conclusive:
+
+- Cloud SQL Admin, Cloud Asset, and Service Networking remain disabled. The full-lifetime Admin
+  Activity search has no Cloud SQL service event, no `sqladmin.googleapis.com` enablement event,
+  and no reference to the default declared instance `strayhub-demo-postgres`. Project IAM has no
+  Cloud SQL service-agent binding, and compute inventory has no private-service address, peering,
+  or peering route. The legacy deployment evidence is still `T239` pending. A legacy Cloud SQL
+  declaration targeted at this accepted project is therefore `DECLARED_BUT_ABSENT`.
+- Storage Admin Activity contains only creation of the canonical backup bucket on 2026-08-30 and
+  the platform-state bucket on 2026-08-31. Those are also the only current project buckets. Neither
+  contains an object under `strayhub/gcp-demo/`; their visible top-level prefixes are the protected
+  backup and platform-state paths. The template-only name `strayhub-demo-private` returns `404`.
+- Repository history contains no tracked `terraform.tfvars`, backend config, legacy state, backend
+  bucket value, runtime bucket value, or production project value. The original workflow always
+  used `terraform init -backend=false`; the historical manual plan/apply helper also used
+  `-backend=false`. Its deployment evidence was never changed from pending.
+
+The final cross-project classifications nevertheless remain fail-closed. `project_id`,
+`name_prefix`, the GCS backend bucket, and `gcs_bucket_name` were explicitly external inputs. The
+single authenticated account can inspect three projects and found no additional buckets, but the
+repository cannot prove that a now-inaccessible project/account was never supplied. Under the F5c
+absence standard this means:
+
+| Boundary | Accepted-project correlation | Final classification |
+| --- | --- | --- |
+| Cloud SQL | `DECLARED_BUT_ABSENT` | `CLOUD_SQL_UNKNOWN` |
+| GCS backend with prefix `strayhub/gcp-demo` | no matching bucket/object; external bucket identity unresolved | `UNKNOWN` |
+| Runtime GCS | no matching bucket; external project/bucket identity unresolved | `UNKNOWN` |
+
+No live legacy resource, state object, new `LEGACY_SAFE_CANDIDATE`, or `LEGACY_DATA_HOLD` was
+discovered. Existing `KEEP_CURRENT`, `KEEP_SHARED`, and `EXCLUDED` protections are unchanged. The
+remaining proof requires the historical operator/organization records that supplied the external
+Terraform inputs, or equivalent organization-wide inventory; it cannot be manufactured from the
+repository. Deletion safety and Phase F6 entry remain **BLOCKED**.
+
 ## Phase F deletion hard gates
 
 - [x] replacement GCE CI release/publication gate exists

@@ -717,3 +717,19 @@ N with matching receipt and digests, while `20260831T034951Z-38ab34dc6aaf` remai
 Legacy cleanup still stays blocked: Cloud SQL, the legacy Terraform backend/state bucket, and the
 legacy runtime GCS bucket remain `UNKNOWN`. No legacy resource has been deleted and Phase F6 has not
 started.
+
+Phase F5c exhausted the remaining repository-accessible discovery without mutating infrastructure.
+For accepted project `canvas-primacy-502703-k1`, full-project-lifetime Admin Activity and current
+inventory prove that Cloud SQL was not created and that only the protected backup and platform-state
+buckets were created. No bucket contains `strayhub/gcp-demo`, and the template name
+`strayhub-demo-private` is absent. Git history contains no legacy tfvars, backend config, state,
+backend bucket, runtime bucket, or production project value; both historical CI and the manual
+helper initialized Terraform with `-backend=false`.
+
+That accepted-project absence does not resolve the global identities: the legacy project,
+`name_prefix`, backend bucket, and runtime bucket were deliberately external inputs, and the
+currently authenticated account cannot prove that an inaccessible historical project/account was
+never used. Consequently Cloud SQL remains `CLOUD_SQL_UNKNOWN`, the legacy backend/state remains
+`UNKNOWN`, and legacy runtime GCS remains `UNKNOWN`. No new live deletion candidate or data hold
+was found, no infrastructure was changed, and Phase F6 remains **BLOCKED** pending historical
+operator/organization evidence or equivalent organization-wide inventory.

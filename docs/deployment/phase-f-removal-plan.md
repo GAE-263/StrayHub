@@ -234,3 +234,39 @@ tenant/RLS/volunteer acceptance at each switched state. The roll-forward used th
 release only, required equal migration revision, and performed no migration or database downgrade.
 These results do not weaken the three unresolved identity gates: Cloud SQL, the legacy Terraform
 backend/state bucket, and legacy runtime GCS all remain `UNKNOWN`.
+
+## Phase F5c discovery result
+
+F5c performed a final read-only correlation of repository history, local Terraform metadata,
+accepted-project inventory, bucket object names, IAM/network evidence, and Admin Activity logs. It
+made no infrastructure or Terraform mutation.
+
+The accepted project was created on 2026-07-17, and its full-lifetime Admin Activity evidence shows
+no Cloud SQL event, no Cloud SQL API enablement, and no `strayhub-demo-postgres` reference. Cloud
+SQL Admin, Cloud Asset, and Service Networking remain disabled; no Cloud SQL service-agent binding,
+private-service address, peering, peering route, or canonical runtime consumer exists. A legacy
+Cloud SQL declaration targeted at this project is `DECLARED_BUT_ABSENT`.
+
+The same full-lifetime Storage Admin Activity inventory records only the protected backup and
+platform-state bucket creations. They are the only current buckets, and neither contains the
+historical `strayhub/gcp-demo` prefix. The only template-like concrete runtime name,
+`strayhub-demo-private`, does not exist. Repository and Git history contain no tracked legacy state,
+tfvars, backend config, backend bucket value, runtime bucket value, or production project value;
+both the original workflow and historical helper initialized the legacy root with the backend
+disabled.
+
+These facts prove absence only in the accepted project. Because the legacy `project_id`,
+`name_prefix`, backend bucket, and runtime bucket were all external inputs, neither the repository
+nor the single currently authenticated account proves that an inaccessible historical
+project/account was never used. The F5c cross-project result is therefore:
+
+| Gate | F5c result | Removal consequence |
+| --- | --- | --- |
+| Cloud SQL | `CLOUD_SQL_UNKNOWN` | no SQL deletion target; stop until historical project binding or organization-wide absence is proven |
+| Legacy backend/state | `UNKNOWN`; no state object found | never initialize against a guessed bucket and never run a destroy plan |
+| Legacy runtime GCS | `UNKNOWN`; no data-bearing bucket found | no bucket/object deletion; require exact historical input and retention disposition |
+
+There are no new live `LEGACY_SAFE_CANDIDATE` resources and no newly discovered
+`LEGACY_DATA_HOLD`; the unknown identities themselves remain hard holds. All `KEEP_CURRENT`,
+`KEEP_SHARED`, and `EXCLUDED` rows remain unchanged. Deletion safety and F6 entry remain
+**BLOCKED**.
