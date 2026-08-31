@@ -1,5 +1,11 @@
 # CI Refactor Review
 
+> Historical record: this review begins with the retired GCP Demo/Cloud Run-era CI design. Phase
+> F6 removed those never-instantiated deployment sources and the `demo-build` workflow. Do not run
+> commands or follow operator paths recorded in the historical sections below. Current deployment
+> sources are documented in `docs/deployment/deployment-source-of-truth-plan.md` and validated by
+> `.github/workflows/gce-release.yml`.
+
 ## CI Refactor Plan
 
 The repository Plan skill was invoked before workflow edits. Its spec-kit setup resolved

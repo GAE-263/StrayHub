@@ -275,7 +275,7 @@ LIFF_BASE_URL="https://liff.line.me/<LIFF_ID_FROM_CONSOLE>" \
 SHELTER_ENTRY_REFERENCE="<RAW_REFERENCE_ONLY_IN_CONTROLLED_SHELL>" \
 API_BASE_URL="<PUBLIC_API_ORIGIN>" \
 $HOME/.local/bin/uv run python scripts/sync_line_rich_menu.py \
-  --config infra/gcp-demo/line-rich-menu.yaml
+  --config infra/gce/line-rich-menu.yaml
 ```
 
 預期輸出為`Rich Menu 設定有效：strayhub-gcp-demo-volunteer-care`。未取得額外外部副作用授權前不得使用`--apply`。

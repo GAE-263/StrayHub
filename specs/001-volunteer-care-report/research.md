@@ -194,7 +194,9 @@ Webhook 事件先驗證未修改的原始 Request Body 與 `X-Line-Signature`，
 
 ## 決策 18：GCP Demo Infrastructure as Code
 
-**Decision**：使用 Terraform 管理 `infra/gcp-demo/terraform/` 下的全部 GCP Demo 基礎設施，涵蓋 Next.js／FastAPI／Worker 的 Cloud Run 執行單元、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry、Cloud Logging、Service Account 與 IAM。`cloud-run-*.yaml` 不作為正式部署來源；如有診斷用 YAML，僅能是 Terraform 可重建的衍生產物。Terraform 設定只服務虛構 Demo 環境，不把正式環境部署納入本 Feature。
+**Historical decision (retired in Phase F6)**：曾規劃以 Terraform 管理獨立 GCP Demo 的
+Cloud Run、Cloud SQL、Cloud Storage、Secret Manager、Artifact Registry、Cloud Logging、
+Service Account 與 IAM；該環境從未實際建立，source 已移除且不得執行。本段只保留決策歷史。
 
 **Rationale**：Terraform 已與本計畫的 GCP Demo 元件及部署門檻對齊，可讓資源宣告、審查與重建流程可重現，並避免把本機開發綁定 GCP Console 的手動操作。
 

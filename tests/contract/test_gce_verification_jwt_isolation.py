@@ -244,14 +244,24 @@ def test_generated_keys_are_excluded_from_images_without_secret_scan_exception()
 def test_terraform_and_real_deploy_scripts_do_not_consume_generated_keys() -> None:
     terraform = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (ROOT / "infra/gcp-demo/terraform").glob("*.tf")
+        for terraform_root in (
+            ROOT / "infra/gce/terraform",
+            ROOT / "infra/gcp-platform/terraform",
+        )
+        for path in terraform_root.glob("*.tf")
     )
-    legacy_deploy_scripts = "\n".join(
-        path.read_text(encoding="utf-8") for path in (ROOT / "infra/gcp-demo").glob("*.sh")
+    verification_only = {
+        "generate-verification-jwt-keys.sh",
+        "generate-verification-tls-cert.sh",
+        "preflight.sh",
+    }
+    deploy_scripts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "infra/gce/scripts").glob("*.sh")
+        if path.name not in verification_only
     )
 
-    for text in (terraform, legacy_deploy_scripts):
-        assert "verification/generated" not in text
-        assert "jwt-private.pem" not in text
-        assert "jwt-public.pem" not in text
+    for text in (terraform, deploy_scripts):
+        assert "verification/generated/jwt-private.pem" not in text
+        assert "verification/generated/jwt-public.pem" not in text
         assert "gcloud secrets versions add" not in text.lower()

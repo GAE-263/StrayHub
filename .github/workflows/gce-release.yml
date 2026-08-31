@@ -6,7 +6,7 @@ on:
       - ".github/workflows/gce-release.yml"
       - "infra/gce/**"
       - "infra/gcp-platform/**"
-      - "infra/gcp-demo/Dockerfile.*"
+      - "infra/gce/images/Dockerfile.*"
       - "scripts/build-release-bundle.sh"
       - "scripts/verify_acceptance_live.py"
       - "services/**"
@@ -20,7 +20,7 @@ on:
       - ".github/workflows/gce-release.yml"
       - "infra/gce/**"
       - "infra/gcp-platform/**"
-      - "infra/gcp-demo/Dockerfile.*"
+      - "infra/gce/images/Dockerfile.*"
       - "scripts/build-release-bundle.sh"
       - "scripts/verify_acceptance_live.py"
       - "services/**"
@@ -99,12 +99,9 @@ jobs:
         run: |
           terraform fmt -check -recursive \
             infra/gce/terraform \
-            infra/gcp-demo/terraform \
             infra/gcp-platform/terraform
           terraform -chdir=infra/gce/terraform init -backend=false -input=false
           terraform -chdir=infra/gce/terraform validate
-          terraform -chdir=infra/gcp-demo/terraform init -backend=false -input=false
-          terraform -chdir=infra/gcp-demo/terraform validate
           terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
           terraform -chdir=infra/gcp-platform/terraform validate
 
@@ -126,15 +123,15 @@ jobs:
           docker build \
             --label "org.opencontainers.image.revision=$REVISION" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gcp-demo/Dockerfile.api -t "strayhub-api:$REVISION" .
+            -f infra/gce/images/Dockerfile.api -t "strayhub-api:$REVISION" .
           docker build \
             --label "org.opencontainers.image.revision=$REVISION" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gcp-demo/Dockerfile.worker -t "strayhub-worker:$REVISION" .
+            -f infra/gce/images/Dockerfile.worker -t "strayhub-worker:$REVISION" .
           docker build \
             --label "org.opencontainers.image.revision=$REVISION" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gcp-demo/Dockerfile.web -t "strayhub-web:$REVISION" .
+            -f infra/gce/images/Dockerfile.web -t "strayhub-web:$REVISION" .
 
   publish-release:
     name: Publish immutable release candidate
@@ -179,7 +176,7 @@ jobs:
             docker build \
               --label "org.opencontainers.image.revision=$REVISION" \
               --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-              -f "infra/gcp-demo/Dockerfile.$service" -t "$image" .
+              -f "infra/gce/images/Dockerfile.$service" -t "$image" .
             docker push "$image"
             reference="$(docker inspect --format='{{index .RepoDigests 0}}' "$image")"
             [[ "$reference" == *@sha256:* ]]

@@ -314,3 +314,11 @@ legacy Terraform declarations, the validation-only legacy workflow, obsolete sha
 transitional documentation. F6 must be a separately reviewed repository cleanup that preserves
 historical evidence and all current/shared/excluded resources. A broad `terraform destroy`, guessed
 backend initialization, API disablement, IAM change, or live resource deletion remains prohibited.
+
+## Phase F6 execution record
+
+F6 executed the repository-only portion of this plan: obsolete declarative/callable legacy source,
+its validation workflow, and legacy-only contracts were removed. Current image definitions and the
+LINE Rich Menu input were moved to `infra/gce/`, current workflows/contracts were updated, and an
+explicit historical record was added. The cloud deletion manifest was empty, so no Terraform
+destroy/apply, backend initialization, API/IAM mutation, or live resource deletion occurred.

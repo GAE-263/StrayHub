@@ -15,7 +15,7 @@
 
 目前沒有尚待產品決策且會阻擋 Schema、Authentication、Tenant Isolation、API Contract、Storage Security、交易邊界、Job Processing 或正式資料正確性的事項。
 
-Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`。US3 優先級已在 spec 與 tasks 一致為 P3。尚有 11 項未完成任務，Feature 尚未達到 Feature Completion；GCP Demo Deployment 另依 T238～T244 判定，T243～T244 尚未完成，仍不能視為可部署產品。
+Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`。US3 優先級已在 spec 與 tasks 一致為 P3。尚有 9 項未完成任務，Feature 尚未達到 Feature Completion。歷史 GCP Demo Deployment 從未建立，T243～T244 已由 Phase F6 取消且不可執行，不列入剩餘工作。
 
 ## 任務格式說明
 
@@ -433,7 +433,10 @@ Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`�
 
 **Local Integration Checkpoint**：T224 必須通過後才能準備 GCP Demo。此 Gate 已執行完整 `GcsStorageAdapter` Contract Test，但真實 GCS IAM／Signed URL 仍須部署後驗證。
 
-## Phase 11：GCP Demo 準備與 Deployment Gate
+## Phase 11：GCP Demo 準備與 Deployment Gate（歷史、已退役）
+
+> Phase F6 已移除這套從未實際建立的舊部署 source。以下完成項目只保留歷史追溯，路徑
+> 與命令不可執行；現行 source of truth 是 GCE + Compose 與 immutable GCE release workflow。
 
 **目的**：只建立可審查的 Demo IaC、映像建置、設定與 Gate；T238 通過前不得建立或修改任何 GCP 資源。
 
@@ -454,7 +457,7 @@ Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`�
 
 **GCP Deployment Gate**：T238 是第一個 GCP 資源異動前的硬 Gate。尤其 `GcsStorageAdapter` 與 `tests/contract/test_storage_adapter_contract.py`／`test_all_adapters.py` 必須在此通過；不得部署後才補做 Contract Test。
 
-## Phase 12：GCP Demo 部署與環境驗證
+## Phase 12：GCP Demo 部署與環境驗證（取消）
 
 **目的**：只有 T238 通過後才建立 GCP Demo，並以真實 Cloud SQL、GCS、IAM、LINE HTTPS 與 Service Account 驗證環境專屬行為。
 
@@ -462,8 +465,8 @@ Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`�
 - [x] T240 在 `infra/gcp-demo/migrate.sh` 建立 Migration Role 的 Cloud SQL 空資料庫 Migration、版本驗證與失敗停止流程 (depends on T239)
 - [x] T241 在 `infra/gcp-demo/seed-demo.sh` 建立只含虛構 Organization A／B、相同 Shelter Number、測試角色與 Demo Animal 的 Seed (depends on T240)
 - [x] T242 在 `infra/gcp-demo/sync-line.sh` 使用 `scripts/sync_line_rich_menu.py` 與 Secret Manager Reference 發布 Demo Rich Menu，不輸出 Token (depends on T159, T233, T239)
-- [ ] T243 在 `tests/integration/test_gcp_demo_smoke.py` 執行真實 Cloud SQL Migration、GCS IAM／Signed URL、正式 LINE Adapter／Webhook HTTPS、QR、A／B 隔離與 AI 降級 Smoke Test (depends on T239-T242)
-- [ ] T244 在 `infra/gcp-demo/deployment-evidence.md` 記錄 Terraform、Migration、GCS、LINE、Isolation、AI 降級與 Cloud Logging 驗證結果 (depends on T243)
+- [x] T243（Phase F6 取消）舊 GCP Demo 從未建立；不得執行已移除的 legacy smoke test
+- [x] T244（Phase F6 取消）不為從未建立的 legacy runtime 製造 deployment evidence
 
 **GCP Demo Checkpoint**：T244 通過只代表以虛構資料完成 GCP Demo Deployment，不代表 Feature Completion，也不代表正式環境部署完成。
 
@@ -620,7 +623,8 @@ Analyze 結果為 `CRITICAL = 0`、`HIGH = 0`；Feature 狀態為 `In Progress`�
 
 ## Completion Gate 分層
 
-本 Feature 的完成判定與 GCP Demo Deployment 判定是兩個獨立 Gate，不互相取代。
+本 Feature 的完成判定只依下列 Feature Completion Gate。從未建立的歷史 GCP Demo
+Deployment 已在 Phase F6 取消，不再是可執行或待完成的 Gate。
 
 ### Feature Completion Gate
 
@@ -632,9 +636,10 @@ Feature Completion 必須同時通過以下三類 Gate：
 
 以上任一 Gate 未通過，不得將 Feature 標記為完成。Feature Completion 可依本機優先流程驗證，不以 GCP Demo Deployment 的結果取代本機、工作台或真人 Gate。
 
-### GCP Demo Deployment Gate
+### GCP Demo Deployment Gate（歷史、已取消）
 
-GCP Demo 是獨立部署分支：T238 是任何 GCP 資源異動前的硬 Gate；T239～T244 負責受控部署、Migration、虛構資料 Seed、LINE 設定、環境 Smoke Test 與部署證據。T244 通過只代表 GCP Demo Deployment 完成，不代表 Feature Completion；Feature Completion 通過也不代表已完成 T239～T244 的 GCP 專屬驗證。
+T225～T244 僅保留歷史追溯；Phase F6 已移除從未建立的 legacy source，且不得依這些
+任務重建 Cloud Run／Cloud SQL 部署。現行部署驗證由 GCE release 與 deployment contracts 負責。
 
 ## Dependencies & Execution Order
 
@@ -648,8 +653,8 @@ GCP Demo 是獨立部署分支：T238 是任何 GCP 資源異動前的硬 Gate�
 6. US3 T164～T179 建立 Timeline；T180～T186 隨即驗證本機 MVP。
 7. US4 T187～T196 與 US5 T197～T217 不阻擋 MVP；兩者在 US2 完成後可平行，US5 使用 Foundational Effective Options 與 Job persistence，不依賴 T196 或 US4 管理 UI。
 8. 完整本機整合 T218～T224 通過後，GCP 準備、Polish 與管理工作台 API 基礎可以分支執行。
-9. GCP IaC／設定 T225～T237 不建立資源；T238 Gate 通過後，T239～T244 才能部署與驗證；GCP 分支不取代管理工作台 Gate。
-10. Polish T245～T255 在 T224 後即可執行，明確不依賴 T239～T244 的 GCP Demo；T254／T255 真人證據必須等 T253 Protocol 與既有 MVP／Timeline 驗收。
+9. 歷史 GCP Demo T225～T244 已取消且不可執行，不是後續 dependency。
+10. Polish T245～T255 在 T224 後即可執行；T254／T255 真人證據必須等 T253 Protocol 與既有 MVP／Timeline 驗收。
 11. 管理工作台 API／Contract T257～T262 依賴 T224 與 Foundational Contract／Scope；完成後按 Shell T263～T272、動物 T273～T281、回報 T282～T289、設定 T290～T298、AI／Audit T299～T305 依序交付。
 12. T306 與 T307 可在各工作流 Checkpoint 通過後平行；T256 先記錄既有 Feature 基線，T308 再整合全部工作台、真人與品質證據，作為 Completion Evidence。
 
@@ -733,21 +738,11 @@ graph TD
 - T281、T289、T298、T305：各管理工作流的 Independent Test，阻擋完整工作台 Gate。
 - T306～T308：工作台品質、A／B Context Isolation 與 Feature Completion Evidence；T256 需等待 T308，未通過時不得標記 Feature Completion。GCP Deployment 仍另依 T238～T244 判定。
 
-### GCP Demo Deployment Gate
+### GCP Demo Deployment Gate（歷史、不可執行）
 
-T238 必須記錄以下全部通過：
-
-```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
-npm --prefix apps/web test
-npm --prefix packages/contracts run check
-terraform fmt -check -recursive infra/gcp-demo/terraform
-terraform -chdir=infra/gcp-demo/terraform validate
-```
-
-另須通過 Local Integration、Migration、Multi-tenant Security、MinIO Adapter、完整 GCS Adapter Contract、LINE Adapter Contract、Secret Scan 與 Docker Build。真實 GCS IAM／Signed URL 在 T243 部署後 Smoke Test 再驗證，不可用部署後結果取代部署前 Adapter Contract。
+Phase F6 已移除舊 GCP Demo source、workflow 與 contract。現行部署 gate 由
+`.github/workflows/gce-release.yml`、GCE contract tests 與 retained Terraform roots 負責；
+不得從本段歷史 task 記錄重建第二條部署路徑。
 
 ## Implementation Strategy
 
@@ -807,8 +802,8 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 
 - **tasks.md 路徑**：`specs/001-volunteer-care-report/tasks.md`
 - **總任務數**：308（T001～T308；本次新增管理工作台整體任務 T257～T308）
-- **本輪已完成任務**：297（以 `[x]` 標記，僅包含已實作且通過對應檢查的任務）
-- **尚未完成任務**：11（GCP Demo T243～T244、真人驗收 T254～T256，以及管理工作台 US3／US2／設定／AI 的獨立驗收與整體 Context Isolation／Evidence Gate）；Feature 尚未達到 Feature Completion，GCP Demo Deployment 亦仍未完成，兩者分別判定。
+- **本輪已完成／已處置任務**：299（包含 Phase F6 明確取消、不可執行的 T243～T244）
+- **尚未完成任務**：9（真人驗收 T254～T256，以及管理工作台 US3／US2／設定／AI 的獨立驗收與整體 Context Isolation／Evidence Gate）；Feature 尚未達到 Feature Completion。
 - **Setup 任務數**：18（T001～T018）
 - **Foundational 任務數**：63（T019～T081，本輪 13 項基礎安全／租戶隔離任務均已完成）
 - **US0 任務數**：16（T082～T097）
@@ -830,15 +825,15 @@ GCS 分成兩層：T070／T072／T221 在本機驗證 `GcsStorageAdapter` 共通
 - **管理工作台 US5 AI／Audit**：7（T299～T305）
 - **管理工作台整體 Gate**：3（T306～T308）
 - **目前自動化驗證證據**：本機 65432 PostgreSQL Migration／Seed／US0～US3／AI 失敗 Demo check 通過；Python `pytest` 280 項、前端 36 項 Vitest 通過；Ruff、Prettier、Next.js production build、Contract Types 與管理工作台 Contract／Scope 測試皆已通過。GCP T237/T238 既有 Gate 證據仍未被本輪部署取代。
-- **未完成測試範圍**：Feature Completion 仍缺少真人 Usability Evidence、管理工作台角色／Context E2E、各 Story 獨立驗收與 A／B 完整 Context Matrix；GCP Demo Deployment 另缺少 T243～T244 的真實 GCP Smoke Test 與部署證據。本機 Gate 不代表正式 GCP 資源或正式 LINE／LIFF 服務已驗證。
+- **未完成測試範圍**：Feature Completion 仍缺少真人 Usability Evidence、管理工作台角色／Context E2E、各 Story 獨立驗收與 A／B 完整 Context Matrix。歷史 GCP Demo T243～T244 已取消，不是缺口。
 - **Security／Isolation Test 任務數**：至少 16 項以 `tests/security/` 或 `tests/isolation/` 為主要路徑，另有管理工作台 integration／E2E 角色測試。
 - **Success Criteria 覆蓋**：25/25 個 SC ID 均可在任務中追溯；FR-001～FR-081 由 Requirement Traceability 的既有 Story／Foundational／工作台任務覆蓋。
 - **可平行任務數**：106 項標記 `[P]`；每項仍須等待其明列的 dependency，且 Model 與對應 Migration 永不平行。
-- **阻擋實作的未決事項**：無文件一致性阻擋事項；最新 `$speckit-analyze` 已達到 `CRITICAL = 0`、`HIGH = 0`。尚未完成任務仍阻擋 Feature Completion；GCP Demo Deployment 仍依其獨立 T238～T244 Gate 判定。
+- **阻擋實作的未決事項**：無文件一致性阻擋事項；最新 `$speckit-analyze` 已達到 `CRITICAL = 0`、`HIGH = 0`。尚未完成任務仍阻擋 Feature Completion。
 - **Independent Tests**：既有 US0 T097、US1 T120、US2 T163、US3 T179、US4 T196、US5 T217；管理工作台為 T272、T281、T289、T298、T305，整體 Gate 為 T308。
 - **真人 Usability Validation**：T253 定義固定 Protocol；T254 驗證 SC-001／SC-002；T255 驗證 SC-006／SC-014。
 - **建議 MVP**：後端／志工 MVP 為 T001～T186；管理工作台 MVP 為 T257～T281（API／Contract、共通 Shell、Dashboard、動物清單／檔案／Timeline）。完整 Feature 仍需 T282～T308、T254～T256。
 - **建議第一批任務**：T001～T018；Setup 通過後執行 T019～T081。
 - **範圍外檢查**：未加入醫療、關注排序、領養、公開頁面、Notification、Export、跨收容所共享、Kubernetes、Redis、Pub/Sub 或其他未核准能力。
 - **本輪實作限制**：本輪已使用本機 65432 PostgreSQL、Terraform provider 與 Docker Desktop 完成 T225～T238；未建立 GCP 資源，也未宣稱正式 GCS IAM／Signed URL、LINE／LIFF 或真人可用性已驗證。
-- **下一步**：Analyze 已通過；先補齊 T243～T244、T254～T256、T281、T289、T298、T305、T307～T308 與真人／GCP 外部證據。Feature Completion 與 GCP Demo Deployment 仍是兩個獨立 Gate，不得互相替代。
+- **下一步**：Analyze 已通過；補齊 T254～T256、T281、T289、T298、T305、T307～T308 與真人證據。不得恢復已取消的 GCP Demo 分支。

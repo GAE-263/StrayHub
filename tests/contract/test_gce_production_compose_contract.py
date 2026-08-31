@@ -164,9 +164,9 @@ def test_phase_b1_has_no_legacy_cloud_runtime_dependency() -> None:
 
     for forbidden in ("cloud run", "cloud sql", "gcs", "migrate.sh", "apply.sh"):
         assert forbidden not in compose_text
-    assert "infra/gcp-demo/dockerfile.api" in compose_text
-    assert "infra/gcp-demo/dockerfile.worker" in compose_text
-    assert "infra/gcp-demo/dockerfile.web" in compose_text
+    assert "infra/gce/images/dockerfile.api" in compose_text
+    assert "infra/gce/images/dockerfile.worker" in compose_text
+    assert "infra/gce/images/dockerfile.web" in compose_text
 
 
 def test_migration_and_persistence_operations_are_documented() -> None:

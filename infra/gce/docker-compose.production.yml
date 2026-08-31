@@ -63,7 +63,7 @@ services:
     image: ${STRAYHUB_API_IMAGE:-strayhub-api:b1}
     build:
       context: ../..
-      dockerfile: infra/gcp-demo/Dockerfile.api
+      dockerfile: infra/gce/images/Dockerfile.api
     restart: unless-stopped
     depends_on:
       postgres:
@@ -143,7 +143,7 @@ services:
     image: ${STRAYHUB_WORKER_IMAGE:-strayhub-worker:b1}
     build:
       context: ../..
-      dockerfile: infra/gcp-demo/Dockerfile.worker
+      dockerfile: infra/gce/images/Dockerfile.worker
     restart: unless-stopped
     depends_on:
       postgres:
@@ -158,7 +158,7 @@ services:
     image: ${STRAYHUB_WEB_IMAGE:-strayhub-web:b1}
     build:
       context: ../..
-      dockerfile: infra/gcp-demo/Dockerfile.web
+      dockerfile: infra/gce/images/Dockerfile.web
     restart: unless-stopped
     depends_on:
       api:

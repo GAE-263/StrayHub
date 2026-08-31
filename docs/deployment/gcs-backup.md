@@ -50,7 +50,8 @@ cannot overwrite completed objects. Default Google-managed encryption is accepta
 requirement must be separately approved and must not be conflated with field-level PII encryption
 through Cloud KMS.
 
-The legacy `infra/gcp-demo` bucket is runtime-media oriented: API/Worker receive Object Admin,
+The retired, never-instantiated legacy design used a runtime-media bucket where API/Worker would
+have received Object Admin,
 versioning is enabled, and Cloud Run receives its name. It is not the canonical backup bucket and is
 not modified by D3. Future ownership should move the approved backup bucket, bucket IAM, and lifecycle
 into a managed-service-only Terraform subset after a remote-state review. No Terraform state move,

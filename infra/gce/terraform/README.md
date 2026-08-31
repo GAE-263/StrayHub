@@ -2,7 +2,7 @@
 
 This isolated subtree owns the GCE host foundation: custom VPC/subnet, minimal ingress,
 regional static IPv4, dedicated metadata-server service account, and one GCE VM. It never owns or
-imports legacy `infra/gcp-demo` resources, managed-service IAM, secrets, KMS keys, backup buckets,
+imports retired legacy GCP-demo resources, managed-service IAM, secrets, KMS keys, backup buckets,
 DNS, certificates, or application deployment.
 
 E1 was applied and accepted through the reviewed saved-plan workflow. E4 replaces the GCE public

@@ -8,7 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_ROOT = ROOT / "infra" / "gcp-platform" / "terraform"
-LEGACY_ROOT = ROOT / "infra" / "gcp-demo"
 
 
 def _read(name: str) -> str:
@@ -46,20 +45,20 @@ def test_retained_resources_are_fail_closed() -> None:
     assert (secrets + kms + storage).count("prevent_destroy = true") == 5
 
 
-def test_legacy_mutation_entrypoints_fail_closed() -> None:
-    forbidden = ("terraform apply", "gcloud run jobs execute", "gcloud storage rm")
-    for script_name in ("apply.sh", "migrate.sh", "seed-demo.sh", "sync-line.sh"):
-        script = (LEGACY_ROOT / script_name).read_text(encoding="utf-8")
-        assert "exit 1" in script
-        assert "retired" in script.lower()
-        assert not any(command in script for command in forbidden)
+def test_legacy_source_is_removed_without_weakening_current_release() -> None:
+    assert not (ROOT / "infra/gcp-demo").exists()
+    assert not (ROOT / ".github/workflows/demo-build.yml").exists()
+    assert not (ROOT / "tests/contract/test_gcp_iac_contract.py").exists()
+    assert not (ROOT / "tests/integration/test_gcp_demo_smoke.py").exists()
 
-    workflow = (ROOT / ".github/workflows/demo-build.yml").read_text(encoding="utf-8")
-    assert "Legacy GCP Demo Validation (No Deploy)" in workflow
-    assert "id-token: write" not in workflow
-    assert "google-github-actions/auth" not in workflow
+    workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
+    compose = (ROOT / "infra/gce/docker-compose.production.yml").read_text(encoding="utf-8")
+    for source in (workflow, compose):
+        assert "infra/gcp-demo" not in source
+        assert "infra/gce/images/Dockerfile.api" in source
+        assert "infra/gce/images/Dockerfile.worker" in source
+        assert "infra/gce/images/Dockerfile.web" in source
     assert "terraform apply" not in workflow
-    assert "gcloud run" not in workflow
 
 
 def test_platform_terraform_format_and_validate() -> None:

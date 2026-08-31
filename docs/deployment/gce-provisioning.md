@@ -14,9 +14,9 @@ source of truth for the canonical GCE host foundation:
 - dedicated metadata identity `strayhub-gce-sa`;
 - single VM `strayhub-gce` and its auto-delete boot disk.
 
-Legacy `infra/gcp-demo/terraform/` remains transitional and has separate state. This subtree does
-not own or import Cloud Run, Cloud SQL, existing VMs, Artifact Registry, Secret Manager, KMS, GCS,
-DNS, certificates, managed-service IAM, application containers, or deployment CI.
+Retired legacy GCP-demo source was never instantiated and was removed in Phase F6. This subtree
+does not own or import Cloud Run, Cloud SQL, existing VMs, Artifact Registry, Secret Manager, KMS,
+GCS, DNS, certificates, managed-service IAM, application containers, or deployment CI.
 
 The reviewed initial plan applied successfully with seven additions, zero changes, and zero
 destroys. The live VM is `RUNNING` at reserved IPv4 `34.81.77.204`; DNS remains unchanged. Terraform
@@ -150,7 +150,7 @@ must not deploy StrayHub.
 
 Rollback is isolated: destroy only resources present in the dedicated GCE state after reviewing a
 destroy plan. VM deletion auto-deletes its boot disk; static-IP release is explicit. Never target
-legacy Cloud Run, Cloud SQL, default VPC resources, or `infra/gcp-demo` state. No production data or
+retired Cloud Run, Cloud SQL, default VPC resources, or never-created legacy state. No production data or
 backup exists on the accepted VM yet.
 
 Approximate resource classes are one `e2-medium`, one 30 GiB `pd-balanced` disk, one reserved

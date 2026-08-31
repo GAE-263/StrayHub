@@ -375,3 +375,11 @@ The traffic gate is supported by DNS resolving to the accepted edge, its upstrea
 targeting `strayhub-gce`, and the absence of any StrayHub Cloud Run service in the active project.
 The backup/restore gate is supported by the accepted E5 checkpoint. F5d resolves the last identity
 gates; F6 still requires separate authorization and is limited to repository-source cleanup.
+
+## Phase F6 disposition
+
+The separately authorized F6 cleanup removed the repository-only `LEGACY_SAFE_CANDIDATE` source.
+Required API/Worker/Web Dockerfiles and the LINE Rich Menu input were preserved under `infra/gce/`;
+historical evidence remains in `docs/deployment/history/legacy-gcp-demo.md`. There was no live
+resource target and no infrastructure mutation or deletion. All `KEEP_CURRENT`, `KEEP_SHARED`, and
+`EXCLUDED` classifications remain unchanged.

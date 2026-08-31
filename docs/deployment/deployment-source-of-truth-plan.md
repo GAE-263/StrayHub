@@ -176,7 +176,11 @@ production data, then the approved saved 1-add/0-change/1-destroy plan replaced 
 startup, an explicit second bootstrap run, and one post-replacement reboot all exited zero. The
 reserved IP and all surrounding network/identity resources persisted, and the final plan has no drift.
 
-## Current deployment inventory
+## Historical pre-F6 deployment inventory
+
+> Snapshot retained for audit history. Classifications and “current” wording in this inventory
+> describe the pre-F6 transition and are superseded by the Phase F6 result at the end of this file.
+> They are not current operator instructions.
 
 Allowed proposed statuses are `KEEP_CANONICAL`, `KEEP_TRANSITIONAL`, `REPLACE`, `REMOVE_LATER`, and
 `UNKNOWN`.
@@ -241,7 +245,7 @@ live DNS, and trusted edge TLS now exist.
 Local Terraform cache content under `.terraform/` is generated tooling state, not a versioned
 deployment source of truth.
 
-## Terraform coupling and future ownership
+## Historical Terraform coupling and ownership plan
 
 Terraform must not be deleted as one unit. Its current files mix resources that remain useful with
 resources that contradict the canonical runtime.
@@ -270,7 +274,7 @@ retained state boundary, and use reviewed state moves/imports/removal declaratio
 files without a state plan could destroy retained GCS, KMS IAM, Secret IAM, or identities on the next
 apply.
 
-## CI coupling
+## Historical CI coupling
 
 Current ownership:
 
@@ -326,7 +330,7 @@ Current contradictions:
 The application GCS adapter is not the backup tool. D3 selects host-side `gcloud storage` with ADC
 so backup transport remains outside application object-storage abstractions.
 
-## Future GCE repository structure
+## Historical GCE repository migration plan
 
 The existing `infra/` environment convention should be extended, not bypassed:
 
@@ -391,7 +395,7 @@ how root-readable runtime material is created/rotated, and how Compose receives 
 `.env` or exposing secrets through command output. KMS access must be limited to the API process's VM
 identity boundary as far as the chosen GCE identity model allows.
 
-## Migration phases
+## Historical migration phases
 
 ### Phase A — Inventory
 
@@ -614,7 +618,7 @@ No Cloud Run/Terraform application asset may be removed until every gate is chec
 - [ ] Terraform remote state and retained-resource ownership reviewed
 - [x] rollback procedure and acceptance owner recorded
 
-## Contradictory and legacy documentation
+## Historical contradictory-document inventory
 
 No documentation is deleted in this phase.
 
@@ -636,7 +640,7 @@ No documentation is deleted in this phase.
 | `volunteer_entry.md` Cloud Run proxy references | Historical work ledger | Preserve history; add a superseding deployment pointer if maintained |
 | `review.md` CI deferred items | Transitional and consistent | Keep history; use this plan for the immediate next phase |
 
-## Naming cleanup candidates
+## Historical naming cleanup candidates
 
 Do not rename anything before reference and Terraform-state migration planning.
 
@@ -755,3 +759,23 @@ an API, change IAM, or delete a resource. The allowed future boundary is review/
 fail-closed legacy helpers, legacy Terraform source, validation-only workflow, obsolete contracts,
 and transitional documentation while preserving historical evidence and every `KEEP_CURRENT`,
 `KEEP_SHARED`, and `EXCLUDED` resource.
+
+## Phase F6 repository cleanup result
+
+Phase F6 removed only the never-instantiated repository deployment branch: its Terraform
+declarations, fail-closed helpers, validation-only workflow, and shape/smoke contracts. The three
+image definitions still required by the immutable GCE release were moved without semantic changes
+to `infra/gce/images/`; the versioned LINE Rich Menu input moved to
+`infra/gce/line-rich-menu.yaml`. Historical meaning is preserved in
+`docs/deployment/history/legacy-gcp-demo.md` and in clearly marked historical records.
+
+The canonical sources remain:
+
+- application runtime: `infra/gce/docker-compose.production.yml` plus GCE systemd units;
+- immutable publication: `.github/workflows/gce-release.yml` and `infra/gce/images/`;
+- GCE host IaC: `infra/gce/terraform/`;
+- shared managed-service IaC: `infra/gcp-platform/terraform/`; and
+- runtime media: MinIO; GCS is backup-only.
+
+No GCP resource, Terraform state, DNS/TLS, IAM, secret, live runtime, application behavior, schema,
+tenant/RLS behavior, or LINE/LIFF behavior was changed. The live deletion manifest remained empty.

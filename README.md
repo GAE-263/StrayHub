@@ -316,9 +316,12 @@ Gate 會執行 Migration、空資料庫 Bootstrap、完整 Python／Frontend 測
 - PostgreSQL transaction 必須設定已驗證的 Organization Scope；前端傳入的 Organization、Animal、Draft、QR 或 Object Key 不能取代後端授權。
 - MinIO 是本機 Object Storage；GCS 只在 GCP Demo Gate 後驗證，不能把本機通過結果當成 GCP 部署證據。
 
-## GCP Demo 邊界
+## 部署邊界
 
-GCP Demo 必須在本機品質 Gate 與 Terraform／GCS／IAM Gate 通過後才可進行。Terraform 唯一來源是 `infra/gcp-demo/terraform/`；本機開發不需要 GCP credentials，也不會由 `scripts/demo.sh` 建立雲端資源。
+正式部署的唯一應用執行環境是 GCE + Compose；共享 Secret Manager、KMS 與備份 GCS
+由 `infra/gcp-platform/terraform/` 管理。不可執行的舊 GCP Demo／Cloud Run 設計已在 Phase F6
+移除；歷史脈絡保存在 [legacy-gcp-demo.md](docs/deployment/history/legacy-gcp-demo.md)。本機開發不需要
+GCP credentials，也不會由 `scripts/demo.sh` 建立雲端資源。
 
 ## 相關文件
 

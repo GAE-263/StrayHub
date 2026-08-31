@@ -177,7 +177,7 @@ def test_docs_keep_accepted_host_and_deferred_boundaries_explicit() -> None:
         "one add, zero changes, and one destroy",
         "explicit second execution",
         "final Terraform plan reports no changes",
-        "Legacy `infra/gcp-demo/terraform/` remains transitional",
+        "Retired legacy GCP-demo source was never instantiated",
         "E2 live Secret Manager/KMS/GCS acceptance",
     ):
         assert required in documentation
