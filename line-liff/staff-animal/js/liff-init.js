@@ -27,11 +27,12 @@ export async function initLiffAndLogin() {
     );
     // 模擬網路延遲，讓載入動畫的體驗跟正式環境接近
     await new Promise((resolve) => setTimeout(resolve, 500));
-    return MOCK_PROFILE;
+    return { profile: MOCK_PROFILE, idToken: "local-mock-id-token" };
   }
 
   // liff 是透過 index.html 裡 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js">
   // 載入的全域變數，這裡直接使用。
+  if (!CONFIG.LIFF_ID) throw new Error("缺少 staff LIFF ID");
   await liff.init({ liffId: CONFIG.LIFF_ID });
 
   if (!liff.isLoggedIn()) {
@@ -43,8 +44,9 @@ export async function initLiffAndLogin() {
     return new Promise(() => {});
   }
 
-  const profile = await liff.getProfile();
-  return profile;
+  const [profile, idToken] = await Promise.all([liff.getProfile(), liff.getIDToken()]);
+  if (!idToken) throw new Error("LINE ID token 不存在");
+  return { profile, idToken };
 }
 
 /**

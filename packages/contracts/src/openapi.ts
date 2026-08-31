@@ -875,7 +875,8 @@ export interface paths {
         };
         get: operations["listManagementAnimals"];
         put?: never;
-        post?: never;
+        /** @description 工作人員以 LINE/LIFF 新增收容動物（multipart：payload JSON + photo）。 */
+        post: operations["createManagementAnimal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -913,6 +914,23 @@ export interface paths {
         head?: never;
         /** @description 更新目前收容所的動物基本資料並記錄 before/after 稽核；不變更動物狀態。省略欄位保持原值，nullable 欄位以 null 清除。 */
         patch: operations["updateManagementAnimalProfile"];
+        trace?: never;
+    };
+    "/v1/management/animals/{animalId}/health-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 工作人員以 LINE/LIFF 更新健康紀錄（multipart：payload JSON + 選填 photo）。 */
+        post: operations["createManagementAnimalHealthRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/management/reports": {
@@ -1921,6 +1939,28 @@ export interface components {
         AnimalStatusUpdateResponse: {
             animal: components["schemas"]["ManagementAnimal"];
             suspended_series_count: number;
+        };
+        LineStaffAnimalCreateRequest: {
+            /** @description JSON 字串；結構見 docs/staff-animal-line-input.md（CREATE_ANIMAL）。 */
+            payload: string;
+            /** Format: binary */
+            photo: string;
+        };
+        LineStaffAnimalCreateResponse: {
+            success: boolean;
+            /** Format: uuid */
+            animalId: string;
+        };
+        LineStaffHealthRecordRequest: {
+            /** @description JSON 字串；結構見 docs/staff-animal-line-input.md（UPDATE_ANIMAL_HEALTH）。 */
+            payload: string;
+            /** Format: binary */
+            photo?: string;
+        };
+        LineStaffHealthRecordResponse: {
+            success: boolean;
+            /** Format: uuid */
+            recordId?: string;
         };
         ManagementReport: {
             /** Format: uuid */
@@ -5233,6 +5273,34 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    createManagementAnimal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["LineStaffAnimalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立動物 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineStaffAnimalCreateResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
     getManagementAnimal: {
         parameters: {
             query?: never;
@@ -5318,6 +5386,37 @@ export interface operations {
             404: components["responses"]["NotFoundOrForbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    createManagementAnimalHealthRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["LineStaffHealthRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立健康紀錄 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineStaffHealthRecordResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listManagementReports: {

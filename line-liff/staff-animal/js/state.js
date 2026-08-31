@@ -7,7 +7,8 @@
 
 const state = {
   // LINE 登入後的使用者資訊
-  currentUser: null, // { lineUserId, displayName, pictureUrl, role: 'volunteer' | 'staff' }
+  // Access token 由 api.js module closure 持有，不寫入 localStorage/sessionStorage/state。
+  currentUser: null, // { displayName, pictureUrl, role, organizationId }
 
   // 目前顯示的畫面 id，對應 index.html 裡各個 <section id="screen-xxx">
   currentScreen: "screen-login",

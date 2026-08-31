@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
+import pytest
+from services.api.app.api import management_animals
+from services.api.app.api.errors import DomainError
 from services.api.app.application.line_staff_animal_input_service import (
+    ALLOWED_PHOTO_TYPES,
     HEALTH_STATUS_LABELS,
     LineStaffAnimalInputService,
+    UploadedPhoto,
 )
 
 
@@ -39,3 +45,58 @@ def test_resolve_occurred_at_falls_back_to_now_on_missing_or_bad_input() -> None
         result = LineStaffAnimalInputService._resolve_occurred_at(value, "Asia/Taipei")
         assert result.tzinfo == timezone.utc
         assert result >= before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content_type", ["text/html", "image/svg+xml", "application/pdf"])
+async def test_create_rejects_non_raster_photo_types(content_type: str) -> None:
+    service = LineStaffAnimalInputService(object(), uuid4(), object())
+
+    with pytest.raises(DomainError, match="照片格式不支援"):
+        await service.create_animal(
+            actor_user_id=uuid4(),
+            animal_data={"name": "小白"},
+            photo=UploadedPhoto(data=b"not-an-image", content_type=content_type),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_overlong_required_fields_before_storage() -> None:
+    service = LineStaffAnimalInputService(object(), uuid4(), object())
+
+    with pytest.raises(DomainError, match="動物名稱過長"):
+        await service.create_animal(
+            actor_user_id=uuid4(),
+            animal_data={"name": "犬" * 201},
+            photo=UploadedPhoto(data=b"x", content_type=next(iter(ALLOWED_PHOTO_TYPES))),
+        )
+
+
+@pytest.mark.asyncio
+async def test_health_update_rejects_status_outside_allowlist() -> None:
+    service = LineStaffAnimalInputService(object(), uuid4(), object())
+
+    with pytest.raises(DomainError, match="允許清單"):
+        await service.add_health_record(
+            actor_user_id=uuid4(),
+            animal_id=uuid4(),
+            health_record={"status": "javascript:alert(1)", "description": "惡意狀態"},
+            submitted_at=None,
+            photo=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_size_limit_is_enforced_before_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Upload:
+        content_type = "image/png"
+
+        async def read(self) -> bytes:
+            return b"1234"
+
+    monkeypatch.setattr(management_animals, "MAX_PHOTO_BYTES", 3)
+
+    with pytest.raises(DomainError, match="超過允許大小"):
+        await management_animals._read_photo(Upload())

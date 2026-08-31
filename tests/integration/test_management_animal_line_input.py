@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 from io import BytesIO
 from uuid import uuid4
@@ -7,7 +8,13 @@ from uuid import uuid4
 import asyncpg
 import pytest
 from PIL import Image
+from services.api.app.api.dependencies import RequestContext
 from services.api.app.api.errors import DomainError
+from services.api.app.api.management_access import require_staff_or_admin
+from services.api.app.api.management_animals import (
+    create_management_animal,
+    create_management_animal_health_record,
+)
 from services.api.app.application.line_staff_animal_input_service import (
     LineStaffAnimalInputService,
     UploadedPhoto,
@@ -221,3 +228,21 @@ async def test_health_record_rejects_unknown_animal() -> None:
             assert err.value.status_code == 404
     finally:
         await _cleanup(ids)
+
+
+async def test_line_input_requires_selected_shelter_and_staff_role() -> None:
+    user_id = uuid4()
+    with pytest.raises(DomainError) as missing:
+        require_staff_or_admin(RequestContext(user_id, None, None, "STAFF"))
+    assert missing.value.code == "shelter_context_required"
+
+    with pytest.raises(DomainError) as volunteer:
+        require_staff_or_admin(RequestContext(user_id, uuid4(), uuid4(), "VOLUNTEER"))
+    assert volunteer.value.code == "management_access_denied"
+
+
+async def test_line_input_contract_has_no_client_controlled_organization_field() -> None:
+    for endpoint in (create_management_animal, create_management_animal_health_record):
+        parameters = inspect.signature(endpoint).parameters
+        assert "organization_id" not in parameters
+        assert "organizationId" not in parameters

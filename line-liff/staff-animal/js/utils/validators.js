@@ -11,6 +11,15 @@
 export function validateAddAnimalForm(draft) {
   const errors = [];
   if (!draft.photoFile) errors.push("請拍攝或上傳一張照片");
+  if (draft.photoFile && draft.photoFile.size > 10 * 1024 * 1024) {
+    errors.push("照片不可超過 10 MB");
+  }
+  if (
+    draft.photoFile &&
+    !["image/jpeg", "image/png", "image/webp"].includes(draft.photoFile.type)
+  ) {
+    errors.push("只支援 JPEG、PNG 或 WebP 圖片");
+  }
   if (!draft.name || draft.name.trim() === "") errors.push("請輸入動物暱稱");
   return errors;
 }

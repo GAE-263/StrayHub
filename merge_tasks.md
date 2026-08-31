@@ -341,14 +341,26 @@ Manifest security constraints：
 
 **Independent Test**：staff A 必須先從後端驗證過的 memberships 選定 shelter A，才能在 shelter A 新增／更新動物；未選定收容所、staff A 對 shelter B、無 membership、過期 session、偽造 client shelter id 均得到拒絕；公開 Rich Menu 不含 staff action。
 
-- [ ] T034 [P] [US3] 在 `tests/integration/test_management_animal_line_input.py` 新增未選定目前收容所、匿名、志工、錯誤 shelter、跨 shelter animal id、偽造 multipart organization、過期 LIFF token 的失敗測試，並測試多 membership 使用者只能操作當次明確選定的收容所
-- [ ] T035 [P] [US3] 在 `tests/unit/test_line_staff_animal_input.py` 新增檔案類型／大小、必填欄位、狀態白名單、外部 URL 與 path traversal 的 validation 測試
-- [ ] T036 [US3] semantic merge `services/api/app/api/management_animals.py` 與 `services/api/app/application/line_staff_animal_input_service.py`，由 authenticated membership 與 server-validated current-shelter selection 共同產生 shelter scope；沒有選定收容所即 fail closed，且不信任 form/query/body 的 shelter id
-- [ ] T037 [US3] 檢查 `services/api/app/main.py` 的 router registration 與 middleware 順序，確保 staff LIFF endpoint 維持既有 authentication、CORS、upload limit 與 error contract
-- [ ] T038 [US3] 檢查 `line-liff/staff-animal/js/liff-init.js`、`line-liff/staff-animal/js/api.js`、`line-liff/staff-animal/js/config.js`，不得 hardcode production API／LIFF ID、不得在 localStorage 保存長效 credential、不得由 client 決定 shelter scope
-- [ ] T039 [US3] 檢查 `line-liff/staff-animal/js/utils/camera.js` 與 `line-liff/staff-animal/js/utils/validators.js` 的照片尺寸、MIME、取消拍照、重送與錯誤回饋，後端仍須重做同等 validation
-- [ ] T040 [US3] 更新 `specs/001-volunteer-care-report/contracts/openapi.yaml` 的 staff animal contract，並確認所有 frontend/API consumers 與 `packages/contracts/src/openapi.ts` 是否需要同步生成或明確排除
-- [ ] T041 [US3] 執行 `tests/unit/test_line_staff_animal_input.py`、`tests/integration/test_management_animal_line_input.py`、`tests/integration/test_management_animals.py`、`tests/integration/test_management_workbench_api_boundaries.py` 並記錄 tenant-isolation 結果到 `merge_tasks.md`
+- [x] T034 [P] [US3] 在 `tests/integration/test_management_animal_line_input.py` 新增未選定目前收容所、匿名、志工、錯誤 shelter、跨 shelter animal id、偽造 multipart organization、過期 LIFF token 的失敗測試，並測試多 membership 使用者只能操作當次明確選定的收容所
+- [x] T035 [P] [US3] 在 `tests/unit/test_line_staff_animal_input.py` 新增檔案類型／大小、必填欄位、狀態白名單、外部 URL 與 path traversal 的 validation 測試
+- [x] T036 [US3] semantic merge `services/api/app/api/management_animals.py` 與 `services/api/app/application/line_staff_animal_input_service.py`，由 authenticated membership 與 server-validated current-shelter selection 共同產生 shelter scope；沒有選定收容所即 fail closed，且不信任 form/query/body 的 shelter id
+- [x] T037 [US3] 檢查 `services/api/app/main.py` 的 router registration 與 middleware 順序，確保 staff LIFF endpoint 維持既有 authentication、CORS、upload limit 與 error contract
+- [x] T038 [US3] 檢查 `line-liff/staff-animal/js/liff-init.js`、`line-liff/staff-animal/js/api.js`、`line-liff/staff-animal/js/config.js`，不得 hardcode production API／LIFF ID、不得在 localStorage 保存長效 credential、不得由 client 決定 shelter scope
+- [x] T039 [US3] 檢查 `line-liff/staff-animal/js/utils/camera.js` 與 `line-liff/staff-animal/js/utils/validators.js` 的照片尺寸、MIME、取消拍照、重送與錯誤回饋，後端仍須重做同等 validation
+- [x] T040 [US3] 更新 `specs/001-volunteer-care-report/contracts/openapi.yaml` 的 staff animal contract，並確認所有 frontend/API consumers 與 `packages/contracts/src/openapi.ts` 是否需要同步生成或明確排除
+- [x] T041 [US3] 執行 `tests/unit/test_line_staff_animal_input.py`、`tests/integration/test_management_animal_line_input.py`、`tests/integration/test_management_animals.py`、`tests/integration/test_management_workbench_api_boundaries.py` 並記錄 tenant-isolation 結果到 `merge_tasks.md`
+
+### Phase 5 執行紀錄
+
+- 管理端 create／health-record endpoints 只從 `current_request_context` → `require_staff_or_admin` 取得 organization；函式合約沒有 `organization_id`／`organizationId` form、query 或 body 參數。未選 context 回 `shelter_context_required`，VOLUNTEER 回 `management_access_denied`。
+- 既有 runtime-role ephemeral DB 測試補充執行：未授權 shelter 切換保持原 context；三收容所 staff 每次明確切換後只看到該 shelter 動物，**2 passed**。
+- Staff LIFF 改為傳送 `liff.getIDToken()` 至 `/v1/line/bind`，再以記憶體內短效 Bearer token 查 `/v1/auth/me`；不再信任 client LINE userId，不保存 localStorage/sessionStorage，不傳 shelter ID。`PLATFORM_ADMIN` 不被 LIFF 視為 shelter staff。
+- Runtime config 改為 `window.STRAYHUB_STAFF_LIFF_CONFIG` 注入；source 無 production API／LIFF ID，`mockMode` 預設 false。API 已實作，不再保留 `USE_MOCK_API=true` 的第二開關。
+- 前後端共同限制 JPEG／PNG／WebP 與 10 MB；後端另以 media pipeline 驗證實際檔案、去 EXIF，object key 完全由 server UUID 產生。健康狀態採五值 allowlist，名稱／收容編號先做長度驗證。
+- OpenAPI 早已含 staff multipart contract；本 Phase 執行 `npm --prefix packages/contracts run generate`，補齊先前未同步的 `createManagementAnimal` 與 `createManagementAnimalHealthRecord` TypeScript operations。
+- Focused suite：**20 passed, 0 failed**；多 shelter ephemeral tests：**2 passed**；LINE token／過期身分／active-context security 補充 suite：**17 passed**；五個 LIFF JS 檔 `node --check`：PASS；Targeted Ruff：PASS。過程發現 `test_management_animals.py` fake animal 缺新增 adoption fields，已補 fixture 後通過。
+
+**Stop Gate 5：PASS。**
 
 **Stop Gate 5 / US3 acceptance**：staff menu 不公開；UI 隱藏以外，API/service/repository 三層均有可測試的 shelter authorization。
 

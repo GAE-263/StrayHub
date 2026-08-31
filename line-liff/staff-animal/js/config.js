@@ -4,26 +4,24 @@
 // 交接給後端 / 部署正式環境前，最需要注意的就是這個檔案。
 // ============================================================
 
+const runtime = window.STRAYHUB_STAFF_LIFF_CONFIG || {};
+
 export const CONFIG = {
-  // 從 LINE Developers Console > LIFF 取得（工作人員用的 LINE Login channel）。
-  LIFF_ID: "YOUR_STAFF_LIFF_ID",
+  // 由 hosting/runtime 注入，不在 tracked source 寫 production LIFF ID。
+  LIFF_ID: runtime.liffId || "",
 
-  // StrayHub 後端 API 根路徑（含 /v1）。正式環境必須是 https。
-  // 例如：https://api.your-strayhub.example.com/v1
-  API_BASE_URL: "https://your-strayhub-api.example.com/v1",
+  // 預設同源；若 API 分離部署，只能由 runtime config 注入 HTTPS base URL。
+  API_BASE_URL: runtime.apiBaseUrl || `${window.location.origin}/v1`,
 
-  // 開發模式開關：
-  // true  → 不呼叫真實 LIFF、用假的工作人員資料，可在一般瀏覽器測畫面。
-  // false → 正式串接 LIFF，必須在 LINE App 內開啟。
-  MOCK_MODE: true,
+  // 必須明確注入 true 才啟用；production 未注入時永遠走真實驗證並 fail closed。
+  MOCK_MODE: runtime.mockMode === true,
 
   // 圖片欄位在 FormData 裡的 key，前後端要對好。
   PHOTO_FIELD_NAME: "photo",
 };
 
 // ============================================================
-// 切換正式環境的兩個開關（要一起改，別漏）：
-//   1. 本檔 CONFIG.MOCK_MODE      → 控制「LINE 登入(LIFF)」是否用假資料
-//   2. js/api.js 的 USE_MOCK_API  → 控制「後端 API」是否用假資料
-// 上線時兩個都要改成 false，並填好 LIFF_ID 與 API_BASE_URL。
+// Local demo 可在 index.html 載入本檔前注入：
+// window.STRAYHUB_STAFF_LIFF_CONFIG = { mockMode: true }。
+// Production contract 禁止 mockMode=true，且必須注入有效 liffId。
 // ============================================================

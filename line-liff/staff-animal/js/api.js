@@ -3,16 +3,17 @@
 // 這支檔案是「LINE 介面 ↔ StrayHub 後端」的合約。後端只要看這支，
 // 就知道每個功能會打哪個路徑、帶什麼資料、預期拿到什麼。
 //
-// 重要：StrayHub 目前「尚未」提供『建立動物』端點（management_animals
-// 只有列表 / 查詢 / 改狀態）。下方標 [後端待實作] 的端點需要後端補上；
-// 參數/回傳已照真實情境設計好，接上後前端頁面不用再改。
-//
-// 切換：USE_MOCK_API=true 用假資料；false 真的打 CONFIG.API_BASE_URL。
+// 身分與 shelter scope 一律由後端 session 決定；payload 不傳 organizationId。
 // ============================================================
 
 import { CONFIG } from "./config.js";
 
-const USE_MOCK_API = true; // [接後端時要改] 後端就緒後改成 false
+let accessToken = null;
+
+function authHeaders() {
+  if (!accessToken) throw new Error("尚未完成工作人員身分驗證");
+  return { Authorization: `Bearer ${accessToken}` };
+}
 
 async function handleJson(res, errorMessage) {
   if (!res.ok) {
@@ -31,30 +32,47 @@ async function handleJson(res, errorMessage) {
 //    正式流程：LIFF 取得 id_token → 後端 POST /v1/line/bind 綁定並回傳
 //    session 與角色。這裡沿用「回傳角色」的介面，工作人員角色才可用本 LIFF。
 // ------------------------------------------------------------
-export async function verifyUserRole(lineProfile) {
-  if (USE_MOCK_API) {
+export async function verifyUserRole({ profile, idToken }) {
+  if (CONFIG.MOCK_MODE) {
     await mockDelay();
+    accessToken = "local-memory-only-token";
     return {
-      lineUserId: lineProfile.userId,
-      displayName: lineProfile.displayName,
-      pictureUrl: lineProfile.pictureUrl,
-      role: "staff", // 本 LIFF 為工作人員用，模擬固定回傳 staff
+      displayName: profile.displayName,
+      pictureUrl: profile.pictureUrl,
+      role: "STAFF",
+      organizationId: "local-mock-organization",
     };
   }
-  // [後端對接] StrayHub：POST /v1/line/bind（帶 id_token），回傳含角色/收容所。
+  // LINE userId 只供 UI 顯示；後端只驗證 LINE 簽發的 id_token。
   const res = await fetch(`${CONFIG.API_BASE_URL}/line/bind`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lineUserId: lineProfile.userId }),
+    body: JSON.stringify({ id_token: idToken }),
   });
-  return handleJson(res, "身分驗證失敗");
+  const session = await handleJson(res, "身分驗證失敗或尚未選定收容所");
+  accessToken = session.access_token;
+  const me = await fetch(`${CONFIG.API_BASE_URL}/auth/me`, { headers: authHeaders() });
+  const identity = await handleJson(me, "無法確認工作人員權限");
+  const membership = identity.memberships.find((item) =>
+    ["STAFF", "SHELTER_ADMIN"].includes(item.role)
+  );
+  if (!membership) {
+    accessToken = null;
+    throw new Error("此帳號沒有目前收容所的工作人員權限");
+  }
+  return {
+    displayName: identity.user.display_name || profile.displayName,
+    pictureUrl: profile.pictureUrl,
+    role: membership.role,
+    organizationId: membership.organization_id,
+  };
 }
 
 // ------------------------------------------------------------
 // 2. 依動物 ID / 收容編號查詢（更新流程用，讓工作人員確認是不是要更新的那隻）
 // ------------------------------------------------------------
 export async function lookupAnimalById(animalId) {
-  if (USE_MOCK_API) {
+  if (CONFIG.MOCK_MODE) {
     await mockDelay();
     if (!animalId || animalId.trim() === "") return null;
     return {
@@ -65,11 +83,12 @@ export async function lookupAnimalById(animalId) {
     };
   }
   // StrayHub：GET /v1/management/animals/{animalId}（require_staff_or_admin）
-  const res = await fetch(
-    `${CONFIG.API_BASE_URL}/management/animals/${encodeURIComponent(animalId)}`
-  );
+  const res = await fetch(`${CONFIG.API_BASE_URL}/management/animals/${encodeURIComponent(animalId)}`, {
+    headers: authHeaders(),
+  });
   if (res.status === 404) return null;
-  return handleJson(res, "查詢動物資料失敗");
+  const body = await handleJson(res, "查詢動物資料失敗");
+  return body.animal;
 }
 
 // ------------------------------------------------------------
@@ -82,9 +101,8 @@ export async function submitNewAnimal({ currentUser, animalData, photoFile }) {
   const payload = {
     requestType: "CREATE_ANIMAL",
     submittedBy: {
-      lineUserId: currentUser.lineUserId,
       displayName: currentUser.displayName,
-      role: currentUser.role, // staff
+      role: currentUser.role,
     },
     animal: {
       tempAnimalId: animalData.animalId,
@@ -100,19 +118,19 @@ export async function submitNewAnimal({ currentUser, animalData, photoFile }) {
     submittedAt: new Date().toISOString(),
   };
 
-  if (USE_MOCK_API) {
+  if (CONFIG.MOCK_MODE) {
     console.log("[模擬送出] 新增動物 payload:", payload);
     console.log("[模擬送出] 附帶照片:", photoFile);
     await mockDelay(800);
     return { success: true, animalId: animalData.animalId };
   }
 
-  // [後端待實作] StrayHub 目前沒有此端點，需後端補上。
   const formData = new FormData();
   formData.append("payload", JSON.stringify(payload));
   formData.append(CONFIG.PHOTO_FIELD_NAME, photoFile, photoFile.name);
   const res = await fetch(`${CONFIG.API_BASE_URL}/management/animals`, {
     method: "POST",
+    headers: authHeaders(),
     body: formData,
   });
   return handleJson(res, "送出失敗，請稍後再試");
@@ -126,7 +144,6 @@ export async function submitAnimalHealthUpdate({ currentUser, animalId, healthDa
   const payload = {
     requestType: "UPDATE_ANIMAL_HEALTH",
     submittedBy: {
-      lineUserId: currentUser.lineUserId,
       displayName: currentUser.displayName,
       role: currentUser.role,
     },
@@ -138,20 +155,19 @@ export async function submitAnimalHealthUpdate({ currentUser, animalId, healthDa
     submittedAt: new Date().toISOString(),
   };
 
-  if (USE_MOCK_API) {
+  if (CONFIG.MOCK_MODE) {
     console.log("[模擬送出] 更新健康紀錄 payload:", payload);
     console.log("[模擬送出] 附帶照片:", photoFile);
     await mockDelay(800);
     return { success: true };
   }
 
-  // [後端待實作]
   const formData = new FormData();
   formData.append("payload", JSON.stringify(payload));
   if (photoFile) formData.append(CONFIG.PHOTO_FIELD_NAME, photoFile, photoFile.name);
   const res = await fetch(
     `${CONFIG.API_BASE_URL}/management/animals/${encodeURIComponent(animalId)}/health-records`,
-    { method: "POST", body: formData }
+    { method: "POST", headers: authHeaders(), body: formData }
   );
   return handleJson(res, "送出失敗，請稍後再試");
 }

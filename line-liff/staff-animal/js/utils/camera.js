@@ -26,13 +26,19 @@ export function setupPhotoPicker({
   placeholderId,
   onPhotoSelected,
 }) {
+  const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+  const maxBytes = 10 * 1024 * 1024;
   const handleFile = (fileList) => {
     const file = fileList && fileList[0];
     if (!file) return;
 
     // 簡單防呆：確認選到的真的是圖片檔
-    if (!file.type.startsWith("image/")) {
-      alert("請選擇圖片檔案");
+    if (!allowedTypes.has(file.type)) {
+      alert("只支援 JPEG、PNG 或 WebP 圖片");
+      return;
+    }
+    if (file.size > maxBytes) {
+      alert("照片不可超過 10 MB");
       return;
     }
 

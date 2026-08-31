@@ -39,6 +39,8 @@ HEALTH_STATUS_LABELS = {
 }
 
 ALLOWED_PHOTO_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+MAX_ANIMAL_NAME_LENGTH = 200
+MAX_SHELTER_NUMBER_LENGTH = 120
 
 
 @dataclass(frozen=True)
@@ -70,8 +72,12 @@ class LineStaffAnimalInputService:
         name = (animal_data.get("name") or "").strip()
         if not name:
             raise DomainError("animal_name_required", "動物名稱不得為空白", 422)
-        asset = await self._store_photo(photo, purpose="line_staff_animal")
+        if len(name) > MAX_ANIMAL_NAME_LENGTH:
+            raise DomainError("animal_name_too_long", "動物名稱過長", 422)
         shelter_number = (animal_data.get("tempAnimalId") or "").strip() or None
+        if shelter_number is not None and len(shelter_number) > MAX_SHELTER_NUMBER_LENGTH:
+            raise DomainError("shelter_number_too_long", "收容編號過長", 422)
+        asset = await self._store_photo(photo, purpose="line_staff_animal")
         animal = Animal(
             organization_id=self.organization_id,
             name=name,
@@ -111,6 +117,8 @@ class LineStaffAnimalInputService:
         if not description:
             raise DomainError("health_record_description_required", "健康狀況說明不得為空白", 422)
         status_code = (health_record.get("status") or "").strip()
+        if status_code not in HEALTH_STATUS_LABELS:
+            raise DomainError("invalid_health_status", "健康狀態不在允許清單", 422)
         animal = (
             await self.session.execute(
                 select(Animal).where(
@@ -123,7 +131,7 @@ class LineStaffAnimalInputService:
             raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
         tz = await self._organization_timezone()
         occurred_at = self._resolve_occurred_at(submitted_at, tz)
-        label = HEALTH_STATUS_LABELS.get(status_code, status_code or "未指定")
+        label = HEALTH_STATUS_LABELS[status_code]
         record = MedicalRecord(
             organization_id=self.organization_id,
             animal_id=animal_id,
@@ -166,6 +174,8 @@ class LineStaffAnimalInputService:
         return {"success": True, "recordId": str(record.id)}
 
     async def _store_photo(self, photo: UploadedPhoto, *, purpose: str) -> MediaAsset:
+        if photo.content_type not in ALLOWED_PHOTO_TYPES:
+            raise DomainError("unsupported_media_type", "照片格式不支援", 422)
         object_key = f"line-staff/{self.organization_id}/{uuid4().hex}"
         stored = await self.media.store_cleaned(
             organization_id=self.organization_id,

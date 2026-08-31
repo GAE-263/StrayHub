@@ -20,10 +20,10 @@ export async function runLoginFlow() {
   statusTextEl().textContent = "正在透過 LINE 登入...";
 
   try {
-    const lineProfile = await initLiffAndLogin();
+    const lineIdentity = await initLiffAndLogin();
 
     statusTextEl().textContent = "登入成功，正在確認身分...";
-    const verifiedUser = await verifyUserRole(lineProfile);
+    const verifiedUser = await verifyUserRole(lineIdentity);
 
     setState({ currentUser: verifiedUser });
     showScreen("screen-menu");
