@@ -190,6 +190,13 @@ Developers 設定或 Rich Menu，也不會停掉不屬於它的 nginx/ngrok。
 這個 local topology 刻意模擬未來可能採用的 GCP nginx single-origin routing，但本項目
 沒有實作、部署或變更任何 GCP 資源。
 
+角色 Rich Menu 與新的公開志工／領養入口在 production 受
+`LINE_ROLE_MENU_FEATURES_ENABLED=false` 保護。實機 smoke 尚未以精確 release commit
+留下核准 evidence 前不得啟用；啟用時 preflight 會同時要求公開 HTTPS origin、default／
+volunteer／staff menu IDs、staff LIFF ID 及 LINE credential。完整狀態與設定見
+[LINE 角色選單](docs/line-role-menu-framework.md) 與
+[LINE 帳號設定](docs/line-account-setup.md)。
+
 ## 一鍵本機展示
 
 ```bash

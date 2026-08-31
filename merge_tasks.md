@@ -478,6 +478,14 @@ Manifest security constraints：
   暴露至外網，被執行環境安全審查拒絕，未繞過限制。
 - T064、T065 保持未完成：需要持有人在手機 LINE、LINE Developers 與受控公開 HTTPS
   tunnel 上執行互動。自動化測試或 read-only token check 不冒充真實 smoke evidence。
+- 文件稽核另發現 staff postback 尚未真正接到 LIFF，已於
+  `39f110eb587315b01f2d54e02f041228312a8449` 修正：只有 exact active
+  `STAFF`／`SHELTER_ADMIN` context 才回覆 staff LIFF；多 membership LIFF 會列出本人可用
+  shelters 並要求明確選定，server 再驗證 membership、撤銷舊 webhook context、建立新
+  session；動物清單使用 exact organization repository，非 staff 與未選 shelter fail closed。
+- 上述修正後重跑 LINE focused：**137 passed, 0 failed**；staff/auth/DB focused：
+  **64 passed, 0 failed**；完整 `verify_local.sh` 再次 PASS，最新完整 Python 為
+  **1226 passed, 2 skipped, 0 failed**，其餘 Web／build／contract／secret／Docker 結果不變。
 
 **Stop Gate 8：BLOCKED（僅 T064／T065 人工實機 smoke）。** 所有可無人值守執行的
 static、unit、integration、full regression、build 與 local routing gate 均 PASS；production
@@ -487,13 +495,50 @@ feature flag 保持 `false`，不得產生 `LINE_ROLE_MENU_SMOKE_EVIDENCE`。
 
 ## Phase 9：文件、PR 與最終 readiness
 
-- [ ] T070 [P] 更新 `docs/line-role-menu-framework.md`，記錄公開兩入口、身分 menu 狀態圖、missing-ID no-op、back-to-default 不改權限與正式 adoption action
-- [ ] T071 [P] 更新 `docs/line-account-setup.md` 與 `docs/staff-animal-line-input.md`，區分 local demo／test／production credential、真實 LINE／LIFF smoke 前置條件與 staff server-side authorization
-- [ ] T072 更新 `README.md` 與 `.env.example` 最終操作說明，確認不把 fixture seed、ORG-A 或 `strayhub_test` 流程描述成 normal demo
-- [ ] T073 在 `merge_tasks.md` 填寫最終報告：Status、integration HEAD、main base、role source、adoption source/scope manifest、unresolved conflicts、CI、full Python、LINE regression、DB boundary、GCE contract、production impact、known limitations
-- [ ] T074 只有當所有 Stop Gates PASS 時才將 status 設為 `MERGE_READY`；否則設為 `NOT_MERGE_READY` 並列出 blocker owner、重現方式與下一步
+- [x] T070 [P] 更新 `docs/line-role-menu-framework.md`，記錄公開兩入口、身分 menu 狀態圖、missing-ID no-op、back-to-default 不改權限與正式 adoption action
+- [x] T071 [P] 更新 `docs/line-account-setup.md` 與 `docs/staff-animal-line-input.md`，區分 local demo／test／production credential、真實 LINE／LIFF smoke 前置條件與 staff server-side authorization
+- [x] T072 更新 `README.md` 與 `.env.example` 最終操作說明，確認不把 fixture seed、ORG-A 或 `strayhub_test` 流程描述成 normal demo
+- [x] T073 在 `merge_tasks.md` 填寫最終報告：Status、integration HEAD、main base、role source、adoption source/scope manifest、unresolved conflicts、CI、full Python、LINE regression、DB boundary、GCE contract、production impact、known limitations
+- [x] T074 只有當所有 Stop Gates PASS 時才將 status 設為 `MERGE_READY`；否則設為 `NOT_MERGE_READY` 並列出 blocker owner、重現方式與下一步
 - [ ] T075 在取得明確授權後建立 integration PR 回 `main`，PR 內容附 conflict ledger、T006 scope manifest、validation evidence、rollback strategy，合併方法指定 `MERGE_COMMIT` 且不得自動 merge
 - [ ] T076 PR head 或 main head 若在 review 期間移動，重新執行 T001–T006 與所有受影響 gates；未再次通過不得核准或 merge
+
+### Phase 9 最終報告
+
+| 項目 | 結果 |
+| --- | --- |
+| Status | **NOT_MERGE_READY**；只剩 T064／T065 真實手機 LINE smoke，production gate 保持關閉 |
+| Validated integration runtime HEAD | `39f110eb587315b01f2d54e02f041228312a8449`；本報告後只允許 documentation-only child commit，最終 branch HEAD 於交接時另列 |
+| Main base | `origin/main@0b60692c2fa0988ef3645b4de41dda05eecab85f` |
+| Role source | 完整 semantic merge `origin/feat/line-role-rich-menu@179de5380c2fb442b5c1ba80d504f4ec9607da63` |
+| Adoption source | `origin/dev/adopting_line_bot@29a2b9e6e640cdacf5d873ac90501157bbec1091`；未 merge branch，只移植 T006 dependency-closed slice |
+| Scope manifest | 38 REQUIRED、12 OPTIONAL、45 EXCLUDED；Growth Diary、非領養 Gemini、adoption inbox/admin UI、來源 CI rewrite 皆未進入 integration diff |
+| Conflicts | 無未解 textual conflict、無 conflict marker；semantic 衝突處置已逐 Phase 記錄，main 的 DB/auth/GCE safety baseline 未回退 |
+| CI-equivalent | `./scripts/verify_local.sh` PASS；critical Playwright **20 passed**；未建立／執行遠端 CI workflow |
+| Full Python | **1226 passed, 2 skipped, 0 failed**；Ruff、format、mypy PASS。兩個 skip 都是需外部預載 MOA dataset 的既有顯式前置條件 |
+| LINE regression | focused **137 passed**；auth/staff/DB focused **64 passed**；missing IDs、5xx、timeout、duplicate/retry、expiry、multi-membership 均有 coverage |
+| Web / contract | normal/mobile/a11y 各 **357 passed**；typecheck、Prettier、23-page Next build、generated OpenAPI check PASS |
+| DB boundary | demo=`strayhub`、test=`strayhub_test`；0038 single head、scratch round-trip、RLS/FORCE RLS、runtime grants、fixture guards均 PASS |
+| GCE contract | GCE/single-edge **102 passed**；Compose、preflight、shell、Terraform、release bundle、Secret Manager contract PASS |
+| Production impact | `LINE_ROLE_MENU_FEATURES_ENABLED=false`；未提供真實 smoke evidence 時 API/Worker/preflight fail closed，不發布或切換新 role menus |
+| Known limitations | 尚無 completed-adoption lifecycle，故 inquiry 不切 adopter menu；志工散步回報／報到沿用既有後續功能；staff 狀態變更刻意導向具個體確認的管理介面 |
+
+#### Blocker 與下一步
+
+- **Owner**：持有受控非 production LINE Messaging/Login channels、LIFF apps 與測試手機帳號的
+  repository operator／release reviewer。
+- **T064 重現**：在確認 demo data 可公開後啟動 `./scripts/demo.sh`，執行
+  `./scripts/test_line_local.sh` 建立 single-origin HTTPS，依 T064 完整操作 public／volunteer／
+  adoption paths，保存遮罩後證據。
+- **T065 重現**：以單 shelter staff、multi-shelter staff、非 staff 三個受控 identity 依序驗證
+  shelter selector、staff menu、create/health/photo/list、switch/replay rejection；不得保存 raw
+  token、LINE UID 或個資。
+- **下一步**：兩項皆 PASS 後，把 evidence 綁定完整 40-char tested commit，重跑 production
+  preflight；若 branch/main 有移動先執行 T076。之後另行取得建立 PR 的明確授權。
+- **T075**：尚未建立 PR；目前既未取得 PR 授權，也不應在 Stop Gate 8 BLOCKED 時建立。
+- **T076**：目前無 PR review，故尚未觸發；一旦 head 移動即為必要 gate，不可視為自動完成。
+
+**Stop Gate 9：BLOCKED BY T064／T065；狀態為 `NOT_MERGE_READY`。**
 
 ## 依賴與建議執行順序
 

@@ -1,93 +1,77 @@
-# StrayHub LINE 依角色選單框架
+# StrayHub LINE 角色選單與公開流程
 
-> 狀態：**框架已建（先做結構，內容由後續接手者實作）**
-> 建立日期：2026-08-26
-> 前提：實際把選單推上 LINE、依 UID 切換，需真實 LINE channel 憑證；本框架可在本機／mock 驗證。
+> 狀態：整合功能已完成；production 預設關閉，須通過真實 LINE smoke 才可啟用。
 
----
+## 公開入口
 
-## 1. 目標行為
+任何加入官方帳號、尚未取得 shelter 身分的使用者只看到兩個入口：
 
+| 選項 | postback | 行為 |
+| --- | --- | --- |
+| 志工服務 | `action=start_volunteer_application` | 開啟公開志工申請 LIFF；核准前不授予 shelter 權限 |
+| 領養流程 | `action=start_adoption_matching&flow=adoption` | 進入正式 Bot 對話，不依賴 adopter mock page |
+
+公開選單沒有工作人員入口。工作人員選單只會在後端確認 active
+`STAFF`／`SHELTER_ADMIN` membership 並建立目前收容所 context 後綁定。
+
+領養流程先選地區與收容所，再選「心有所屬」或「推薦我」。兩條路徑都以規則式
+matching 為必要基線；AI 是可選增強，停用或失敗時仍可完成。流程支援返回、取消、
+續接，送出後建立具 shelter scope 的 inquiry。送出 inquiry 不會自動綁 adopter menu；
+完成領養後的 adopter lifecycle 不在本輪範圍。
+
+## 選單狀態
+
+```text
+未綁定／未知角色／平台管理員／未選收容所的 staff
+  └─ default（志工服務、領養流程）
+
+active VOLUNTEER membership
+  └─ volunteer（散步回報、志工報到、返回主選單）
+
+active STAFF 或 SHELTER_ADMIN membership + server-side shelter context
+  └─ staff（新增動物、更新健康、動物清單、變更狀態）
+
+ADOPTER（僅 routing framework，無自動 lifecycle）
+  └─ adopter（我想領養、返回主選單）
 ```
-LINE 官方帳號（未綁定）── 預設選單：看基本資訊 + 綁定
-        │
-        ▼ 底部選單「綁定身分」
-   後端依綁定後的角色，把對應 Rich Menu 綁到該使用者的 LINE UID
-        ├─ 工作人員（STAFF / SHELTER_ADMIN / PLATFORM_ADMIN）→ 工作人員選單
-        ├─ 志工（VOLUNTEER）→ 志工選單：散步回報 / 志工報到
-        └─ 領養人（ADOPTER，新角色）→ 領養選單：我想領養 / 領養回報
+
+多收容所工作人員不能由 LINE UID 自動猜測收容所，必須先透過身分交換明確選定
+membership。`PLATFORM_ADMIN` 是平台權限，不等同任何收容所工作人員。
+
+「返回主選單」只把該 LINE UID link 回 default Rich Menu，不會刪除、降級或改寫
+membership、grant、session 或 shelter context；權限仍以後端為準。再次進入受保護功能時，
+後端會重新驗證身分與目前收容所。
+
+## 設定與安全失敗
+
+四份 menu 定義在 `infra/local/line-rich-menu-{default,volunteer,adopter,staff}.yaml`，
+以 `scripts/sync_line_role_menus.py` 驗證或發佈。角色 ID 由下列環境變數提供：
+
+```dotenv
+LINE_RICH_MENU_DEFAULT_ID=
+LINE_RICH_MENU_VOLUNTEER_ID=
+LINE_RICH_MENU_ADOPTER_ID=
+LINE_RICH_MENU_STAFF_ID=
 ```
 
-## 2. 選單定義（已建）
+全部缺少或只缺目標角色 ID 時，routing 是 no-op；不影響 webhook、身分綁定、核准或
+資料 transaction。LINE Messaging API timeout、5xx 或 reply token 失效會記錄警告並安全
+失敗，不會回滾已提交的 CRM mutation。Webhook signature 驗證及 duplicate-event
+idempotency 不可關閉。
 
-四份 YAML 位於 `infra/local/`，全部為 postback 動作（dry-run 不需憑證）：
+Production 另受 `LINE_ROLE_MENU_FEATURES_ENABLED` fail-closed gate 保護，預設 `false`。
+只有全部必要 menu ID、公開 HTTPS origin、staff LIFF ID、LINE credential，以及格式為
+`verified-YYYYMMDD-<40-char-tested-git-sha>` 的真實 smoke evidence 都通過 preflight，才可對
+該已測 commit 設為 `true`。目前不要求 adopter menu ID，因為沒有完成領養 lifecycle。
 
-| 檔案 | role | chatBarText | 項目（action 代碼） |
-|---|---|---|---|
-| `line-rich-menu-default.yaml` | default | 收容所資訊 | 收容所基本資訊(`shelter_info`)、綁定身分(`start_binding`) |
-| `line-rich-menu-volunteer.yaml` | volunteer | 志工選單 | 散步回報(`walk_report`)、志工報到(`volunteer_checkin`) |
-| `line-rich-menu-adopter.yaml` | adopter | 領養選單 | 我想領養(`want_to_adopt`)、領養回報(`adoption_report`) |
-| `line-rich-menu-staff.yaml` | staff | 工作人員 | 新增動物(`staff_create_animal`)、更新健康紀錄(`staff_update_health`)、動物清單(`staff_animal_list`)、變更動物狀態(`staff_change_status`) |
+## 權限與資料邊界
 
-> 既有的 `infra/local/line-rich-menu.yaml`（單一志工照護選單）**未更動**，仍可獨立使用。
+- LINE user ID 只是外部 identity，必須映射到內部 user/membership。
+- 公開志工申請只會建立 pending application；管理員核准後才建立 active grant。
+- 公開領養目錄使用專用 read-only RLS scope，只可讀 active shelter 的 adoptable animals。
+- Staff LIFF/API 使用 server-side active organization；不信任 payload 中的 shelter/actor。
+- 志工到期只撤銷該 shelter 的 membership/grant/menu context，不得影響其他 shelter。
 
-## 3. 角色路由（已建）
-
-`services/api/app/application/line_rich_menu_routing.py`
-
-- `LineRole`：角色常數，含**新增的 `ADOPTER`**。
-- `menu_key_for_role(role, bound)`：
-  - 未綁定 / 角色未知 → `default`
-  - `STAFF` / `SHELTER_ADMIN` / `PLATFORM_ADMIN` → `staff`
-  - `VOLUNTEER` → `volunteer`；`ADOPTER` → `adopter`
-- `RichMenuRegistry`：選單 key → 已建立的 `richMenuId` 對應（由 sync 腳本 `--apply` 產生後填入）。
-- `RichMenuRoutingService.link_for_user(line_user_id, role)`：依角色把對應 rich menu 綁到該 UID（用既有 `LineMessagingPort.link_rich_menu(rich_menu_id, user_id=...)`）。選單尚未註冊時為 no-op。
-
-## 4. 選單動作占位（已建 + 已接線）
-
-- `services/api/app/application/line_menu_actions.py`：`MENU_PLACEHOLDER_ACTIONS`，每個新選單項目對應一句「開發中」占位回覆。
-- `services/api/app/api/line_webhook.py`：在 `_handle_postback` 解析 action 後，additive 加入兩個分支：
-  - `start_binding` → 回覆 LIFF 綁定連結（沿用 `_liff_binding_message()`）。
-  - 命中 `MENU_PLACEHOLDER_ACTIONS` → 回覆對應占位訊息。
-- 既有 postback 動作（`start_care_report`、`resume_draft`、`contact_staff` 等）**行為不變**。
-
-## 5. 發佈腳本（已建）
-
-`scripts/sync_line_role_menus.py`
-
-- 不帶參數：驗證四份設定（dry-run），輸出每個角色的項目數。已實測通過。
-- `--apply --image-dir <dir>`：逐一建立每個選單、上傳圖片，印出「角色 → richMenuId」，並把 `default` 綁給所有人作為基準。需真實 `LINE_CHANNEL_ACCESS_TOKEN` 與每角色一張圖（`<role>.png`）。
-
-## 6. 接手者要做的事（TODO，內容層）
-
-**綁定時切換選單（關鍵接點）— ✅ 已接（2026-08-26）**
-在綁定成功處（`SessionService.bind_line_identity`，`services/api/app/application/authentication/session_service.py`）取得使用者角色後，呼叫：
-```python
-await RichMenuRoutingService(line_adapter, registry).link_for_user(
-    line_user_id=line_user_id, role=role
-)
-```
-`registry` 來自 `sync_line_role_menus.py --apply` 的輸出（建議存為設定 / 環境變數）。
-
-> 已實作：`SessionService.bind_line_identity` 綁定成功後會 best-effort 呼叫 `_link_role_rich_menu(line_user_id, role)`（link 失敗不影響綁定）。`get_session_service` 會在 settings 有設 `line_rich_menu_*_id` 時自動組出 router。
-> 只要 `.env` 填入 `LINE_RICH_MENU_DEFAULT_ID` / `_VOLUNTEER_ID` / `_ADOPTER_ID` / `_STAFF_ID`（由 sync `--apply` 產生），綁定就會依角色切換選單；全空則為 no-op。
-
-**各選單項目的實作**（目前都是占位）
-- 志工：`walk_report`、`volunteer_checkin`
-- 領養人：`want_to_adopt`、`adoption_report`
-- 工作人員（重點）：
-  - `staff_create_animal` / `staff_update_health`：✅ 已建 LIFF 介面 `line-liff/staff-animal/`（由 paw-village 衍生），選單點按會回覆 LIFF 連結。後端合約見 `docs/staff-animal-line-input.md`。⚠️ 其中 `POST /v1/management/animals` 與 `.../health-records` 為 **[後端待實作]**（StrayHub 目前無建立動物 API）。
-  - `staff_animal_list` / `staff_change_status`：接既有 `management_animals`（列表 / PATCH 狀態，`require_staff_or_admin`）。
-
-**ADOPTER 角色正式化**
-本框架只在選單路由層引入 `ADOPTER`。若要正式成為後端角色，需擴充 membership role 體系與相關權限白名單（`services/api/app/api/management_access.py` 等），並決定領養人如何綁定（可能不屬於任何收容所 membership）。
-
-**圖片素材**
-四張 rich menu 底圖（2500×1686，`default.png`/`volunteer.png`/`adopter.png`/`staff.png`）放進 `--image-dir`。
-
-## 7. 本輪未改動 / 限制
-
-- 未接觸 auth 綁定核心流程（只留接點）。
-- 未新增/修改任何後端角色權限邏輯（ADOPTER 僅選單路由層）。
-- 未實際發佈 rich menu（無真實憑證）。
-- 未跑完整品質 Gate；新增/修改檔已通過 Python 語法檢查與 sync dry-run。
+實機設定見 [line-account-setup.md](line-account-setup.md)，staff contract 見
+[staff-animal-line-input.md](staff-animal-line-input.md)，production gate 見
+[deployment/production-config-contract.md](deployment/production-config-contract.md)。

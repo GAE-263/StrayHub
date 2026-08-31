@@ -1,153 +1,101 @@
-# 串接 LINE 帳號 — 逐步設定
+# LINE 帳號、LIFF 與 Rich Menu 設定
 
-目標：從 mock 切到真實 LINE，能用真實帳號跑「綁定 → 依角色切選單 → 開 LIFF 操作」。
-本文只需做一次；之後換人綁帳號只用最後的「綁定帳號」那步。
+本文件區分本機展示、自動測試、受控實機 smoke 與 production。真實 token、secret、
+ID token、LINE user ID 與個資不得提交 Git 或貼入測試證據。
 
-> 需要你手動去 LINE Developers Console 取得的憑證，本文標為 🔑。程式端該填哪、該跑什麼都寫在下面。
+## 環境分級
 
----
+| 環境 | Credential／資料 | 用途 |
+| --- | --- | --- |
+| Normal demo | `.env.example` 的 fake LINE 值；三個 demo shelters | `./scripts/demo.sh`，不發布 menu、不建立 LINE test fixtures |
+| Automated test | loopback `strayhub_test`、deterministic fake verifier | pytest／E2E／tenant isolation；不可指向 demo 或 production DB |
+| Controlled smoke | 非 production LINE channels、受控帳號、公開 HTTPS tunnel | 手機驗證 webhook、LIFF、menu link 與角色切換 |
+| Production | Secret Manager／部署 config、正式 HTTPS origin | 預設 gate 關閉；只有精確 release commit 通過 smoke 才可啟用 |
 
-## 0. 你會需要兩個 LINE channel
+## LINE Developers 前置條件
 
-在 [LINE Developers Console](https://developers.line.biz/) 的一個 Provider 底下建立：
+在同一 Provider 準備：
 
-1. **Messaging API channel**（給 Bot / Rich Menu / 推播用）
-   - 🔑 `Channel ID` → `LINE_CHANNEL_ID`
-   - 🔑 `Channel secret` → `LINE_CHANNEL_SECRET`
-   - 🔑 `Channel access token`（長期）→ `LINE_CHANNEL_ACCESS_TOKEN`
-2. **LINE Login channel**（給 LIFF 登入 / 身分驗證用）
-   - 🔑 `Channel ID` → `LINE_LOGIN_CHANNEL_ID`
-   - 🔑 `Channel secret` → `LINE_LOGIN_CHANNEL_SECRET`
-   - 在此 channel 下建立 **LIFF app**：🔑 `LIFF ID` → `LIFF_ID`、`NEXT_PUBLIC_LIFF_ID`
-   - LIFF 的 **Endpoint URL** 填你的 HTTPS 網址（見第 3 步 tunnel），scope 勾 `openid`、`profile`
+1. Messaging API channel：Channel ID、Channel secret、長期 access token。
+2. LINE Login channel：Channel ID、Channel secret。
+3. 志工申請 LIFF app：scope 至少 `openid`，Endpoint 指向公開 origin 的
+   `/volunteer-application`。
+4. Staff LIFF app：Endpoint 必須是已審核、部署於同一公開 origin 的 staff artifact；其
+   LIFF ID 以 `LINE_STAFF_LIFF_ID` 提供。
+5. 四張 2500×1686 Rich Menu 圖片位於
+   `infra/local/rich-menu-images/{default,volunteer,adopter,staff}.png`。
 
-> 工作人員動物輸入等 LIFF 若要各自獨立，可再建多個 LIFF app，把各自的 LIFF ID 填進
-> `line-liff/*/config.js` 或單檔 CONFIG 的 `LIFF_ID`。最簡單是先共用一個 LIFF。
+本機 `.env` 可由 `.env.example` 複製再填入受控測試值；production 值只能由部署平台注入。
+不要在命令列輸出 secret。`LIFF_ID` 是公開志工 LIFF；`LINE_STAFF_LIFF_ID` 是 staff LIFF。
 
----
-
-## 1. 填 `.env`
-
-複製 `.env.example` 成 `.env`，把上面 🔑 的值填進去，並設定：
-
-```dotenv
-APP_ENV=local
-LINE_CHANNEL_ID=<你的 Messaging channel id>
-LINE_CHANNEL_SECRET=<...>
-LINE_CHANNEL_ACCESS_TOKEN=<...>
-LINE_LOGIN_CHANNEL_ID=<你的 Login channel id>
-LINE_LOGIN_CHANNEL_SECRET=<...>
-LIFF_ID=<你的 LIFF id>
-NEXT_PUBLIC_LIFF_ID=<同上>
-LIFF_BASE_URL=https://liff.line.me/<你的 LIFF id>
-```
-
-> ⚠️ 只要 `LINE_CHANNEL_ID` 不再是 `fake-` 開頭，後端就會改用**真實** LINE 身分驗證
-> （`identity_verification_adapter.py` 的判斷），mock 驗證自動關閉。
-
-JWT 金鑰若還沒設，依 README 產生並填 `AUTH_JWT_ACTIVE_PRIVATE_KEY` / `_PUBLIC_KEY`。
-
----
-
-## 2. 起本機服務 + 資料
+## 本機與自動測試
 
 ```bash
-cp .env.example .env   # 然後照第 1 步填
-docker compose -f infra/local/docker-compose.yml up -d postgres minio
-uv run alembic upgrade head
-uv run python -m scripts.seed_local        # 建立 local-staff-a 等測試帳號
-```
-
-三個終端機分別跑 FastAPI(8001) / Next.js(3001) / Worker（見 README）。
-
----
-
-## 3. 對外 HTTPS（LINE 一定要 https）
-
-LINE Webhook 與 LIFF Endpoint 都必須是公開 HTTPS。用兩條獨立 tunnel（Web 與 API 不可共用）：
-
-```bash
-cloudflared tunnel --url http://127.0.0.1:3001   # Web / LIFF
-cloudflared tunnel --url http://127.0.0.1:8001   # API / webhook
-```
-
-- Messaging channel 的 **Webhook URL** 填：`https://<API tunnel>/v1/line/webhook`，並「Verify」。
-- LIFF app 的 **Endpoint URL** 填：`https://<Web tunnel>/`（或各 LIFF 的路徑）。
-
----
-
-## 4. 建立並綁定 Rich Menu（依角色）
-
-準備四張 2500×1686 底圖，放 `infra/local/rich-menu-images/{default,volunteer,adopter,staff}.png`，然後：
-
-```bash
-# 先 dry-run 確認設定無誤（不需憑證）
+./scripts/demo.sh
+./scripts/test_line_local.sh --print-env
+./scripts/test_line_local.sh --no-tunnel
 uv run python -m scripts.sync_line_role_menus
-
-# 實際建立（需 LINE_CHANNEL_ACCESS_TOKEN）
-uv run python -m scripts.sync_line_role_menus --apply --image-dir infra/local/rich-menu-images
 ```
 
-腳本會印出「角色 → richMenuId」。把四個 id 填回 `.env`：
+`--no-tunnel` 只驗證 credential presence、mock 關閉、API/Web、single-origin proxy 與 LIFF
+route，不把服務暴露至 Internet。自動測試使用：
 
-```dotenv
-LINE_RICH_MENU_DEFAULT_ID=richmenu-xxxx
-LINE_RICH_MENU_VOLUNTEER_ID=richmenu-xxxx
-LINE_RICH_MENU_ADOPTER_ID=richmenu-xxxx
-LINE_RICH_MENU_STAFF_ID=richmenu-xxxx
+```bash
+uv run python -m scripts.test_local tests/unit/test_line_role_menu_actions.py -q
 ```
 
-> 填了之後，綁定成功時後端會自動依角色 link 對應選單（`session_service.bind_line_identity`）。
-> 全空則此功能自動略過，不影響綁定本身。重啟 FastAPI 讓新 env 生效。
+`ORG-A` 等 fixture 僅能存在 `strayhub_test`，不是 normal demo 帳號或收容所。
 
----
+## 受控實機 smoke
 
-## 5. 綁定帳號（串帳號的核心）
+先確認資料無敏感內容，再明確同意公開本機測試 surface：
 
-要知道你自己的 **LINE userId**（U 開頭 33 字元）。取得方式擇一：
-- 用 LIFF 登入後 `liff.getProfile()` 的 `userId`（可暫時 console.log 出來）；或
-- 加官方帳號傳一則訊息，看 webhook 收到的 `source.userId`（server log）。
+```bash
+./scripts/test_line_local.sh
+```
 
-把它綁到既有 StrayHub 帳號（例如工作人員 `local-staff-a`）：
+helper 以 nginx 將 `/v1/*` 送 FastAPI、其他路徑送 Next.js，再用一條 ngrok tunnel 提供
+single HTTPS origin。它不修改 `.env`、LINE Developers 或 Rich Menu。將輸出的 webhook URL
+與 LIFF Endpoint 手動填入受控 channel；結束後執行 `./scripts/test_line_local.sh stop`。
+
+發佈測試 Rich Menu 前先 dry-run，再明確執行：
+
+```bash
+uv run python -m scripts.sync_line_role_menus
+uv run python -m scripts.sync_line_role_menus --apply \
+  --image-dir infra/local/rich-menu-images
+```
+
+將輸出的 menu IDs 注入目前測試 process 並重新啟動服務。實機至少驗證：
+
+- 公開 menu 只有志工服務與領養流程。
+- 志工申請核准後切 volunteer menu；返回 default 不改權限。
+- 領養兩條路徑、返回／取消／續接與 AI disabled fallback；inquiry 後不切 adopter menu。
+- 單 shelter staff 可進 staff menu；多 shelter staff 必須先選 shelter。
+- 未選 shelter、非 staff、跨 shelter/replay request 都被 server 拒絕。
+- LINE timeout/5xx 不破壞已提交資料，duplicate event 不重複建立資料。
+
+證據只能保留時間、遮罩後 channel/environment、完整 40-char commit SHA、case 結果與錯誤碼；
+不得保留 token、secret、raw ID token、LINE UID 或受保護資料。
+
+## 帳號綁定與收容所選擇
+
+測試管理員可用 CLI 將受控 LINE UID 綁到既有內部帳號：
 
 ```bash
 uv run python -m scripts.bind_line_account bind \
-  --username local-staff-a --line-user-id U0123456789abcdef0123456789abcdef
-
-# 查詢 / 解綁
-uv run python -m scripts.bind_line_account status --username local-staff-a
-uv run python -m scripts.bind_line_account unbind --line-user-id U0123...
+  --username <TEST_USERNAME> --line-user-id <CONTROLLED_LINE_UID>
+uv run python -m scripts.bind_line_account status --username <TEST_USERNAME>
+uv run python -m scripts.bind_line_account unbind --line-user-id <CONTROLLED_LINE_UID>
 ```
 
-> 一個帳號通常只綁一個 LINE UID；帳號需剛好 1 個 active membership，
-> 否則 webhook 會要求「在 LIFF 明確選擇收容所」。
+只有一個 active membership 時可建立該 shelter context。多個 active memberships 時必須由
+LIFF 身分交換明確傳入要使用的 organization；後端逐一驗證 membership，不能由 client
+直接指定未授權 shelter。
 
----
+## Production 啟用
 
-## 6. 驗收流程
-
-1. 用綁定的 LINE 帳號打開官方帳號 → 底部選單應是該角色的選單
-   （工作人員 = staff 選單）。
-2. 點「新增動物 / 更新健康紀錄」→ 收到 LIFF 連結 → 開啟表單。
-3. LIFF 表單 `config.js` 的 `MOCK_MODE=false`、`USE_MOCK_API=false`、
-   `API_BASE_URL` 指向 API tunnel 的 `/v1`。
-4. 送出 → 打到後端。
-
----
-
-## 還沒完成、會擋住第 6 步「送出」的一件事
-
-工作人員「新增動物 / 更新健康紀錄」送出的目標端點**後端尚未實作**：
-- `POST /v1/management/animals`
-- `POST /v1/management/animals/{id}/health-records`
-
-合約見 [`staff-animal-line-input.md`](staff-animal-line-input.md)。在後端補上前，
-staff 表單維持 `USE_MOCK_API=true` 可完整走完 UI（送出只在 Console 印 payload）。
-其餘（綁定、依角色切選單、志工/領養人選單占位）都能用真實帳號跑通。
-
-## 檔案速查
-- 綁定工具：`scripts/bind_line_account.py`
-- 選單發佈：`scripts/sync_line_role_menus.py`
-- 角色→選單：`services/api/app/application/line_rich_menu_routing.py`
-- 綁定切換選單接點：`services/api/app/application/authentication/session_service.py`
-- LIFF 介面：`line-liff/`（demo / staff-animal / volunteer / adopter）
+`LINE_ROLE_MENU_FEATURES_ENABLED=false` 是預設值。完成實機 smoke 後，將同一 release commit
+的 evidence 設為 `verified-YYYYMMDD-<40-char-tested-git-sha>`，由 production preflight 驗證
+全部 conditional config，再透過正常 release/approval 將 gate 設為 `true`。不可直接在 VM
+手改 env，也不可用 local smoke evidence 代替 production-like smoke。
