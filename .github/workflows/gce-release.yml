@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 env:
-  TRUSTED_F4_SOURCE_REVISION: 0f5994487f5fb11a1edd6dc36087902ec6b257f5
+  TRUSTED_F4_SOURCE_REVISION: 38ab34dc6aaff78e0f3a9f20dbf954a071fb355a
   GCP_WORKLOAD_IDENTITY_PROVIDER: projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github
   GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT: strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com
   GCP_ARTIFACT_REGISTRY: asia-east1-docker.pkg.dev/canvas-primacy-502703-k1/strayhub
@@ -128,7 +128,7 @@ jobs:
     needs: verify-release
     if: >-
       ${{ inputs.publish &&
-          inputs.source_revision == '0f5994487f5fb11a1edd6dc36087902ec6b257f5' }}
+          inputs.source_revision == '38ab34dc6aaff78e0f3a9f20dbf954a071fb355a' }}
     runs-on: ubuntu-latest
     environment: release-publication
     permissions:
