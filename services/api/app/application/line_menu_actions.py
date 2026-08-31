@@ -34,9 +34,6 @@ MENU_LIFF_ACTIONS: dict[str, str] = {
     "staff_update_health": "staff-animal",
 }
 
-# 領養人選單裡的兩個項目：開啟領養假頁面（之後會換成真正的領養 LIFF）。
-ADOPTION_ENTRY_ACTIONS: frozenset[str] = frozenset({"want_to_adopt", "adoption_report"})
-
 # 志工／領養人選單都有的「返回主選單」：切回 default，讓有個別身份的人自由換入口。
 BACK_TO_DEFAULT_MENU_ACTION = "back_to_default_menu"
 
@@ -45,6 +42,5 @@ def is_menu_action(action: str) -> bool:
     return (
         action in MENU_PLACEHOLDER_ACTIONS
         or action in MENU_LIFF_ACTIONS
-        or action in ADOPTION_ENTRY_ACTIONS
         or action == BACK_TO_DEFAULT_MENU_ACTION
     )

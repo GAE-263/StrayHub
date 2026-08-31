@@ -397,7 +397,13 @@ class RecordingRichMenuRouter:
         self.calls: list[tuple[str, str | None]] = []
         self.fail = fail
 
-    async def link_for_user(self, *, line_user_id: str, role: str | None) -> None:
+    async def link_for_user(
+        self,
+        *,
+        line_user_id: str,
+        role: str | None,
+        organization_selected: bool = False,
+    ) -> None:
         self.calls.append((line_user_id, role))
         if self.fail:
             raise RuntimeError("LINE API 暫時不可用")

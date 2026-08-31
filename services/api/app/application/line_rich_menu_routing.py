@@ -43,8 +43,9 @@ MENU_STAFF = "staff"
 
 MENU_KEYS = (MENU_DEFAULT, MENU_VOLUNTEER, MENU_ADOPTER, MENU_STAFF)
 
-# 具管理權的角色一律導向工作人員選單。
-_STAFF_ROLES = frozenset({LineRole.STAFF, LineRole.SHELTER_ADMIN, LineRole.PLATFORM_ADMIN})
+# 收容所管理角色只有在後端已建立明確 organization context 時才能取得 staff menu。
+# PLATFORM_ADMIN 是平台權限，不代表任何單一收容所的工作人員身分。
+_SHELTER_STAFF_ROLES = frozenset({LineRole.STAFF, LineRole.SHELTER_ADMIN})
 
 _ROLE_TO_MENU = {
     LineRole.VOLUNTEER: MENU_VOLUNTEER,
@@ -52,17 +53,23 @@ _ROLE_TO_MENU = {
 }
 
 
-def menu_key_for_role(role: str | None, *, bound: bool = True) -> str:
+def menu_key_for_role(
+    role: str | None,
+    *,
+    bound: bool = True,
+    organization_selected: bool = False,
+) -> str:
     """回傳該角色應綁定的選單 key。
 
     - 未綁定（bound=False）或角色未知 → default（可看基本資訊 + 綁定入口）
-    - 具管理權角色 → staff
+    - STAFF／SHELTER_ADMIN 且後端已選定收容所 → staff
+    - PLATFORM_ADMIN 或尚未選定收容所的工作人員 → default
     - VOLUNTEER / ADOPTER → 對應選單
     """
     if not bound or not role:
         return MENU_DEFAULT
     normalized = role.upper()
-    if normalized in _STAFF_ROLES:
+    if normalized in _SHELTER_STAFF_ROLES and organization_selected:
         return MENU_STAFF
     return _ROLE_TO_MENU.get(normalized, MENU_DEFAULT)
 
@@ -102,10 +109,19 @@ class RichMenuRoutingService:
         self.registry = registry
 
     async def link_for_user(
-        self, *, line_user_id: str, role: str | None, bound: bool = True
+        self,
+        *,
+        line_user_id: str,
+        role: str | None,
+        bound: bool = True,
+        organization_selected: bool = False,
     ) -> str | None:
         """綁定對應選單，回傳所綁定的 richMenuId；若尚未註冊該選單則回傳 None。"""
-        menu_key = menu_key_for_role(role, bound=bound)
+        menu_key = menu_key_for_role(
+            role,
+            bound=bound,
+            organization_selected=organization_selected,
+        )
         rich_menu_id = self.registry.get(menu_key)
         if rich_menu_id is None:
             # 尚未建立該角色選單（例如還沒 --apply）；框架階段視為 no-op。

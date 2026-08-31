@@ -35,10 +35,7 @@ from services.api.app.application.line_draft_conversation import (
 )
 from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.line_image_service import LineImageService
-from services.api.app.application.line_menu_actions import (
-    ADOPTION_ENTRY_ACTIONS,
-    MENU_PLACEHOLDER_ACTIONS,
-)
+from services.api.app.application.line_menu_actions import MENU_PLACEHOLDER_ACTIONS
 from services.api.app.application.line_message_presenter import quick_reply_for_options
 from services.api.app.application.line_rich_menu_routing import (
     LineRole,
@@ -154,33 +151,6 @@ def _volunteer_application_liff_url() -> str:
     return f"https://liff.line.me/{get_settings().liff_id}"
 
 
-def _adoption_entry_message() -> dict:
-    """領養流程占位介面：假頁面，之後會換成真正的 LIFF。
-
-    需要 WEB_PUBLIC_BASE_URL（demo-line.sh 的 NGROK_URL）才有連結；未設定時
-    退回純文字，行為與其他占位選單項目一致。
-    """
-    base_url = get_settings().web_public_base_url.rstrip("/")
-    if not base_url:
-        return _text("領養媒合功能準備中，之後會在這裡提供可領養動物與媒合流程。")
-    return {
-        "type": "text",
-        "text": "領養流程還在建置中，先提供假頁面試試看，之後會換成正式版。",
-        "quickReply": {
-            "items": [
-                {
-                    "type": "action",
-                    "action": {
-                        "type": "uri",
-                        "label": "開啟領養流程（假頁面）",
-                        "uri": f"{base_url}/adoption-entry/index.html",
-                    },
-                }
-            ]
-        },
-    }
-
-
 def _rich_menu_router() -> RichMenuRoutingService | None:
     """四個 richMenuId 都沒設定時回 None，選單切換為 no-op。"""
     settings = get_settings()
@@ -211,11 +181,6 @@ async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
     except Exception:
         logger.warning("switching rich menu failed (role=%s)", role, exc_info=True)
         return False
-
-
-async def _switch_menu_to_adopter(line_user_id: str | None) -> bool:
-    """點「領養流程」直接把 Rich Menu 切到領養人選單，不經過 LIFF/綁定。"""
-    return await _switch_rich_menu(line_user_id, LineRole.ADOPTER)
 
 
 async def _switch_menu_to_default(line_user_id: str | None) -> bool:
@@ -298,7 +263,7 @@ async def _handle_menu_action(
             ],
         )
         return True
-    if action in ADOPTION_ENTRY_ACTIONS or action == "start_adoption_matching":
+    if action == "start_adoption_matching":
         # 正式領養流程必須在 membership resolution 前由 adoption router 處理。
         return False
     if action == "back_to_default_menu":

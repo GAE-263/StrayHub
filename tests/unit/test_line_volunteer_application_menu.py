@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import pytest
 from services.api.app.api import line_webhook
+from services.api.app.application.volunteer_access_service import VolunteerAccessService
 from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
 
 
@@ -119,3 +121,35 @@ async def test_formal_adoption_entry_is_not_consumed_by_volunteer_router() -> No
 
     assert handled is False
     assert line.replies == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail", [False, True])
+async def test_approval_menu_switch_is_best_effort(fail: bool) -> None:
+    user_id = uuid4()
+
+    class Identities:
+        async def get_line_binding_for_user(self, requested_user_id):
+            assert requested_user_id == user_id
+            return SimpleNamespace(line_user_id="U-approved")
+
+    class Router:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def link_for_user(self, *, line_user_id: str, role: str | None):
+            self.calls.append((line_user_id, role))
+            if fail:
+                raise RuntimeError("LINE unavailable")
+
+    router = Router()
+    service = VolunteerAccessService(
+        repository=object(),
+        identities=Identities(),
+        verifier=object(),
+        rich_menu_router=router,
+    )
+
+    await service._switch_rich_menu(user_id, "VOLUNTEER")
+
+    assert router.calls == [("U-approved", "VOLUNTEER")]

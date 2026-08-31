@@ -157,3 +157,8 @@ class LineMessagingApiAdapter:
         )
         response = await self._post(f"{self.api_base}{path}", headers=self._headers)
         self._raise_for_status(response, "link_rich_menu")
+
+    async def unlink_rich_menu(self, *, user_id: str | None = None) -> None:
+        path = f"/v2/bot/user/{user_id}/richmenu" if user_id else "/v2/bot/user/all/richmenu"
+        response = await self._delete(f"{self.api_base}{path}", headers=self._headers)
+        self._raise_for_status(response, "unlink_rich_menu")

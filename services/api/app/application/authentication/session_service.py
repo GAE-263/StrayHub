@@ -229,15 +229,29 @@ class SessionService:
         )
         await self.repository.add(session)
         issued = await self._issue_session(user.id, session)
-        await self._link_role_rich_menu(line_user_id, memberships[0].role)
+        await self._link_role_rich_menu(
+            line_user_id,
+            memberships[0].role,
+            organization_selected=True,
+        )
         return issued
 
-    async def _link_role_rich_menu(self, line_user_id: str, role: str | None) -> None:
+    async def _link_role_rich_menu(
+        self,
+        line_user_id: str,
+        role: str | None,
+        *,
+        organization_selected: bool = False,
+    ) -> None:
         """Best-effort：依角色綁定對應 Rich Menu；失敗不影響身分綁定結果。"""
         if self.rich_menu_router is None:
             return
         try:
-            await self.rich_menu_router.link_for_user(line_user_id=line_user_id, role=role)
+            await self.rich_menu_router.link_for_user(
+                line_user_id=line_user_id,
+                role=role,
+                organization_selected=organization_selected,
+            )
         except Exception:
             # 選單切換為非關鍵操作（LINE API 可能暫時不可用）；綁定已成功即回傳。
             # 但一定要留下紀錄：最常見的原因是 .env 的 richMenuId 在重跑

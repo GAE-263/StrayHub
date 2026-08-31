@@ -29,6 +29,10 @@ class Client:
         self.calls.append(("GET", url, kwargs))
         return Response()
 
+    async def delete(self, url, **kwargs):
+        self.calls.append(("DELETE", url, kwargs))
+        return Response()
+
 
 @pytest.mark.asyncio
 async def test_real_adapter_uses_reply_token_and_message_content_endpoints() -> None:
@@ -54,9 +58,14 @@ async def test_real_adapter_rich_menu_flow_is_repeatable_and_validated() -> None
     )
     await adapter.upload_rich_menu_image(rich_menu_id=rich_menu_id, content=b"png")
     await adapter.link_rich_menu(rich_menu_id=rich_menu_id)
+    await adapter.unlink_rich_menu(user_id="U-user")
     assert rich_menu_id == "rich-1"
-    assert len(client.calls) == 3
+    assert len(client.calls) == 4
     # 建立與綁定走 api.line.me，圖片上傳必須走 api-data.line.me（打錯 host 會 404）。
     assert client.calls[0][1] == "https://api.line.me/v2/bot/richmenu"
     assert client.calls[1][1] == f"https://api-data.line.me/v2/bot/richmenu/{rich_menu_id}/content"
     assert client.calls[2][1] == f"https://api.line.me/v2/bot/user/all/richmenu/{rich_menu_id}"
+    assert client.calls[3][0:2] == (
+        "DELETE",
+        "https://api.line.me/v2/bot/user/U-user/richmenu",
+    )

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
 from services.api.app.api import line_webhook
 from services.api.app.application.line_menu_actions import (
-    ADOPTION_ENTRY_ACTIONS,
     BACK_TO_DEFAULT_MENU_ACTION,
     MENU_PLACEHOLDER_ACTIONS,
+)
+from services.api.app.application.line_rich_menu_routing import (
+    MENU_ADOPTER,
+    MENU_DEFAULT,
+    MENU_STAFF,
+    MENU_VOLUNTEER,
+    LineRole,
+    RichMenuRoutingService,
+    build_registry,
+    menu_key_for_role,
 )
 from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
 
@@ -17,7 +27,6 @@ WEBHOOK_HANDLED_ACTIONS = {
     "start_volunteer_application",
     "start_adoption_matching",
     BACK_TO_DEFAULT_MENU_ACTION,
-    *ADOPTION_ENTRY_ACTIONS,
 }
 
 
@@ -35,17 +44,6 @@ async def test_every_menu_action_gets_its_placeholder_reply(action: str) -> None
 
     assert handled is True
     assert line.replies[0][1][0]["text"] == MENU_PLACEHOLDER_ACTIONS[action]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("action", sorted(ADOPTION_ENTRY_ACTIONS))
-async def test_adopter_menu_items_are_left_to_formal_adoption_router(action: str) -> None:
-    line = MockLineAdapter()
-
-    handled = await line_webhook._handle_menu_action(line, _postback_event(f"action={action}"))
-
-    assert handled is False
-    assert line.replies == []
 
 
 @pytest.mark.asyncio
@@ -145,3 +143,51 @@ def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
         "start_volunteer_application",
         "start_adoption_matching&flow=adoption",
     ]
+
+
+@pytest.mark.parametrize(
+    ("role", "selected", "expected"),
+    [
+        (None, False, MENU_DEFAULT),
+        ("unknown", False, MENU_DEFAULT),
+        (LineRole.VOLUNTEER, False, MENU_VOLUNTEER),
+        (LineRole.ADOPTER, False, MENU_ADOPTER),
+        (LineRole.STAFF, False, MENU_DEFAULT),
+        (LineRole.STAFF, True, MENU_STAFF),
+        (LineRole.SHELTER_ADMIN, True, MENU_STAFF),
+        (LineRole.PLATFORM_ADMIN, False, MENU_DEFAULT),
+        (LineRole.PLATFORM_ADMIN, True, MENU_DEFAULT),
+    ],
+)
+def test_role_routing_requires_verified_shelter_context(
+    role: str | None, selected: bool, expected: str
+) -> None:
+    assert menu_key_for_role(role, organization_selected=selected) == expected
+
+
+def test_unbound_identity_always_uses_default_menu() -> None:
+    assert (
+        menu_key_for_role(LineRole.STAFF, bound=False, organization_selected=True) == MENU_DEFAULT
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_role_menu_id_is_a_noop() -> None:
+    line = MockLineAdapter()
+    router = RichMenuRoutingService(line, build_registry(default="default-id"))
+
+    linked = await router.link_for_user(
+        line_user_id="U-staff",
+        role=LineRole.STAFF,
+        organization_selected=True,
+    )
+
+    assert linked is None
+
+
+def test_adoption_inquiry_submission_does_not_switch_to_adopter_menu() -> None:
+    """沒有正式 adoption-completed lifecycle 前，送出 inquiry 不能改變角色選單。"""
+    source = inspect.getsource(line_webhook._handle_adoption_postback)
+
+    assert "LineRole.ADOPTER" not in source
+    assert "_switch_rich_menu" not in source

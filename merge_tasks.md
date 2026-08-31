@@ -312,15 +312,26 @@ Manifest security constraints：
 
 **Independent Test**：同一 LINE UID 在未綁定、志工核准、志工到期、領養正式完成與工作人員選定收容所等狀態下取得正確 menu；只送出領養申請不得切 adopter menu；menu ID 缺失或 LINE API 失敗不使 webhook crash。
 
-- [ ] T025 [P] [US2] 在 `tests/unit/test_line_role_menu_actions.py` 新增 default／volunteer／adopter／staff／unknown role、missing richMenuId、back-to-default 的 routing matrix，並測試送出 inquiry 不切 adopter menu、只有正式 adoption-completed event 才可切換；若尚無 completion lifecycle 則 adopter auto-switch 必須維持停用
-- [ ] T026 [P] [US2] 在 `tests/unit/test_line_volunteer_application_menu.py` 新增志工已核准重入、核准後切 menu、到期後回 default、LINE API failure 不回滾核准結果的測試
-- [ ] T027 [US2] semantic merge `services/api/app/application/line_rich_menu_routing.py`，移除把 `PLATFORM_ADMIN` 無條件導向 staff menu 的假設；後端先列出已驗證 memberships，工作人員明確選定目前收容所後才建立 organization-scoped staff menu context，沒有選定收容所時維持 default menu
-- [ ] T028 [US2] semantic merge `services/api/app/application/line_menu_actions.py`，讓 `back_to_default_menu` 只切 UI menu、不降權或變更 membership，並移除已由正式 adoption conversation 取代的 `ADOPTION_ENTRY_ACTIONS` placeholder
-- [ ] T029 [US2] semantic merge `services/api/app/application/volunteer_access_service.py` 與 `services/worker/app/handlers/volunteer_access_handler.py`，在 transaction 成功後 best-effort 切 volunteer menu，LINE API 失敗只記錄可稽核 warning
-- [ ] T030 [US2] semantic merge `services/api/app/application/volunteer_expiration_service.py`，到期後依剩餘有效 membership 決定 menu，不得只憑最後一次 role 或 client 傳入 shelter id
-- [ ] T031 [US2] semantic merge `services/api/app/application/authentication/session_service.py` 與 `services/api/app/api/authentication.py`，LINE identity 只作 external identity，綁定時必須驗證邀請／membership，禁止綁定即取得 staff menu
-- [ ] T032 [US2] semantic merge `services/api/app/infrastructure/line/messaging_api_adapter.py` 與 `services/api/app/application/ports/line_messaging.py`，確保 client lifecycle、link／unlink、timeout、HTTP error 與 close 行為一致且不洩漏 access token
-- [ ] T033 [US2] 執行 `tests/unit/test_line_role_menu_actions.py`、`tests/unit/test_line_volunteer_application_menu.py`、`tests/unit/test_line_adapter_client_lifecycle.py`、`tests/integration/test_volunteer_access_expiration.py`、`tests/integration/test_line_adapter_real_boundary.py` 並將結果記錄到 `merge_tasks.md`
+- [x] T025 [P] [US2] 在 `tests/unit/test_line_role_menu_actions.py` 新增 default／volunteer／adopter／staff／unknown role、missing richMenuId、back-to-default 的 routing matrix，並測試送出 inquiry 不切 adopter menu、只有正式 adoption-completed event 才可切換；若尚無 completion lifecycle 則 adopter auto-switch 必須維持停用
+- [x] T026 [P] [US2] 在 `tests/unit/test_line_volunteer_application_menu.py` 新增志工已核准重入、核准後切 menu、到期後回 default、LINE API failure 不回滾核准結果的測試
+- [x] T027 [US2] semantic merge `services/api/app/application/line_rich_menu_routing.py`，移除把 `PLATFORM_ADMIN` 無條件導向 staff menu 的假設；後端先列出已驗證 memberships，工作人員明確選定目前收容所後才建立 organization-scoped staff menu context，沒有選定收容所時維持 default menu
+- [x] T028 [US2] semantic merge `services/api/app/application/line_menu_actions.py`，讓 `back_to_default_menu` 只切 UI menu、不降權或變更 membership，並移除已由正式 adoption conversation 取代的 `ADOPTION_ENTRY_ACTIONS` placeholder
+- [x] T029 [US2] semantic merge `services/api/app/application/volunteer_access_service.py` 與 `services/worker/app/handlers/volunteer_access_handler.py`，在 transaction 成功後 best-effort 切 volunteer menu，LINE API 失敗只記錄可稽核 warning
+- [x] T030 [US2] semantic merge `services/api/app/application/volunteer_expiration_service.py`，到期後依剩餘有效 membership 決定 menu，不得只憑最後一次 role 或 client 傳入 shelter id
+- [x] T031 [US2] semantic merge `services/api/app/application/authentication/session_service.py` 與 `services/api/app/api/authentication.py`，LINE identity 只作 external identity，綁定時必須驗證邀請／membership，禁止綁定即取得 staff menu
+- [x] T032 [US2] semantic merge `services/api/app/infrastructure/line/messaging_api_adapter.py` 與 `services/api/app/application/ports/line_messaging.py`，確保 client lifecycle、link／unlink、timeout、HTTP error 與 close 行為一致且不洩漏 access token
+- [x] T033 [US2] 執行 `tests/unit/test_line_role_menu_actions.py`、`tests/unit/test_line_volunteer_application_menu.py`、`tests/unit/test_line_adapter_client_lifecycle.py`、`tests/integration/test_volunteer_access_expiration.py`、`tests/integration/test_line_adapter_real_boundary.py` 並將結果記錄到 `merge_tasks.md`
+
+### Phase 4 執行紀錄
+
+- `PLATFORM_ADMIN` 永遠不再因平台角色直接取得 staff menu；`STAFF`／`SHELTER_ADMIN` 只有在 SessionService 已由後端驗證唯一 membership 並建立 active organization context 時，才傳入 `organization_selected=True`。多 membership 維持既有 `shelter_context_required`，必須先選定收容所。
+- 移除 `ADOPTION_ENTRY_ACTIONS` 與假領養頁 handler；adopter menu（目前不會自動發放）也只保留正式 adoption action 與返回公開選單。送出 inquiry 沒有任何 adopter menu switch；待未來正式 adoption-completed lifecycle 才能啟用。
+- `back_to_default_menu` 僅呼叫 LINE menu link，不修改 session、membership 或 grant。志工核准與到期維持 transaction 後 best-effort link；LINE failure 僅 warning，不回滾權限交易。
+- 志工到期後採 fail-closed default menu：worker 的單一 organization scope 不以看不到的跨 shelter membership 猜測使用者 context；若另有工作人員 membership，仍須依核准決策重新選定收容所。
+- Adapter client 共用、close idempotency、HTTP boundary、menu create/upload/link 與錯誤映射沿用 Phase 2 已完整合併的 role source 實作；本 Phase 無需再改 API transport contract。
+- Focused suite：**63 passed, 0 failed**（包含 routing matrix、LIFF exchange、approval failure、expiration 與 adapter boundary）。Targeted Ruff：PASS。
+
+**Stop Gate 4：PASS。**
 
 **Stop Gate 4 / US2 acceptance**：身分選單完全由 server-side authorization 決定；Rich Menu 切換失敗不破壞核心交易，且有 log／test 證據。
 
