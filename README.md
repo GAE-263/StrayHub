@@ -25,6 +25,11 @@ npm ci --prefix apps/web
 ./scripts/demo.sh refresh
 ```
 
+Windows + WSL 使用者：直接在 WSL 執行 `./scripts/demo.sh` 即可，不需要手動 `dos2unix`。
+[`.gitattributes`](.gitattributes) 已強制 `*.sh`／`*.bash` 一律以 LF checkout，避免 CRLF 造成
+`env: 'bash\r': No such file or directory`。若 clone 於該規則加入前，執行一次
+`git rm --cached -r . && git reset --hard` 讓工作目錄重新正規化。
+
 正常 demo 只建立毛小孩幸福聯盟協會（5 隻）、新北市新店區公立動物之家
 （犬，最多 60 隻）、新北市五股區公立動物之家（犬，最多 60 隻）。
 流程包含 Docker、Alembic、runtime-role 最小 grants、FurKids、MOA 資料確認、
