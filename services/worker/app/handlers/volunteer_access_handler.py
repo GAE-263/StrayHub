@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,8 @@ from services.api.app.persistence.repositories.volunteer_access_repository impor
 from services.worker.app.persistence.volunteer_access_repository import (
     WorkerVolunteerAccessRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _rich_menu_router() -> RichMenuRoutingService | None:
@@ -132,6 +135,22 @@ class VolunteerAccessHandler:
                     error_code="notification_provider_error",
                 )
             else:
+                if payload.get("application_status") == "approved":
+                    router = _rich_menu_router()
+                    if router is not None:
+                        try:
+                            await router.link_for_user(
+                                line_user_id=line_user_id,
+                                role="VOLUNTEER",
+                            )
+                        except Exception:
+                            # The approval and notification outbox already
+                            # committed. Menu UI is non-authoritative and may
+                            # self-heal on the user's next public-menu entry.
+                            logger.warning(
+                                "linking volunteer menu after committed approval failed",
+                                exc_info=True,
+                            )
                 await worker_repository.complete_notification(delivery, sent=True)
         await self.session.commit()
         return len(deliveries)

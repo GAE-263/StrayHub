@@ -368,14 +368,35 @@ Manifest security constraints：
 
 **目的**：新增 adoption schema 與 lifecycle handler 不得破壞 demo/test DB 邊界或 GCE worker runtime。
 
-- [ ] T042 [P] 對 `services/api/migrations/versions/` 執行 `uv run alembic heads`，確保整合後只有預期 head；若出現多 head，新增只合併 revision graph 的 migration，不改寫既有已發布 migration
-- [ ] T043 在全新 `strayhub_test` 或符合 narrow ephemeral exception 的 scratch DB 執行 upgrade head／downgrade review／再 upgrade，驗證 adoption tables、FK、index、tenant key 與既有資料相容性，結果記錄到 `merge_tasks.md`
-- [ ] T044 [P] 執行 `tests/unit/test_test_database_safety.py` 與所有 DB isolation／fixture guard contract，證明 demo=`strayhub`、test=`strayhub_test`、ephemeral exception、production rejection 均維持 fail-closed
-- [ ] T045 掃描 `scripts/demo-line.sh`、`scripts/adoption_chat_demo.py`、`scripts/sync_line_role_menus.py`、`scripts/bind_line_account.py`、`line-liff/` 是否引用 ORG-A、local fixture identity、`scripts.seed_local` 或 demo DB 測試寫入，將每個命中與處置記錄到 `merge_tasks.md`
-- [ ] T046 semantic merge `services/worker/worker.py` 與 `services/worker/app/handlers/volunteer_access_handler.py`，只註冊 T006 核准範圍所需 handler，排除 Growth Diary handler 與所有未列入 dependency-closure manifest 的 AI background job
-- [ ] T047 [P] 測試 worker import、async DB session lifecycle、volunteer expiration、重試與 shutdown，執行 `tests/integration/test_volunteer_access_expiration.py` 及核准範圍內 handler tests
-- [ ] T048 檢查 webhook 與 worker 的外部 side effect ordering，確保 DB transaction／idempotency key 成功後才送 LINE menu switch，重試不會重複建立 adoption inquiry 或跨 tenant 寫入
-- [ ] T049 將 Demo DB boundary、Test DB isolation、Fixture mutation safety、Ephemeral exception、Unsafe entry points 五項證據與 PASS／FAIL 記錄到 `merge_tasks.md`
+- [x] T042 [P] 對 `services/api/migrations/versions/` 執行 `uv run alembic heads`，確保整合後只有預期 head；若出現多 head，新增只合併 revision graph 的 migration，不改寫既有已發布 migration
+- [x] T043 在全新 `strayhub_test` 或符合 narrow ephemeral exception 的 scratch DB 執行 upgrade head／downgrade review／再 upgrade，驗證 adoption tables、FK、index、tenant key 與既有資料相容性，結果記錄到 `merge_tasks.md`
+- [x] T044 [P] 執行 `tests/unit/test_test_database_safety.py` 與所有 DB isolation／fixture guard contract，證明 demo=`strayhub`、test=`strayhub_test`、ephemeral exception、production rejection 均維持 fail-closed
+- [x] T045 掃描 `scripts/demo-line.sh`、`scripts/adoption_chat_demo.py`、`scripts/sync_line_role_menus.py`、`scripts/bind_line_account.py`、`line-liff/` 是否引用 ORG-A、local fixture identity、`scripts.seed_local` 或 demo DB 測試寫入，將每個命中與處置記錄到 `merge_tasks.md`
+- [x] T046 semantic merge `services/worker/worker.py` 與 `services/worker/app/handlers/volunteer_access_handler.py`，只註冊 T006 核准範圍所需 handler，排除 Growth Diary handler 與所有未列入 dependency-closure manifest 的 AI background job
+- [x] T047 [P] 測試 worker import、async DB session lifecycle、volunteer expiration、重試與 shutdown，執行 `tests/integration/test_volunteer_access_expiration.py` 及核准範圍內 handler tests
+- [x] T048 檢查 webhook 與 worker 的外部 side effect ordering，確保 DB transaction／idempotency key 成功後才送 LINE menu switch，重試不會重複建立 adoption inquiry 或跨 tenant 寫入
+- [x] T049 將 Demo DB boundary、Test DB isolation、Fixture mutation safety、Ephemeral exception、Unsafe entry points 五項證據與 PASS／FAIL 記錄到 `merge_tasks.md`
+
+### Phase 6 執行紀錄
+
+- Alembic：`0038_line_adoption (head)`，單一 head。建立專用 scratch DB `strayhub_phase6_9dcb90f`，完成 clean upgrade head → downgrade `0037_animal_external_sources` → re-upgrade head；最終 adoption_drafts／adoption_inquiries 均 `RLS=true`、`FORCE RLS=true`，兩個必要 index 齊全。驗證後已刪除該 scratch DB。
+- DB/fixture/worker focused suite：**62 passed, 0 failed**；另針對 post-commit menu ordering、expiration 與 worker tenant RLS：**17 passed, 0 failed**。
+- Worker 新增 retry/shutdown lifecycle test：iteration transient failure 會進入下一輪等待；Cancellation 仍執行 engine dispose。註冊來源只有 `VolunteerAccessHandler`，未出現 Growth Diary、Gemini 或 adoption AI handler。
+- 修正 side-effect ordering：`VolunteerAccessService.decide_application` 不再於 transaction commit 前呼叫 LINE；worker 在已提交 approval/outbox 的 notification delivery 階段才 best-effort link volunteer menu。link 失敗仍將核心核准與已送通知視為成功，不重跑權限交易。
+- Adoption webhook 的 event claim 與 draft unique partial index維持冪等；Phase 3 已驗證 duplicate event 只建立一個 draft、跨 user／跨 shelter 寫入被拒。
+- Unsafe entry scan：`scripts/demo-line.sh`、`sync_line_role_menus.py`、`bind_line_account.py` 無 ORG-A、`strayhub_test` 或 `scripts.seed_local` 命中；`scripts/adoption_chat_demo.py` 未移植（EXCLUDED）。`line-liff/volunteer`／`adopter` 與 demo 頁仍含明確 mock placeholder，但 release bundle、GCE Dockerfiles、nginx、systemd、production compose 均無引用，屬 local-only；Phase 7 會以 production contract 再次 fail-closed 驗證。
+
+#### 五項 DB safety 證據
+
+| 項目 | 結果 | 證據 |
+|---|---|---|
+| Demo DB boundary | PASS | normal demo 固定 `strayhub`；local product quality contract 無 test fixture bootstrap |
+| Test DB isolation | PASS | 所有本 Phase DB tests 明確使用 `strayhub_test`；production／demo target rejection tests 通過 |
+| Fixture mutation safety | PASS | demo bootstrap、seed medical care、local product contract 全部通過 |
+| Ephemeral exception | PASS | 僅建立明確命名 scratch DB 做 migration round-trip，完成後刪除 |
+| Unsafe entry points | PASS | production artifacts 不引用 local-only LIFF mock／serve-demo；無 ORG-A／seed_local 命中 |
+
+**Stop Gate 6：PASS。**
 
 **Stop Gate 6**：五項 DB safety 全部 PASS、migration 可由乾淨 DB 重建、worker async regression 無 failure。
 

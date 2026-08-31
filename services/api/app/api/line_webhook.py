@@ -191,8 +191,8 @@ async def _switch_menu_to_default(line_user_id: str | None) -> bool:
 async def _switch_menu_to_volunteer_if_active(session, line_user_id: str | None) -> bool:
     """點「志工服務」時：若已有生效中的志工資格，直接切回志工選單。
 
-    核准當下已經切過一次選單（VolunteerAccessService.decide_application），但
-    「返回主選單」把選單切走之後，原本只能靠重新走一次 LIFF 登入／交換身分才能
+    核准通知由 worker 在交易提交後切過一次選單，但「返回主選單」把選單切走之後，
+    原本只能靠重新走一次 LIFF 登入／交換身分才能
     切回去——那段路徑（entry 交換）是設計給「還沒決定要去哪個收容所」的人用
     的，已核准的人每次都要重跑一次沒有必要，而且只要中途沒完整跑完
     （沒登入、頁面沒開完、還在 LIFF 內建瀏覽器的快取狀態卡住）選單就切不回去，

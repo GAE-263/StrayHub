@@ -756,14 +756,14 @@ class VolunteerAccessService:
                     "expires_at": None if grant is None else grant.expires_at,
                 },
             )
-        if application.status == "approved":
-            await self._switch_rich_menu(application.user_id, "VOLUNTEER")
         return application, membership, grant
 
     async def _switch_rich_menu(self, user_id: UUID, role: str | None) -> None:
-        """志工申請核准後把 LINE 選單切到志工選單。
+        """Best-effort LINE menu helper for post-commit callers.
 
-        Best-effort：push 選單失敗不影響核准本身已經生效。
+        Approval transactions must not call this method before commit. The
+        worker invokes menu linking while delivering the committed outbox
+        notification, so a rollback can never leave a user with elevated UI.
         """
         if self.rich_menu_router is None:
             return
