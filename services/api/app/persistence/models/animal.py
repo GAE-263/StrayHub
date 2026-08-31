@@ -2,6 +2,7 @@ from datetime import date
 from uuid import UUID
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -45,3 +46,9 @@ class Animal(IdentityMixin, AuditMixin, Base):
     age_description: Mapped[str | None] = mapped_column(String(120), nullable=True)
     behavior_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     care_guidance: Mapped[str | None] = mapped_column(Text, nullable=True)
+    species: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    size: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    energy: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    temperament: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    is_adoptable: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    adoption_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)

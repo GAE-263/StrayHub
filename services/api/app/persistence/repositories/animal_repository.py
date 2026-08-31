@@ -34,6 +34,18 @@ class AnimalRepository:
         )
         return list(result.scalars())
 
+    async def list_adoptable(self) -> list[Animal]:
+        result = await self.session.execute(
+            select(Animal)
+            .where(
+                Animal.organization_id == self.organization_id,
+                Animal.status == "active",
+                Animal.is_adoptable.is_(True),
+            )
+            .order_by(Animal.name, Animal.shelter_number, Animal.id)
+        )
+        return list(result.scalars())
+
     async def list_active(self) -> list[Animal]:
         result = await self.session.execute(
             select(Animal)

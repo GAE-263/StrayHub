@@ -283,15 +283,26 @@ Manifest security constraints：
 
 **Independent Test**：未綁定 LINE 使用者點「志工服務」只進志工申請；點「領養流程」送出 `action=start_adoption_matching&flow=adoption` 並建立／續接自己的 adoption draft；「心有所屬」與「推薦我」在 AI 不可用時都能完成；公開選單不存在 staff action。
 
-- [ ] T016 [P] [US1] 先在 `tests/unit/test_line_role_menu_actions.py` 與 `tests/unit/test_sync_role_menus_env_writeback.py` 新增公開 menu 僅允許 `start_volunteer_application`、`start_adoption_matching` 的失敗測試
-- [ ] T017 [P] [US1] 先在 `tests/integration/test_adoption_webhook_flow.py` 新增 Rich Menu 入口建立／續接 draft、重送 webhook 不重複建立 draft、跨 LINE user 不可讀取 draft 的失敗測試
-- [ ] T018 [US1] 將 `infra/local/line-rich-menu-default.yaml` 的公開入口固定為「志工服務」→ `action=start_volunteer_application` 與「領養流程」→ `action=start_adoption_matching&flow=adoption`，移除 shelter_info、staff、placeholder adoption action
-- [ ] T019 [US1] 同步 `scripts/rich_menu_images/render.mjs` 與 `infra/local/rich-menu-images/default.png` 的兩格文案、座標及 action 對應，確認 YAML imagemap bounds 不重疊且涵蓋完整畫布
-- [ ] T020 [US1] 依 T006 核准 manifest 移植 `services/api/app/domain/line_adoption_state.py`、`services/api/app/application/line_adoption_draft_service.py`、`services/api/app/application/line_adoption_conversation.py` 與 `services/api/app/application/line_adoption_flex.py`，讓 webhook 只負責通道路由，業務狀態與驗證留在 service/domain
-- [ ] T021 [US1] 依 T006 核准 manifest 移植必要的 `services/api/app/persistence/models/adoption_draft.py`、`services/api/app/persistence/models/adoption_inquiry.py`、`services/api/app/persistence/repositories/adoption_draft_repository.py`、`services/api/app/persistence/repositories/adoption_inquiry_repository.py` 與最小 migration chain，排除 growth-diary-only schema
-- [ ] T022 [US1] semantic merge `services/api/app/api/line_webhook.py`，讓 `start_adoption_matching` 優先進正式領養對話，保留 `X-Line-Signature` 驗證、event idempotency、既有志工照護回報與快速回應行為，刪除公開入口的 adoption placeholder 分支
-- [ ] T023 [US1] 確認 `services/api/app/application/adoption_matching_service.py` 與 `services/api/app/persistence/repositories/animal_repository.py` 的每個 animal／organization 查詢都由 server-side organization scope 建立；「推薦我」必須先有 deterministic matching，若依 T006 納入 `services/api/app/application/adoption_ai_analysis_service.py`／`services/api/app/infrastructure/ai/gemini_client.py`，須測試 AI 未設定、timeout、錯誤輸出時自動使用 deterministic fallback，並拒絕 client-supplied organization 越權
-- [ ] T024 [US1] 執行 `tests/unit/test_line_adoption_state_machine.py`、`tests/unit/test_line_adoption_draft_service.py`、`tests/unit/test_line_adoption_flex.py`、`tests/integration/test_adoption_conversation_flow.py`、`tests/integration/test_adoption_webhook_flow.py`，並將測試數與結果記錄到 `merge_tasks.md`
+- [x] T016 [P] [US1] 先在 `tests/unit/test_line_role_menu_actions.py` 與 `tests/unit/test_sync_role_menus_env_writeback.py` 新增公開 menu 僅允許 `start_volunteer_application`、`start_adoption_matching` 的失敗測試
+- [x] T017 [P] [US1] 先在 `tests/integration/test_adoption_webhook_flow.py` 新增 Rich Menu 入口建立／續接 draft、重送 webhook 不重複建立 draft、跨 LINE user 不可讀取 draft 的失敗測試
+- [x] T018 [US1] 將 `infra/local/line-rich-menu-default.yaml` 的公開入口固定為「志工服務」→ `action=start_volunteer_application` 與「領養流程」→ `action=start_adoption_matching&flow=adoption`，移除 shelter_info、staff、placeholder adoption action
+- [x] T019 [US1] 同步 `scripts/rich_menu_images/render.mjs` 與 `infra/local/rich-menu-images/default.png` 的兩格文案、座標及 action 對應，確認 YAML imagemap bounds 不重疊且涵蓋完整畫布
+- [x] T020 [US1] 依 T006 核准 manifest 移植 `services/api/app/domain/line_adoption_state.py`、`services/api/app/application/line_adoption_draft_service.py`、`services/api/app/application/line_adoption_conversation.py` 與 `services/api/app/application/line_adoption_flex.py`，讓 webhook 只負責通道路由，業務狀態與驗證留在 service/domain
+- [x] T021 [US1] 依 T006 核准 manifest 移植必要的 `services/api/app/persistence/models/adoption_draft.py`、`services/api/app/persistence/models/adoption_inquiry.py`、`services/api/app/persistence/repositories/adoption_draft_repository.py`、`services/api/app/persistence/repositories/adoption_inquiry_repository.py` 與最小 migration chain，排除 growth-diary-only schema
+- [x] T022 [US1] semantic merge `services/api/app/api/line_webhook.py`，讓 `start_adoption_matching` 優先進正式領養對話，保留 `X-Line-Signature` 驗證、event idempotency、既有志工照護回報與快速回應行為，刪除公開入口的 adoption placeholder 分支
+- [x] T023 [US1] 確認 `services/api/app/application/adoption_matching_service.py` 與 `services/api/app/persistence/repositories/animal_repository.py` 的每個 animal／organization 查詢都由 server-side organization scope 建立；「推薦我」必須先有 deterministic matching，若依 T006 納入 `services/api/app/application/adoption_ai_analysis_service.py`／`services/api/app/infrastructure/ai/gemini_client.py`，須測試 AI 未設定、timeout、錯誤輸出時自動使用 deterministic fallback，並拒絕 client-supplied organization 越權
+- [x] T024 [US1] 執行 `tests/unit/test_line_adoption_state_machine.py`、`tests/unit/test_line_adoption_draft_service.py`、`tests/unit/test_line_adoption_flex.py`、`tests/integration/test_adoption_conversation_flow.py`、`tests/integration/test_adoption_webhook_flow.py`，並將測試數與結果記錄到 `merge_tasks.md`
+
+### Phase 3 執行紀錄
+
+- 公開 default Rich Menu 僅保留兩格；正式 action 為 `start_volunteer_application` 與 `start_adoption_matching&flow=adoption`。重新產生並人工檢視 2500×1686 圖片；兩個 1250px bounds 無重疊且完整覆蓋畫布。
+- adoption source 只移植 dependency-closed deterministic slice；未納入 Gemini client、AI background task、Growth Diary。兩條路徑均不等待 AI，提交 inquiry 後也不切 adopter menu。
+- Webhook 保留 signature verification 與既有 event claim/complete idempotency；adoption routing 在 membership resolution 前執行。未選 shelter 的 draft 以內部 adopter user scope 存取，選定後才切 server-side organization scope；公開 shelter directory 只有 active shelter／active adoptable animal projection。
+- 新增跨 LINE user 與跨 shelter animal ID 測試；client 傳入其他 shelter 的 animal ID 得到 `animal_not_adoptable`，不會跨 tenant 讀寫。
+- 專用 `strayhub_test` focused suite：**74 passed, 0 failed, 1 deprecation warning**（Starlette TestClient/httpx 相容性警告，非產品失敗）。Targeted Ruff、format check 與 `git diff --check`：PASS。
+- `apps/web/public/adoption-entry/index.html` 已刪除；公開入口不存在 placeholder production route。
+
+**Stop Gate 3：PASS。**
 
 **Stop Gate 3 / US1 acceptance**：公開入口恰為兩個 action；正式領養對話可啟動、返回、取消、續接及送出；無 placeholder production path、無跨使用者／跨收容所存取。
 

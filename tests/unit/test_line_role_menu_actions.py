@@ -15,7 +15,7 @@ from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
 WEBHOOK_HANDLED_ACTIONS = {
     "start_binding",
     "start_volunteer_application",
-    "adoption_placeholder",
+    "start_adoption_matching",
     BACK_TO_DEFAULT_MENU_ACTION,
     *ADOPTION_ENTRY_ACTIONS,
 }
@@ -39,23 +39,13 @@ async def test_every_menu_action_gets_its_placeholder_reply(action: str) -> None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", sorted(ADOPTION_ENTRY_ACTIONS))
-async def test_adopter_menu_items_open_the_fake_adoption_entry_page(
-    action: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(
-        line_webhook,
-        "get_settings",
-        lambda: SimpleNamespace(web_public_base_url="https://example.ngrok-free.dev"),
-    )
+async def test_adopter_menu_items_are_left_to_formal_adoption_router(action: str) -> None:
     line = MockLineAdapter()
 
     handled = await line_webhook._handle_menu_action(line, _postback_event(f"action={action}"))
 
-    assert handled is True
-    action_payload = line.replies[0][1][0]["quickReply"]["items"][0]["action"]
-    assert action_payload["uri"] == "https://example.ngrok-free.dev/adoption-entry/index.html"
+    assert handled is False
+    assert line.replies == []
 
 
 @pytest.mark.asyncio
@@ -151,4 +141,7 @@ def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
     )
     actions = [item["data"].split("action=", 1)[1] for item in document["actions"]]
 
-    assert actions == ["start_volunteer_application", "adoption_placeholder"]
+    assert actions == [
+        "start_volunteer_application",
+        "start_adoption_matching&flow=adoption",
+    ]

@@ -1,6 +1,6 @@
 # 預設選單：任何加好友的人都看得到（含尚未綁定者）。
 #
-# 分成「志工服務」與「領養流程」兩條入口，內容待實作。
+# 分成「志工服務」與「領養流程」兩條公開入口。
 # 綁定不再是獨立按鈕：走志工報名時後端會自動建立 User 與 LineUserBinding
 # （volunteer_access_service 的 get_or_create_line_applicant），
 # 使用者不需要先「綁定」再做事。
@@ -14,4 +14,4 @@ actions:
     data: action=start_volunteer_application
   - label: 領養流程
     type: postback
-    data: action=adoption_placeholder
+    data: action=start_adoption_matching&flow=adoption

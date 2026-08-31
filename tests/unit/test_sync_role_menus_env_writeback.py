@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.sync_line_role_menus import ENV_KEYS, write_env
+from scripts.sync_line_role_menus import (
+    ENV_KEYS,
+    load_role_definition,
+    to_line_rich_menu,
+    write_env,
+)
 
 MAPPING = {
     "default": "richmenu-new-default",
@@ -54,3 +59,16 @@ def test_absent_env_file_is_reported_not_created(tmp_path: Path) -> None:
 
     assert write_env(MAPPING, env) == []
     assert not env.exists()
+
+
+def test_public_menu_has_only_volunteer_and_formal_adoption_entries() -> None:
+    document = load_role_definition(Path("infra/local/line-rich-menu-default.yaml"))
+
+    assert [action["data"] for action in document["actions"]] == [
+        "action=start_volunteer_application",
+        "action=start_adoption_matching&flow=adoption",
+    ]
+    rich_menu = to_line_rich_menu(document)
+    assert sum(area["bounds"]["width"] for area in rich_menu["areas"]) == 2500
+    assert rich_menu["areas"][0]["bounds"]["x"] == 0
+    assert rich_menu["areas"][1]["bounds"]["x"] == 1250

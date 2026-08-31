@@ -45,7 +45,7 @@ function parseMenu(text) {
 
 const EMOJI = {
   start_volunteer_application: "🐾",
-  adoption_placeholder: "🏡",
+  start_adoption_matching: "🏡",
   shelter_info: "🏠",
   start_binding: "🤝",
   walk_report: "🚶",
@@ -69,7 +69,7 @@ const ROLE_TITLE = {
 function html(doc, role) {
   const cards = doc.actions
     .map((action, index) => {
-      const code = (action.data || "").replace(/^action=/, "");
+      const code = new URLSearchParams(action.data || "").get("action") || "";
       return `<div class="card">
         <div class="num">${index + 1}</div><div class="spark">🌟</div>
         <div class="mid"><div class="emoji">${EMOJI[code] || "✨"}</div>

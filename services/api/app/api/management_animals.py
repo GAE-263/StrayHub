@@ -67,6 +67,12 @@ class ManagementAnimal(AnimalProfile):
     area_name: str | None
     area_type: str | None
     area_path: str | None = None
+    species: str | None = None
+    size: str | None = None
+    energy: str | None = None
+    temperament: list[str] = Field(default_factory=list)
+    is_adoptable: bool = False
+    adoption_notes: str | None = None
 
 
 class ManagementAnimalResponse(BaseModel):
@@ -78,6 +84,16 @@ class ManagementAnimalListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class AnimalAdoptionProfileUpdateRequest(BaseModel):
+    species: str | None = Field(default=None, max_length=60)
+    breed: str | None = Field(default=None, max_length=120)
+    size: str | None = Field(default=None, max_length=30)
+    energy: str | None = Field(default=None, max_length=30)
+    temperament: list[str] = Field(default_factory=list)
+    is_adoptable: bool = False
+    adoption_notes: str | None = Field(default=None, max_length=2000)
 
 
 @router.post("")
@@ -192,4 +208,25 @@ async def create_management_animal_health_record(
         health_record=health_record,
         submitted_at=data.get("submittedAt"),
         photo=photo_obj,
+    )
+
+
+@router.patch("/{animal_id}/adoption-profile")
+async def update_management_animal_adoption_profile(
+    animal_id: UUID,
+    payload: AnimalAdoptionProfileUpdateRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    organization_id = require_staff_or_admin(context)
+    return await ManagementAnimalService(session, organization_id).update_adoption_fields(
+        animal_id,
+        species=payload.species,
+        breed=payload.breed,
+        size=payload.size,
+        energy=payload.energy,
+        temperament=payload.temperament,
+        is_adoptable=payload.is_adoptable,
+        adoption_notes=payload.adoption_notes,
+        actor_user_id=context.user_id,
     )

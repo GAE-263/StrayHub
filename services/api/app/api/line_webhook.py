@@ -15,6 +15,21 @@ from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
 )
+from services.api.app.application.line_adoption_conversation import (
+    LineAdoptionConversationService,
+)
+from services.api.app.application.line_adoption_draft_service import LineAdoptionDraftService
+from services.api.app.application.line_adoption_flex import (
+    MatchReportCard,
+    QuestionOption,
+    ShelterCard,
+    build_animal_confirm_card,
+    build_info_card,
+    build_match_report,
+    build_question_card,
+    build_shelter_carousel,
+    build_target_animal_picker,
+)
 from services.api.app.application.line_draft_conversation import (
     LineDraftConversationService,
 )
@@ -35,6 +50,7 @@ from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.config.settings import get_settings
+from services.api.app.domain.line_adoption_state import AdoptionDraftState
 from services.api.app.domain.line_care_report_state import (
     DraftAnswers,
     DraftState,
@@ -44,7 +60,15 @@ from services.api.app.domain.line_webhook_security import verify_line_signature
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.database.engine import session_factory
+from services.api.app.persistence.database.scope import (
+    set_authentication_user_scope,
+    set_organization_scope,
+)
+from services.api.app.persistence.models.identity import LineUserBinding, User
 from services.api.app.persistence.models.shelter_area import ShelterArea
+from services.api.app.persistence.repositories.adoption_draft_repository import (
+    AdoptionDraftRepository,
+)
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -54,6 +78,7 @@ from services.api.app.persistence.repositories.care_report_draft_repository impo
 )
 from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
+from services.api.app.persistence.repositories.organization_repository import OrganizationRepository
 from services.api.app.persistence.repositories.reportable_scope_repository import (
     ReportableScopeRepository,
 )
@@ -99,6 +124,30 @@ def _postback(label: str, data: str, *, display_text: str | None = None) -> dict
             "displayText": display_text or label,
         },
     }
+
+
+def _action(label: str, data: str, *, display_text: str | None = None) -> dict:
+    """Template/Flex postback action (quick replies use `_postback`)."""
+    return {
+        "type": "postback",
+        "label": label[:20],
+        "data": data,
+        "displayText": display_text or label,
+    }
+
+
+async def _animal_photo_url(organization_id: UUID, animal) -> str | None:
+    if not animal.current_photo_key:
+        return None
+    try:
+        url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
+            media_organization_id=organization_id,
+            object_key=animal.current_photo_key,
+            expires_seconds=300,
+        )
+    except Exception:
+        return None
+    return url if url.startswith("https://") else None
 
 
 def _volunteer_application_liff_url() -> str:
@@ -249,10 +298,9 @@ async def _handle_menu_action(
             ],
         )
         return True
-    if action in ADOPTION_ENTRY_ACTIONS:
-        # 領養選單裡的項目：開啟領養假頁面（之後會換成真正的領養 LIFF）。
-        await _reply(line, event, [_adoption_entry_message()])
-        return True
+    if action in ADOPTION_ENTRY_ACTIONS or action == "start_adoption_matching":
+        # 正式領養流程必須在 membership resolution 前由 adoption router 處理。
+        return False
     if action == "back_to_default_menu":
         # 志工／領養人選單裡的「返回主選單」：讓有個別身份的人可以自由切回去，
         # 重新選志工服務或領養流程，不用退出好友重加。
@@ -286,18 +334,6 @@ async def _handle_public_volunteer_application_entry(
         else {}
     )
     is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
-    if postback_values.get("action", [""])[0] == "adoption_placeholder":
-        line_user_id = event.get("source", {}).get("userId")
-        switched = await _switch_menu_to_adopter(line_user_id)
-        if switched:
-            await _reply(
-                line,
-                event,
-                [_text("已切換到領養選單，請由下方選單點選「我想領養」或「領養回報」。")],
-            )
-        else:
-            await _reply(line, event, [_adoption_entry_message()])
-        return True
     if not is_text_command and not is_postback_command:
         return False
     line_user_id = event.get("source", {}).get("userId")
@@ -310,6 +346,508 @@ async def _handle_public_volunteer_application_entry(
         return True
     await _reply(line, event, [_volunteer_application_entry_message()])
     return True
+
+
+_ADOPTION_QUESTION_OPTIONS: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "housing_type": (
+        ("house", "🏡", "透天／獨棟房屋"),
+        ("apartment_small", "🏢", "小坪數公寓"),
+        ("apartment_large", "🏙️", "大坪數公寓"),
+    ),
+    "dog_experience": (
+        ("first_time", "🌱", "這是我第一次"),
+        ("experienced", "🎓", "有，養過囉"),
+    ),
+    "other_pets": (
+        ("none", "🚫", "目前沒有其他寵物"),
+        ("has_cats", "🐱", "家裡有貓咪"),
+        ("has_dogs", "🐶", "家裡有其他狗狗"),
+    ),
+    "household_members": (
+        ("adults_only", "🧑", "只有大人"),
+        ("has_children", "👶", "家裡有小朋友"),
+    ),
+    "work_schedule": (
+        ("work_from_home", "💻", "在家工作"),
+        ("flexible", "🌤️", "工作時間很彈性"),
+        ("full_time_work", "🏢", "全職外出上班"),
+        ("little_time_at_home", "🌙", "在家時間比較少"),
+        ("retired", "🌿", "退休／幾乎都在家"),
+    ),
+    "preferred_size": (
+        ("small", "🐕‍🦺", "小型犬"),
+        ("medium", "🐕", "中型犬"),
+        ("large", "🐩", "大型犬"),
+    ),
+    "preferred_energy": (
+        ("low", "😌", "文靜乖巧"),
+        ("medium", "🙂", "適中就好"),
+        ("high", "🤩", "活潑好動"),
+    ),
+    "parenting_style": (
+        ("structured", "📏", "生活作息比較固定規律"),
+        ("free", "🌿", "比較彈性隨性"),
+    ),
+    "patience_level": (
+        ("high_patience", "😌", "很有耐心，慢慢教就好"),
+        ("medium_patience", "🙂", "看情況，需要一點時間適應"),
+        ("low_patience", "😅", "希望毛孩本來就乖巧穩定"),
+    ),
+    "adoption_motivation": (
+        ("companionship", "🥰", "想要一個陪伴"),
+        ("family_activity", "🏃", "想帶著一起運動出遊"),
+        ("guarding", "🛡️", "希望多一點安全感"),
+        ("other_reason", "💬", "其他原因"),
+    ),
+}
+
+_ADOPTION_QUESTION_LABEL = {
+    "housing_type": "居住環境",
+    "dog_experience": "養狗經驗",
+    "other_pets": "家中其他寵物",
+    "household_members": "家庭成員",
+    "work_schedule": "作息時間",
+    "preferred_size": "希望的體型",
+    "preferred_energy": "希望的活動力",
+    "parenting_style": "飼養風格",
+    "patience_level": "耐心與應變",
+    "adoption_motivation": "領養動機",
+}
+
+_ADOPTION_QUESTION_PROMPT = {
+    "housing_type": "你家是什麼樣子呢？🏠",
+    "dog_experience": "之前有養狗經驗嗎？🐕",
+    "other_pets": "家裡還有其他毛孩嗎？🐱🐶",
+    "household_members": "家裡平常有誰在呢？👨‍👩‍👧",
+    "work_schedule": "平常的作息大概是？⏰",
+    "preferred_size": "想找什麼體型的毛孩呢？📏",
+    "preferred_energy": "期待什麼樣的活動力？⚡",
+    "parenting_style": "你比較習慣怎麼帶毛孩呢？🧭",
+    "patience_level": "如果毛孩不小心搗蛋，你的耐心程度是？🧘",
+    "adoption_motivation": "這次想領養毛孩，最主要是為了？💭",
+}
+
+_ADOPTION_STATE_QUESTION_KEY = {
+    AdoptionDraftState.ANSWERING_PREFERENCE_HOUSING: "housing_type",
+    AdoptionDraftState.ANSWERING_PREFERENCE_EXPERIENCE: "dog_experience",
+    AdoptionDraftState.ANSWERING_PREFERENCE_OTHER_PETS: "other_pets",
+    AdoptionDraftState.ANSWERING_PREFERENCE_HOUSEHOLD: "household_members",
+    AdoptionDraftState.ANSWERING_PREFERENCE_SCHEDULE: "work_schedule",
+    AdoptionDraftState.ANSWERING_PREFERENCE_PARENTING_STYLE: "parenting_style",
+    AdoptionDraftState.ANSWERING_PREFERENCE_PATIENCE: "patience_level",
+    AdoptionDraftState.ANSWERING_PREFERENCE_ADOPTION_MOTIVATION: "adoption_motivation",
+    AdoptionDraftState.ANSWERING_PREFERENCE_SIZE: "preferred_size",
+    AdoptionDraftState.ANSWERING_PREFERENCE_ENERGY: "preferred_energy",
+    AdoptionDraftState.ANSWERING_HOUSING: "housing_type",
+    AdoptionDraftState.ANSWERING_EXPERIENCE: "dog_experience",
+    AdoptionDraftState.ANSWERING_OTHER_PETS: "other_pets",
+    AdoptionDraftState.ANSWERING_HOUSEHOLD: "household_members",
+    AdoptionDraftState.ANSWERING_SCHEDULE: "work_schedule",
+    AdoptionDraftState.ANSWERING_PARENTING_STYLE: "parenting_style",
+    AdoptionDraftState.ANSWERING_PATIENCE: "patience_level",
+    AdoptionDraftState.ANSWERING_ADOPTION_MOTIVATION: "adoption_motivation",
+}
+
+_BASE_QUESTION_ORDER = (
+    "housing_type",
+    "dog_experience",
+    "other_pets",
+    "household_members",
+    "work_schedule",
+    "parenting_style",
+    "patience_level",
+    "adoption_motivation",
+)
+_QUESTION_ORDER = {
+    "specific_animal": _BASE_QUESTION_ORDER,
+    "recommend_me": _BASE_QUESTION_ORDER + ("preferred_size", "preferred_energy"),
+}
+
+
+def _answer_display(key: str, value: str) -> str:
+    for code, emoji, label in _ADOPTION_QUESTION_OPTIONS.get(key, ()):
+        if code == value:
+            return f"{emoji} {label}"
+    return value
+
+
+def _adoption_answer_validator(key: str, value: str) -> None:
+    options = _ADOPTION_QUESTION_OPTIONS.get(key)
+    if options is not None and value not in {code for code, _, _ in options}:
+        raise DomainError("invalid_answer_value", f"不支援的領養問卷答案：{key}", 422)
+
+
+async def _get_or_create_adopter_identity(session, line_user_id: str) -> UUID:
+    identity = LineWebhookRepository(session)
+    binding = await identity.binding(line_user_id)
+    if binding is not None:
+        return binding.user_id
+    user = await identity.add(User(display_name="LINE 領養人", status="active"))
+    binding = await identity.add(
+        LineUserBinding(line_user_id=line_user_id, user_id=user.id, status="active")
+    )
+    return binding.user_id
+
+
+async def _active_adoption_draft(session, line_user_id: str):
+    binding = await LineWebhookRepository(session).binding(line_user_id)
+    if binding is None:
+        return None
+    await set_authentication_user_scope(session, binding.user_id)
+    return await AdoptionDraftRepository(session, None).get_active_for_adopter(binding.user_id)
+
+
+def _adoption_cancel_item() -> dict:
+    return _postback("取消", urlencode({"action": "cancel", "flow": "adoption"}))
+
+
+async def _adoption_reply_for_state(session, line, event: dict, *, draft) -> None:
+    state = AdoptionDraftState(draft.current_step)
+    if state == AdoptionDraftState.SELECTING_ORGANIZATION:
+        actions = [
+            (
+                emoji,
+                label,
+                _action(
+                    label,
+                    urlencode({"action": "select_region", "flow": "adoption", "value": value}),
+                ),
+            )
+            for value, emoji, label in (
+                ("north", "🧭", "北部"),
+                ("central", "🌿", "中部"),
+                ("south", "☀️", "南部"),
+                ("east", "🌊", "東部"),
+            )
+        ]
+        card = build_info_card("請選擇想去的地區 🗺️", accent_index=0, actions=actions)
+    elif state == AdoptionDraftState.CHOOSING_PATH:
+        card = build_info_card(
+            "請選擇領養方式 🐾",
+            accent_index=1,
+            actions=[
+                (
+                    "💗",
+                    "心有所屬",
+                    _action(
+                        "心有所屬",
+                        urlencode(
+                            {
+                                "action": "choose_path",
+                                "flow": "adoption",
+                                "value": "specific_animal",
+                            }
+                        ),
+                    ),
+                ),
+                (
+                    "✨",
+                    "推薦給我",
+                    _action(
+                        "推薦給我",
+                        urlencode(
+                            {"action": "choose_path", "flow": "adoption", "value": "recommend_me"}
+                        ),
+                    ),
+                ),
+            ],
+        )
+    elif state == AdoptionDraftState.SELECTING_TARGET_ANIMAL:
+        animals = await AnimalRepository(session, draft.organization_id).list_adoptable()
+        cards = [
+            MatchReportCard(
+                animal_id=str(animal.id),
+                name=animal.name,
+                shelter_number=animal.shelter_number,
+                photo_url=await _animal_photo_url(draft.organization_id, animal),
+                selectable=True,
+                select_action="select_target_animal",
+                select_label="選這隻",
+            )
+            for animal in animals[:12]
+        ]
+        if not cards:
+            await _reply(line, event, [_text("目前沒有可領養的動物，請聯繫工作人員協助。")])
+            return
+        card = build_target_animal_picker(cards)
+    elif state == AdoptionDraftState.CONFIRMING_TARGET_ANIMAL:
+        animal = await AnimalRepository(session, draft.organization_id).get(draft.target_animal_id)
+        if animal is None:
+            await _reply(line, event, [_text("動物資料異常，請重新選擇。")])
+            return
+        card = build_animal_confirm_card(
+            name=animal.name,
+            shelter_number=animal.shelter_number,
+            photo_url=await _animal_photo_url(draft.organization_id, animal),
+            confirm_action=_action(
+                "確認是這隻", urlencode({"action": "confirm_target_animal", "flow": "adoption"})
+            ),
+            back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
+        )
+    elif state in _ADOPTION_STATE_QUESTION_KEY:
+        key = _ADOPTION_STATE_QUESTION_KEY[state]
+        order = _QUESTION_ORDER[draft.path]
+        card = build_question_card(
+            step=order.index(key) + 1,
+            total=len(order),
+            prompt=_ADOPTION_QUESTION_PROMPT[key],
+            options=[
+                QuestionOption(code=code, emoji=emoji, label=label)
+                for code, emoji, label in _ADOPTION_QUESTION_OPTIONS[key]
+            ],
+            accent_index=(order.index(key) % 4),
+            back_action=_action("上一步", urlencode({"action": "back", "flow": "adoption"})),
+        )
+    elif state == AdoptionDraftState.CONFIRMING_ANSWERS:
+        order = _QUESTION_ORDER[draft.path]
+        card = build_info_card(
+            "請確認你的問卷回答 📋",
+            accent_index=2,
+            rows=[
+                (_ADOPTION_QUESTION_LABEL[key], _answer_display(key, draft.answers.get(key, "")))
+                for key in order
+            ],
+            actions=[
+                (
+                    "✅",
+                    "確認無誤",
+                    _action(
+                        "確認無誤", urlencode({"action": "confirm_answers", "flow": "adoption"})
+                    ),
+                ),
+                ("✏️", "修改", _action("修改", urlencode({"action": "back", "flow": "adoption"}))),
+            ],
+        )
+    elif state == AdoptionDraftState.SELECTING_MATCHED_ANIMAL:
+        repository = AnimalRepository(session, draft.organization_id)
+        cards = []
+        for rank, result in enumerate(draft.match_results or [], start=1):
+            animal = await repository.get(UUID(result["animal_id"]))
+            if animal is not None:
+                cards.append(
+                    MatchReportCard(
+                        animal_id=str(animal.id),
+                        name=animal.name,
+                        shelter_number=animal.shelter_number,
+                        photo_url=await _animal_photo_url(draft.organization_id, animal),
+                        score=result.get("score"),
+                        reasons=tuple(result.get("reasons", [])),
+                        rank=rank,
+                        selectable=True,
+                    )
+                )
+        if not cards:
+            await _reply(line, event, [_text("目前沒有符合條件的可領養動物，請聯繫工作人員協助。")])
+            return
+        card = build_match_report(cards, max_bubbles=5)
+    elif state == AdoptionDraftState.AWAITING_ADOPTER_NAME:
+        card = build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名")
+    elif state == AdoptionDraftState.AWAITING_CONTACT_TIME:
+        card = build_info_card(
+            "方便聯繫的時間是？⏰",
+            accent_index=1,
+            body="也可以直接輸入",
+            actions=[
+                (
+                    "🌤️",
+                    "平日白天",
+                    _action(
+                        "平日白天",
+                        urlencode(
+                            {"action": "answer", "flow": "adoption", "value": "平日白天（9-18點）"}
+                        ),
+                    ),
+                ),
+                (
+                    "🌙",
+                    "平日晚上",
+                    _action(
+                        "平日晚上",
+                        urlencode(
+                            {"action": "answer", "flow": "adoption", "value": "平日晚上（18-22點）"}
+                        ),
+                    ),
+                ),
+                (
+                    "🌈",
+                    "假日皆可",
+                    _action(
+                        "假日皆可",
+                        urlencode({"action": "answer", "flow": "adoption", "value": "假日皆可"}),
+                    ),
+                ),
+            ],
+        )
+    elif state == AdoptionDraftState.AWAITING_PHONE_NUMBER:
+        card = build_info_card("請留下手機號碼 📞", accent_index=1, body="例如 0912345678")
+    elif state == AdoptionDraftState.REVIEWING:
+        card = build_info_card(
+            "領養意願摘要 📋",
+            accent_index=2,
+            rows=[
+                ("姓名", draft.answers.get("adopter_name", "")),
+                ("方便聯繫時間", draft.answers.get("contact_time", "")),
+                ("聯絡電話", draft.answers.get("phone_number", "")),
+            ],
+            actions=[
+                (
+                    "📮",
+                    "送出",
+                    _action("送出", urlencode({"action": "submit", "flow": "adoption"})),
+                ),
+                ("✏️", "修改", _action("修改", urlencode({"action": "back", "flow": "adoption"}))),
+            ],
+        )
+    else:
+        await _reply(line, event, [_text("領養流程狀態已更新，請重新點選「領養流程」。")])
+        return
+    card["quickReply"] = {"items": [_adoption_cancel_item()]}
+    await _reply(line, event, [card])
+
+
+async def _handle_adoption_start(session, line, event: dict, line_user_id: str) -> None:
+    adopter_user_id = await _get_or_create_adopter_identity(session, line_user_id)
+    await set_authentication_user_scope(session, adopter_user_id)
+    repository = AdoptionDraftRepository(session, None)
+    draft = await repository.get_active_for_adopter(adopter_user_id)
+    if draft is None:
+        draft, _ = await LineAdoptionDraftService(
+            repository, ttl_seconds=get_settings().draft_ttl_seconds
+        ).create(adopter_user_id=adopter_user_id)
+    elif draft.organization_id is not None:
+        await set_organization_scope(session, draft.organization_id)
+    await _adoption_reply_for_state(session, line, event, draft=draft)
+
+
+async def _handle_adoption_postback(session, line, event: dict, *, draft) -> None:
+    values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
+    action = values.get("action", [""])[0]
+    value = values.get("value", [None])[0]
+    adopter_user_id = draft.adopter_user_id
+
+    if action == "select_region":
+        if not value:
+            raise DomainError("region_required", "需要選擇地區", 422)
+        organizations = await OrganizationRepository(session).list_with_adoptable_animals_by_region(
+            value
+        )
+        await set_authentication_user_scope(session, adopter_user_id)
+        if not organizations:
+            await _reply(line, event, [_text("這個地區目前沒有開放領養媒合的收容所。")])
+            return
+        await _reply(
+            line,
+            event,
+            [
+                build_shelter_carousel(
+                    [
+                        ShelterCard(
+                            str(organization.id),
+                            organization.name,
+                            organization.service_area,
+                            count,
+                            value,
+                        )
+                        for organization, count in organizations
+                    ]
+                )
+            ],
+        )
+        return
+
+    if action == "select_organization":
+        try:
+            candidate_id = UUID(value or "")
+        except ValueError as exc:
+            raise DomainError("organization_id_required", "需要選擇收容所", 422) from exc
+        allowed = {
+            item.id for item in await OrganizationRepository(session).list_with_adoptable_animals()
+        }
+        await set_authentication_user_scope(session, adopter_user_id)
+        if candidate_id not in allowed:
+            raise DomainError("organization_not_available", "該收容所目前無法領養媒合", 404)
+    elif draft.organization_id is not None and not (
+        action == "back" and draft.current_step == AdoptionDraftState.CHOOSING_PATH.value
+    ):
+        await set_organization_scope(session, draft.organization_id)
+    else:
+        await set_authentication_user_scope(session, adopter_user_id)
+
+    repository = AdoptionDraftRepository(session, draft.organization_id)
+    result = await LineAdoptionConversationService(
+        repository,
+        organization_validator=(lambda candidate_id: _true_async(candidate_id)),
+        answer_validator=_adoption_answer_validator,
+        match_top_n=5,
+    ).handle(
+        token=None,
+        adopter_user_id=adopter_user_id,
+        action=action,
+        value=value,
+        event_id=event.get("webhookEventId", ""),
+    )
+    if result.inquiry_id is not None:
+        await _reply(
+            line,
+            event,
+            [
+                build_info_card(
+                    "已收到你的領養意願 🎉", accent_index=1, body="收容所工作人員將盡快與你聯絡。"
+                )
+            ],
+        )
+        return
+    if result.state in {AdoptionDraftState.CANCELLED, AdoptionDraftState.EXPIRED}:
+        await _reply(line, event, [build_info_card("已取消這次領養媒合對話", accent_index=3)])
+        return
+    await set_authentication_user_scope(session, adopter_user_id)
+    updated = await AdoptionDraftRepository(session, None).get_active_for_adopter(adopter_user_id)
+    if updated is not None:
+        if updated.organization_id is not None:
+            await set_organization_scope(session, updated.organization_id)
+        await _adoption_reply_for_state(session, line, event, draft=updated)
+
+
+async def _true_async(_value) -> bool:
+    return True
+
+
+async def _handle_adoption_text(session, line, event: dict, *, draft, text: str) -> None:
+    if draft.organization_id is not None:
+        await set_organization_scope(session, draft.organization_id)
+    repository = AdoptionDraftRepository(session, draft.organization_id)
+    if draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
+        matches = [
+            animal
+            for animal in await AnimalRepository(session, draft.organization_id).search(text)
+            if animal.is_adoptable
+        ]
+        if len(matches) != 1:
+            await _reply(line, event, [_text("請輸入唯一的收容編號／名稱，或由清單選擇毛孩。")])
+            return
+        action, value = "select_target_animal", str(matches[0].id)
+    elif draft.current_step in {
+        AdoptionDraftState.AWAITING_ADOPTER_NAME.value,
+        AdoptionDraftState.AWAITING_CONTACT_TIME.value,
+    }:
+        action, value = "answer", text.strip()
+    elif draft.current_step == AdoptionDraftState.AWAITING_PHONE_NUMBER.value:
+        action, value = "phone_number", text.strip()
+    else:
+        await _reply(line, event, [_text("目前步驟請使用選單按鈕操作，不需要輸入文字。")])
+        return
+    await LineAdoptionConversationService(
+        repository, answer_validator=_adoption_answer_validator
+    ).handle(
+        token=None,
+        adopter_user_id=draft.adopter_user_id,
+        action=action,
+        value=value,
+        event_id=event.get("webhookEventId", ""),
+    )
+    updated = await repository.get_active_for_adopter(draft.adopter_user_id)
+    if updated is not None:
+        await _adoption_reply_for_state(session, line, event, draft=updated)
 
 
 async def _animal_confirmation_messages(session, animal, organization_id: UUID) -> list[dict]:
@@ -825,7 +1363,46 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
+                    postback_values = (
+                        parse_qs(
+                            event.get("postback", {}).get("data", ""),
+                            keep_blank_values=True,
+                        )
+                        if event.get("type") == "postback"
+                        else {}
+                    )
+                    action = postback_values.get("action", [""])[0]
+                    if action == "start_adoption_matching":
+                        await _handle_adoption_start(session, line, event, line_user_id)
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     if await _handle_public_volunteer_application_entry(session, line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
+                    adoption_draft = await _active_adoption_draft(session, line_user_id)
+                    if (
+                        adoption_draft is not None
+                        and event.get("type") == "postback"
+                        and postback_values.get("flow", [""])[0] == "adoption"
+                    ):
+                        await _handle_adoption_postback(session, line, event, draft=adoption_draft)
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
+                    if (
+                        adoption_draft is not None
+                        and event.get("type") == "message"
+                        and event.get("message", {}).get("type") == "text"
+                    ):
+                        await _handle_adoption_text(
+                            session,
+                            line,
+                            event,
+                            draft=adoption_draft,
+                            text=event["message"].get("text", ""),
+                        )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
