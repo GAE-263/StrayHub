@@ -20,15 +20,17 @@ def test_agenda_e2e_keeps_opt_in_and_loopback_guards(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv("STRAYHUB_MEDICAL_E2E_SEED_ALLOWED", raising=False)
     with pytest.raises(RuntimeError, match="STRAYHUB_MEDICAL_E2E_SEED_ALLOWED=1"):
         validate_seed_environment(
-            "agenda-e2e", "postgresql://strayhub:test@127.0.0.1:65432/strayhub"
+            "agenda-e2e", "postgresql://strayhub:test@127.0.0.1:65432/strayhub_test"
         )
 
     monkeypatch.setenv("STRAYHUB_MEDICAL_E2E_SEED_ALLOWED", "1")
-    with pytest.raises(RuntimeError, match="loopback PostgreSQL"):
+    with pytest.raises(RuntimeError, match="not an approved local test target"):
         validate_seed_environment(
-            "agenda-e2e", "postgresql://strayhub:test@database.example/strayhub"
+            "agenda-e2e", "postgresql://strayhub:test@database.example/strayhub_test"
         )
-    validate_seed_environment("agenda-e2e", "postgresql://strayhub:test@localhost:65432/strayhub")
+    validate_seed_environment(
+        "agenda-e2e", "postgresql://strayhub:test@localhost:65432/strayhub_test"
+    )
 
 
 def test_agenda_plan_uses_domain_occurrence_ids_and_exact_bucket_totals() -> None:

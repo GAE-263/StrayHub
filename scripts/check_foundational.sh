@@ -4,8 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
-export STRAYHUB_TEST_DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL:-postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub}"
-export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub}"
+export STRAYHUB_TEST_DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL:-postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test}"
+export DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL/postgresql:\/\//postgresql+asyncpg:\/\/}"
+uv run python -c 'from scripts.test_database import require_test_database; require_test_database()'
 
 echo "[foundational] checking migration files"
 test -f services/api/migrations/versions/0003_tenant_rls.py

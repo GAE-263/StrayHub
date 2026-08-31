@@ -12,19 +12,19 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: strayhub
+          POSTGRES_DB: strayhub_test
           POSTGRES_USER: strayhub
           POSTGRES_PASSWORD: strayhub
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U strayhub -d strayhub"
+          --health-cmd "pg_isready -U strayhub -d strayhub_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+asyncpg://strayhub:strayhub@127.0.0.1:5432/strayhub
-      STRAYHUB_TEST_DATABASE_URL: postgresql://strayhub:strayhub@127.0.0.1:5432/strayhub
+      DATABASE_URL: postgresql+asyncpg://strayhub:strayhub@127.0.0.1:5432/strayhub_test
+      STRAYHUB_TEST_DATABASE_URL: postgresql://strayhub:strayhub@127.0.0.1:5432/strayhub_test
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

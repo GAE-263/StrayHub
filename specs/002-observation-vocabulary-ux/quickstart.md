@@ -14,8 +14,10 @@
 ```bash
 cp .env.example .env
 docker compose -f infra/local/docker-compose.yml up -d postgres minio
+export STRAYHUB_TEST_DATABASE_URL=postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test
+export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub_test
 uv run alembic upgrade head
-uv run python -m scripts.seed_local
+uv run python -m scripts.seed_test_fixtures
 ```
 
 分別啟動 API 與管理前端：

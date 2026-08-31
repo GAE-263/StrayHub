@@ -47,6 +47,8 @@ async def test_empty_database_bootstrap_seed_reset_and_reversible_upgrade() -> N
     env = os.environ.copy()
     env["DATABASE_URL"] = _database_url(database).replace("postgresql://", "postgresql+asyncpg://")
     env["DATABASE_MIGRATION_URL"] = env["DATABASE_URL"]
+    env["STRAYHUB_TEST_DATABASE_URL"] = _database_url(database)
+    env["STRAYHUB_ALLOW_EPHEMERAL_TEST_DATABASE"] = "1"
     try:
         _run("-m", "alembic", "upgrade", "0014_timeline_query_indexes", env=env)
         _run("-m", "alembic", "upgrade", "head", env=env)

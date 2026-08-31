@@ -90,7 +90,15 @@ Unsafe non-local configuration (production):
 ## Test Fixtures：與 Demo 分開的資料庫
 
 ORG-A／ORG-B／ORG-DISABLED、`local-staff-a`、`local-volunteer-a` 等
-皆為測試 fixtures，不是正常 demo。先建立專用本機 DB，再明確指定：
+皆為測試 fixtures，不是正常 demo。後端測試的標準單一入口會建立／重用
+`strayhub_test`、執行 migration，然後將其餘參數傳給 pytest：
+
+```bash
+uv run python -m scripts.test_local
+uv run python -m scripts.test_local tests/unit/test_demo_bootstrap.py -q
+```
+
+若要人工載入 fixture，必須明確使用專用測試 DB：
 
 ```bash
 export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub_test
@@ -102,7 +110,9 @@ uv run python -m scripts.seed_test_fixtures
 uv run python -m scripts.seed_t255_timeline
 ```
 
-`scripts.seed_local` 保留相容性，但只屬於測試路徑。
+`scripts.seed_local`、`scripts.seed_test_fixtures`、`scripts.seed_t255_timeline`
+與 `scripts.seed_medical_care` 均為只能指向 loopback `strayhub_test` 的測試路徑；
+安全檢查會在非 PostgreSQL、遠端 host 或其他 DB 名稱時 fail closed。
 LINE、QR、E2E、auth、volunteer、isolation 與 AI 失敗降級測試請使用上述
 專用 DB；不要讓完整測試污染 demo DB。
 

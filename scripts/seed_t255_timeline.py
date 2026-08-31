@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid5
 
+from scripts.test_database import require_fixture_database
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AIObservation
@@ -130,7 +131,7 @@ async def _required_records(session) -> tuple[Organization, Animal, User, Organi
         select(Organization).where(Organization.code == ORGANIZATION_CODE)
     )
     if organization is None:
-        raise RuntimeError("找不到 ORG-A，請先執行：uv run python -m scripts.seed_local")
+        raise RuntimeError("找不到 ORG-A，請先執行：uv run python -m scripts.seed_test_fixtures")
 
     animal = await session.scalar(
         select(Animal).where(
@@ -140,7 +141,9 @@ async def _required_records(session) -> tuple[Organization, Animal, User, Organi
     )
     volunteer = await session.scalar(select(User).where(User.username == VOLUNTEER_USERNAME))
     if animal is None or volunteer is None:
-        raise RuntimeError("找不到本機動物或志工，請先執行：uv run python -m scripts.seed_local")
+        raise RuntimeError(
+            "找不到本機動物或志工，請先執行：uv run python -m scripts.seed_test_fixtures"
+        )
 
     membership = await session.scalar(
         select(OrganizationMembership).where(
@@ -151,7 +154,7 @@ async def _required_records(session) -> tuple[Organization, Animal, User, Organi
     )
     if membership is None:
         raise RuntimeError(
-            "找不到 ORG-A 志工 Membership，請先執行：uv run python -m scripts.seed_local"
+            "找不到 ORG-A 志工 Membership，請先執行：uv run python -m scripts.seed_test_fixtures"
         )
     return organization, animal, volunteer, membership
 
@@ -201,6 +204,7 @@ async def _upsert_failed_ai_trace(
 
 
 async def seed_timeline() -> int:
+    require_fixture_database()
     now = datetime.now(timezone.utc).replace(microsecond=0)
     async with session_factory() as session:
         async with session.begin():
@@ -242,6 +246,7 @@ async def seed_timeline() -> int:
 
 
 def main() -> None:
+    require_fixture_database()
     count = asyncio.run(seed_timeline())
     print(f"已建立／更新 T255 Timeline 固定回報：{count} 筆")
     print(f"Organization：{ORGANIZATION_CODE}")

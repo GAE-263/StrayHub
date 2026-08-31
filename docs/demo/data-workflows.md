@@ -55,10 +55,11 @@ uv run python -m scripts.verify_demo_data --photos
 ```
 
 Requires local Docker PostgreSQL/MinIO, uv, npm, openssl and installed dependencies.
-Only APP_ENV=local/test, loopback PostgreSQL with database `strayhub` or `strayhub_*`,
+Only APP_ENV=local/test, loopback PostgreSQL with the exact database name `strayhub`,
 and loopback MinIO are accepted. No cloud credentials/deployment are involved.
 `DEMO_SKIP_DOCKER=1` reuses already running local infrastructure. Override
-DATABASE_URL, MINIO_BUCKET, API_PORT and WEB_PORT for a fresh-machine simulation.
+Connection host/port/credentials, MINIO_BUCKET, API_PORT and WEB_PORT may be overridden
+for a fresh-machine simulation, but the database name must remain exactly `strayhub`.
 
 Order: local safety check → Docker → existing Alembic head → runtime-role setup →
 FurKids → verified-local MOA reuse or repair (Xindian dog/60, Wugu dog/60) → demo
@@ -89,9 +90,13 @@ repairs them instead of silently trusting database rows.
 ## Test Fixtures (separate database)
 
 ```bash
+# Canonical backend test entry: prepares strayhub_test and forwards pytest arguments.
+uv run python -m scripts.test_local
+uv run python -m scripts.test_local tests/unit/test_demo_bootstrap.py -q
+
+# Explicit fixture loading for manual test-only workflows:
 export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub_test
 export STRAYHUB_TEST_DATABASE_URL=postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test
-# Create this dedicated local DB first; do not point tests at the demo DB.
 uv run alembic upgrade head
 uv run python -m scripts.configure_runtime_role --apply
 uv run python -m scripts.seed_test_fixtures
@@ -103,6 +108,14 @@ uv run python -m scripts.seed_medical_care --help
 ORG-A/ORG-B/ORG-DISABLED, local-* identities, LINE, daily-scope, authorization-state
 and batch fixtures remain available. `scripts.seed_local` remains a compatibility
 alias/implementation for historical test guides, not normal demo onboarding.
+`seed_local`, `seed_test_fixtures`, `seed_t255_timeline`, and `seed_medical_care`
+all reject the demo database, non-PostgreSQL URLs, and non-loopback hosts before
+fixture mutation. Normal demo commands continue to use only `strayhub`.
+Integration tests that must prove empty-database or cleanup behavior use a narrow,
+explicit internal opt-in for randomly suffixed `strayhub_mvp_*` or
+`strayhub_cleanup_test_*` disposable databases; that opt-in is not a developer CLI
+fallback, is accepted only while the named isolation tests are running, and never
+permits `strayhub` or an arbitrary database name.
 The shared vocabulary still has exactly the original category/option codes/labels.
 
 ## Existing local demo cleanup

@@ -66,6 +66,8 @@ def test_demo_guard_denies_nonlocal_environments(environment):
     [
         "postgresql+asyncpg://u:p@shared.example/strayhub",
         "postgresql+asyncpg://u:p@127.0.0.1/production",
+        "postgresql+asyncpg://u:p@127.0.0.1/strayhub_test",
+        "postgresql+asyncpg://u:p@127.0.0.1/strayhub_demo_test",
         "postgresql+asyncpg://u:p@127.0.0.1/strayhub?host=remote.example",
         "sqlite:///strayhub",
     ],
@@ -77,11 +79,10 @@ def test_demo_guard_denies_remote_or_ambiguous_database(url):
         require_local_demo("local", url)
 
 
-def test_demo_guard_allows_local_dedicated_database():
+def test_demo_guard_allows_only_canonical_local_database():
     from scripts.local_demo import require_local_demo
 
     require_local_demo("local", "postgresql+asyncpg://u:p@127.0.0.1:65432/strayhub")
-    require_local_demo("test", "postgresql+asyncpg://u:p@localhost/strayhub_demo_test")
 
 
 def test_explicit_fixture_entry_reuses_legacy_implementation():

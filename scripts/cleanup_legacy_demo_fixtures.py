@@ -144,7 +144,7 @@ async def plan_cleanup(conn):
 
 
 async def cleanup(*, apply=False):
-    guard()
+    guard(allow_isolation_test=True)
     async with engine.begin() as conn:
         if not await conn.scalar(
             text("SELECT has_table_privilege(current_user,'public.users','DELETE')")

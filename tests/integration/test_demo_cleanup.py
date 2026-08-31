@@ -31,7 +31,14 @@ async def cleanup_db(monkeypatch):
     url = urlunsplit(("postgresql+asyncpg", base.netloc, "/" + database, "", ""))
     engine = create_async_engine(url)
     try:
-        env = dict(os.environ, DATABASE_URL=url, DATABASE_MIGRATION_URL=url, APP_ENV="test")
+        env = dict(
+            os.environ,
+            DATABASE_URL=url,
+            DATABASE_MIGRATION_URL=url,
+            STRAYHUB_TEST_DATABASE_URL=url.replace("postgresql+asyncpg://", "postgresql://", 1),
+            STRAYHUB_ALLOW_EPHEMERAL_TEST_DATABASE="1",
+            APP_ENV="test",
+        )
         for module, args in [("alembic", ["upgrade", "head"]), ("scripts.seed_test_fixtures", [])]:
             r = await asyncio.to_thread(
                 subprocess.run,
@@ -139,6 +146,7 @@ async def test_demo_accounts_are_idempotent_and_volunteers_are_single_tenant(
 
     factory = async_sessionmaker(cleanup_db, expire_on_commit=False)
     monkeypatch.setattr(seed_demo_accounts, "session_factory", factory)
+    monkeypatch.setattr(seed_demo_accounts, "guard", lambda: None)
     async with factory() as session, session.begin():
         for code, name in DEMO_SHELTERS.items():
             org = Organization(code=code, name=name, status="active")

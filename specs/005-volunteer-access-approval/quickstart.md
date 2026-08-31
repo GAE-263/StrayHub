@@ -48,7 +48,9 @@ uv run alembic current
 載入虛構資料：
 
 ```bash
-uv run python -m scripts.seed_local
+export STRAYHUB_TEST_DATABASE_URL=postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test
+export DATABASE_URL=postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub_test
+uv run python -m scripts.seed_test_fixtures
 ```
 
 正式環境樣式的 entry reference 發行／輪替以受控 script 執行；raw token 只在 stdout／secret handoff 顯示一次，測試不得把輸出提交進 Git：

@@ -12,10 +12,10 @@ from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 from uuid import UUID, uuid5
 from zoneinfo import ZoneInfo
 
+from scripts.test_database import require_fixture_database, require_test_database
 from services.api.app.domain.care_recurrence import occurrence_id
 from services.api.app.domain.organization_timezone import local_to_utc
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
@@ -49,13 +49,13 @@ def _database_url() -> str:
 
 
 def validate_seed_environment(profile: str, database_url: str | None = None) -> None:
-    """Keep the automation-only agenda profile restricted to an opted-in local DB."""
+    """Keep every deterministic medical fixture restricted to the local test DB."""
     if profile == "agenda-e2e" and os.getenv("STRAYHUB_MEDICAL_E2E_SEED_ALLOWED") != "1":
         raise RuntimeError("agenda-e2e seed 需要 STRAYHUB_MEDICAL_E2E_SEED_ALLOWED=1")
-    if profile == "agenda-e2e":
-        parsed = urlparse(database_url or _database_url())
-        if parsed.hostname not in {"127.0.0.1", "localhost"}:
-            raise RuntimeError("agenda-e2e seed 僅允許 loopback PostgreSQL")
+    if database_url is None:
+        require_fixture_database()
+    else:
+        require_test_database(database_url)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -231,7 +231,7 @@ async def _organization(session: AsyncSession, code: str) -> Organization:
         await session.execute(select(Organization).where(Organization.code == code))
     ).scalar_one_or_none()
     if organization is None:
-        raise RuntimeError(f"找不到 {code}，請先執行 scripts.seed_local")
+        raise RuntimeError(f"找不到 {code}，請先執行 scripts.seed_test_fixtures")
     organization.timezone = organization.timezone or "Asia/Taipei"
     return organization
 
