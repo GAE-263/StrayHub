@@ -111,6 +111,8 @@ type RenderOptions = {
   profile?: typeof adminProfile;
   qrStatus?: number;
   revokeStatus?: number;
+  listHandler?: (url: URL, init?: RequestInit) => Response | Promise<Response>;
+  revokeHandler?: () => Response | Promise<Response>;
 };
 
 let root: Root | undefined;
@@ -124,8 +126,7 @@ function mountPage() {
 }
 
 async function settle() {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
 }
 
 async function renderPage({
@@ -134,6 +135,8 @@ async function renderPage({
   profile = adminProfile,
   qrStatus = 200,
   revokeStatus = 200,
+  listHandler,
+  revokeHandler,
 }: RenderOptions = {}) {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -141,10 +144,22 @@ async function renderPage({
       if (path.endsWith("/auth/active-shelter-context"))
         return response({ organization_id: "org-a" });
       if (path.endsWith("/auth/me")) return response(profile);
-      if (path.endsWith("/revoke")) return response(revokedQr, revokeStatus);
+      if (path.endsWith("/revoke"))
+        return revokeHandler?.() ?? response(revokedQr, revokeStatus);
       if (path.endsWith("/regenerate")) return response(activeQr);
-      if (path.includes("/qr-codes?") && !init?.method)
-        return response({ items, page: 1, page_size: 20, total }, qrStatus);
+      if (path.includes("/qr-codes?") && !init?.method) {
+        const url = new URL(path, "http://localhost");
+        if (listHandler) return listHandler(url, init);
+        return response(
+          {
+            items,
+            page: Number(url.searchParams.get("page")),
+            page_size: 20,
+            total,
+          },
+          qrStatus,
+        );
+      }
       return response({}, 404);
     },
   );
@@ -162,21 +177,74 @@ function recordNamed(name: string) {
   );
 }
 
+function setControlValue(
+  control: HTMLInputElement | HTMLSelectElement,
+  value: string,
+) {
+  const prototype =
+    control instanceof HTMLInputElement
+      ? HTMLInputElement.prototype
+      : HTMLSelectElement.prototype;
+  Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
+    control,
+    value,
+  );
+  control.dispatchEvent(
+    new Event(control instanceof HTMLSelectElement ? "change" : "input", {
+      bubbles: true,
+    }),
+  );
+}
+
+async function changeControl(id: string, value: string) {
+  const control = container?.querySelector<
+    HTMLInputElement | HTMLSelectElement
+  >(`#${id}`);
+  await act(async () => {
+    if (control) setControlValue(control, value);
+    await settle();
+  });
+}
+
+async function clickButton(name: string) {
+  const button = Array.from(
+    container?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+  ).find((candidate) => candidate.textContent?.trim() === name);
+  await act(async () => {
+    button?.click();
+    await settle();
+  });
+}
+
+async function advance(milliseconds: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds);
+    await settle();
+  });
+}
+
+function qrListUrls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls
+    .map(([input]) => String(input))
+    .filter((path) => path.includes("/management/qr-codes?"))
+    .map((path) => new URL(path, "http://localhost"));
+}
+
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;
   container?.remove();
   container = undefined;
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("animal-aware care QR management list", () => {
-  it("requests the fixed QR-2B list and presents animal identity without UUIDs", async () => {
+  it("requests the default QR-2C list and presents animal identity without UUIDs", async () => {
     const fetchMock = await renderPage();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/v1/management/qr-codes?status=all&page=1&page_size=20",
-      expect.anything(),
+    expect(qrListUrls(fetchMock).at(0)?.search).toBe(
+      "?page=1&page_size=20&status=all",
     );
     expect(container?.textContent).toContain(
       "僅顯示目前操作收容所的 QR 紀錄。",
@@ -185,10 +253,194 @@ describe("animal-aware care QR management list", () => {
     expect(container?.textContent).toContain("收容編號：DOG-001");
     expect(container?.textContent).toContain("區域：犬舍 A 區");
     expect(container?.textContent).not.toContain(activeQr.animal_id);
-    expect(container?.querySelector("input")).toBeNull();
+    expect(container?.querySelector("input")?.getAttribute("type")).toBe(
+      "search",
+    );
     expect(
       recordNamed("阿福")?.querySelector("h3 a")?.getAttribute("href"),
     ).toBe(`/animals/${activeQr.animal_id}`);
+  });
+
+  it("debounces search for 300ms, cancels the prior value, and trims the request", async () => {
+    vi.useFakeTimers();
+    const fetchMock = await renderPage();
+    expect(qrListUrls(fetchMock)).toHaveLength(1);
+
+    await changeControl("qr-query", "小");
+    await advance(299);
+    expect(qrListUrls(fetchMock)).toHaveLength(1);
+
+    await changeControl("qr-query", "  小黑  ");
+    await advance(299);
+    expect(qrListUrls(fetchMock)).toHaveLength(1);
+    await advance(1);
+
+    const urls = qrListUrls(fetchMock);
+    expect(urls).toHaveLength(2);
+    expect(urls.at(-1)?.searchParams.get("query")).toBe("小黑");
+    expect(urls.some((url) => url.searchParams.get("query") === "小")).toBe(
+      false,
+    );
+  });
+
+  it("clears a pending debounce timer when the page unmounts", async () => {
+    vi.useFakeTimers();
+    const fetchMock = await renderPage();
+
+    await changeControl("qr-query", "不應送出");
+    await act(async () => root?.unmount());
+    root = undefined;
+    await advance(300);
+
+    expect(qrListUrls(fetchMock)).toHaveLength(1);
+  });
+
+  it("supports previous and next pagination with correct disabled states", async () => {
+    const fetchMock = await renderPage({
+      listHandler: (url) => {
+        const requestedPage = Number(url.searchParams.get("page"));
+        return response({
+          items: [
+            requestedPage === 1
+              ? activeQr
+              : { ...legacyActiveQr, animal_name: "第二頁動物" },
+          ],
+          page: requestedPage,
+          page_size: 20,
+          total: 21,
+        });
+      },
+    });
+
+    const previous = Array.from(
+      container?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "上一頁");
+    const next = Array.from(
+      container?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).find((button) => button.textContent?.trim() === "下一頁");
+    expect(previous?.disabled).toBe(true);
+    expect(next?.disabled).toBe(false);
+
+    await clickButton("下一頁");
+    expect(recordNamed("第二頁動物")).toBeDefined();
+    expect(container?.textContent).toContain("第 2 頁，共 21 筆");
+    expect(
+      Array.from(
+        container?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+      ).find((button) => button.textContent?.trim() === "下一頁")?.disabled,
+    ).toBe(true);
+    expect(qrListUrls(fetchMock).at(-1)?.searchParams.get("page")).toBe("2");
+
+    await clickButton("上一頁");
+    expect(recordNamed("阿福")).toBeDefined();
+    expect(qrListUrls(fetchMock).at(-1)?.searchParams.get("page")).toBe("1");
+  });
+
+  it("reconciles an overlarge page to the last page when total remains positive", async () => {
+    let pageTwoRequests = 0;
+    const fetchMock = await renderPage({
+      listHandler: (url) => {
+        const requestedPage = Number(url.searchParams.get("page"));
+        if (requestedPage === 3)
+          return response({ items: [], page: 3, page_size: 20, total: 21 });
+        if (requestedPage === 2) pageTwoRequests += 1;
+        return response({
+          items: [
+            {
+              ...activeQr,
+              animal_name:
+                pageTwoRequests > 1 ? "校正後最後一頁" : "第二頁舊結果",
+            },
+          ],
+          page: requestedPage,
+          page_size: 20,
+          total: pageTwoRequests > 1 ? 21 : 81,
+        });
+      },
+    });
+
+    await clickButton("下一頁");
+    await clickButton("下一頁");
+
+    expect(recordNamed("校正後最後一頁")).toBeDefined();
+    expect(container?.textContent).toContain("第 2 頁，共 21 筆");
+    const pages = qrListUrls(fetchMock).map((url) =>
+      url.searchParams.get("page"),
+    );
+    expect(pages.slice(-2)).toEqual(["3", "2"]);
+  });
+
+  it("reconciles an overlarge page to page one when the result total is zero", async () => {
+    let initialRequest = true;
+    const fetchMock = await renderPage({
+      listHandler: (url) => {
+        const requestedPage = Number(url.searchParams.get("page"));
+        if (initialRequest) {
+          initialRequest = false;
+          return response({
+            items: [activeQr],
+            page: 1,
+            page_size: 20,
+            total: 21,
+          });
+        }
+        return response({
+          items: [],
+          page: requestedPage,
+          page_size: 20,
+          total: 0,
+        });
+      },
+    });
+
+    await clickButton("下一頁");
+
+    expect(container?.textContent).toContain("目前收容所尚無照護 QR 紀錄。");
+    const pages = qrListUrls(fetchMock).map((url) =>
+      url.searchParams.get("page"),
+    );
+    expect(pages.slice(-2)).toEqual(["2", "1"]);
+  });
+
+  it("resets page to one when the debounced search changes", async () => {
+    vi.useFakeTimers();
+    const fetchMock = await renderPage({ items: [activeQr], total: 41 });
+    await clickButton("下一頁");
+    await clickButton("下一頁");
+    expect(qrListUrls(fetchMock).at(-1)?.searchParams.get("page")).toBe("3");
+
+    await changeControl("qr-query", "小黑");
+    await advance(300);
+
+    const latest = qrListUrls(fetchMock).at(-1);
+    expect(latest?.searchParams.get("query")).toBe("小黑");
+    expect(latest?.searchParams.get("page")).toBe("1");
+    expect(
+      qrListUrls(fetchMock).some(
+        (url) =>
+          url.searchParams.get("query") === "小黑" &&
+          url.searchParams.get("page") === "3",
+      ),
+    ).toBe(false);
+  });
+
+  it("resets page to one when status changes", async () => {
+    const fetchMock = await renderPage({ items: [activeQr], total: 41 });
+    await clickButton("下一頁");
+    await clickButton("下一頁");
+
+    await changeControl("qr-status", "revoked");
+
+    const latest = qrListUrls(fetchMock).at(-1);
+    expect(latest?.searchParams.get("status")).toBe("revoked");
+    expect(latest?.searchParams.get("page")).toBe("1");
+    expect(
+      qrListUrls(fetchMock).some(
+        (url) =>
+          url.searchParams.get("status") === "revoked" &&
+          url.searchParams.get("page") === "3",
+      ),
+    ).toBe(false);
   });
 
   it("renders null fallbacks, localized statuses, and a readable created time", async () => {
@@ -328,20 +580,204 @@ describe("animal-aware care QR management list", () => {
     expect(recordNamed("阿福")?.textContent).toContain("前往重新列印");
   });
 
-  it("shows an explicit interim notice when more records exist than are rendered", async () => {
-    await renderPage({ items: [activeQr], total: 43 });
+  it("reconciles an emptied active-filter page after revoke", async () => {
+    let revoked = false;
+    const fetchMock = await renderPage({
+      revokeHandler: () => {
+        revoked = true;
+        return response(revokedQr);
+      },
+      listHandler: (url) => {
+        const requestedPage = Number(url.searchParams.get("page"));
+        const activeFilter = url.searchParams.get("status") === "active";
+        if (activeFilter && requestedPage === 2 && revoked)
+          return response({ items: [], page: 2, page_size: 20, total: 20 });
+        return response({
+          items: [activeQr],
+          page: requestedPage,
+          page_size: 20,
+          total: activeFilter ? (revoked ? 20 : 21) : 1,
+        });
+      },
+    });
 
-    expect(container?.textContent).toContain(
-      "目前顯示前 1 筆 QR 紀錄；完整分頁將於後續管理功能提供。",
+    await changeControl("qr-status", "active");
+    await clickButton("下一頁");
+    await clickButton("撤銷 QR");
+    await clickButton("確認撤銷");
+
+    expect(container?.textContent).toContain("共 20 筆");
+    expect(container?.textContent).not.toContain("上一頁");
+    const activeUrls = qrListUrls(fetchMock).filter(
+      (url) => url.searchParams.get("status") === "active",
+    );
+    expect(activeUrls.at(-2)?.searchParams.get("page")).toBe("2");
+    expect(activeUrls.at(-1)?.searchParams.get("page")).toBe("1");
+  });
+
+  it("keeps a valid all-status page after revoke and trusts the refreshed row", async () => {
+    let revoked = false;
+    const fetchMock = await renderPage({
+      revokeHandler: () => {
+        revoked = true;
+        return response(revokedQr);
+      },
+      listHandler: (url) => {
+        const requestedPage = Number(url.searchParams.get("page"));
+        return response({
+          items: [
+            requestedPage === 2 && revoked
+              ? { ...revokedQr, animal_name: "第二頁已撤銷結果" }
+              : activeQr,
+          ],
+          page: requestedPage,
+          page_size: 20,
+          total: 21,
+        });
+      },
+    });
+
+    await clickButton("下一頁");
+    await clickButton("撤銷 QR");
+    await clickButton("確認撤銷");
+
+    expect(recordNamed("第二頁已撤銷結果")).toBeDefined();
+    expect(container?.textContent).toContain("第 2 頁，共 21 筆");
+    expect(qrListUrls(fetchMock).at(-1)?.searchParams.get("page")).toBe("2");
+  });
+
+  it("shows filtered empty on page one when revoke removes the final active QR", async () => {
+    let revoked = false;
+    await renderPage({
+      revokeHandler: () => {
+        revoked = true;
+        return response(revokedQr);
+      },
+      listHandler: (url) => {
+        const activeFilter = url.searchParams.get("status") === "active";
+        return response({
+          items: activeFilter && revoked ? [] : [activeQr],
+          page: 1,
+          page_size: 20,
+          total: activeFilter && revoked ? 0 : 1,
+        });
+      },
+    });
+
+    await changeControl("qr-status", "active");
+    await clickButton("撤銷 QR");
+    await clickButton("確認撤銷");
+
+    expect(container?.textContent).toContain("找不到符合條件的 QR 紀錄。");
+    expect(container?.textContent).not.toContain(
+      "目前收容所尚無照護 QR 紀錄。",
     );
   });
 
-  it("does not show the interim notice when total equals rendered records", async () => {
-    await renderPage({ items: [activeQr], total: 1 });
+  it("does not let a pre-mutation list response overwrite refreshed truth", async () => {
+    let resolveMutation!: (value: Response) => void;
+    let resolveOldList!: (value: Response) => void;
+    let activeRequests = 0;
+    await renderPage({
+      revokeHandler: () =>
+        new Promise<Response>((resolve) => {
+          resolveMutation = resolve;
+        }),
+      listHandler: (url) => {
+        if (url.searchParams.get("status") === "active") {
+          activeRequests += 1;
+          if (activeRequests === 1)
+            return new Promise<Response>((resolve) => {
+              resolveOldList = resolve;
+            });
+          return response({
+            items: [{ ...activeQr, animal_name: "撤銷後伺服器結果" }],
+            page: 1,
+            page_size: 20,
+            total: 1,
+          });
+        }
+        return response({
+          items: [activeQr],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        });
+      },
+    });
+
+    await clickButton("撤銷 QR");
+    await clickButton("確認撤銷");
+    await changeControl("qr-status", "active");
+    await act(async () => {
+      resolveMutation(response(revokedQr));
+      await settle();
+    });
+    expect(recordNamed("撤銷後伺服器結果")).toBeDefined();
+
+    await act(async () => {
+      resolveOldList(
+        response({
+          items: [{ ...activeQr, animal_name: "撤銷前過期結果" }],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        }),
+      );
+      await settle();
+    });
+    expect(recordNamed("撤銷後伺服器結果")).toBeDefined();
+    expect(recordNamed("撤銷前過期結果")).toBeUndefined();
+  });
+
+  it("removes the interim first-N notice when pagination is unnecessary", async () => {
+    await renderPage({ items: [activeQr], total: 20 });
 
     expect(container?.textContent).not.toContain(
       "完整分頁將於後續管理功能提供",
     );
+    expect(container?.textContent).not.toContain("上一頁");
+  });
+
+  it("shows a search-specific empty state and resets filters", async () => {
+    vi.useFakeTimers();
+    const fetchMock = await renderPage({
+      listHandler: (url) =>
+        response({
+          items: url.searchParams.has("query") ? [] : [activeQr],
+          page: 1,
+          page_size: 20,
+          total: url.searchParams.has("query") ? 0 : 1,
+        }),
+    });
+
+    await changeControl("qr-query", "不存在");
+    await advance(300);
+    expect(container?.textContent).toContain("找不到符合條件的 QR 紀錄。");
+    expect(container?.textContent).not.toContain(
+      "目前收容所尚無照護 QR 紀錄。",
+    );
+
+    await clickButton("重設篩選");
+    expect(recordNamed("阿福")).toBeDefined();
+    expect(qrListUrls(fetchMock).at(-1)?.searchParams.has("query")).toBe(false);
+  });
+
+  it("shows a filtered empty state for a status with no records", async () => {
+    await renderPage({
+      listHandler: (url) => {
+        const filteredStatus = url.searchParams.get("status") !== "all";
+        return response({
+          items: filteredStatus ? [] : [activeQr],
+          page: 1,
+          page_size: 20,
+          total: filteredStatus ? 0 : 1,
+        });
+      },
+    });
+
+    await changeControl("qr-status", "revoked");
+    expect(container?.textContent).toContain("找不到符合條件的 QR 紀錄。");
   });
 
   it("renders the empty state without filter-oriented copy", async () => {
@@ -362,6 +798,187 @@ describe("animal-aware care QR management list", () => {
     expect(container?.textContent).toContain("QR 清單載入失敗");
     expect(container?.textContent).toContain("HTTP 500");
     expect(container?.textContent).toContain("重新載入");
+  });
+
+  it("keeps the newest search response when an older request returns late", async () => {
+    vi.useFakeTimers();
+    let resolveOld!: (value: Response) => void;
+    const oldRequest: { signal: AbortSignal | null } = { signal: null };
+    const fetchMock = await renderPage({
+      listHandler: (url, init) => {
+        const query = url.searchParams.get("query");
+        if (query === "小") {
+          oldRequest.signal = init?.signal ?? null;
+          return new Promise<Response>((resolve) => {
+            resolveOld = resolve;
+          });
+        }
+        if (query === "小黑")
+          return response({
+            items: [{ ...legacyActiveQr, animal_name: "小黑新結果" }],
+            page: 1,
+            page_size: 20,
+            total: 1,
+          });
+        return response({
+          items: [activeQr],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        });
+      },
+    });
+
+    await changeControl("qr-query", "小");
+    await advance(300);
+    await changeControl("qr-query", "小黑");
+    await advance(300);
+    expect(recordNamed("小黑新結果")).toBeDefined();
+    expect(oldRequest.signal?.aborted).toBe(true);
+
+    await act(async () => {
+      resolveOld(
+        response({
+          items: [{ ...activeQr, animal_name: "過期搜尋結果" }],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        }),
+      );
+      await settle();
+    });
+    expect(recordNamed("小黑新結果")).toBeDefined();
+    expect(recordNamed("過期搜尋結果")).toBeUndefined();
+    expect(qrListUrls(fetchMock).at(-1)?.searchParams.get("query")).toBe(
+      "小黑",
+    );
+  });
+
+  it("keeps the newest status response when an older filter returns late", async () => {
+    let resolveActive!: (value: Response) => void;
+    await renderPage({
+      listHandler: (url) => {
+        const requestedStatus = url.searchParams.get("status");
+        if (requestedStatus === "active")
+          return new Promise<Response>((resolve) => {
+            resolveActive = resolve;
+          });
+        if (requestedStatus === "revoked")
+          return response({
+            items: [{ ...revokedQr, animal_name: "已撤銷新結果" }],
+            page: 1,
+            page_size: 20,
+            total: 1,
+          });
+        return response({
+          items: [activeQr],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        });
+      },
+    });
+
+    await changeControl("qr-status", "active");
+    await changeControl("qr-status", "revoked");
+    expect(recordNamed("已撤銷新結果")).toBeDefined();
+    await act(async () => {
+      resolveActive(
+        response({
+          items: [{ ...activeQr, animal_name: "過期使用中結果" }],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        }),
+      );
+      await settle();
+    });
+    expect(recordNamed("已撤銷新結果")).toBeDefined();
+    expect(recordNamed("過期使用中結果")).toBeUndefined();
+  });
+
+  it("keeps active data when the initial all-status response returns late", async () => {
+    let resolveAll!: (value: Response) => void;
+    const allRequest: { signal: AbortSignal | null } = { signal: null };
+    await renderPage({
+      listHandler: (url, init) => {
+        if (url.searchParams.get("status") === "all") {
+          allRequest.signal = init?.signal ?? null;
+          return new Promise<Response>((resolve) => {
+            resolveAll = resolve;
+          });
+        }
+        return response({
+          items: [{ ...activeQr, animal_name: "使用中目前結果" }],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        });
+      },
+    });
+
+    await changeControl("qr-status", "active");
+    expect(recordNamed("使用中目前結果")).toBeDefined();
+    expect(allRequest.signal?.aborted).toBe(true);
+
+    await act(async () => {
+      resolveAll(
+        response({
+          items: [{ ...revokedQr, animal_name: "過期全部結果" }],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        }),
+      );
+      await settle();
+    });
+    expect(recordNamed("使用中目前結果")).toBeDefined();
+    expect(recordNamed("過期全部結果")).toBeUndefined();
+  });
+
+  it("keeps page two when a late page-one request resolves", async () => {
+    let holdPageOne = false;
+    let resolvePageOne!: (value: Response) => void;
+    await renderPage({
+      listHandler: (url) => {
+        const requestedPage = Number(url.searchParams.get("page"));
+        if (requestedPage === 1 && holdPageOne)
+          return new Promise<Response>((resolve) => {
+            resolvePageOne = resolve;
+          });
+        return response({
+          items: [
+            {
+              ...activeQr,
+              animal_name:
+                requestedPage === 1 ? "第一頁目前結果" : "第二頁目前結果",
+            },
+          ],
+          page: requestedPage,
+          page_size: 20,
+          total: 21,
+        });
+      },
+    });
+    await clickButton("下一頁");
+    holdPageOne = true;
+    await clickButton("上一頁");
+    await clickButton("下一頁");
+    expect(recordNamed("第二頁目前結果")).toBeDefined();
+
+    await act(async () => {
+      resolvePageOne(
+        response({
+          items: [{ ...activeQr, animal_name: "過期第一頁結果" }],
+          page: 1,
+          page_size: 20,
+          total: 21,
+        }),
+      );
+      await settle();
+    });
+    expect(recordNamed("第二頁目前結果")).toBeDefined();
+    expect(recordNamed("過期第一頁結果")).toBeUndefined();
   });
 
   it("keeps loading visible until the list request resolves", async () => {

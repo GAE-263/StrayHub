@@ -33,6 +33,21 @@ type ReportFixture = {
   note: string | null;
 };
 
+export type QrFixture = {
+  id: string;
+  organization_id: string;
+  animal_id: string;
+  animal_name: string;
+  shelter_number: string | null;
+  animal_status: string;
+  area_name: string | null;
+  status: "active" | "revoked";
+  revoked: boolean;
+  created_at: string;
+  deep_link: string | null;
+  token: null;
+};
+
 type ListResponse<T> = {
   items: T[];
   page: number;
@@ -63,6 +78,10 @@ export type ManagementFixtureOptions = {
   reportsStatus?: FixtureStatus;
   reports?: (params: URLSearchParams) => ListResponse<ReportFixture>;
   reportDelay?: (params: URLSearchParams) => number;
+  qrCodes?: (
+    params: URLSearchParams,
+    organizationId: string,
+  ) => ListResponse<QrFixture> | Promise<ListResponse<QrFixture>>;
   animalDetailStatus?: FixtureStatus;
   animalDetails?: Record<string, unknown>;
   reportDetailStatus?: FixtureStatus;
@@ -368,27 +387,30 @@ export async function mockManagementApi(
       return;
     }
     if (url.pathname.endsWith("/management/qr-codes")) {
-      await json(route, {
-        items: [
-          {
-            id: "qr-a",
-            organization_id: "org-a",
-            animal_id: "animal-a",
-            animal_name: "小森",
-            shelter_number: "A-001",
-            animal_status: "active",
-            area_name: "一區",
-            status: "active",
-            revoked: false,
-            created_at: "2026-08-14T00:00:00Z",
-            deep_link: "https://example.test/animal/animal-a",
-            token: null,
-          },
-        ],
-        page: 1,
-        page_size: 20,
-        total: 1,
-      });
+      const body = options.qrCodes
+        ? await options.qrCodes(url.searchParams, activeOrganizationId)
+        : {
+            items: [
+              {
+                id: "qr-a",
+                organization_id: "org-a",
+                animal_id: "animal-a",
+                animal_name: "小森",
+                shelter_number: "A-001",
+                animal_status: "active",
+                area_name: "一區",
+                status: "active" as const,
+                revoked: false,
+                created_at: "2026-08-14T00:00:00Z",
+                deep_link: "https://example.test/animal/animal-a",
+                token: null,
+              },
+            ],
+            page: 1,
+            page_size: 20,
+            total: 1,
+          };
+      await json(route, body).catch(() => undefined);
       return;
     }
     if (url.pathname.endsWith("/management/reportable-scopes")) {
