@@ -11,6 +11,9 @@ from services.api.app.application.observation_option_usage_service import (
     ObservationOptionUsageService,
 )
 from services.api.app.application.report_submission import ReportSubmissionService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.domain.line_care_report_state import (
     NO_STOOL_CODE,
     UNOBSERVED,
@@ -19,14 +22,14 @@ from services.api.app.domain.line_care_report_state import (
     DraftStateMachine,
 )
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
+from services.api.app.persistence.repositories.authentication_repository import (
+    AuthenticationRepository,
+)
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
 )
 from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
-)
 
 
 @dataclass(frozen=True)
@@ -162,22 +165,18 @@ class LineDraftConversationService:
         elif action in {"submit", "submit_current"}:
             machine.transition(DraftState.SUBMITTING)
             machine.submit()
-            animal = await AnimalRepository(
-                self.draft_repository.session,
-                self.draft_repository.organization_id,
-            ).get(draft.animal_id)
-            if animal is None or animal.status != "active":
-                raise DomainError("animal_not_found", "動物不存在或無法回報", 404)
-            if not await ReportableScopeRepository(
-                self.draft_repository.session,
-                self.draft_repository.organization_id,
-            ).is_animal_reportable(
-                animal_id=animal.id,
-                volunteer_user_id=volunteer_user_id,
-            ):
-                raise DomainError("animal_not_reportable", "動物目前不在你的今日可回報範圍", 403)
             session = self.draft_repository.session
             organization_id = self.draft_repository.organization_id
+            authorization = await VolunteerReportingAuthorizationService(
+                AuthenticationRepository(session), AnimalRepository(session, organization_id)
+            ).authorize(
+                user_id=volunteer_user_id,
+                organization_id=organization_id,
+                membership_id=draft.membership_id,
+                animal_id=draft.animal_id,
+            )
+            assert authorization.animal is not None
+            animal = authorization.animal
             report = await ReportSubmissionService(
                 self.draft_repository,
                 CareReportRepository(session, organization_id),

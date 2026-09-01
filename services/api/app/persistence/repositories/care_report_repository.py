@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -106,6 +107,29 @@ class CareReportRepository:
             .order_by(CareReport.submitted_at.desc())
         )
         return list(result.scalars())
+
+    async def daily_stats_by_animal(
+        self, *, start: datetime, end: datetime
+    ) -> dict[UUID, tuple[int, datetime]]:
+        result = await self.session.execute(
+            select(
+                CareReport.animal_id,
+                func.count(CareReport.id),
+                func.max(CareReport.submitted_at),
+            )
+            .where(
+                CareReport.organization_id == self.organization_id,
+                CareReport.submitted_at >= start,
+                CareReport.submitted_at < end,
+                CareReport.archived_at.is_(None),
+            )
+            .group_by(CareReport.animal_id)
+        )
+        return {
+            animal_id: (int(count), latest)
+            for animal_id, count, latest in result.all()
+            if animal_id is not None and latest is not None
+        }
 
     async def archive(self, report: CareReport, *, actor_user_id: UUID, reason: str) -> CareReport:
         if report.organization_id != self.organization_id:

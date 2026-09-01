@@ -438,6 +438,14 @@ Walk-report authorization reconciliation與第二套allow-list移除只屬於Pha
 **Dependency**：Phase 1 committed。**Scope**：application/domain/service與資料模型行為；允許最小
 presenter/helper interface，但不得提前大量重寫 webhook或完成 Phase 3 delivery。
 
+- [x] P2-T01 — Define a delivery-neutral find-dog hub model
+- [x] P2-T02 — Reuse and reconcile current authorization
+- [x] P2-T03 — Manual name/shelter-number search with safe pagination
+- [x] P2-T04 — QR resolve as locator followed by shared confirmation
+- [x] P2-T05 — Build Today List data service
+- [x] P2-T06 — Shared Animal Confirmation model
+- [x] P2-T07 — Active draft resume/switch transaction
+
 ### P2-T01 — Define a delivery-neutral find-dog hub model
 
 - Likely components: new/existing application result dataclasses/types near `AnimalSelectionService`。
@@ -881,3 +889,9 @@ Phase 5  feat(web): show stool analysis in animal timeline
   coverage. Preserved the existing DailyScope dependency for Phase 2 reconciliation. Targeted and
   contract tests: 47 passed; full suite collection: 1245 tests collected; local test DB current at
   `0039_walk_report_story_media (head)`.
+- 2026-09-02 01:05 CST — Phase 2 implementation complete. Added delivery-neutral find-animal
+  actions, shared confirmation projection, deterministic paginated search, timezone-aware Today
+  List grouping with one tenant-scoped report aggregate, and explicit active-draft resume/switch
+  decisions with full animal-context cleanup. Reconciled selection/submission authorization on
+  `VolunteerReportingAuthorizationService` and removed DailyScope from walk-report creation and
+  submission paths. Phase 2 targeted/security/contract tests: 50 passed.
