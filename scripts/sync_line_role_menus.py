@@ -25,6 +25,7 @@ import yaml  # type: ignore[import-untyped]
 
 VALID_ROLES = {"default", "volunteer", "adopter", "staff"}
 CONFIG_GLOB = "infra/local/line-rich-menu-*.yaml"
+IMAGE_CONTENT_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
 
 def load_role_definition(path: Path) -> dict:
@@ -85,6 +86,23 @@ def discover_definitions() -> dict[str, dict]:
     return by_role
 
 
+def resolve_role_image(image_dir: Path, role: str) -> tuple[Path, str]:
+    matches = [
+        image_dir / f"{role}{suffix}"
+        for suffix in IMAGE_CONTENT_TYPES
+        if (image_dir / f"{role}{suffix}").is_file()
+    ]
+    if not matches:
+        raise ValueError(f"缺少角色圖片：{image_dir / role}.[png|jpg|jpeg]")
+    if len(matches) > 1:
+        raise ValueError(f"角色圖片格式重複：{', '.join(str(path) for path in matches)}")
+    path = matches[0]
+    content = path.read_bytes()
+    if not content:
+        raise ValueError(f"角色圖片為空：{path}")
+    return path, IMAGE_CONTENT_TYPES[path.suffix.lower()]
+
+
 async def apply(by_role: dict[str, dict], image_dir: Path) -> dict[str, str]:
     from services.api.app.infrastructure.line.messaging_api_adapter import (
         LineMessagingApiAdapter,
@@ -105,16 +123,16 @@ async def apply(by_role: dict[str, dict], image_dir: Path) -> dict[str, str]:
                 await adapter.delete_rich_menu(rich_menu_id=existing["richMenuId"])
 
         for role, document in by_role.items():
-            image_path = image_dir / f"{role}.png"
-            if not image_path.is_file():
-                raise ValueError(f"缺少角色圖片：{image_path}")
+            image_path, content_type = resolve_role_image(image_dir, role)
             content = image_path.read_bytes()
-            if not content:
-                raise ValueError(f"角色圖片為空：{image_path}")
             rich_menu = to_line_rich_menu(document)
             await adapter.validate_rich_menu(rich_menu=rich_menu)
             rich_menu_id = await adapter.create_rich_menu(rich_menu=rich_menu)
-            await adapter.upload_rich_menu_image(rich_menu_id=rich_menu_id, content=content)
+            await adapter.upload_rich_menu_image(
+                rich_menu_id=rich_menu_id,
+                content=content,
+                content_type=content_type,
+            )
             result[role] = rich_menu_id
         # default 綁給所有人作為基準；其餘角色於綁定時由 RichMenuRoutingService 依 UID link。
         if "default" in result:

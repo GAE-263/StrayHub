@@ -20,6 +20,7 @@ dependencies = [
   "sqlalchemy[asyncio]>=2.0,<3",
   "starlette>=0.46,<1",
   "uvicorn[standard]>=0.32,<1",
+  "zxing-cpp>=2.3,<3",
 ]
 
 [dependency-groups]

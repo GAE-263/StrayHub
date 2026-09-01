@@ -140,11 +140,17 @@ class LineMessagingApiAdapter:
         self._raise_for_status(response, "create_rich_menu")
         return response.json()["richMenuId"]
 
-    async def upload_rich_menu_image(self, *, rich_menu_id: str, content: bytes) -> None:
+    async def upload_rich_menu_image(
+        self, *, rich_menu_id: str, content: bytes, content_type: str = "image/png"
+    ) -> None:
+        if not content:
+            raise ValueError("rich menu image must not be empty")
+        if content_type not in {"image/png", "image/jpeg"}:
+            raise ValueError("rich menu image must be PNG or JPEG")
         # 圖片上傳走 data endpoint（api-data.line.me）；api.line.me 對此路徑回 404。
         response = await self._post(
             f"{self.data_base}/v2/bot/richmenu/{rich_menu_id}/content",
-            headers={**self._headers, "Content-Type": "image/png"},
+            headers={**self._headers, "Content-Type": content_type},
             content=content,
         )
         self._raise_for_status(response, "upload_rich_menu_image")

@@ -31,6 +31,7 @@ WEBHOOK_HANDLED_ACTIONS = {
     "start_binding",
     "start_volunteer_application",
     "start_adoption_matching",
+    "walk_report",
     BACK_TO_DEFAULT_MENU_ACTION,
     *STAFF_MENU_ACTIONS,
 }
@@ -38,6 +39,31 @@ WEBHOOK_HANDLED_ACTIONS = {
 
 def _postback_event(data: str) -> dict:
     return {"type": "postback", "replyToken": "reply-1", "postback": {"data": data}}
+
+
+@pytest.mark.parametrize("text", ["開始散步回報", " 開始散步回報 "])
+def test_walk_report_command_is_exact_with_whitespace_normalization(text: str) -> None:
+    assert line_webhook._is_walk_report_command(
+        {"type": "message", "message": {"type": "text", "text": text}}
+    )
+
+
+@pytest.mark.parametrize("text", ["開始照護回報", "開始散步回報！", "我想開始散步回報"])
+def test_walk_report_command_rejects_legacy_and_near_matches(text: str) -> None:
+    assert not line_webhook._is_walk_report_command(
+        {"type": "message", "message": {"type": "text", "text": text}}
+    )
+
+
+def test_walk_command_routing_precedes_active_adoption_free_text() -> None:
+    source = inspect.getsource(line_webhook.webhook)
+
+    assert source.index("_is_walk_report_command(event)") < source.index(
+        "_active_adoption_draft(session, line_user_id)"
+    )
+    assert source.index('postback_values.get("flow"') < source.index(
+        "_handle_postback("
+    )
 
 
 @pytest.mark.asyncio

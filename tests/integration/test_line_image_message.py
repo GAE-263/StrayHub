@@ -82,9 +82,22 @@ async def test_line_image_creates_scoped_draft_media_link() -> None:
         object_key="drafts/draft-2/photo.jpg",
         draft_id=uuid4(),
         source_event_id="event-2",
+        subject="stool",
         session=session,
     )
 
-    assert any(isinstance(item, MediaAsset) for item in session.added)
+    asset = next(item for item in session.added if isinstance(item, MediaAsset))
+    assert asset.subject == "stool"
     link = next(item for item in session.added if isinstance(item, DraftMediaAsset))
     assert link.source_event_id == "event-2"
+
+
+@pytest.mark.asyncio
+async def test_line_image_rejects_client_invented_subject() -> None:
+    with pytest.raises(DomainError, match="用途無效"):
+        await LineImageService(MockLineAdapter(), InMemoryStorageFake()).attach_to_draft(
+            message_id="unused",
+            organization_id=uuid4(),
+            object_key="unused",
+            subject="client-controlled",
+        )

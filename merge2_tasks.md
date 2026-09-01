@@ -538,6 +538,16 @@ presenter/helper interface，但不得提前大量重寫 webhook或完成 Phase 
 **Dependency**：Phase 2 committed。**Scope**：LINE delivery、routing、presenters、Rich Menu與LIFF protocol。
 所有walk-report in-chat presentation以Emily final UI為主；current architecture只提供安全routing與data。
 
+- [x] P3-T00 — Freeze Emily's final LINE Bot UI contract before coding
+- [x] P3-T01 — Wire `walk_report` and find-dog presentation
+- [x] P3-T02 — Add exact command precedence and synchronize LIFF protocol
+- [x] P3-T03 — Preserve adoption/walk routing isolation
+- [x] P3-T04 — Dispatch LINE images by server-side state
+- [x] P3-T05 — Deliver search, pagination, Today List and confirmation
+- [x] P3-T06 — Preserve required-note and story text delivery
+- [x] P3-T07 — Rich Menu upload hardening without IA redesign
+- [x] P3-T08 — Record the handoff boundary
+
 ### P3-T00 — Freeze Emily's final LINE Bot UI contract before coding
 
 - Likely sources: `9e534ebd`的LINE presenter/webhook output、`6374592`、`33f9023`、相關Flex preview與
@@ -895,3 +905,13 @@ Phase 5  feat(web): show stool analysis in animal timeline
   decisions with full animal-context cleanup. Reconciled selection/submission authorization on
   `VolunteerReportingAuthorizationService` and removed DailyScope from walk-report creation and
   submission paths. Phase 2 targeted/security/contract tests: 50 passed.
+- 2026-09-02 01:19 CST — Phase 3 implementation complete. Integrated Emily's final block/sticker
+  Flex presentation with the canonical six-question copy; wired the walk menu, exact command,
+  QR/search/Today List shared confirmation, safe search/Today pagination, draft resume/switch,
+  required-note/story/review/success delivery, and strict adoption/walk image isolation. Added
+  server-side QR image decoding and server-assigned stool media subjects; retained current Rich
+  Menu IA while hardening PNG/JPEG uploads. Backend Phase 3 gate: 108 passed; frontend Vitest:
+  393 passed; typecheck, Prettier, Ruff and diff checks passed. Focused Playwright reached 9/12;
+  the three LINE-runtime cases used the real unavailable SDK because the current Next dev setup did
+  not apply its pre-existing `LIFF_HANDOFF_E2E_MOCK` alias (the changed command contract is covered
+  by passing Vitest tests); no failing product assertion was hidden or rewritten.

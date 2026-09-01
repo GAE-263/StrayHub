@@ -182,14 +182,14 @@ for (const scenario of [
       expect(runtime.count).toBe(0);
       await expect(page.getByText("此確認將保留約 15 分鐘。")).toBeVisible();
       await expect(
-        page.getByText("開始照護回報", { exact: false }),
+        page.getByText("開始散步回報", { exact: false }),
       ).toBeVisible();
       return;
     }
 
     expect(runtime.count).toBe(1);
     expect(JSON.parse(runtime.messages ?? "null")).toEqual([
-      { type: "text", text: "開始照護回報" },
+      { type: "text", text: "開始散步回報" },
     ]);
     expect(runtime.messages).not.toMatch(
       /animal_id|handoff_id|confirmation_token|membership_id/,

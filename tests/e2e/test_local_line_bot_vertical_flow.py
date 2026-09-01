@@ -225,21 +225,14 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
                     event_id="local-confirm",
                 )
                 answers = (
-                    "care_completion.completed",
                     "walk_completion.completed",
-                    "feeding.normal",
-                    "water.observed",
                     "activity.usual",
-                    "urination.observed",
-                    "defecation.formed",
-                    "resource_guarding.not_observed",
-                    "human_interaction.usual",
-                    "animal_interaction.usual",
-                    "emotion.calm",
-                    "walk.willing",
-                    "appearance.not_observed",
+                    "gait.normal",
+                    "defecation.normal",
+                    "animal_interaction.friendly",
+                    "appearance.none_found",
                 )
-                for index, value in enumerate(answers):
+                for index, value in enumerate(answers[:4]):
                     result = await conversation.handle(
                         token=raw_draft_token,
                         volunteer_user_id=user_id,
@@ -247,7 +240,7 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
                         value=value,
                         event_id=f"local-answer-{index}",
                     )
-                assert result.state == DraftState.AWAITING_MEDIA
+                assert result.state == DraftState.AWAITING_STOOL_MEDIA
 
                 image = BytesIO()
                 Image.new("RGB", (3, 3), "purple").save(image, format="JPEG")
@@ -261,16 +254,37 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
                     object_key=f"drafts/{draft.id}/local.jpg",
                     draft_id=draft.id,
                     source_event_id="local-image-event",
+                    subject="stool",
                     session=session,
                 )
-                draft.current_step = DraftState.AWAITING_NOTE.value
-                await session.flush()
+                await conversation.handle(
+                    token=raw_draft_token,
+                    volunteer_user_id=user_id,
+                    action="stool_media_attached",
+                    value=None,
+                    event_id="local-stool-attached",
+                )
+                for index, value in enumerate(answers[4:], start=4):
+                    await conversation.handle(
+                        token=raw_draft_token,
+                        volunteer_user_id=user_id,
+                        action="answer",
+                        value=value,
+                        event_id=f"local-answer-{index}",
+                    )
                 await conversation.handle(
                     token=raw_draft_token,
                     volunteer_user_id=user_id,
                     action="skip_note",
                     value=None,
                     event_id="local-skip-note",
+                )
+                await conversation.handle(
+                    token=raw_draft_token,
+                    volunteer_user_id=user_id,
+                    action="skip_story",
+                    value=None,
+                    event_id="local-skip-story",
                 )
                 submission = await conversation.handle(
                     token=raw_draft_token,
@@ -309,6 +323,7 @@ async def test_local_vertical_flow_reaches_report_and_timeline_without_ai_worker
             )
             for table in (
                 "report_idempotency_keys",
+                "observation_option_usages",
                 "care_report_corrections",
                 "ai_processing_jobs",
                 "audit_records",
