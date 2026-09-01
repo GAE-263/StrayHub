@@ -42,6 +42,7 @@ type ListResponse<T> = {
 
 export type ManagementFixtureOptions = {
   organizations?: (typeof organization)[];
+  platformRole?: string | null;
   activeOrganizationId?: string;
   memberships?: Array<{
     id: string;
@@ -118,7 +119,8 @@ export async function mockManagementApi(
           id: "user-a",
           username: "local-staff-a",
           display_name: "林工作人員",
-          platform_role: "STAFF",
+          platform_role:
+            options.platformRole === undefined ? "STAFF" : options.platformRole,
           status: "active",
         },
         memberships,

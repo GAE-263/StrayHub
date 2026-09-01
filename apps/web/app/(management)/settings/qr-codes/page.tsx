@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import React, { useEffect, useState } from "react";
-import { authFetch } from "../../../../lib/auth";
+import { authFetch, type CurrentUser } from "../../../../lib/auth";
+import { canManageCareQr } from "../../../../lib/management-capabilities";
 import { LoadingState } from "../../../../components/management/StateViews";
 import { Alert } from "../../../../components/ui/alert";
 import { Badge } from "../../../../components/ui/badge";
@@ -12,8 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../components/ui/card";
-import { Field } from "../../../../components/ui/field";
-import { Input } from "../../../../components/ui/input";
 import { Dialog } from "../../../../components/ui/dialog";
 import { Toast } from "../../../../components/ui/toast";
 import {
@@ -30,6 +30,7 @@ type Qr = {
   animal_id: string;
   status: string;
   revoked: boolean;
+  deep_link: string | null;
 };
 
 type PendingQrAction = {
@@ -40,7 +41,7 @@ type PendingQrAction = {
 
 export default function QrCodesPage() {
   const [items, setItems] = useState<Qr[]>([]);
-  const [animalId, setAnimalId] = useState("");
+  const [canManage, setCanManage] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -49,11 +50,22 @@ export default function QrCodesPage() {
   );
   const load = () => {
     setLoading(true);
-    void authFetch("/v1/management/qr-codes")
-      .then(async (response) => {
-        if (!response.ok)
-          throw new Error(`QR 清單載入失敗（HTTP ${response.status}）`);
-        setItems(((await response.json()) as { items: Qr[] }).items);
+    void Promise.all([
+      authFetch("/v1/management/qr-codes"),
+      authFetch("/v1/auth/active-shelter-context"),
+      authFetch("/v1/auth/me"),
+    ])
+      .then(async ([qrResponse, contextResponse, profileResponse]) => {
+        if (!qrResponse.ok)
+          throw new Error(`QR 清單載入失敗（HTTP ${qrResponse.status}）`);
+        if (!contextResponse.ok || !profileResponse.ok)
+          throw new Error("QR 管理權限載入失敗");
+        const context = (await contextResponse.json()) as {
+          organization_id: string;
+        };
+        const profile = (await profileResponse.json()) as CurrentUser;
+        setItems(((await qrResponse.json()) as { items: Qr[] }).items);
+        setCanManage(canManageCareQr(profile, context.organization_id));
       })
       .catch((requestError: unknown) =>
         setError(
@@ -65,20 +77,6 @@ export default function QrCodesPage() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
-  const create = async () => {
-    setError("");
-    const response = await authFetch("/v1/management/qr-codes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ animal_id: animalId }),
-    });
-    if (!response.ok) {
-      setError(`QR 建立失敗（HTTP ${response.status}）`);
-      return;
-    }
-    setAnimalId("");
-    load();
-  };
   const revoke = async (id: string) => {
     setError("");
     const response = await authFetch(`/v1/management/qr-codes/${id}/revoke`, {
@@ -115,8 +113,8 @@ export default function QrCodesPage() {
     <section aria-labelledby="qr-title">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">QR BINDINGS</span>
-          <h1 id="qr-title">QR 綁定</h1>
+          <span className="eyebrow">CARE QR MANAGEMENT</span>
+          <h1 id="qr-title">照護 QR 管理</h1>
           <p>QR 只提供動物候選查詢，不是授權憑證；請至動物檔案預覽與列印。</p>
         </div>
       </div>
@@ -124,38 +122,15 @@ export default function QrCodesPage() {
       {message ? <Toast>{message}</Toast> : null}
       <Card>
         <CardHeader>
-          <CardTitle>建立 QR</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="p1-actions">
-            <Field>
-              <label htmlFor="qr-animal">Animal ID</label>
-              <Input
-                id="qr-animal"
-                value={animalId}
-                onChange={(event) => setAnimalId(event.target.value)}
-                placeholder="UUID"
-              />
-            </Field>
-            <Button
-              type="button"
-              disabled={!animalId}
-              onClick={() => void create()}
-            >
-              建立 QR
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>已建立綁定</CardTitle>
+          <CardTitle>QR 紀錄</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <LoadingState title="正在載入 QR…" />
           ) : items.length === 0 ? (
-            <p className="muted">目前沒有 QR 綁定。</p>
+            <p className="muted">
+              目前沒有照護 QR 紀錄。請前往動物檔案建立照護 QR。
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -174,33 +149,59 @@ export default function QrCodesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="p1-actions">
-                        <Button
-                          variant="destructive"
-                          type="button"
-                          disabled={item.revoked}
-                          onClick={() =>
-                            setPendingAction({
-                              id: item.id,
-                              animalId: item.animal_id,
-                              action: "revoke",
-                            })
-                          }
-                        >
-                          撤銷
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          onClick={() =>
-                            setPendingAction({
-                              id: item.id,
-                              animalId: item.animal_id,
-                              action: "regenerate",
-                            })
-                          }
-                        >
-                          重新產生
-                        </Button>
+                        {item.status === "active" && !item.revoked ? (
+                          <>
+                            {item.deep_link ? (
+                              <Link
+                                className="ui-button ui-button-secondary"
+                                href={`/animals/${item.animal_id}`}
+                              >
+                                前往重新列印
+                              </Link>
+                            ) : (
+                              <span className="muted">
+                                舊版 QR 無法重新列印
+                              </span>
+                            )}
+                            {canManage ? (
+                              <>
+                                <Button
+                                  variant="secondary"
+                                  type="button"
+                                  onClick={() =>
+                                    setPendingAction({
+                                      id: item.id,
+                                      animalId: item.animal_id,
+                                      action: "regenerate",
+                                    })
+                                  }
+                                >
+                                  重新產生新 QR
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  type="button"
+                                  onClick={() =>
+                                    setPendingAction({
+                                      id: item.id,
+                                      animalId: item.animal_id,
+                                      action: "revoke",
+                                    })
+                                  }
+                                >
+                                  撤銷 QR
+                                </Button>
+                              </>
+                            ) : null}
+                          </>
+                        ) : (
+                          <Link
+                            className="ui-button ui-button-secondary"
+                            href={`/animals/${item.animal_id}`}
+                          >
+                            前往動物檔案
+                          </Link>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -210,37 +211,45 @@ export default function QrCodesPage() {
           )}
         </CardContent>
       </Card>
-      <Dialog
-        open={pendingAction !== null}
-        role="alertdialog"
-        title={
-          pendingAction?.action === "revoke" ? "確認撤銷 QR" : "確認重新產生 QR"
-        }
-        onClose={() => setPendingAction(null)}
-      >
-        <p className="dialog-description">
-          動物：{pendingAction?.animalId ?? "未知動物"}。這會讓目前綁定的 QR
-          立即失效，已張貼的舊標籤需要更換。
-        </p>
-        <div className="dialog-actions">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setPendingAction(null)}
-          >
-            取消
-          </Button>
-          <Button
-            type="button"
-            variant={
-              pendingAction?.action === "revoke" ? "destructive" : "default"
-            }
-            onClick={() => void confirmPendingAction()}
-          >
-            {pendingAction?.action === "revoke" ? "確認撤銷" : "確認重新產生"}
-          </Button>
-        </div>
-      </Dialog>
+      {canManage ? (
+        <Dialog
+          open={pendingAction !== null}
+          role="alertdialog"
+          title={
+            pendingAction?.action === "revoke"
+              ? "確認撤銷 QR"
+              : "重新產生新的照護 QR？"
+          }
+          onClose={() => setPendingAction(null)}
+        >
+          <p className="dialog-description">
+            動物：{pendingAction?.animalId ?? "未知動物"}。
+            {pendingAction?.action === "revoke"
+              ? "撤銷後，目前的 QR 會立即失效，且不會建立新的 QR。請移除現場舊標籤。"
+              : "重新產生後，目前的 QR 會立即失效。請列印新的 QR，並更換現場舊標籤。"}
+          </p>
+          <div className="dialog-actions">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setPendingAction(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant={
+                pendingAction?.action === "revoke" ? "destructive" : "default"
+              }
+              onClick={() => void confirmPendingAction()}
+            >
+              {pendingAction?.action === "revoke"
+                ? "確認撤銷"
+                : "重新產生新 QR"}
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
     </section>
   );
 }

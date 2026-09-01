@@ -1,13 +1,50 @@
 import { describe, expect, it } from "vitest";
 
 import { decideRouteAccess, routeAreaForPathname } from "./route-access";
-import { canReviewVolunteerApplications } from "./management-capabilities";
+import {
+  canManageCareQr,
+  canReviewVolunteerApplications,
+} from "./management-capabilities";
+import type { CurrentUser } from "./auth";
 
 describe("route access decision matrix", () => {
   it("limits volunteer review capability to admin roles", () => {
     expect(canReviewVolunteerApplications("STAFF")).toBe(false);
     expect(canReviewVolunteerApplications("SHELTER_ADMIN")).toBe(true);
     expect(canReviewVolunteerApplications("PLATFORM_ADMIN")).toBe(true);
+  });
+
+  it("scopes care QR mutation capability to the active shelter role", () => {
+    const shelterAdmin = {
+      user: { id: "user-a", platform_role: null, status: "active" },
+      memberships: [
+        {
+          id: "membership-a",
+          organization_id: "org-a",
+          user_id: "user-a",
+          role: "SHELTER_ADMIN",
+          status: "active",
+        },
+      ],
+    } satisfies CurrentUser;
+    const staff = {
+      ...shelterAdmin,
+      memberships: [{ ...shelterAdmin.memberships[0], role: "STAFF" }],
+    } satisfies CurrentUser;
+    const platformAdmin = {
+      user: {
+        id: "platform-a",
+        platform_role: "PLATFORM_ADMIN",
+        status: "active",
+      },
+      memberships: [],
+    } satisfies CurrentUser;
+
+    expect(canManageCareQr(shelterAdmin, "org-a")).toBe(true);
+    expect(canManageCareQr(shelterAdmin, "org-b")).toBe(false);
+    expect(canManageCareQr(staff, "org-a")).toBe(false);
+    expect(canManageCareQr(platformAdmin, "org-a")).toBe(true);
+    expect(canManageCareQr(platformAdmin, "")).toBe(false);
   });
 
   it("keeps the public volunteer entry public regardless of session state", () => {
