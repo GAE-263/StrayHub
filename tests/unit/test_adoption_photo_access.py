@@ -48,13 +48,9 @@ def test_adoption_photo_token_expires(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_line_adoption_photo_uses_public_api_instead_of_private_minio() -> None:
     organization_id = uuid4()
-    animal = SimpleNamespace(
-        id=uuid4(), current_photo_key="furkids-demo/animals/A-1/primary.jpg"
-    )
+    animal = SimpleNamespace(id=uuid4(), current_photo_key="furkids-demo/animals/A-1/primary.jpg")
 
-    url = await line_webhook._animal_photo_url(
-        "https://strayhub.example", organization_id, animal
-    )
+    url = await line_webhook._animal_photo_url("https://strayhub.example", organization_id, animal)
 
     assert url is not None
     assert url.startswith(

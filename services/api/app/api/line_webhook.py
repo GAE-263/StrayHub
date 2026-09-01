@@ -158,7 +158,9 @@ def _line_public_base_url(request: Request) -> str | None:
     return request_base if request_base.startswith("https://") else None
 
 
-async def _animal_photo_url(public_base_url: str | None, organization_id: UUID, animal) -> str | None:
+async def _animal_photo_url(
+    public_base_url: str | None, organization_id: UUID, animal
+) -> str | None:
     if not public_base_url or not animal.current_photo_key:
         return None
     token = issue_adoption_photo_token(
@@ -629,9 +631,7 @@ async def _adoption_reply_for_state(
                 animal_id=str(animal.id),
                 name=animal.name,
                 shelter_number=animal.shelter_number,
-                photo_url=await _animal_photo_url(
-                    public_base_url, draft.organization_id, animal
-                ),
+                photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
                 selectable=True,
                 select_action="select_target_animal",
                 select_label="選這隻",
