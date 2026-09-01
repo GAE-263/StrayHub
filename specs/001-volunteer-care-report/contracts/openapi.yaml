@@ -3465,17 +3465,6 @@ components:
       properties:
         animal_id: { type: string, format: uuid }
         confirmation_token: { type: string, minLength: 1 }
-    CareCompletionCode:
-      type: string
-      enum:
-        [
-          care_completion.completed,
-          care_completion.partially_completed,
-          care_completion.not_provided,
-          care_completion.not_observed,
-          care_completion.uncertain,
-        ]
-      description: 照護完成狀態；未觀察與無法判斷不得解讀為已完成
     WalkCompletionCode:
       type: string
       enum:
@@ -3483,33 +3472,22 @@ components:
           walk_completion.completed,
           walk_completion.partially_completed,
           walk_completion.not_done,
-          walk_completion.not_observed,
-          walk_completion.uncertain,
         ]
-      description: 散步完成狀態；與散步反應的 walk.* 選項分開
+      description: 散步完成狀態；Bot層另可記錄不屬於CRM選項的unobserved sentinel
     ObservationAnswerCode:
       type: string
       minLength: 1
       description: 由 CRM 有效 Observation Vocabulary 提供的穩定 Code；顯示名稱不得作為正式值
     DraftAnswers:
       type: object
-      additionalProperties: true
+      additionalProperties: false
       properties:
-        care_completion: { $ref: "#/components/schemas/CareCompletionCode" }
         walk_completion: { $ref: "#/components/schemas/WalkCompletionCode" }
-        feeding: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        water: { $ref: "#/components/schemas/ObservationAnswerCode" }
         activity: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        urination: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        gait: { $ref: "#/components/schemas/ObservationAnswerCode" }
         defecation: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        resource_guarding:
-          { $ref: "#/components/schemas/ObservationAnswerCode" }
-        human_interaction:
-          { $ref: "#/components/schemas/ObservationAnswerCode" }
         animal_interaction:
           { $ref: "#/components/schemas/ObservationAnswerCode" }
-        emotion: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        walk_reaction: { $ref: "#/components/schemas/ObservationAnswerCode" }
         appearance_special_status:
           { $ref: "#/components/schemas/ObservationAnswerCode" }
       description: 可逐題保存的標準回報答案；草稿階段允許不完整，正式送出時必須符合 CareReportAnswers
@@ -3519,18 +3497,11 @@ components:
         - type: object
           required:
             [
-              care_completion,
               walk_completion,
-              feeding,
-              water,
               activity,
-              urination,
+              gait,
               defecation,
-              resource_guarding,
-              human_interaction,
               animal_interaction,
-              emotion,
-              walk_reaction,
               appearance_special_status,
             ]
       description: 正式 Care Report 必須完整包含的標準結構化答案；照片與心得不在此必要集合
@@ -3541,6 +3512,7 @@ components:
           $ref: "#/components/schemas/DraftAnswers"
           description: 可只包含目前新增或修改的答案；後端依 Draft 目前狀態驗證，不接受跳步或略過必要題目
         note: { type: string }
+        story: { type: string, maxLength: 2000 }
         media_ids: { type: array, items: { type: string, format: uuid } }
     Draft:
       type: object
@@ -3571,15 +3543,15 @@ components:
               [
                 selecting_animal,
                 confirming_animal,
-                answering_completion,
-                answering_feeding,
-                answering_water,
+                answering_walk_completion,
                 answering_activity,
-                answering_elimination,
-                answering_behavior,
+                answering_gait,
+                answering_defecation,
+                awaiting_stool_media,
+                answering_animal_interaction,
                 answering_special_status,
-                awaiting_media,
                 awaiting_note,
+                awaiting_story,
                 reviewing,
                 submitting,
                 submitted,
@@ -3604,6 +3576,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         organization_id: { type: string, format: uuid }
+        subject: { type: [string, "null"], enum: [stool, portrait, null], readOnly: true }
         status:
           {
             type: string,
@@ -3636,6 +3609,7 @@ components:
           $ref: "#/components/schemas/CareReportAnswers"
           description: 標準回報完整結構化答案；照片與心得不屬於必要欄位
         note: { type: string }
+        story: { type: string, maxLength: 2000 }
         media_ids: { type: array, items: { type: string, format: uuid } }
     CareReportCorrectionRequest:
       type: object
@@ -3666,6 +3640,8 @@ components:
           additionalProperties:
             type: object
             additionalProperties: { type: string }
+        note: { type: [string, "null"] }
+        story: { type: [string, "null"], maxLength: 2000 }
         created_at: { type: string, format: date-time }
     TimelineResponse:
       type: object

@@ -48,12 +48,14 @@ class DraftCreateRequest(BaseModel):
 class DraftUpdateRequest(BaseModel):
     answers: dict[str, str] | None = None
     note: str | None = None
+    story: str | None = None
 
 
 class CareReportCreateRequest(BaseModel):
     draft_id: UUID
     observations: dict[str, str]
     note: str | None = None
+    story: str | None = None
     media_ids: list[UUID] = []
 
 
@@ -88,6 +90,8 @@ class CareReportResponse(BaseModel):
     status: str
     observations: dict
     observation_snapshots: dict | None = None
+    note: str | None = None
+    story: str | None = None
     created_at: datetime
 
 
@@ -114,6 +118,8 @@ def _report_response(report: CareReport) -> CareReportResponse:
         status=report.status,
         observations=report.answers,
         observation_snapshots=report.answer_snapshots,
+        note=report.note,
+        story=report.story,
         created_at=report.created_at,
     )
 
@@ -237,6 +243,8 @@ async def update_draft(
         draft.answers = {**draft.answers, **payload.answers}
     if payload.note is not None:
         draft.note = payload.note
+    if payload.story is not None:
+        draft.story = payload.story
     return _draft_response(draft)
 
 
@@ -333,6 +341,7 @@ async def create_care_report(
         animal=animal,
         idempotency_key=idempotency_key,
         note=payload.note,
+        story=payload.story,
         media_asset_ids=payload.media_ids,
     )
     await session.commit()

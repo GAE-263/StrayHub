@@ -5,18 +5,18 @@ from uuid import uuid4
 import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.report_submission import ReportSubmissionService
-from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
 from services.api.app.persistence.models.animal import Animal
 
 
 def _complete_answers() -> dict[str, str]:
-    values = {key: f"{key}.observed" for key in REQUIRED_ANSWER_KEYS}
-    values.update(
-        care_completion="care_completion.completed",
-        walk_completion="walk_completion.completed",
-        walk_reaction="walk.willing",
-    )
-    return values
+    return {
+        "walk_completion": "walk_completion.completed",
+        "activity": "activity.usual",
+        "gait": "gait.normal",
+        "defecation": "defecation.normal",
+        "animal_interaction": "animal_interaction.friendly",
+        "appearance_special_status": "appearance.none_found",
+    }
 
 
 def _draft(organization_id, volunteer_id, animal_id, answers):
@@ -73,7 +73,7 @@ async def test_submission_rejects_missing_answer_before_creating_report() -> Non
     volunteer_id = uuid4()
     animal_id = uuid4()
     draft = _draft(organization_id, volunteer_id, animal_id, _complete_answers())
-    draft.answers.pop("emotion")
+    draft.answers.pop("gait")
     with pytest.raises(DomainError, match="缺少必要"):
         await ReportSubmissionService(Drafts(draft), Reports(organization_id)).submit(
             draft_id=draft.id,
@@ -89,14 +89,14 @@ async def test_submission_rejects_missing_answer_before_creating_report() -> Non
 
 
 @pytest.mark.asyncio
-async def test_submission_rejects_walk_completion_as_walk_reaction() -> None:
+async def test_submission_rejects_legacy_extra_answer() -> None:
     organization_id = uuid4()
     volunteer_id = uuid4()
     animal_id = uuid4()
     answers = _complete_answers()
     answers["walk_reaction"] = "walk_completion.completed"
     draft = _draft(organization_id, volunteer_id, animal_id, answers)
-    with pytest.raises(DomainError, match="不可混用"):
+    with pytest.raises(DomainError, match="不支援"):
         await ReportSubmissionService(Drafts(draft), Reports(organization_id)).submit(
             draft_id=draft.id,
             volunteer_user_id=volunteer_id,

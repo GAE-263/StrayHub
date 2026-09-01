@@ -335,6 +335,13 @@ find-dog delivery、Rich Menu或AI。Phase 1不得引入任何新的`DailyReport
 `ReportableScopeRepository`依賴；對與core domain work無關的既有authorization行為保持不變。
 Walk-report authorization reconciliation與第二套allow-list移除只屬於Phase 2。
 
+- [x] P1-T01 — Add the minimum schema from the current Alembic head
+- [x] P1-T02 — Replace the 13-question state machine with the frozen six-question flow
+- [x] P1-T03 — Seed/effective vocabulary and UNOBSERVED representation
+- [x] P1-T04 — Implement note, story and required-note semantics
+- [x] P1-T05 — Wire answer snapshots and option usage for LINE submission
+- [x] P1-T06 — Preserve multiple reports per animal/day
+
 ### P1-T01 — Add the minimum schema from the current Alembic head
 
 - Likely files: `services/api/migrations/versions/`, `care_report_draft.py`, `care_report.py`。
@@ -864,3 +871,13 @@ Phase 5  feat(web): show stool analysis in animal timeline
 - [ ] `Separate workstream — QR→LINE CareReportHandoff`仍明確deferred且未偷偷接線。
 - [ ] Phase 1–5各自有dedicated local commit；Phase 6無diff時沒有empty commit。
 - [ ] 沒有unrelated changes、沒有push，最終`git diff --check`通過。
+
+## Unattended Execution Log
+
+- 2026-09-02 00:52 CST — Phase 1 implementation complete. Added child migration
+  `0039_walk_report_story_media` from `0038_line_adoption`; implemented the frozen six-question
+  state flow, conditional stool-photo state, UNOBSERVED snapshot semantics, note/story separation,
+  LINE answer snapshots and usage indexing, and same-animal/same-day multiple-report regression
+  coverage. Preserved the existing DailyScope dependency for Phase 2 reconciliation. Targeted and
+  contract tests: 47 passed; full suite collection: 1245 tests collected; local test DB current at
+  `0039_walk_report_story_media (head)`.

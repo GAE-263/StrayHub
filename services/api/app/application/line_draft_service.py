@@ -84,7 +84,7 @@ class LineDraftService:
         draft.reconfirmation_keys = [
             key for key in REQUIRED_ANSWER_KEYS if key in (draft.answers or {})
         ]
-        draft.current_step = DraftState.ANSWERING_COMPLETION.value
+        draft.current_step = DraftState.ANSWERING_WALK_COMPLETION.value
         draft.last_interaction_at = datetime.now(timezone.utc)
         return draft
 

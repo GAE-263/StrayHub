@@ -48,38 +48,21 @@ class LinePostbackService:
         if str(draft.volunteer_user_id) != line_user_id:
             raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
         if action == "confirm":
-            draft.machine.transition(DraftState.ANSWERING_COMPLETION)
+            draft.machine.transition(DraftState.ANSWERING_WALK_COMPLETION)
         elif action == "back":
             draft.machine.back()
         elif action == "answer":
             if value is None:
                 raise DomainError("answer_required", "需要選擇回報答案", 422)
-            expected = {
-                DraftState.ANSWERING_COMPLETION: ("care_completion", "walk_completion"),
-                DraftState.ANSWERING_FEEDING: ("feeding",),
-                DraftState.ANSWERING_WATER: ("water",),
-                DraftState.ANSWERING_ACTIVITY: ("activity",),
-                DraftState.ANSWERING_ELIMINATION: ("urination", "defecation"),
-                DraftState.ANSWERING_BEHAVIOR: (
-                    "resource_guarding",
-                    "human_interaction",
-                    "animal_interaction",
-                    "emotion",
-                    "walk_reaction",
-                ),
-                DraftState.ANSWERING_SPECIAL_STATUS: ("appearance_special_status",),
-            }.get(draft.machine.state)
-            if expected is None:
-                raise DomainError("invalid_state_transition", "目前步驟不接受答案", 409)
-            key = next(
-                (item for item in expected if item not in draft.machine.answers.values), None
-            )
-            if key is None:
-                raise DomainError("invalid_state_transition", "目前步驟已完成", 409)
-            draft.machine.answer_question(key, value)
-        elif action == "skip_media" and draft.machine.state == DraftState.AWAITING_MEDIA:
-            draft.machine.transition(DraftState.AWAITING_NOTE)
+            draft.machine.answer_current(value)
+        elif (
+            action == "skip_stool_media"
+            and draft.machine.state == DraftState.AWAITING_STOOL_MEDIA
+        ):
+            draft.machine.transition(DraftState.ANSWERING_ANIMAL_INTERACTION)
         elif action == "skip_note" and draft.machine.state == DraftState.AWAITING_NOTE:
+            draft.machine.transition(DraftState.AWAITING_STORY)
+        elif action == "skip_story" and draft.machine.state == DraftState.AWAITING_STORY:
             draft.machine.transition(DraftState.REVIEWING)
         elif action == "submit" and draft.machine.state == DraftState.REVIEWING:
             draft.machine.transition(DraftState.SUBMITTING)
