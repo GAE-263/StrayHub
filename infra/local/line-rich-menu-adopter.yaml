@@ -1,0 +1,12 @@
+# 領養人選單。正式完成領養的 lifecycle 尚未建立前，不會自動綁定此選單。
+version: 1
+role: adopter
+name: strayhub-adopter
+chatBarText: 領養選單
+actions:
+  - label: 我想領養
+    type: postback
+    data: action=start_adoption_matching&flow=adoption
+  - label: 返回主選單
+    type: postback
+    data: action=back_to_default_menu

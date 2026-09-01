@@ -38,6 +38,7 @@ class OrganizationResponse(BaseModel):
     status: str
     address: str | None
     service_area: str | None
+    region: Literal["north", "central", "south", "east"] | None = None
     contact: str | None
     timezone: str = "Asia/Taipei"
     timezone_version: int = 1
@@ -51,6 +52,7 @@ class OrganizationCreateRequest(BaseModel):
     initial_admin_temporary_password: str = Field(..., min_length=1)
     address: str | None = None
     service_area: str | None = None
+    region: Literal["north", "central", "south", "east"] | None = None
     contact: str | None = None
 
 
@@ -58,6 +60,7 @@ class OrganizationUpdateRequest(BaseModel):
     name: str | None = None
     address: str | None = None
     service_area: str | None = None
+    region: Literal["north", "central", "south", "east"] | None = None
     contact: str | None = None
     status: Literal["pending_setup", "active", "suspended"] | None = None
     timezone: str | None = None
@@ -210,7 +213,7 @@ def _require_update_permission(
 ) -> None:
     """Allow shelter admins to change only their current shelter timezone."""
 
-    platform_fields = ("name", "address", "service_area", "contact", "status")
+    platform_fields = ("name", "address", "service_area", "region", "contact", "status")
     has_platform_field = any(getattr(payload, field) is not None for field in platform_fields)
     OrganizationManagementService.require_update_permission(
         role=context.role,
@@ -230,6 +233,7 @@ def _response(organization: Organization) -> OrganizationResponse:
             "status": organization.status,
             "address": organization.address,
             "service_area": organization.service_area,
+            "region": getattr(organization, "region", None),
             "contact": organization.contact,
             "timezone": getattr(organization, "timezone", None) or "Asia/Taipei",
             "timezone_version": getattr(organization, "timezone_version", None) or 1,
@@ -387,6 +391,7 @@ async def create_organization(
     )
     organization.address = payload.address
     organization.service_area = payload.service_area
+    organization.region = payload.region
     organization.contact = payload.contact
     initial_admin = await service.create_initial_admin(
         organization_id=organization.id,
@@ -457,7 +462,7 @@ async def update_organization(
     organization = await OrganizationRepository(session).get(organizationId)
     if organization is None:
         raise DomainError("organization_not_found", "收容所不存在", 404)
-    for field in ("name", "address", "service_area", "contact", "status"):
+    for field in ("name", "address", "service_area", "region", "contact", "status"):
         value = getattr(payload, field)
         if value is not None:
             setattr(organization, field, value)

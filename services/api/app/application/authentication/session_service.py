@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.line_rich_menu_routing import RichMenuRoutingService
 from services.api.app.application.ports.authentication import (
     AccessTokenPort,
     LineIdentityVerifierPort,
@@ -16,10 +18,13 @@ from services.api.app.persistence.models.identity import (
     OrganizationMembership,
     RefreshTokenRecord,
     SessionRecord,
+    WebhookSession,
 )
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _refresh_digest(token: str) -> str:
@@ -35,6 +40,7 @@ class SessionService:
         access_token: AccessTokenPort,
         line_verifier: LineIdentityVerifierPort | None = None,
         entry_resolver: VolunteerEntryResolverPort | None = None,
+        rich_menu_router: RichMenuRoutingService | None = None,
         refresh_ttl_seconds: int = 604800,
         access_ttl_seconds: int = 900,
     ) -> None:
@@ -43,6 +49,7 @@ class SessionService:
         self.access_token = access_token
         self.line_verifier = line_verifier
         self.entry_resolver = entry_resolver
+        self.rich_menu_router = rich_menu_router
         self.refresh_ttl_seconds = refresh_ttl_seconds
         self.access_ttl_seconds = access_ttl_seconds
 
@@ -197,7 +204,9 @@ class SessionService:
             "memberships": [serialize_membership(membership) for membership in memberships],
         }
 
-    async def bind_line_identity(self, *, id_token: str) -> dict:
+    async def bind_line_identity(
+        self, *, id_token: str, organization_id: UUID | None = None
+    ) -> dict:
         """Preserve the existing LINE binding endpoint independently of LIFF entry exchange."""
         if self.line_verifier is None:
             raise DomainError("line_not_configured", "LINE 身分驗證尚未設定", 503)
@@ -209,12 +218,36 @@ class SessionService:
         if user is None or user.status != "active":
             raise DomainError("line_binding_invalid", "LINE 身分綁定無效", 403)
         await self.repository.set_authentication_user_scope(user.id)
-        memberships = await self.repository.memberships(user.id, active_only=True)
-        if len(memberships) != 1:
-            raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
-        organization = await self.repository.get_organization(memberships[0].organization_id)
+        available = await self.repository.effective_organization_access(user.id)
+        if not available:
+            raise DomainError("shelter_context_required", "沒有可使用的收容所權限", 409)
+        if organization_id is None and len(available) > 1:
+            return {
+                "state": "selection_required",
+                "organizations": [
+                    {
+                        "id": organization.id,
+                        "code": organization.code,
+                        "name": organization.name,
+                        "role": membership.role,
+                    }
+                    for membership, organization in available
+                ],
+            }
+        selected = next(
+            (
+                (membership, organization)
+                for membership, organization in available
+                if organization.id == organization_id
+            ),
+            available[0] if organization_id is None and len(available) == 1 else None,
+        )
+        if selected is None:
+            raise DomainError("shelter_context_denied", "無法使用指定收容所", 403)
+        membership, organization = selected
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)
+        await self.repository.set_authentication_context_scope(user.id, organization.id)
         session = SessionRecord(
             user_id=user.id,
             active_organization_id=organization.id,
@@ -222,7 +255,50 @@ class SessionService:
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
         )
         await self.repository.add(session)
-        return await self._issue_session(user.id, session)
+        await self.repository.revoke_active_webhook_sessions(user.id)
+        await self.repository.add(
+            WebhookSession(
+                user_id=user.id,
+                organization_id=organization.id,
+                status="active",
+                expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            )
+        )
+        issued = await self._issue_session(user.id, session)
+        issued["organization_id"] = organization.id
+        await self._link_role_rich_menu(
+            line_user_id,
+            membership.role,
+            organization_selected=True,
+        )
+        return issued
+
+    async def _link_role_rich_menu(
+        self,
+        line_user_id: str,
+        role: str | None,
+        *,
+        organization_selected: bool = False,
+    ) -> None:
+        """Best-effort：依角色綁定對應 Rich Menu；失敗不影響身分綁定結果。"""
+        if self.rich_menu_router is None:
+            return
+        try:
+            await self.rich_menu_router.link_for_user(
+                line_user_id=line_user_id,
+                role=role,
+                organization_selected=organization_selected,
+            )
+        except Exception:
+            # 選單切換為非關鍵操作（LINE API 可能暫時不可用）；綁定已成功即回傳。
+            # 但一定要留下紀錄：最常見的原因是 .env 的 richMenuId 在重跑
+            # sync_line_role_menus.py --apply 之後過期，靜默吞掉會讓人查錯方向。
+            logger.warning(
+                "linking rich menu failed; menu unchanged (role=%s)",
+                role,
+                exc_info=True,
+            )
+            return
 
     async def exchange_line_identity(self, *, id_token: str, shelter_entry_reference: str) -> dict:
         if self.line_verifier is None or self.entry_resolver is None:
@@ -296,6 +372,8 @@ class SessionService:
         )
         await self.repository.add(session)
         issued = await self._issue_session(user.id, session)
+        # 志工是走 entry 交換身分，不經過 /v1/line/bind，先前這條路徑不會切選單。
+        await self._link_role_rich_menu(line_user_id, "VOLUNTEER")
         return {
             "state": "ACTIVE",
             **issued,

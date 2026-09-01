@@ -33,6 +33,7 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _KMS_CRYPTO_KEY_PATTERN = re.compile(
     r"^projects/[^/\s]+/locations/[^/\s]+/keyRings/[^/\s]+/cryptoKeys/[^/\s]+$"
 )
+_LINE_SMOKE_EVIDENCE_PATTERN = re.compile(r"^verified-[0-9]{8}-[0-9a-f]{40}$")
 
 
 def is_placeholder_secret(value: str | None) -> bool:
@@ -79,6 +80,20 @@ class Settings(BaseSettings):
     line_login_channel_id: str = ""
     line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
+    # 對外可達的 HTTPS origin（例如 production 網址或保留的 ngrok 網址），用於
+    # LINE 入口與短效簽章的公開領養照片。local webhook 未設定時可由反向代理取得 origin。
+    web_public_base_url: str = ""
+    # 依角色 Rich Menu 的 richMenuId（由 scripts/sync_line_role_menus.py --apply 產生後填入）。
+    # 任一有值時，綁定成功會依角色 link 對應選單；全空則此功能為 no-op。
+    line_rich_menu_default_id: str = ""
+    line_rich_menu_volunteer_id: str = ""
+    line_rich_menu_adopter_id: str = ""
+    line_rich_menu_staff_id: str = ""
+    # New role-menu/adoption behavior is always available to local/test runtimes, but is
+    # fail-closed in every non-local runtime until the release contract is explicitly satisfied.
+    line_role_menu_features_enabled: bool = False
+    line_staff_liff_id: str = ""
+    line_role_menu_smoke_evidence: str = ""
     animal_confirmation_secret: str = "local-animal-confirmation-secret"
     auth_jwt_issuer: str = "strayhub-local"
     auth_jwt_audience: str = "strayhub-api"
@@ -105,6 +120,10 @@ class Settings(BaseSettings):
     ai_endpoint: str | None = None
     ai_api_key: str | None = None
     ai_timeout_seconds: float = Field(default=30.0, gt=0)
+
+    def line_role_menu_features_active(self) -> bool:
+        environment = self.app_env.strip().lower()
+        return environment in {"local", "test", "testing"} or (self.line_role_menu_features_enabled)
 
     def validate_runtime_safety(self, *, process: str = "api") -> "Settings":
         """Reject unsafe defaults before a non-local process starts work."""
@@ -136,6 +155,11 @@ class Settings(BaseSettings):
         ):
             problems.append("DATABASE_URL uses local development credentials")
 
+        if process == "worker" and self.line_role_menu_features_enabled:
+            placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
+            placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
+            placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
+
         if process in {"worker", "migration"}:
             if problems:
                 details = "\n".join(f"- {problem}" for problem in problems)
@@ -157,6 +181,36 @@ class Settings(BaseSettings):
         placeholder("LIFF_ID", self.liff_id)
         if self.liff_id.strip().lower() == "gcp-demo-liff":
             problems.append("LIFF_ID uses a deployment placeholder")
+
+        if self.line_role_menu_features_enabled:
+            missing("WEB_PUBLIC_BASE_URL", self.web_public_base_url)
+            if self.web_public_base_url:
+                parsed_public_url = urlparse(self.web_public_base_url)
+                if parsed_public_url.scheme != "https" or not parsed_public_url.hostname:
+                    problems.append("WEB_PUBLIC_BASE_URL must be an absolute HTTPS URL")
+                elif parsed_public_url.hostname.lower() in _LOOPBACK_HOSTS:
+                    problems.append("WEB_PUBLIC_BASE_URL uses a loopback host")
+                elif parsed_public_url.hostname.lower().endswith(
+                    (
+                        ".example",
+                        ".example.com",
+                        ".example.net",
+                        ".example.org",
+                        ".invalid",
+                        ".test",
+                    )
+                ):
+                    problems.append("WEB_PUBLIC_BASE_URL uses a reserved placeholder host")
+            placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
+            placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
+            placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
+            placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
+            if not _LINE_SMOKE_EVIDENCE_PATTERN.fullmatch(
+                self.line_role_menu_smoke_evidence.strip()
+            ):
+                problems.append(
+                    "LINE_ROLE_MENU_SMOKE_EVIDENCE must be verified-YYYYMMDD-<40-char-git-sha>"
+                )
 
         placeholder("ANIMAL_CONFIRMATION_SECRET", self.animal_confirmation_secret)
 

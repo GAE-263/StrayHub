@@ -14,6 +14,7 @@ class Organization(IdentityMixin, AuditMixin, Base):
     code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     service_area: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     contact: Mapped[str | None] = mapped_column(String(300), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_setup", index=True)
     timezone: Mapped[str] = mapped_column(

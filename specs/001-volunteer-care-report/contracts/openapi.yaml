@@ -581,6 +581,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SignedUrlResponse" }
+  /v1/public/adoption/animals/{animalId}/photo:
+    get:
+      tags: [Media]
+      operationId: getPublicAdoptionAnimalPhoto
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+        - name: token
+          in: query
+          required: true
+          description: 綁定收容所、動物與目前照片版本的短效 HMAC capability
+          schema: { type: string }
+      responses:
+        "200":
+          description: 已安全清理的目前領養照片
+          headers:
+            Cache-Control:
+              schema: { type: string }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFoundOrForbidden"
   /v1/care-reports:
     post:
       tags: [Care Reports]
@@ -920,7 +947,7 @@ paths:
       tags: [LINE Bot]
       operationId: bindLineIdentity
       security: []
-      description: FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；不得自動建立正式 Membership。
+      description: FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；多 Membership 時 organization_id 只是選擇輸入，後端仍須逐一驗證，不得自動建立正式 Membership。
       requestBody:
         required: true
         content:
@@ -933,6 +960,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LineBindResponse" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/line/rich-menu/context:
     get:
       tags: [LINE Bot]
@@ -1025,6 +1053,25 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+    post:
+      tags: [Management Animals]
+      operationId: createManagementAnimal
+      description: 工作人員以 LINE/LIFF 新增收容動物（multipart：payload JSON + photo）。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/LineStaffAnimalCreateRequest" }
+      responses:
+        "200":
+          description: 已建立動物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineStaffAnimalCreateResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/management/animals/{animalId}:
     get:
       tags: [Management Animals]
@@ -1084,6 +1131,29 @@ paths:
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /v1/management/animals/{animalId}/health-records:
+    post:
+      tags: [Management Animals]
+      operationId: createManagementAnimalHealthRecord
+      description: 工作人員以 LINE/LIFF 更新健康紀錄（multipart：payload JSON + 選填 photo）。
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/LineStaffHealthRecordRequest" }
+      responses:
+        "200":
+          description: 已建立健康紀錄
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineStaffHealthRecordResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
   /v1/management/reports:
     get:
       tags: [Management Reports]
@@ -2567,6 +2637,12 @@ components:
         area_name: { type: [string, "null"] }
         area_type: { type: [string, "null"] }
         area_path: { type: [string, "null"], default: null }
+        species: { type: [string, "null"], default: null }
+        size: { type: [string, "null"], default: null }
+        energy: { type: [string, "null"], default: null }
+        temperament: { type: array, items: { type: string } }
+        is_adoptable: { type: boolean, default: false }
+        adoption_notes: { type: [string, "null"], default: null }
     ManagementAnimalResponse:
       type: object
       required: [animal]
@@ -2596,6 +2672,34 @@ components:
       properties:
         animal: { $ref: "#/components/schemas/ManagementAnimal" }
         suspended_series_count: { type: integer, minimum: 0 }
+    LineStaffAnimalCreateRequest:
+      type: object
+      required: [payload, photo]
+      properties:
+        payload:
+          type: string
+          description: JSON 字串；結構見 docs/staff-animal-line-input.md（CREATE_ANIMAL）。
+        photo: { type: string, format: binary }
+    LineStaffAnimalCreateResponse:
+      type: object
+      required: [success, animalId]
+      properties:
+        success: { type: boolean }
+        animalId: { type: string, format: uuid }
+    LineStaffHealthRecordRequest:
+      type: object
+      required: [payload]
+      properties:
+        payload:
+          type: string
+          description: JSON 字串；結構見 docs/staff-animal-line-input.md（UPDATE_ANIMAL_HEALTH）。
+        photo: { type: string, format: binary }
+    LineStaffHealthRecordResponse:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean }
+        recordId: { type: string, format: uuid }
     ManagementReport:
       type: object
       required:
@@ -2821,13 +2925,33 @@ components:
     LineBindRequest:
       type: object
       required: [id_token]
+      additionalProperties: false
       properties:
         id_token: { type: string }
+        organization_id:
+          type: [string, "null"]
+          format: uuid
+          description: 多 Membership 時由使用者明確選擇；不是授權來源。
     LineBindResponse:
+      oneOf:
+        - $ref: "#/components/schemas/LineBindSessionResponse"
+        - $ref: "#/components/schemas/LineBindSelectionResponse"
+    LineBindSessionResponse:
+      allOf:
+        - $ref: "#/components/schemas/AuthResponse"
+        - type: object
+          required: [organization_id]
+          properties:
+            organization_id: { type: string, format: uuid }
+    LineBindSelectionResponse:
       type: object
-      required: [session]
+      additionalProperties: false
+      required: [state, organizations]
       properties:
-        session: { $ref: "#/components/schemas/AuthResponse" }
+        state: { type: string, const: selection_required }
+        organizations:
+          type: array
+          items: { $ref: "#/components/schemas/LoginOrganization" }
     RichMenuContext:
       type: object
       required: [context_status, actions]

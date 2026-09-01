@@ -125,6 +125,16 @@ class AuthenticationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def revoke_active_webhook_sessions(self, user_id: UUID) -> None:
+        await self.session.execute(
+            update(WebhookSession)
+            .where(
+                WebhookSession.user_id == user_id,
+                WebhookSession.status == "active",
+            )
+            .values(status="revoked")
+        )
+
     async def get_effective_volunteer_membership(
         self, user_id: UUID, organization_id: UUID
     ) -> OrganizationMembership | None:

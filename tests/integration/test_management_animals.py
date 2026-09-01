@@ -28,6 +28,13 @@ class _Session:
             shelter_number="A-001",
             current_photo_key=None,
             status="active",
+            species=None,
+            breed=None,
+            size=None,
+            energy=None,
+            temperament=[],
+            is_adoptable=False,
+            adoption_notes=None,
         )
         area = SimpleNamespace(id=uuid4(), name="A Cage", area_type="cage")
         return _Result([(animal, area)])

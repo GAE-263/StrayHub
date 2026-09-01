@@ -11,6 +11,7 @@ class MockLineAdapter:
         self.push_failure_mode = push_failure_mode
         self.images: dict[str, LineImageContent] = {}
         self.rich_menus: list[dict] = []
+        self.unlinked_users: list[str | None] = []
 
     async def push(self, *, to_user_id: str, messages: list[dict]) -> None:
         if self.push_failure_mode == "transient":
@@ -41,3 +42,6 @@ class MockLineAdapter:
     async def link_rich_menu(self, *, rich_menu_id: str, user_id: str | None = None) -> None:
         if not rich_menu_id:
             raise ValueError("rich menu id is required")
+
+    async def unlink_rich_menu(self, *, user_id: str | None = None) -> None:
+        self.unlinked_users.append(user_id)

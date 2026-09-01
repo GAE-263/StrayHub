@@ -32,6 +32,12 @@ const animal: ManagementAnimal = {
   care_guidance: null,
   photo_url: null,
   area_path: null,
+  species: null,
+  size: null,
+  energy: null,
+  temperament: [],
+  is_adoptable: false,
+  adoption_notes: null,
 };
 const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;

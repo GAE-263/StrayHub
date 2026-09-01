@@ -34,6 +34,7 @@ required_vars=(
   LINE_CHANNEL_SECRET
   LINE_CHANNEL_ACCESS_TOKEN
   LIFF_ID
+  LINE_ROLE_MENU_FEATURES_ENABLED
   ANIMAL_CONFIRMATION_SECRET
   AUTH_JWT_ISSUER
   AUTH_JWT_AUDIENCE
@@ -89,6 +90,8 @@ done
   fail "E4_WEB_UPSTREAM_HOST_PORT must be 3000"
 [[ "$(env_value E4_API_UPSTREAM_HOST_PORT)" == "8080" ]] || \
   fail "E4_API_UPSTREAM_HOST_PORT must be 8080"
+[[ "$(env_value LINE_ROLE_MENU_FEATURES_ENABLED)" == "false" ]] || \
+  fail "LINE_ROLE_MENU_FEATURES_ENABLED must remain false in synthetic verification"
 
 assigned_values="$(awk '!/^[[:space:]]*(#|$)/ {sub(/^[^=]*=/, ""); print}' "$ENV_FILE")"
 if grep -Eiq 'localhost|127\.0\.0\.1|strayhub:strayhub|(^|[^[:alnum:]])(changeme|dummy|placeholder|minioadmin)([^[:alnum:]]|$)|(^|[^[:alnum:]])(fake-|local-only-)' \

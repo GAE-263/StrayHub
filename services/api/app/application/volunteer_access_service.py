@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -9,6 +10,7 @@ from uuid import UUID
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.line_rich_menu_routing import RichMenuRoutingService
 from services.api.app.application.ports.authentication import LineIdentityVerifierPort
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
@@ -41,6 +43,8 @@ from services.api.app.persistence.repositories.authentication_repository import 
 from services.api.app.persistence.repositories.volunteer_access_repository import (
     VolunteerAccessRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,7 @@ class VolunteerAccessService:
         audit: AuditService | None = None,
         notifications: VolunteerNotificationService | None = None,
         pii_service: VolunteerPiiService | None = None,
+        rich_menu_router: RichMenuRoutingService | None = None,
     ) -> None:
         self.repository = repository
         self.identities = identities
@@ -125,6 +130,7 @@ class VolunteerAccessService:
         self.audit = audit
         self.notifications = notifications
         self.pii_service = pii_service
+        self.rich_menu_router = rich_menu_router
 
     async def application_detail(
         self,
@@ -751,6 +757,23 @@ class VolunteerAccessService:
                 },
             )
         return application, membership, grant
+
+    async def _switch_rich_menu(self, user_id: UUID, role: str | None) -> None:
+        """Best-effort LINE menu helper for post-commit callers.
+
+        Approval transactions must not call this method before commit. The
+        worker invokes menu linking while delivering the committed outbox
+        notification, so a rollback can never leave a user with elevated UI.
+        """
+        if self.rich_menu_router is None:
+            return
+        try:
+            binding = await self.identities.get_line_binding_for_user(user_id)
+            if binding is None:
+                return
+            await self.rich_menu_router.link_for_user(line_user_id=binding.line_user_id, role=role)
+        except Exception:
+            logger.warning("switching rich menu after approval failed", exc_info=True)
 
     async def mutate_grant(
         self,

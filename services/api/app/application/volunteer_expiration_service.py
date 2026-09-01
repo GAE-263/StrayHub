@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.line_rich_menu_routing import RichMenuRoutingService
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
@@ -15,6 +17,8 @@ from services.api.app.persistence.repositories.volunteer_access_repository impor
     VolunteerAccessRepository,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class VolunteerExpirationService:
     def __init__(
@@ -24,11 +28,13 @@ class VolunteerExpirationService:
         *,
         audit: AuditService | None = None,
         notifications: VolunteerNotificationService | None = None,
+        rich_menu_router: RichMenuRoutingService | None = None,
     ) -> None:
         self.repository = repository
         self.identities = identities
         self.audit = audit
         self.notifications = notifications
+        self.rich_menu_router = rich_menu_router
 
     async def sweep(self, *, now: datetime | None = None, limit: int = 500) -> int:
         clock = now or datetime.now(timezone.utc)
@@ -76,8 +82,28 @@ class VolunteerExpirationService:
                         "next_action": "reapply",
                     },
                 )
+            await self._reset_rich_menu(grant.user_id)
             changed += 1
         return changed
+
+    async def _reset_rich_menu(self, user_id) -> None:
+        """志工到期後把 LINE 選單退回 default。
+
+        Rich Menu 是 push 的：到期本身不會觸發任何請求，沒有這一步使用者會
+        一直停在志工選單。這裡刻意只退回 default 而不重算角色 —— worker 在
+        organization scope 下跑，RLS 讓它看不到該使用者在其他收容所的
+        membership（跨收容所的人目前也無法完成 LINE 綁定）。
+        """
+        if self.rich_menu_router is None:
+            return
+        try:
+            binding = await self.identities.get_line_binding_for_user(user_id)
+            if binding is None:
+                return
+            await self.rich_menu_router.link_for_user(line_user_id=binding.line_user_id, role=None)
+        except Exception:
+            # 收斂本身已完成（權限已失效）；選單沒切不該讓整批 sweep 失敗。
+            logger.warning("resetting rich menu after expiry failed", exc_info=True)
 
 
 __all__ = ["VolunteerExpirationService"]

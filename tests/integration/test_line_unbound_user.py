@@ -63,3 +63,23 @@ async def test_multiple_memberships_require_explicit_shelter_context() -> None:
     )
     with pytest.raises(DomainError, match="明確選擇收容所"):
         await service.resolve("line-user")
+
+
+@pytest.mark.asyncio
+async def test_selected_webhook_session_resolves_exact_membership() -> None:
+    user_id = uuid4()
+    organization_a = uuid4()
+    organization_b = uuid4()
+    binding = SimpleNamespace(user_id=user_id)
+    memberships = [
+        SimpleNamespace(organization_id=organization_a, status="active"),
+        SimpleNamespace(organization_id=organization_b, status="active"),
+    ]
+    selected = SimpleNamespace(organization_id=organization_b)
+    organization = SimpleNamespace(id=organization_b, status="active")
+    service = LineWebhookSessionService(
+        Identity(binding=binding, sessions=[selected]),
+        Auth(SimpleNamespace(id=user_id, status="active"), memberships, organization),
+    )
+
+    assert await service.resolve("line-user") is selected

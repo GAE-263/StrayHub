@@ -39,6 +39,13 @@ class ManagementAnimalService:
             "area_id": str(area.id) if area else None,
             "area_name": area.name if area else None,
             "area_type": area.area_type if area else None,
+            "species": animal.species,
+            "breed": animal.breed,
+            "size": animal.size,
+            "energy": animal.energy,
+            "temperament": animal.temperament or [],
+            "is_adoptable": animal.is_adoptable,
+            "adoption_notes": animal.adoption_notes,
         }
 
     async def _read_payload(self, animal: Animal, area: ShelterArea | None) -> dict:
@@ -229,3 +236,65 @@ class ManagementAnimalService:
         )
         await self.session.commit()
         return {"animal": self.payload(animal, None), "suspended_series_count": suspended_count}
+
+    async def update_adoption_fields(
+        self,
+        animal_id: UUID,
+        *,
+        species: str | None,
+        breed: str | None,
+        size: str | None,
+        energy: str | None,
+        temperament: list[str],
+        is_adoptable: bool,
+        adoption_notes: str | None,
+        actor_user_id: UUID,
+    ) -> dict:
+        animal = (
+            await self.session.execute(
+                select(Animal)
+                .where(
+                    Animal.id == animal_id,
+                    Animal.organization_id == self.organization_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if animal is None:
+            raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+        before = {
+            "species": animal.species,
+            "breed": animal.breed,
+            "size": animal.size,
+            "energy": animal.energy,
+            "temperament": animal.temperament,
+            "is_adoptable": animal.is_adoptable,
+            "adoption_notes": animal.adoption_notes,
+        }
+        animal.species = species
+        animal.breed = breed
+        animal.size = size
+        animal.energy = energy
+        animal.temperament = temperament
+        animal.is_adoptable = is_adoptable
+        animal.adoption_notes = adoption_notes
+        await AuditService(self.session).record(
+            organization_id=self.organization_id,
+            actor_user_id=actor_user_id,
+            action="animal.adoption_fields_updated",
+            resource_type="Animal",
+            resource_id=animal.id,
+            source_channel="api",
+            before=before,
+            after={
+                "species": species,
+                "breed": breed,
+                "size": size,
+                "energy": energy,
+                "temperament": temperament,
+                "is_adoptable": is_adoptable,
+                "adoption_notes": adoption_notes,
+            },
+        )
+        await self.session.commit()
+        return {"animal": self.payload(animal, None)}

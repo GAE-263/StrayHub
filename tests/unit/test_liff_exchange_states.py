@@ -5,7 +5,11 @@ import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.authentication.session_service import SessionService
 from services.api.app.application.ports.authentication import ActiveVolunteerEntryReference
-from services.api.app.persistence.models.identity import RefreshTokenRecord, SessionRecord
+from services.api.app.persistence.models.identity import (
+    RefreshTokenRecord,
+    SessionRecord,
+    WebhookSession,
+)
 
 
 class FakePasswordHasher:
@@ -99,14 +103,28 @@ class FakeRepository:
         self.authorization_calls: list[str] = []
 
     async def get_line_binding(self, line_user_id: str):
-        raise AssertionError("LIFF exchange must lock active LINE Binding")
+        return self.binding if line_user_id == "U-line-user" else None
+
+    async def set_authentication_user_scope(self, user_id: UUID) -> None:
+        self.authorization_calls.append("user_scope")
+
+    async def effective_organization_access(self, user_id: UUID):
+        assert user_id == self.user.id
+        return [
+            (self.target_membership, self.target_organization),
+            (self.other_membership, self.other_organization),
+        ]
+
+    async def revoke_active_webhook_sessions(self, user_id: UUID) -> None:
+        assert user_id == self.user.id
+        self.authorization_calls.append("revoke_webhook_sessions")
 
     async def lock_line_binding(self, line_user_id: str):
         self.authorization_calls.append("binding")
         return self.binding if line_user_id == "U-line-user" else None
 
     async def get_user(self, user_id: UUID):
-        raise AssertionError("LIFF exchange must lock User before authorization")
+        return self.user if user_id == self.user.id else None
 
     async def set_authentication_context_scope(self, user_id: UUID, organization_id: UUID) -> None:
         self.scoped_to = (user_id, organization_id)
@@ -166,6 +184,59 @@ def service(repository: FakeRepository, *, entry_valid: bool = True) -> SessionS
             valid=entry_valid,
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_line_bind_requires_explicit_selection_for_multiple_memberships() -> None:
+    repository = FakeRepository()
+
+    result = await service(repository).bind_line_identity(id_token="valid-line-id-token")
+
+    assert result["state"] == "selection_required"
+    assert {item["id"] for item in result["organizations"]} == {
+        repository.target_organization.id,
+        repository.other_organization.id,
+    }
+    assert repository.values == []
+
+
+@pytest.mark.asyncio
+async def test_line_bind_selected_membership_sets_exact_session_context() -> None:
+    repository = FakeRepository()
+    repository.target_membership.role = "STAFF"
+
+    result = await service(repository).bind_line_identity(
+        id_token="valid-line-id-token",
+        organization_id=repository.target_organization.id,
+    )
+
+    assert result["organization_id"] == repository.target_organization.id
+    assert repository.scoped_to == (repository.user.id, repository.target_organization.id)
+    assert "revoke_webhook_sessions" in repository.authorization_calls
+    assert any(
+        isinstance(value, SessionRecord)
+        and value.active_organization_id == repository.target_organization.id
+        for value in repository.values
+    )
+    assert any(
+        isinstance(value, WebhookSession)
+        and value.organization_id == repository.target_organization.id
+        for value in repository.values
+    )
+
+
+@pytest.mark.asyncio
+async def test_line_bind_rejects_unowned_shelter_selection() -> None:
+    repository = FakeRepository()
+
+    with pytest.raises(DomainError) as caught:
+        await service(repository).bind_line_identity(
+            id_token="valid-line-id-token",
+            organization_id=uuid4(),
+        )
+
+    assert caught.value.code == "shelter_context_denied"
+    assert repository.values == []
 
 
 @pytest.mark.asyncio
@@ -388,3 +459,86 @@ async def test_database_failure_returns_safe_dependency_error() -> None:
     assert error.value.status_code == 503
     assert error.value.code == "liff_exchange_unavailable"
     assert error.value.message == "志工入口暫時無法使用"
+
+
+class RecordingRichMenuRouter:
+    """記錄 link_for_user 呼叫；optional 用來模擬 LINE API 失敗。"""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+        self.fail = fail
+
+    async def link_for_user(
+        self,
+        *,
+        line_user_id: str,
+        role: str | None,
+        organization_selected: bool = False,
+    ) -> None:
+        self.calls.append((line_user_id, role))
+        if self.fail:
+            raise RuntimeError("LINE API 暫時不可用")
+
+
+def service_with_router(
+    repository: FakeRepository,
+    router: RecordingRichMenuRouter,
+    *,
+    entry_valid: bool = True,
+) -> SessionService:
+    return SessionService(
+        repository,
+        password_hasher=FakePasswordHasher(),
+        access_token=FakeAccessToken(),
+        line_verifier=FakeLineVerifier(),
+        entry_resolver=FakeEntryResolver(
+            repository.target_organization.id,
+            valid=entry_valid,
+        ),
+        rich_menu_router=router,
+    )
+
+
+@pytest.mark.asyncio
+async def test_active_exchange_links_volunteer_rich_menu() -> None:
+    """志工走 entry 交換身分，不經過 /v1/line/bind，這條路徑也必須切選單。"""
+    repository = FakeRepository()
+    router = RecordingRichMenuRouter()
+
+    result = await service_with_router(repository, router).exchange_line_identity(
+        id_token="valid-line-id-token",
+        shelter_entry_reference="valid-entry-reference",
+    )
+
+    assert result["state"] == "ACTIVE"
+    assert router.calls == [("U-line-user", "VOLUNTEER")]
+
+
+@pytest.mark.asyncio
+async def test_non_active_exchange_does_not_link_rich_menu() -> None:
+    repository = FakeRepository()
+    router = RecordingRichMenuRouter()
+
+    with pytest.raises(DomainError):
+        await service_with_router(repository, router, entry_valid=False).exchange_line_identity(
+            id_token="valid-line-id-token",
+            shelter_entry_reference="valid-entry-reference",
+        )
+
+    assert router.calls == []
+
+
+@pytest.mark.asyncio
+async def test_rich_menu_failure_does_not_break_exchange() -> None:
+    """選單切換是 best-effort；LINE API 失敗不得讓志工換不到 session。"""
+    repository = FakeRepository()
+    router = RecordingRichMenuRouter(fail=True)
+
+    result = await service_with_router(repository, router).exchange_line_identity(
+        id_token="valid-line-id-token",
+        shelter_entry_reference="valid-entry-reference",
+    )
+
+    assert result["state"] == "ACTIVE"
+    assert result["access_token"].startswith("internal:")
+    assert router.calls == [("U-line-user", "VOLUNTEER")]

@@ -1,0 +1,372 @@
+<title>浪浪 LINE 選單框架</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+<style>
+:root{
+  --ground:#FAF6EE; --surface:#FFFFFF; --surface-2:#F3ECDF;
+  --ink:#3F352C; --ink-soft:#6B5B4D; --ink-mute:#9A8B7B;
+  --line:#E4D8C6; --line-strong:#6B5B4D;
+  --accent:#5E9A6F; --accent-ink:#2F5E3C;
+  --brand:#C9856A; --brand-soft:#F6E4D9;
+  --ok:#4E9A5C; --ok-bg:#E4F1E4;
+  --todo:#C08A2E; --todo-bg:#F8ECD3;
+  --shadow:0 2px 0 rgba(107,91,77,.18), 0 10px 26px -14px rgba(63,53,44,.4);
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme:dark){
+    --ground:#1E1913; --surface:#292219; --surface-2:#332a20;
+    --ink:#F2E9DC; --ink-soft:#D3C3B0; --ink-mute:#9E8E7C;
+    --line:#3E3327; --line-strong:#5A4A39;
+    --accent:#7FBE8E; --accent-ink:#CDEBD3;
+    --brand:#E0A184; --brand-soft:#3a2c23;
+    --ok:#78C186; --ok-bg:#233524;
+    --todo:#E0B25C; --todo-bg:#3a2f1c;
+    --shadow:0 2px 0 rgba(0,0,0,.4), 0 12px 30px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#1E1913; --surface:#292219; --surface-2:#332a20;
+  --ink:#F2E9DC; --ink-soft:#D3C3B0; --ink-mute:#9E8E7C;
+  --line:#3E3327; --line-strong:#5A4A39;
+  --accent:#7FBE8E; --accent-ink:#CDEBD3;
+  --brand:#E0A184; --brand-soft:#3a2c23;
+  --ok:#78C186; --ok-bg:#233524;
+  --todo:#E0B25C; --todo-bg:#3a2f1c;
+  --shadow:0 2px 0 rgba(0,0,0,.4), 0 12px 30px -16px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Noto Sans TC",system-ui,sans-serif; line-height:1.65;
+  font-size:16px;
+}
+.wrap{max-width:1040px; margin:0 auto; padding:0 20px}
+h1,h2,h3{font-family:"Fredoka","Noto Sans TC",sans-serif; text-wrap:balance; line-height:1.2; margin:0}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+a{color:var(--accent-ink)}
+.eyebrow{font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-ink); font-weight:600}
+
+/* header */
+header.hero{padding:56px 0 30px}
+.hero .ki{font-size:34px}
+.hero h1{font-size:clamp(28px,5vw,42px); font-weight:700; margin:10px 0 8px}
+.hero p{max-width:60ch; color:var(--ink-soft); font-size:17px; margin:0}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:18px}
+.chip{font-size:12.5px; font-weight:500; padding:5px 11px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft)}
+.chip.ok{background:var(--ok-bg); color:var(--ok); border-color:transparent; font-weight:700}
+.chip.todo{background:var(--todo-bg); color:var(--todo); border-color:transparent; font-weight:700}
+
+section{padding:30px 0; border-top:1px solid var(--line)}
+.sec-h{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:20px}
+.sec-h h2{font-size:23px; font-weight:600}
+.sec-h .note{color:var(--ink-mute); font-size:14px}
+
+/* flow */
+.flow{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px}
+.node{flex:1 1 150px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow)}
+.node b{display:block; font-family:"Fredoka",sans-serif; font-size:15px}
+.node span{font-size:13px; color:var(--ink-mute)}
+.arrow{align-self:center; color:var(--brand); font-weight:700; font-size:20px}
+.branch{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:10px}
+.branch .node{border-left:4px solid var(--accent)}
+
+/* simulator */
+.sim{display:grid; grid-template-columns:1fr 320px; gap:26px; align-items:start}
+@media(max-width:760px){ .sim{grid-template-columns:1fr} }
+.roles{display:flex; flex-direction:column; gap:10px}
+.role-btn{display:flex; gap:12px; align-items:center; text-align:left; width:100%; cursor:pointer;
+  background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px 15px; color:inherit; font:inherit; box-shadow:var(--shadow); transition:transform .12s, border-color .12s}
+.role-btn:hover{transform:translateY(-2px)}
+.role-btn[aria-pressed="true"]{border-color:var(--line-strong); border-width:2px; padding:12px 14px}
+.role-btn .em{font-size:22px}
+.role-btn b{font-family:"Fredoka",sans-serif; display:block; font-size:15.5px}
+.role-btn small{color:var(--ink-mute); font-size:12.5px}
+.role-btn .tag{margin-left:auto; font-size:11px; font-family:"JetBrains Mono",monospace; color:var(--ink-mute)}
+
+/* phone */
+.phone{background:var(--surface); border:1px solid var(--line-strong); border-radius:26px; padding:12px; box-shadow:var(--shadow); position:sticky; top:16px}
+.phone .screen{background:var(--surface-2); border-radius:16px; overflow:hidden; height:430px; display:flex; flex-direction:column}
+.phone .bar{background:var(--accent); color:#fff; font-family:"Fredoka",sans-serif; font-weight:600; text-align:center; padding:9px; font-size:14px}
+.phone .feed{flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:9px}
+.bubble{max-width:85%; padding:9px 12px; border-radius:14px; font-size:13.5px; line-height:1.5; box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.bubble.bot{align-self:flex-start; background:var(--surface); border:1px solid var(--line); border-top-left-radius:4px}
+.bubble.sys{align-self:center; background:transparent; color:var(--ink-mute); font-size:12px; box-shadow:none; text-align:center}
+.bubble a{word-break:break-all}
+.menu{border-top:1px solid var(--line); background:var(--surface); display:grid; gap:1px; background:var(--line)}
+.menu.cols-2{grid-template-columns:1fr 1fr}
+.menu.cols-3{grid-template-columns:1fr 1fr 1fr}
+.menu.cols-4{grid-template-columns:1fr 1fr}
+.mbtn{background:var(--surface); border:0; color:var(--ink); font:inherit; font-size:12.5px; padding:11px 6px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; transition:background .1s}
+.mbtn:hover{background:var(--brand-soft)}
+.mbtn .mi{font-size:17px}
+.chatbar{font-size:11px; color:var(--ink-mute); text-align:center; padding:6px; font-family:"JetBrains Mono",monospace}
+
+/* interfaces */
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px}
+.card h3{font-size:16px; display:flex; align-items:center; gap:8px}
+.card .path{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--ink-mute); word-break:break-all}
+.card ul{margin:4px 0 0; padding-left:18px; font-size:13.5px; color:var(--ink-soft)}
+.card li{margin:2px 0}
+
+/* table */
+.tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:14px}
+table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:560px}
+th,td{text-align:left; padding:10px 13px; border-bottom:1px solid var(--line); vertical-align:top}
+th{background:var(--surface-2); font-family:"Fredoka",sans-serif; font-weight:600; font-size:13px}
+tr:last-child td{border-bottom:0}
+td .mono{font-size:12.5px}
+.pill{display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap}
+.pill.ok{background:var(--ok-bg); color:var(--ok)}
+.pill.todo{background:var(--todo-bg); color:var(--todo)}
+
+pre.run{background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--brand); border-radius:12px; padding:14px 16px; overflow-x:auto; font-family:"JetBrains Mono",monospace; font-size:13px; line-height:1.7; color:var(--ink); margin:0}
+.callout{background:var(--brand-soft); border:1px solid var(--line); border-radius:14px; padding:14px 16px; font-size:14px; color:var(--ink-soft)}
+.callout b{color:var(--ink)}
+footer{padding:34px 0 60px; color:var(--ink-mute); font-size:13px; border-top:1px solid var(--line)}
+.theme-btn{position:fixed; top:14px; right:14px; z-index:9; background:var(--surface); border:1px solid var(--line); border-radius:999px; width:40px; height:40px; cursor:pointer; font-size:17px; box-shadow:var(--shadow); color:inherit}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2.5px solid var(--accent); outline-offset:2px; border-radius:6px}
+.legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-mute); margin-top:14px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.dot{width:10px; height:10px; border-radius:3px; display:inline-block}
+</style>
+
+<button class="theme-btn" id="themeBtn" aria-label="切換深淺主題">◐</button>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="ki">🐾</div>
+    <div class="eyebrow">浪浪森友會 · LINE 整合框架</div>
+    <h1>依角色切換的 LINE 選單</h1>
+    <p>使用者在 LINE 綁定後，後端依角色把不同的底部選單綁到他的 UID。這頁把整個流程演給你看，並列出每個對接點——檔案、端點、環境變數。點左邊的角色，看他會拿到哪套選單、按下去 bot 怎麼回。</p>
+    <div class="chips">
+      <span class="chip ok">✓ 選單框架已建</span>
+      <span class="chip ok">✓ 綁定→切換接點已接</span>
+      <span class="chip ok">✓ 4 個 LIFF 介面可跑（mock）</span>
+      <span class="chip todo">⧗ 建立動物端點：後端待實作</span>
+      <span class="chip todo">⧗ 真實 LINE 憑證：待提供</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h"><span class="eyebrow">01</span><h2>整體流程</h2><span class="note">LINE 只認「人」，收容所與角色由後端決定</span></div>
+    <div class="flow">
+      <div class="node"><b>加好友</b><span>未綁定，看預設選單</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>底部選單「綁定」</b><span>開 LIFF 完成身分綁定</span></div>
+      <div class="arrow">→</div>
+      <div class="node" style="border-left:4px solid var(--brand)"><b>後端依 UID 判角色</b><span>bind_line_identity</span></div>
+    </div>
+    <div class="branch">
+      <div class="node"><b>👷 工作人員</b><span>staff 選單（管理動物）</span></div>
+      <div class="node"><b>🐕 志工</b><span>volunteer 選單</span></div>
+      <div class="node"><b>🏡 領養人</b><span>adopter 選單</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h"><span class="eyebrow">02</span><h2>互動模擬器</h2><span class="note">選一個角色，模擬綁定後拿到的選單</span></div>
+    <div class="sim">
+      <div class="roles" id="roles" role="group" aria-label="選擇角色"></div>
+      <div class="phone">
+        <div class="screen">
+          <div class="bar" id="ph-bar">LINE 官方帳號</div>
+          <div class="feed" id="ph-feed"></div>
+          <div class="menu" id="ph-menu"></div>
+          <div class="chatbar" id="ph-chatbar"></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--accent)"></i>已接線動作</span>
+      <span><i class="dot" style="background:var(--todo)"></i>占位（開發中）</span>
+      <span><i class="dot" style="background:var(--brand)"></i>開啟 LIFF 介面</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h"><span class="eyebrow">03</span><h2>四個 LIFF 介面</h2><span class="note">line-liff/ 底下，純前端、mock 可跑</span></div>
+    <div class="cards">
+      <div class="card">
+        <h3>👷 工作人員動物輸入</h3>
+        <div class="path">line-liff/staff-animal/</div>
+        <ul><li>新增動物（拍照 + 表單）</li><li>更新健康紀錄</li><li>由 paw-village 表單衍生</li></ul>
+      </div>
+      <div class="card">
+        <h3>🐕 志工選單</h3>
+        <div class="path">line-liff/volunteer/</div>
+        <ul><li>散步回報</li><li>志工報到</li></ul>
+      </div>
+      <div class="card">
+        <h3>🏡 領養人選單</h3>
+        <div class="path">line-liff/adopter/</div>
+        <ul><li>我想領養</li><li>領養回報</li></ul>
+      </div>
+      <div class="card">
+        <h3>🎛️ 本頁 Demo Hub</h3>
+        <div class="path">line-liff/demo/</div>
+        <ul><li>流程展示 + 對接說明</li><li>可分享給組員</li></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h"><span class="eyebrow">04</span><h2>對接點</h2><span class="note">要接的檔案、端點、環境變數</span></div>
+    <h3 style="font-size:16px;margin-bottom:10px;color:var(--ink-soft)">後端程式（StrayHub · additive，既有行為不變）</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>檔案</th><th>做什麼</th><th>狀態</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">application/line_rich_menu_routing.py</td><td>角色→選單對應、ADOPTER 常數、link_for_user</td><td><span class="pill ok">已建</span></td></tr>
+          <tr><td class="mono">application/line_menu_actions.py</td><td>選單動作占位訊息 + staff LIFF 連結</td><td><span class="pill ok">已建</span></td></tr>
+          <tr><td class="mono">api/line_webhook.py</td><td>_handle_postback 加分支（綁定/占位/LIFF）</td><td><span class="pill ok">已接</span></td></tr>
+          <tr><td class="mono">authentication/session_service.py</td><td>綁定成功後依角色 link 選單（best-effort）</td><td><span class="pill ok">已接</span></td></tr>
+          <tr><td class="mono">scripts/sync_line_role_menus.py</td><td>驗證/發佈四套選單，印 角色→richMenuId</td><td><span class="pill ok">已建</span></td></tr>
+          <tr><td class="mono">POST /v1/management/animals</td><td>建立動物（新增動物表單送這裡）</td><td><span class="pill todo">後端待實作</span></td></tr>
+          <tr><td class="mono">POST .../{id}/health-records</td><td>更新健康紀錄</td><td><span class="pill todo">後端待實作</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 style="font-size:16px;margin:22px 0 10px;color:var(--ink-soft)">環境變數（填了才會實際切換選單）</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>變數</th><th>來源 / 說明</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">LINE_RICH_MENU_DEFAULT_ID</td><td rowspan="4" style="vertical-align:middle">由 <span class="mono">sync_line_role_menus.py --apply</span> 產生的 richMenuId；全空則自動 no-op（不影響綁定）</td></tr>
+          <tr><td class="mono">LINE_RICH_MENU_VOLUNTEER_ID</td></tr>
+          <tr><td class="mono">LINE_RICH_MENU_ADOPTER_ID</td></tr>
+          <tr><td class="mono">LINE_RICH_MENU_STAFF_ID</td></tr>
+          <tr><td class="mono">各 LIFF 的 config.js</td><td>LIFF_ID、API_BASE_URL、MOCK_MODE、USE_MOCK_API</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout" style="margin-top:18px">
+      <b>ADOPTER 是新角色。</b> 目前只在選單路由層引入，後端角色權限體系（membership role）尚未正式納入——由後續接手者決定領養人如何綁定與授權。
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h"><span class="eyebrow">05</span><h2>本機試跑</h2><span class="note">組員照這個就能開起來看</span></div>
+    <pre class="run"># 一次啟動全部 LIFF 介面 + 本頁
+cd StrayHub-main/line-liff
+./serve-demo.sh          # 或： python3 -m http.server 8080
+
+# 瀏覽器開：
+#   http://localhost:8080/demo/           ← 本展示頁
+#   http://localhost:8080/staff-animal/   ← 工作人員動物輸入
+#   http://localhost:8080/volunteer/      ← 志工選單
+#   http://localhost:8080/adopter/        ← 領養人選單
+
+# 驗證後端選單腳本（dry-run，不需憑證）
+cd StrayHub-main
+python3 scripts/sync_line_role_menus.py</pre>
+    <div class="callout" style="margin-top:16px">
+      全部預設 <b>MOCK 模式</b>：不需真實 LINE 憑證或後端就能點、能填、能看流程。送出動作會在 Console 印出 payload。上線只要填好 LIFF_ID / API_BASE_URL，把兩個 MOCK 開關關掉即可。
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    浪浪森友會 LINE 選單框架 · 內部開發展示 · 2026-08-26<br/>
+    完整文件見 repo：<span class="mono">docs/line-role-menu-framework.md</span>、<span class="mono">docs/staff-animal-line-input.md</span>
+  </div>
+</footer>
+
+<script>
+const ROLES = [
+  { key:"default", em:"👋", name:"未綁定使用者", desc:"剛加好友，還沒綁定", tag:"—", bar:"浪浪森友會",
+    intro:"歡迎加入浪浪森友會！請先綁定身分。", chatbar:"chatBarText：收容所資訊",
+    menu:[ {mi:"ℹ️",label:"收容所基本資訊",action:"shelter_info"}, {mi:"🔗",label:"綁定身分",action:"start_binding"} ] },
+  { key:"volunteer", em:"🐕", name:"志工", desc:"role = VOLUNTEER", tag:"VOLUNTEER", bar:"志工選單",
+    intro:"綁定成功，歡迎回來，志工！", chatbar:"chatBarText：志工選單",
+    menu:[ {mi:"🚶",label:"散步回報",action:"walk_report"}, {mi:"✅",label:"志工報到",action:"volunteer_checkin"} ] },
+  { key:"adopter", em:"🏡", name:"領養人", desc:"role = ADOPTER（新角色）", tag:"ADOPTER", bar:"領養選單",
+    intro:"綁定成功，歡迎，領養人！", chatbar:"chatBarText：領養選單",
+    menu:[ {mi:"💛",label:"我想領養",action:"want_to_adopt"}, {mi:"📷",label:"領養回報",action:"adoption_report"} ] },
+  { key:"staff", em:"👷", name:"工作人員", desc:"STAFF / SHELTER_ADMIN / PLATFORM_ADMIN", tag:"STAFF", bar:"工作人員",
+    intro:"綁定成功，工作人員模式。", chatbar:"chatBarText：工作人員",
+    menu:[ {mi:"➕",label:"新增動物",action:"staff_create_animal"}, {mi:"🩺",label:"更新健康紀錄",action:"staff_update_health"},
+           {mi:"📋",label:"動物清單",action:"staff_animal_list"}, {mi:"🔄",label:"變更動物狀態",action:"staff_change_status"} ] },
+];
+// 對應後端 line_menu_actions.py / line_webhook.py 的回覆
+const REPLIES = {
+  shelter_info:{k:"todo",t:"這裡將顯示收容所基本資訊（開發中）。"},
+  start_binding:{k:"brand",t:"請開啟 LIFF 完成身分綁定：https://liff.line.me/&lt;LIFF_ID&gt;"},
+  walk_report:{k:"todo",t:"散步回報功能開發中，稍後開放。"},
+  volunteer_checkin:{k:"todo",t:"志工報到功能開發中，稍後開放。"},
+  want_to_adopt:{k:"todo",t:"「我想領養」功能開發中，稍後開放。"},
+  adoption_report:{k:"todo",t:"領養回報功能開發中，稍後開放。"},
+  staff_create_animal:{k:"brand",t:"請開啟工作人員動物輸入：https://liff.line.me/&lt;LIFF_ID&gt;/staff-animal"},
+  staff_update_health:{k:"brand",t:"請開啟工作人員動物輸入：https://liff.line.me/&lt;LIFF_ID&gt;/staff-animal"},
+  staff_animal_list:{k:"todo",t:"動物清單功能開發中：將接 management_animals 列表 API。"},
+  staff_change_status:{k:"todo",t:"變更動物狀態功能開發中：將接 management_animals PATCH 狀態 API。"},
+};
+const rolesEl=document.getElementById("roles");
+const feed=document.getElementById("ph-feed"), menuEl=document.getElementById("ph-menu");
+const bar=document.getElementById("ph-bar"), chatbar=document.getElementById("ph-chatbar");
+let current=null;
+
+ROLES.forEach(r=>{
+  const b=document.createElement("button");
+  b.className="role-btn"; b.setAttribute("aria-pressed","false");
+  b.innerHTML=`<span class="em">${r.em}</span><span><b>${r.name}</b><small>${r.desc}</small></span><span class="tag">${r.tag}</span>`;
+  b.onclick=()=>selectRole(r.key);
+  rolesEl.appendChild(b);
+});
+
+function selectRole(key){
+  current=ROLES.find(r=>r.key===key);
+  [...rolesEl.children].forEach((c,i)=>c.setAttribute("aria-pressed", ROLES[i].key===key));
+  bar.textContent=current.bar;
+  chatbar.textContent=current.chatbar;
+  feed.innerHTML="";
+  addBubble("sys", key==="default" ? "情境：使用者尚未綁定" : `情境：綁定後，後端判定角色為 ${current.tag}`);
+  addBubble("bot", current.intro);
+  addBubble("sys","↓ 點下方底部選單試試");
+  renderMenu();
+}
+function renderMenu(){
+  menuEl.className="menu cols-"+current.menu.length;
+  menuEl.innerHTML="";
+  current.menu.forEach(m=>{
+    const btn=document.createElement("button");
+    btn.className="mbtn"; btn.innerHTML=`<span class="mi">${m.mi}</span>${m.label}`;
+    btn.onclick=()=>tap(m);
+    menuEl.appendChild(btn);
+  });
+}
+function tap(m){
+  addBubble("sys",`你按了「${m.label}」 · postback: action=${m.action}`);
+  const rep=REPLIES[m.action]||{k:"todo",t:"（無對應回覆）"};
+  addBubble("bot",rep.t,rep.k);
+}
+function addBubble(cls,text,kind){
+  const d=document.createElement("div");
+  d.className="bubble "+cls;
+  if(kind==="todo") d.style.borderColor="var(--todo)";
+  if(kind==="brand"){ d.style.borderColor="var(--brand)"; d.style.background="var(--brand-soft)"; }
+  d.innerHTML=text;
+  feed.appendChild(d); feed.scrollTop=feed.scrollHeight;
+}
+selectRole("default");
+
+// theme toggle
+const root=document.documentElement, tb=document.getElementById("themeBtn");
+function cur(){ return root.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"); }
+tb.onclick=()=>{ const n=cur()==="dark"?"light":"dark"; root.setAttribute("data-theme",n); tb.textContent=n==="dark"?"☀":"◐"; };
+</script>

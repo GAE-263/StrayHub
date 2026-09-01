@@ -16,6 +16,10 @@ from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.authentication.context_service import ActiveShelterContextService
 from services.api.app.application.authentication.session_service import SessionService
+from services.api.app.application.line_rich_menu_routing import (
+    RichMenuRoutingService,
+    build_registry,
+)
 from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
@@ -172,6 +176,21 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
         public_keys[settings.auth_jwt_previous_public_key_reference] = (
             settings.auth_jwt_previous_public_key
         )
+    rich_menu_router = None
+    registry = build_registry()
+    if settings.line_role_menu_features_active():
+        registry = build_registry(
+            default=settings.line_rich_menu_default_id,
+            volunteer=settings.line_rich_menu_volunteer_id,
+            adopter=settings.line_rich_menu_adopter_id,
+            staff=settings.line_rich_menu_staff_id,
+        )
+    if registry.menu_ids:
+        from services.api.app.infrastructure.line.messaging_api_adapter import (
+            LineMessagingApiAdapter,
+        )
+
+        rich_menu_router = RichMenuRoutingService(LineMessagingApiAdapter(), registry)
     return SessionService(
         AuthenticationRepository(_session),
         password_hasher=Argon2PasswordHasher(),
@@ -188,6 +207,7 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
             channel_id=settings.line_login_channel_id or settings.line_channel_id,
         ),
         entry_resolver=VolunteerEntryReferenceAdapter(_session),
+        rich_menu_router=rich_menu_router,
         refresh_ttl_seconds=settings.session_refresh_token_ttl_seconds,
         access_ttl_seconds=settings.session_access_token_ttl_seconds,
     )

@@ -10,6 +10,7 @@ from scripts.seed_observation_vocabulary import seed_vocabulary
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
+from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
@@ -40,9 +41,20 @@ async def seed():
             raise RuntimeError("seed_all_three_shelters_before_accounts")
         for organization in orgs.values():
             organization.service_area = "新北市"
+            organization.region = "north"
             if not organization.address:
                 organization.address = "新北市（示範資料）"
             await set_organization_scope(session, organization.id)
+            animals = (
+                await session.scalars(
+                    select(Animal).where(
+                        Animal.organization_id == organization.id,
+                        Animal.status == "active",
+                    )
+                )
+            ).all()
+            for animal in animals:
+                animal.is_adoptable = True
             policy = await session.scalar(
                 select(OrganizationVolunteerAccessPolicy).where(
                     OrganizationVolunteerAccessPolicy.organization_id == organization.id

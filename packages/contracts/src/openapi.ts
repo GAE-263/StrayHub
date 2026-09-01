@@ -498,6 +498,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/adoption/animals/{animalId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPublicAdoptionAnimalPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/care-reports": {
         parameters: {
             query?: never;
@@ -778,7 +794,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；不得自動建立正式 Membership。 */
+        /** @description FastAPI 驗證 LINE 身分後，將其對應既有 User 與有效 Membership；多 Membership 時 organization_id 只是選擇輸入，後端仍須逐一驗證，不得自動建立正式 Membership。 */
         post: operations["bindLineIdentity"];
         delete?: never;
         options?: never;
@@ -875,7 +891,8 @@ export interface paths {
         };
         get: operations["listManagementAnimals"];
         put?: never;
-        post?: never;
+        /** @description 工作人員以 LINE/LIFF 新增收容動物（multipart：payload JSON + photo）。 */
+        post: operations["createManagementAnimal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -913,6 +930,23 @@ export interface paths {
         head?: never;
         /** @description 更新目前收容所的動物基本資料並記錄 before/after 稽核；不變更動物狀態。省略欄位保持原值，nullable 欄位以 null 清除。 */
         patch: operations["updateManagementAnimalProfile"];
+        trace?: never;
+    };
+    "/v1/management/animals/{animalId}/health-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 工作人員以 LINE/LIFF 更新健康紀錄（multipart：payload JSON + 選填 photo）。 */
+        post: operations["createManagementAnimalHealthRecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/management/reports": {
@@ -1904,6 +1938,17 @@ export interface components {
             area_type: string | null;
             /** @default null */
             area_path: string | null;
+            /** @default null */
+            species: string | null;
+            /** @default null */
+            size: string | null;
+            /** @default null */
+            energy: string | null;
+            temperament?: string[];
+            /** @default false */
+            is_adoptable: boolean;
+            /** @default null */
+            adoption_notes: string | null;
         };
         ManagementAnimalResponse: {
             animal: components["schemas"]["ManagementAnimal"];
@@ -1921,6 +1966,28 @@ export interface components {
         AnimalStatusUpdateResponse: {
             animal: components["schemas"]["ManagementAnimal"];
             suspended_series_count: number;
+        };
+        LineStaffAnimalCreateRequest: {
+            /** @description JSON 字串；結構見 docs/staff-animal-line-input.md（CREATE_ANIMAL）。 */
+            payload: string;
+            /** Format: binary */
+            photo: string;
+        };
+        LineStaffAnimalCreateResponse: {
+            success: boolean;
+            /** Format: uuid */
+            animalId: string;
+        };
+        LineStaffHealthRecordRequest: {
+            /** @description JSON 字串；結構見 docs/staff-animal-line-input.md（UPDATE_ANIMAL_HEALTH）。 */
+            payload: string;
+            /** Format: binary */
+            photo?: string;
+        };
+        LineStaffHealthRecordResponse: {
+            success: boolean;
+            /** Format: uuid */
+            recordId?: string;
         };
         ManagementReport: {
             /** Format: uuid */
@@ -2088,9 +2155,21 @@ export interface components {
         };
         LineBindRequest: {
             id_token: string;
+            /**
+             * Format: uuid
+             * @description 多 Membership 時由使用者明確選擇；不是授權來源。
+             */
+            organization_id?: string | null;
         };
-        LineBindResponse: {
-            session: components["schemas"]["AuthResponse"];
+        LineBindResponse: components["schemas"]["LineBindSessionResponse"] | components["schemas"]["LineBindSelectionResponse"];
+        LineBindSessionResponse: components["schemas"]["AuthResponse"] & {
+            /** Format: uuid */
+            organization_id: string;
+        };
+        LineBindSelectionResponse: {
+            /** @constant */
+            state: "selection_required";
+            organizations: components["schemas"]["LoginOrganization"][];
         };
         RichMenuContext: {
             /** @enum {string} */
@@ -4600,6 +4679,35 @@ export interface operations {
             };
         };
     };
+    getPublicAdoptionAnimalPhoto: {
+        parameters: {
+            query: {
+                /** @description 綁定收容所、動物與目前照片版本的短效 HMAC capability */
+                token: string;
+            };
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已安全清理的目前領養照片 */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "X-Content-Type-Options"?: "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
     createCareReport: {
         parameters: {
             query?: never;
@@ -5082,6 +5190,7 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     getLineRichMenuContext: {
@@ -5233,6 +5342,34 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    createManagementAnimal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["LineStaffAnimalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立動物 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineStaffAnimalCreateResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
     getManagementAnimal: {
         parameters: {
             query?: never;
@@ -5318,6 +5455,37 @@ export interface operations {
             404: components["responses"]["NotFoundOrForbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    createManagementAnimalHealthRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["LineStaffHealthRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立健康紀錄 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineStaffHealthRecordResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     listManagementReports: {

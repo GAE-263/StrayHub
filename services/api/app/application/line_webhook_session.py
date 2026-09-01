@@ -30,18 +30,26 @@ class LineWebhookSessionService:
 
         memberships = await self.authentication.memberships(user.id, active_only=True)
         sessions = await self.identity.sessions(user.id)
-        if len(sessions) > 1 or len(memberships) != 1:
+        if len(sessions) > 1:
             raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
-
-        membership = memberships[0]
+        if sessions:
+            session = sessions[0]
+            membership = next(
+                (item for item in memberships if item.organization_id == session.organization_id),
+                None,
+            )
+            if membership is None:
+                raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
+        elif len(memberships) == 1:
+            membership = memberships[0]
+            session = None
+        else:
+            raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
         organization = await self.authentication.get_organization(membership.organization_id)
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)
 
-        if sessions:
-            session = sessions[0]
-            if session.organization_id != organization.id:
-                raise DomainError("shelter_context_required", "請在 LIFF 明確選擇收容所", 409)
+        if session is not None:
             return session
 
         now = datetime.now(timezone.utc)
