@@ -19,7 +19,7 @@ DATABASE_URL = os.getenv(
     "STRAYHUB_TEST_DATABASE_URL",
     "postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub",
 )
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+pytestmark = pytest.mark.asyncio
 
 
 async def _seed_assigned_care() -> dict:
