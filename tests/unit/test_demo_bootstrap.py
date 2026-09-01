@@ -50,6 +50,10 @@ def test_three_shelter_demo_exposes_only_dynamic_new_taipei_region() -> None:
 
     assert 'organization.service_area = "新北市"' in accounts
     assert 'organization.service_area = "新北市"' in furkids
+    assert 'organization.region = "north"' in accounts
+    assert 'organization.region = "north"' in furkids
+    assert "animal.is_adoptable = True" in accounts
+    assert "animal.is_adoptable = True" in furkids
     assert "DailyReportableScope" not in accounts
 
 

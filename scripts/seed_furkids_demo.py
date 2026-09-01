@@ -644,6 +644,7 @@ async def seed(
             organization.status = "active"
             organization.timezone = TIMEZONE_NAME
             organization.service_area = "新北市"
+            organization.region = "north"
             if not organization.address:
                 organization.address = "新北市（示範資料）"
             admin, volunteer, membership = await _seed_identity(session, organization)
@@ -670,6 +671,7 @@ async def seed(
                 animal.name = spec.name
                 animal.area_id = areas[spec.area_name].id
                 animal.status = "active"
+                animal.is_adoptable = True
                 for field, value in ANIMAL_PROFILES[spec.key].model_dump().items():
                     setattr(animal, field, value)
                 asset = (
