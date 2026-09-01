@@ -3,11 +3,18 @@ from __future__ import annotations
 from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
+from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.qr_code import AnimalQrCode
+from services.api.app.persistence.models.shelter_area import ShelterArea
+
+
+def _escaped_like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 class QrCodeRepository:
@@ -56,6 +63,63 @@ class QrCodeRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def list_management(
+        self,
+        *,
+        animal_id: UUID | None,
+        query: str | None,
+        status: str,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[tuple[AnimalQrCode, Animal, ShelterArea | None]], int]:
+        animal_join = and_(
+            Animal.id == AnimalQrCode.animal_id,
+            Animal.organization_id == AnimalQrCode.organization_id,
+            Animal.organization_id == self.organization_id,
+        )
+        filters = [AnimalQrCode.organization_id == self.organization_id]
+        if animal_id is not None:
+            filters.append(AnimalQrCode.animal_id == animal_id)
+        normalized_query = (query or "").strip()
+        if normalized_query:
+            pattern = _escaped_like_pattern(normalized_query)
+            filters.append(
+                or_(
+                    Animal.name.ilike(pattern, escape="\\"),
+                    Animal.shelter_number.ilike(pattern, escape="\\"),
+                )
+            )
+        if status == "active":
+            filters.extend([AnimalQrCode.status == "active", AnimalQrCode.revoked.is_(False)])
+        elif status == "revoked":
+            filters.append(or_(AnimalQrCode.status == "revoked", AnimalQrCode.revoked.is_(True)))
+
+        total = await self.session.scalar(
+            select(func.count(AnimalQrCode.id))
+            .select_from(AnimalQrCode)
+            .join(Animal, animal_join)
+            .where(*filters)
+        )
+        result = await self.session.execute(
+            select(AnimalQrCode, Animal, ShelterArea)
+            .select_from(AnimalQrCode)
+            .join(Animal, animal_join)
+            .outerjoin(
+                ShelterArea,
+                and_(
+                    ShelterArea.id == Animal.area_id,
+                    ShelterArea.organization_id == Animal.organization_id,
+                    ShelterArea.organization_id == self.organization_id,
+                    ShelterArea.status == "active",
+                ),
+            )
+            .where(*filters)
+            .order_by(AnimalQrCode.created_at.desc(), AnimalQrCode.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list(result.all()), int(total or 0)
 
     async def create(self, qr_code: AnimalQrCode) -> AnimalQrCode:
         if qr_code.organization_id != self.organization_id:

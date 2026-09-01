@@ -2081,7 +2081,31 @@ export interface components {
             token: null;
         };
         ManagementQrCodeList: {
-            items: components["schemas"]["ManagementQrCode"][];
+            items: components["schemas"]["ManagementQrCodeListItem"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        ManagementQrCodeListItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            animal_id: string;
+            animal_name: string;
+            shelter_number: string | null;
+            animal_status: string;
+            area_name: string | null;
+            /** @enum {string} */
+            status: "active" | "revoked";
+            revoked: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null */
+            deep_link: string | null;
+            /** @description raw token 不作為獨立欄位顯示；locator 僅存在 deep_link */
+            token: null;
         };
         ManagementQrCodeRequest: {
             /** Format: uuid */
@@ -5691,6 +5715,10 @@ export interface operations {
         parameters: {
             query?: {
                 animal_id?: string;
+                query?: string;
+                status?: "all" | "active" | "revoked";
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
             };
             header?: never;
             path?: never;
@@ -5710,6 +5738,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     createManagementQrCode: {
