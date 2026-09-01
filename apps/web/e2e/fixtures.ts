@@ -676,6 +676,7 @@ type LoginFixtureOptions = {
   organizations?: (typeof organization)[];
   loginStatus?: FixtureStatus;
   contextSwitchStatus?: FixtureStatus;
+  platformRole?: "PLATFORM_ADMIN" | null;
 };
 
 export async function mockLoginApi(
@@ -739,6 +740,7 @@ export async function mockLoginApi(
         access_token: "test-access",
         refresh_token: "test-refresh",
         session_id: "test-session",
+        platform_role: options.platformRole ?? null,
         organizations,
       },
       options.loginStatus ?? 200,

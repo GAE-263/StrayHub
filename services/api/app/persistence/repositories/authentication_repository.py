@@ -12,6 +12,9 @@ from services.api.app.persistence.database.scope import (
     set_authentication_user_scope,
     set_organization_scope,
 )
+from services.api.app.persistence.database.scope import (
+    set_platform_scope as set_database_platform_scope,
+)
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     Organization,
@@ -42,6 +45,9 @@ class AuthenticationRepository:
 
     async def set_authentication_context_scope(self, user_id: UUID, organization_id: UUID) -> None:
         await set_authentication_user_organization_scope(self.session, user_id, organization_id)
+
+    async def set_platform_scope(self) -> None:
+        await set_database_platform_scope(self.session)
 
     async def set_organization_scope(self, organization_id: UUID) -> None:
         await set_organization_scope(self.session, organization_id)

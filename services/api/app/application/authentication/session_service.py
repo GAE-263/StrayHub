@@ -73,6 +73,12 @@ class SessionService:
         )
         await self.repository.add(session)
         result = await self._issue_session(user.id, session)
+        result["platform_role"] = user.platform_role
+        if user.platform_role == "PLATFORM_ADMIN":
+            # The role was loaded from the verified server-side identity. Move
+            # into platform RLS scope before listing organizations; auth-user
+            # discovery scope intentionally cannot see tenantless admin data.
+            await self.repository.set_platform_scope()
         result["organizations"] = await self._available_organizations(
             user.id, platform_scope=user.platform_role == "PLATFORM_ADMIN"
         )

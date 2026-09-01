@@ -21,6 +21,7 @@ type LoginResponse = {
   access_token: string;
   refresh_token: string;
   session_id: string;
+  platform_role?: "PLATFORM_ADMIN" | null;
   organizations?: AuthOrganization[];
 };
 
@@ -78,6 +79,11 @@ export default function LoginPage() {
       setOrganizations(availableOrganizations);
       const organization = availableOrganizations[0];
       if (!organization) {
+        if (login.platform_role === "PLATFORM_ADMIN") {
+          storeSession(login);
+          router.replace("/platform-admins");
+          return;
+        }
         throw new Error(
           `${LOGIN_STATE_COPY.noShelterAccess.label}：${LOGIN_STATE_COPY.noShelterAccess.nextStep}`,
         );

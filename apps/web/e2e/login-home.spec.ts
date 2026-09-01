@@ -72,3 +72,13 @@ test("登入後可選擇多收容所 Active Shelter Context", async ({ page }) =
   await page.getByRole("button", { name: "進入管理工作台" }).click();
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("tenantless PLATFORM_ADMIN 可登入平台治理", async ({ page }) => {
+  await mockLoginApi(page, {
+    organizations: [],
+    platformRole: "PLATFORM_ADMIN",
+  });
+  await page.goto("/login");
+  await page.getByRole("button", { name: "登入" }).click();
+  await expect(page).toHaveURL(/\/platform-admins$/);
+});

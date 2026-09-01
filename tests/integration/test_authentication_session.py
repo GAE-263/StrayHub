@@ -24,6 +24,7 @@ class FakeAuthRepository:
         self.sessions = {}
         self.refresh = {}
         self.values = []
+        self.platform_scope_enabled = False
         self.organization = Organization(
             id=uuid4(), name="Shelter", code="SHELTER", status="active"
         )
@@ -47,6 +48,9 @@ class FakeAuthRepository:
 
     async def set_authentication_context_scope(self, _user_id, _organization_id):
         return None
+
+    async def set_platform_scope(self):
+        self.platform_scope_enabled = True
 
     async def add(self, value):
         if getattr(value, "id", None) is None:
@@ -122,6 +126,8 @@ class FakeAuthRepository:
         return None
 
     async def organizations(self, *, active_only=False):
+        if self.user.platform_role == "PLATFORM_ADMIN" and not self.platform_scope_enabled:
+            return []
         return (
             [self.organization] if not active_only or self.organization.status == "active" else []
         )
@@ -288,6 +294,8 @@ async def test_platform_admin_login_lists_active_organizations_without_membershi
 
     result = await service.login(username="platform-admin", password="password")
 
+    assert repository.platform_scope_enabled is True
+    assert result["platform_role"] == "PLATFORM_ADMIN"
     assert result["organizations"] == [
         {
             "id": repository.organization.id,
