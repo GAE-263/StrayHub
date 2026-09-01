@@ -80,8 +80,8 @@ class Settings(BaseSettings):
     line_login_channel_id: str = ""
     line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
-    # 對外可達的 web 網址（例如 demo-line.sh 的 NGROK_URL），用於回覆非 LIFF 的靜態
-    # 假頁面連結（例如領養流程占位介面）。留空則退回純文字占位訊息。
+    # 對外可達的 HTTPS origin（例如 production 網址或保留的 ngrok 網址），用於
+    # LINE 入口與短效簽章的公開領養照片。local webhook 未設定時可由反向代理取得 origin。
     web_public_base_url: str = ""
     # 依角色 Rich Menu 的 richMenuId（由 scripts/sync_line_role_menus.py --apply 產生後填入）。
     # 任一有值時，綁定成功會依角色 link 對應選單；全空則此功能為 no-op。

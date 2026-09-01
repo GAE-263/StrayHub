@@ -47,7 +47,10 @@ from services.api.app.application.line_rich_menu_routing import (
     build_registry,
 )
 from services.api.app.application.line_webhook_session import LineWebhookSessionService
-from services.api.app.application.media_access import MediaAccessService
+from services.api.app.application.media_access import (
+    MediaAccessService,
+    issue_adoption_photo_token,
+)
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.config.settings import get_settings
@@ -147,18 +150,24 @@ def _action(label: str, data: str, *, display_text: str | None = None) -> dict:
     }
 
 
-async def _animal_photo_url(organization_id: UUID, animal) -> str | None:
-    if not animal.current_photo_key:
+def _line_public_base_url(request: Request) -> str | None:
+    configured = get_settings().web_public_base_url.strip().rstrip("/")
+    if configured.startswith("https://"):
+        return configured
+    request_base = str(request.base_url).rstrip("/")
+    return request_base if request_base.startswith("https://") else None
+
+
+async def _animal_photo_url(public_base_url: str | None, organization_id: UUID, animal) -> str | None:
+    if not public_base_url or not animal.current_photo_key:
         return None
-    try:
-        url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
-            media_organization_id=organization_id,
-            object_key=animal.current_photo_key,
-            expires_seconds=300,
-        )
-    except Exception:
-        return None
-    return url if url.startswith("https://") else None
+    token = issue_adoption_photo_token(
+        organization_id=organization_id,
+        animal_id=animal.id,
+        object_key=animal.current_photo_key,
+        ttl_seconds=300,
+    )
+    return f"{public_base_url}/v1/public/adoption/animals/{animal.id}/photo?token={token}"
 
 
 def _volunteer_application_liff_url() -> str:
@@ -560,7 +569,9 @@ def _adoption_cancel_item() -> dict:
     return _postback("取消", urlencode({"action": "cancel", "flow": "adoption"}))
 
 
-async def _adoption_reply_for_state(session, line, event: dict, *, draft) -> None:
+async def _adoption_reply_for_state(
+    session, line, event: dict, *, draft, public_base_url: str | None
+) -> None:
     state = AdoptionDraftState(draft.current_step)
     if state == AdoptionDraftState.SELECTING_ORGANIZATION:
         actions = [
@@ -618,7 +629,9 @@ async def _adoption_reply_for_state(session, line, event: dict, *, draft) -> Non
                 animal_id=str(animal.id),
                 name=animal.name,
                 shelter_number=animal.shelter_number,
-                photo_url=await _animal_photo_url(draft.organization_id, animal),
+                photo_url=await _animal_photo_url(
+                    public_base_url, draft.organization_id, animal
+                ),
                 selectable=True,
                 select_action="select_target_animal",
                 select_label="選這隻",
@@ -637,7 +650,7 @@ async def _adoption_reply_for_state(session, line, event: dict, *, draft) -> Non
         card = build_animal_confirm_card(
             name=animal.name,
             shelter_number=animal.shelter_number,
-            photo_url=await _animal_photo_url(draft.organization_id, animal),
+            photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
             confirm_action=_action(
                 "確認是這隻", urlencode({"action": "confirm_target_animal", "flow": "adoption"})
             ),
@@ -688,7 +701,9 @@ async def _adoption_reply_for_state(session, line, event: dict, *, draft) -> Non
                         animal_id=str(animal.id),
                         name=animal.name,
                         shelter_number=animal.shelter_number,
-                        photo_url=await _animal_photo_url(draft.organization_id, animal),
+                        photo_url=await _animal_photo_url(
+                            public_base_url, draft.organization_id, animal
+                        ),
                         score=result.get("score"),
                         reasons=tuple(result.get("reasons", [])),
                         rank=rank,
@@ -764,7 +779,9 @@ async def _adoption_reply_for_state(session, line, event: dict, *, draft) -> Non
     await _reply(line, event, [card])
 
 
-async def _handle_adoption_start(session, line, event: dict, line_user_id: str) -> None:
+async def _handle_adoption_start(
+    session, line, event: dict, line_user_id: str, *, public_base_url: str | None
+) -> None:
     adopter_user_id = await _get_or_create_adopter_identity(session, line_user_id)
     await set_authentication_user_scope(session, adopter_user_id)
     repository = AdoptionDraftRepository(session, None)
@@ -775,10 +792,14 @@ async def _handle_adoption_start(session, line, event: dict, line_user_id: str) 
         ).create(adopter_user_id=adopter_user_id)
     elif draft.organization_id is not None:
         await set_organization_scope(session, draft.organization_id)
-    await _adoption_reply_for_state(session, line, event, draft=draft)
+    await _adoption_reply_for_state(
+        session, line, event, draft=draft, public_base_url=public_base_url
+    )
 
 
-async def _handle_adoption_postback(session, line, event: dict, *, draft) -> None:
+async def _handle_adoption_postback(
+    session, line, event: dict, *, draft, public_base_url: str | None
+) -> None:
     values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
     action = values.get("action", [""])[0]
     value = values.get("value", [None])[0]
@@ -864,14 +885,18 @@ async def _handle_adoption_postback(session, line, event: dict, *, draft) -> Non
     if updated is not None:
         if updated.organization_id is not None:
             await set_organization_scope(session, updated.organization_id)
-        await _adoption_reply_for_state(session, line, event, draft=updated)
+        await _adoption_reply_for_state(
+            session, line, event, draft=updated, public_base_url=public_base_url
+        )
 
 
 async def _true_async(_value) -> bool:
     return True
 
 
-async def _handle_adoption_text(session, line, event: dict, *, draft, text: str) -> None:
+async def _handle_adoption_text(
+    session, line, event: dict, *, draft, text: str, public_base_url: str | None
+) -> None:
     if draft.organization_id is not None:
         await set_organization_scope(session, draft.organization_id)
     repository = AdoptionDraftRepository(session, draft.organization_id)
@@ -906,7 +931,9 @@ async def _handle_adoption_text(session, line, event: dict, *, draft, text: str)
     )
     updated = await repository.get_active_for_adopter(draft.adopter_user_id)
     if updated is not None:
-        await _adoption_reply_for_state(session, line, event, draft=updated)
+        await _adoption_reply_for_state(
+            session, line, event, draft=updated, public_base_url=public_base_url
+        )
 
 
 async def _animal_confirmation_messages(session, animal, organization_id: UUID) -> list[dict]:
@@ -1393,6 +1420,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
         raise DomainError("invalid_webhook_payload", "LINE Webhook 格式無效", 400) from exc
 
     line = LineMessagingApiAdapter()
+    public_base_url = _line_public_base_url(request)
     results = []
     async with session_factory() as session:
         for event in payload.get("events", []):
@@ -1432,7 +1460,13 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                     )
                     action = postback_values.get("action", [""])[0]
                     if action == "start_adoption_matching":
-                        await _handle_adoption_start(session, line, event, line_user_id)
+                        await _handle_adoption_start(
+                            session,
+                            line,
+                            event,
+                            line_user_id,
+                            public_base_url=public_base_url,
+                        )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
@@ -1446,7 +1480,13 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         and event.get("type") == "postback"
                         and postback_values.get("flow", [""])[0] == "adoption"
                     ):
-                        await _handle_adoption_postback(session, line, event, draft=adoption_draft)
+                        await _handle_adoption_postback(
+                            session,
+                            line,
+                            event,
+                            draft=adoption_draft,
+                            public_base_url=public_base_url,
+                        )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
@@ -1461,6 +1501,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             event,
                             draft=adoption_draft,
                             text=event["message"].get("text", ""),
+                            public_base_url=public_base_url,
                         )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})

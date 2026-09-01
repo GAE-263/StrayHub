@@ -56,7 +56,7 @@ unless the flag is explicitly true.
 | `LINE_CHANNEL_SECRET` | API | Secret | Synthetic/fake local secret | Existing required Secret Manager key `line-channel-secret` |
 | `LINE_CHANNEL_ACCESS_TOKEN` | API, Worker | Secret | Synthetic/fake local token | Existing required Secret Manager key `line-channel-access-token`; Worker receives it only for post-commit menu switching |
 | `LIFF_ID` | API, Web | Non-secret volunteer LIFF ID | Synthetic/fake local ID | Existing required Compose config; non-placeholder |
-| `WEB_PUBLIC_BASE_URL` | API / release preflight | Non-secret public origin | Empty | Required only when enabled; absolute HTTPS, non-loopback, reviewed origin |
+| `WEB_PUBLIC_BASE_URL` | API / release preflight | Non-secret public origin for LINE entry and short-lived adoption-photo URLs | Empty; local proxied webhook may derive its HTTPS origin | Required only when enabled; absolute HTTPS, non-loopback, reviewed origin |
 | `LINE_RICH_MENU_DEFAULT_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
 | `LINE_RICH_MENU_VOLUNTEER_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
 | `LINE_RICH_MENU_STAFF_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |

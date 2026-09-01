@@ -581,6 +581,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SignedUrlResponse" }
+  /v1/public/adoption/animals/{animalId}/photo:
+    get:
+      tags: [Media]
+      operationId: getPublicAdoptionAnimalPhoto
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+        - name: token
+          in: query
+          required: true
+          description: 綁定收容所、動物與目前照片版本的短效 HMAC capability
+          schema: { type: string }
+      responses:
+        "200":
+          description: 已安全清理的目前領養照片
+          headers:
+            Cache-Control:
+              schema: { type: string }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFoundOrForbidden"
   /v1/care-reports:
     post:
       tags: [Care Reports]

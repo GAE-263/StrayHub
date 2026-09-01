@@ -498,6 +498,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/adoption/animals/{animalId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPublicAdoptionAnimalPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/care-reports": {
         parameters: {
             query?: never;
@@ -4661,6 +4677,35 @@ export interface operations {
                     "application/json": components["schemas"]["SignedUrlResponse"];
                 };
             };
+        };
+    };
+    getPublicAdoptionAnimalPhoto: {
+        parameters: {
+            query: {
+                /** @description 綁定收容所、動物與目前照片版本的短效 HMAC capability */
+                token: string;
+            };
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已安全清理的目前領養照片 */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "X-Content-Type-Options"?: "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["NotFoundOrForbidden"];
         };
     };
     createCareReport: {
