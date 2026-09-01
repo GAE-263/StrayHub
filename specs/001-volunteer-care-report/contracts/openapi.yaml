@@ -3675,6 +3675,7 @@ components:
           observations,
           observation_snapshots,
           media_ids,
+          stool_analysis,
         ]
       properties:
         id: { type: string, format: uuid }
@@ -3694,6 +3695,34 @@ components:
         media_ids:
           type: array
           items: { type: string, format: uuid }
+        stool_analysis:
+          anyOf:
+            - { $ref: "#/components/schemas/StoolAnalysis" }
+            - { type: "null" }
+    StoolAnalysis:
+      type: object
+      required:
+        [
+          recognized,
+          score,
+          score_label,
+          has_abnormalities,
+          abnormality_details,
+          assessment,
+          recommendation,
+          review_status,
+          human_reviewed,
+        ]
+      properties:
+        recognized: { type: boolean }
+        score: { type: [integer, "null"], minimum: 1, maximum: 7 }
+        score_label: { type: [string, "null"] }
+        has_abnormalities: { type: boolean }
+        abnormality_details: { type: [string, "null"] }
+        assessment: { type: [string, "null"] }
+        recommendation: { type: [string, "null"] }
+        review_status: { type: string }
+        human_reviewed: { type: boolean }
     ObservationCategoryListResponse:
       type: object
       required: [items]

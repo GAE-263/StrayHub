@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.persistence.models.ai_job import AIProcessingJob
+from services.api.app.persistence.models.ai_observation import AIObservation
 from services.api.app.persistence.models.care_report import CareReport, CareReportMedia, MediaAsset
 from services.api.app.persistence.models.medical_care import (
     CareReminderAction,
@@ -59,6 +61,30 @@ class TimelineRepository:
         for report_id, media in result.all():
             media_by_report.setdefault(report_id, []).append(media)
         return media_by_report
+
+    async def stool_analyses_for_reports(self, report_ids: list[UUID]) -> dict[UUID, dict]:
+        """Return the latest valid stool payload for each already-scoped report."""
+        if not report_ids:
+            return {}
+        result = await self.session.execute(
+            select(AIProcessingJob.target_id, AIObservation)
+            .join(AIProcessingJob, AIProcessingJob.id == AIObservation.job_id)
+            .where(
+                AIObservation.organization_id == self.organization_id,
+                AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.target_type == "care_report",
+                AIProcessingJob.target_id.in_(report_ids),
+            )
+            .order_by(AIObservation.created_at, AIObservation.id)
+        )
+        analyses: dict[UUID, dict] = {}
+        for report_id, observation in result.all():
+            analysis = _stool_analysis_payload(observation)
+            if analysis is not None:
+                # The deterministic ascending query means a later valid retry
+                # replaces an earlier one, including equal-timestamp rows.
+                analyses[report_id] = analysis
+        return analyses
 
     async def medical_records(
         self, *, animal_id: UUID, start_date: date, end_date: date, timezone_name: str
@@ -130,3 +156,44 @@ class TimelineRepository:
         start = datetime.combine(start_date, time.min, tzinfo=zone).astimezone(timezone.utc)
         end = datetime.combine(end_date, time.min, tzinfo=zone).astimezone(timezone.utc)
         return start, end + timedelta(days=1)
+
+
+def _stool_analysis_payload(observation: AIObservation) -> dict | None:
+    payload = observation.raw_ai_output
+    if not isinstance(payload, dict) or not isinstance(payload.get("recognized"), bool):
+        return None
+
+    score = payload.get("score")
+    if score is not None and (
+        not isinstance(score, int) or isinstance(score, bool) or not 1 <= score <= 7
+    ):
+        return None
+    has_abnormalities = payload.get("has_abnormalities", False)
+    if not isinstance(has_abnormalities, bool) or (
+        payload["recognized"] and "has_abnormalities" not in payload
+    ):
+        return None
+    nullable_text_fields = (
+        "score_label",
+        "consistency",
+        "abnormality_details",
+        "assessment",
+        "recommendation",
+    )
+    if any(
+        payload.get(field) is not None and not isinstance(payload.get(field), str)
+        for field in nullable_text_fields
+    ):
+        return None
+
+    return {
+        "recognized": payload["recognized"],
+        "score": score,
+        "score_label": payload.get("score_label") or payload.get("consistency"),
+        "has_abnormalities": has_abnormalities,
+        "abnormality_details": payload.get("abnormality_details"),
+        "assessment": payload.get("assessment"),
+        "recommendation": payload.get("recommendation"),
+        "review_status": observation.status,
+        "human_reviewed": observation.human_review_result is not None,
+    }

@@ -732,6 +732,11 @@ presenter/helper interface，但不得提前大量重寫 webhook或完成 Phase 
 **Dependency**：Phase 4 committed並能產生實際AIObservation。`9e534ebd`只作behavior reference；即使
 patch可乾淨套用，也不得在此前移植。
 
+- [x] P5-T01 — Add tenant-safe, deterministic repository lookup
+- [x] P5-T02 — Define an explicit API response schema and serialization
+- [x] P5-T03 — Update frontend types and mapping
+- [x] P5-T04 — Render stool analysis and human review state
+
 ### P5-T01 — Add tenant-safe, deterministic repository lookup
 
 - Likely file: `TimelineRepository`。
@@ -930,3 +935,14 @@ Phase 5  feat(web): show stool analysis in animal timeline
   and enqueue failures leave the submitted report readable and retryable. Phase 4 adapter, worker,
   tenant-isolation, failure-isolation and existing volunteer-worker gate: 88 passed; Ruff and diff
   checks passed. No Timeline frontend files changed.
+- 2026-09-02 01:38 CST — Phase 5 implementation complete. Added a deterministic
+  `(created_at, id)` stool-observation lookup constrained by both job and observation organization,
+  `care_report` target type and the already tenant-scoped report IDs; malformed/non-stool payloads
+  are ignored and latest valid retries win. Added explicit Pydantic response models with stable
+  null/no-analysis behavior, explicit frontend snake-to-camel mapping, and recognized/unrecognized,
+  abnormality, assessment, recommendation/disclaimer and pending/confirmed/rejected/corrected UI.
+  Focused backend gate: 17 passed; database-backed authorization gate: 6 passed; focused frontend:
+  16 passed; full frontend: 400 passed. Typecheck, production build, Prettier, full Ruff and diff
+  checks passed. Reviewed against `9e534ebd`; only the required timeline behavior was adapted, with
+  dual-tenant filters, deterministic ties and typed contracts added rather than porting old branch
+  architecture.
