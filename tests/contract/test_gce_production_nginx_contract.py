@@ -46,24 +46,24 @@ def test_old_edge_nginx_is_the_single_routing_source_of_truth() -> None:
 
     assert "server_name strayhub.enadv.quest;" in config
     assert "listen 443 ssl;" in config
-    assert "34.81.77.204:8080" in config
-    assert "34.81.77.204:3000" in config
+    assert "10.43.0.2:8080" in config
+    assert "10.43.0.2:3000" in config
 
 
 def test_api_routes_preserve_paths_and_web_owns_the_fallback() -> None:
-    assert "proxy_pass http://34.81.77.204:8080;" in _location("= /healthz")
-    assert "proxy_pass http://34.81.77.204:8080;" in _location("= /v1")
+    assert "proxy_pass http://10.43.0.2:8080;" in _location("= /healthz")
+    assert "proxy_pass http://10.43.0.2:8080;" in _location("= /v1")
     versioned = _location("^~ /v1/")
-    assert "proxy_pass http://34.81.77.204:8080;" in versioned
-    assert "proxy_pass http://34.81.77.204:8080/;" not in versioned
-    assert "proxy_pass http://34.81.77.204:3000;" in _location("/")
+    assert "proxy_pass http://10.43.0.2:8080;" in versioned
+    assert "proxy_pass http://10.43.0.2:8080/;" not in versioned
+    assert "proxy_pass http://10.43.0.2:3000;" in _location("/")
 
 
 def test_proxy_targets_use_only_new_gce_application_upstreams() -> None:
     targets = re.findall(r"proxy_pass\s+([^;]+);", _nginx())
 
     assert targets
-    assert set(targets) == {"http://34.81.77.204:8080", "http://34.81.77.204:3000"}
+    assert set(targets) == {"http://10.43.0.2:8080", "http://10.43.0.2:3000"}
     assert not any(
         forbidden in target
         for target in targets
@@ -104,6 +104,6 @@ def test_line_webhook_and_liff_paths_are_structurally_compatible() -> None:
 
     assert 'APIRouter(prefix="/v1/line"' in webhook
     assert re.search(r'@router\.post\("/webhook"(?:,|\))', webhook)
-    assert "proxy_pass http://34.81.77.204:8080;" in _location("^~ /v1/")
+    assert "proxy_pass http://10.43.0.2:8080;" in _location("^~ /v1/")
     assert liff_page.is_file()
-    assert "proxy_pass http://34.81.77.204:3000;" in _location("/")
+    assert "proxy_pass http://10.43.0.2:3000;" in _location("/")
