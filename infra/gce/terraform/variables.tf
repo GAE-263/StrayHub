@@ -11,13 +11,41 @@ variable "project_id" {
 variable "region" {
   description = "Region for the canonical GCE deployment."
   type        = string
-  default     = "asia-east1"
+  default     = "us-central1"
+
+  validation {
+    condition     = var.region == "us-central1"
+    error_message = "The canonical GCE deployment is pinned to us-central1 beside the nginx edge."
+  }
 }
 
 variable "zone" {
   description = "Zone for the canonical single VM."
   type        = string
+  default     = "us-central1-c"
+
+  validation {
+    condition     = var.zone == "us-central1-c"
+    error_message = "The canonical GCE VM is pinned to us-central1-c beside the nginx edge."
+  }
+}
+
+variable "legacy_region" {
+  description = "Retained rollback region during the us-central1 migration."
+  type        = string
+  default     = "asia-east1"
+}
+
+variable "legacy_zone" {
+  description = "Retained rollback zone during the us-central1 migration."
+  type        = string
   default     = "asia-east1-b"
+}
+
+variable "migration_snapshot_name" {
+  description = "Immutable stopped-disk snapshot used for the cross-region migration."
+  type        = string
+  default     = "strayhub-gce-asia-east1-final-20260901"
 }
 
 variable "environment" {
@@ -43,14 +71,14 @@ variable "machine_type" {
   default     = "e2-medium"
 }
 
-variable "edge_source_cidr" {
-  description = "Only the canonical external nginx edge may reach application upstream ports."
+variable "edge_private_source_cidr" {
+  description = "Private IP of the canonical nginx edge across VPC peering."
   type        = string
-  default     = "34.10.249.63/32"
+  default     = "10.128.0.5/32"
 
   validation {
-    condition     = var.edge_source_cidr == "34.10.249.63/32"
-    error_message = "edge_source_cidr must remain the approved old-edge VM address."
+    condition     = var.edge_private_source_cidr == "10.128.0.5/32"
+    error_message = "edge_private_source_cidr must remain the reviewed nginx private address."
   }
 }
 
@@ -130,6 +158,12 @@ variable "subnet_name" {
 
 variable "subnet_cidr" {
   description = "Private CIDR for the isolated GCE subnet."
+  type        = string
+  default     = "10.43.0.0/24"
+}
+
+variable "legacy_subnet_cidr" {
+  description = "Retained asia-east1 subnet CIDR during rollback validation."
   type        = string
   default     = "10.42.0.0/24"
 }

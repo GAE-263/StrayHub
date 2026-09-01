@@ -43,17 +43,21 @@ def test_location_machine_disk_and_static_ip_contract() -> None:
     compute = (TF_ROOT / "compute.tf").read_text(encoding="utf-8")
 
     for required in (
-        'default     = "asia-east1"',
-        'default     = "asia-east1-b"',
+        'default     = "us-central1"',
+        'default     = "us-central1-c"',
         'default     = "e2-medium"',
         'default     = "pd-balanced"',
         "var.boot_disk_size_gb >= 30",
         'default     = "ubuntu-2404-lts-amd64"',
-        'resource "google_compute_address" "gce"',
-        "nat_ip       = google_compute_address.gce.address",
+        'resource "google_compute_address" "us_central1"',
+        "nat_ip       = google_compute_address.us_central1.address",
+        'resource "google_compute_snapshot" "gce_us_central1_migration"',
+        "storage_locations = [var.region]",
         "auto_delete = true",
     ):
         assert required in variables + compute
+
+    assert compute.count("prevent_destroy = true") >= 3
 
 
 def test_network_ingress_is_edge_restricted_and_iap_only() -> None:
@@ -61,9 +65,10 @@ def test_network_ingress_is_edge_restricted_and_iap_only() -> None:
     variables = (TF_ROOT / "variables.tf").read_text(encoding="utf-8")
 
     assert "auto_create_subnetworks = false" in network
-    assert 'resource "google_compute_firewall" "edge_upstreams"' in network
-    assert "source_ranges           = [var.edge_source_cidr]" in network
-    assert 'default     = "34.10.249.63/32"' in variables
+    assert 'resource "google_compute_firewall" "edge_private_upstreams"' in network
+    assert 'resource "google_compute_firewall" "edge_upstreams"' not in network
+    assert "edge_source_cidr" not in variables
+    assert 'default     = "10.128.0.5/32"' in variables
     assert "tostring(var.web_upstream_port)" in network
     assert "tostring(var.api_upstream_port)" in network
     assert "source_ranges           = [var.iap_ssh_source_range]" in network
@@ -71,6 +76,16 @@ def test_network_ingress_is_edge_restricted_and_iap_only() -> None:
     assert '"0.0.0.0/0"' not in network
     for forbidden_port in ("80", "443", "3001", "8000", "8001", "5432", "9000", "9001"):
         assert f'"{forbidden_port}"' not in network
+
+
+def test_nginx_and_application_vpcs_are_peered_without_custom_route_exchange() -> None:
+    peering = (TF_ROOT / "network-peering.tf").read_text(encoding="utf-8")
+
+    assert 'data "google_compute_network" "default"' in peering
+    assert 'resource "google_compute_network_peering" "default_to_strayhub"' in peering
+    assert 'resource "google_compute_network_peering" "strayhub_to_default"' in peering
+    assert peering.count("import_custom_routes = false") == 2
+    assert peering.count("export_custom_routes = false") == 2
 
 
 def test_dedicated_adc_identity_has_no_key_or_broad_iam() -> None:

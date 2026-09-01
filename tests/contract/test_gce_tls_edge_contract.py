@@ -145,7 +145,7 @@ def test_dns_firewall_line_and_certificate_policy_are_documented() -> None:
         "Phase E4",
     ):
         assert phrase in normalized
-    assert "34.81.77.204" in normalized
+    assert "10.43.0.2" in normalized
     assert "E4 neither issues nor replaces the certificate" in normalized
 
 

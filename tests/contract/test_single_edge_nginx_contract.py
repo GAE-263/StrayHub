@@ -26,10 +26,10 @@ def test_edge_routes_only_to_source_restricted_web_and_api_ports() -> None:
     network = NETWORK.read_text(encoding="utf-8")
     variables = VARIABLES.read_text(encoding="utf-8")
 
-    assert "proxy_pass http://34.81.77.204:3000;" in edge
-    assert "proxy_pass http://34.81.77.204:8080;" in edge
-    assert "source_ranges           = [var.edge_source_cidr]" in network
-    assert 'default     = "34.10.249.63/32"' in variables
+    assert "proxy_pass http://10.43.0.2:3000;" in edge
+    assert "proxy_pass http://10.43.0.2:8080;" in edge
+    assert "source_ranges = [var.edge_private_source_cidr]" in network
+    assert 'default     = "10.128.0.5/32"' in variables
     assert '"0.0.0.0/0"' not in network
     for forbidden in ("5432", "9000", "9001"):
         assert f'"{forbidden}"' not in network

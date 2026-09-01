@@ -6,16 +6,16 @@ Status: Phase E4 single-edge live cutover accepted
 
 The canonical public edge is the existing nginx VM at `34.10.249.63`. DNS and the valid Let's
 Encrypt certificate for `strayhub.enadv.quest` remain on that host. The application VM at
-`34.81.77.204` no longer runs nginx:
+`10.43.0.2` in `us-central1-c` does not run nginx:
 
 ```text
 Internet -> strayhub.enadv.quest -> old VM nginx 34.10.249.63 (TLS + routing)
-                                      |-> 34.81.77.204:8080 (API)
-                                      `-> 34.81.77.204:3000 (Web)
+                                      |-> VPC peering -> 10.43.0.2:8080 (API)
+                                      `-> VPC peering -> 10.43.0.2:3000 (Web)
 ```
 
 The old edge alone accepts public TCP 80/443. On the new GCE VM, host ports 3000 (Web) and 8080
-(API) accept ingress only from `34.10.249.63/32`. PostgreSQL 5432 and MinIO 9000/9001 remain
+(API) accept ingress only from nginx private IP `10.128.0.5/32`. PostgreSQL 5432 and MinIO 9000/9001 remain
 unpublished. SSH remains IAP-only from `35.235.240.0/20`; broad `0.0.0.0/0` SSH is forbidden.
 
 ## DNS and static IP
@@ -24,8 +24,12 @@ The approved canonical hostname is `strayhub.enadv.quest`, and its existing DNS 
 to point to the old edge at `34.10.249.63`. E4 makes no DNS mutation. `www` remains unsupported and
 no AAAA record is added.
 
-The new VM keeps its reserved external IP `34.81.77.204` solely as the source-restricted application
-upstream and IAP administration target. It is not the canonical DNS/TLS endpoint.
+The canonical VM keeps reserved external IP `34.45.245.15` for rollback and administration, but it
+is not an nginx upstream or the canonical DNS/TLS endpoint. nginx uses the VM's private
+`10.43.0.2` address across bidirectional VPC peering.
+
+The stopped asia rollback VM retains `34.81.77.204` during migration acceptance and is not a live
+nginx upstream after the us-central1 cutover.
 
 The eventual public URL shapes are:
 
@@ -86,9 +90,12 @@ The running container passed `nginx -t`; Compose published only nginx's verifica
 The tracked old-edge config enables conservative `X-Content-Type-Options: nosniff` and
 `Referrer-Policy: strict-origin-when-cross-origin`. HSTS and frame policy remain deferred pending
 explicit LIFF embedded-browser compatibility acceptance. nginx supplies forwarded
-headers. Firewall ingress constrains the application upstreams to `34.10.249.63/32`; global
+headers. Firewall ingress constrains the application upstreams to `10.128.0.5/32`; global
 client-IP trust must not be weakened.
 
 The live E4 acceptance passed edge reload, public Web/API/LIFF routes, structural LINE webhook
 routing, trusted existing TLS, edge-only upstream firewall behavior, and one application-VM reboot.
-Deferred: deployment CI replacement, Terraform state migration, and legacy deletion.
+On 2026-09-01 the edge was safely reloaded first to the us-central1 VM and then to its private
+`10.43.0.2` upstream after peering connectivity checks; public health, Web, organization API, and
+structural LINE webhook checks passed.
+Legacy asia deletion remains deferred.

@@ -1,26 +1,41 @@
 # Canonical GCE Provisioning Contract
 
-Status: Phase E1 accepted after controlled bootstrap-idempotency replacement
+Status: Phase E1 accepted; us-central1 migration accepted on 2026-09-01
 
 ## Approved target and ownership
 
-The reviewed target is project `canvas-primacy-502703-k1`, region `asia-east1`, zone
-`asia-east1-b`, operated by the explicitly confirmed account. `infra/gce/terraform/` is the only
+The original reviewed target was project `canvas-primacy-502703-k1`, region `asia-east1`, zone
+`asia-east1-b`, operated by the explicitly confirmed account. The current canonical target is
+`us-central1` / `us-central1-c`, colocated with the retained nginx edge. `infra/gce/terraform/` is the only
 source of truth for the canonical GCE host foundation:
 
-- isolated custom VPC `strayhub-gce-vpc` and subnet `strayhub-gce-subnet`;
-- old-edge-source-restricted Web/API and IAP-only SSH firewall rules;
+- isolated custom VPC `strayhub-gce-vpc` and regional subnets named `strayhub-gce-subnet`;
+- private nginx-source-restricted Web/API and IAP-only SSH firewall rules;
 - regional reserved IPv4 `strayhub-gce-ip`;
 - dedicated metadata identity `strayhub-gce-sa`;
-- single VM `strayhub-gce` and its auto-delete boot disk.
+- canonical VM `strayhub-gce` in `us-central1-c` plus the stopped asia rollback VM.
+
+The region migration is additive: a stopped-disk snapshot is stored in `us-central1`, then a new
+boot disk and VM are created from it. The asia VM, IP, and subnet are protected with
+`prevent_destroy`; the reviewed first plan was `4 to add, 0 to change, 0 to destroy`. Public nginx
+continued using `34.81.77.204` until direct API, Web, PostgreSQL, MinIO storage, LINE webhook, and
+backup verification passed against the new static IP. nginx now routes privately to `10.43.0.2`
+through bidirectional peering between `default` and `strayhub-gce-vpc`.
 
 Retired legacy GCP-demo source was never instantiated and was removed in Phase F6. This subtree
 does not own or import Cloud Run, Cloud SQL, existing VMs, Artifact Registry, Secret Manager, KMS,
 GCS, DNS, certificates, managed-service IAM, application containers, or deployment CI.
 
-The reviewed initial plan applied successfully with seven additions, zero changes, and zero
-destroys. The live VM is `RUNNING` at reserved IPv4 `34.81.77.204`; DNS remains unchanged. Terraform
-state contains only the seven E1 resources plus the Ubuntu image data source.
+The historical initial plan applied successfully with seven additions, zero changes, and zero
+destroys. The canonical VM is `RUNNING` at reserved IPv4 `34.45.245.15`; DNS remains unchanged and
+still points to nginx `34.10.249.63`. The stopped rollback VM retains `34.81.77.204`.
+
+The migration apply created four resources with zero changes and zero destroys: a `us-central1`
+subnet and address, an immutable stopped-disk snapshot, and the `us-central1-c` VM. The post-apply
+Terraform plan reported no changes. Direct runtime checks passed for Web, API, Worker, PostgreSQL,
+MinIO, public organization routing, and the structural LINE webhook path. The nginx VM reached both
+new upstream ports before its validated reload; public HTTPS health, Web, organizations, and LINE
+webhook routing passed afterward.
 
 ## Read-only live inventory and network decision
 
@@ -53,7 +68,7 @@ therefore mandatory before production data is entrusted to it. The verified OS f
 The regional external IPv4 is reserved separately and attached to the VM. DNS and LINE endpoints do
 not change in E1. Firewall rules target only the dedicated service account:
 
-- `34.10.249.63/32` to TCP 3000 and 8080 for the old edge's Web/API upstream access;
+- `10.128.0.5/32` to TCP 3000 and 8080 for nginx private upstream access across VPC peering;
 - Google IAP TCP forwarding `35.235.240.0/20` to TCP 22.
 
 There is no public 22, 80, or 443 rule and no ingress for PostgreSQL or MinIO. Web/API ports are not
@@ -62,8 +77,8 @@ OS Login is enabled and project SSH keys are blocked. An administrator still nee
 reviewed OS Login key and IAP permissions; Terraform does not grant project IAM or manage profile
 keys.
 
-Phase E4 live acceptance replaced the original public 80/443 rule with only
-`34.10.249.63/32` to TCP 3000/8080. The old edge is the sole public TLS endpoint. Docker DNAT on the
+The private-upstream cutover removed the external-IP upstream rule and permits only
+`10.128.0.5/32` to TCP 3000/8080. The old edge is the sole public TLS endpoint. Docker DNAT on the
 application VM requires the repo-owned `/etc/sysctl.d/99-strayhub-network.conf`, containing only
 `net.ipv4.ip_forward=1`; it persisted across the accepted reboot without custom firewall/NAT rules.
 
@@ -120,8 +135,8 @@ Run the read-only collision and identity preflight first:
 infra/gce/scripts/gce-terraform-preflight.sh \
   --account b97502027@gmail.com \
   --project canvas-primacy-502703-k1 \
-  --region asia-east1 \
-  --zone asia-east1-b
+  --region us-central1 \
+  --zone us-central1-c
 ```
 
 The bootstrap plan uses ignored local state because no remote backend is approved:
