@@ -103,5 +103,33 @@ async def test_reclaim_stale_job_returns_it_to_retry_queue(monkeypatch) -> None:
     assert job.claim_token is None
 
 
+@pytest.mark.asyncio
+async def test_reclaim_stale_job_stops_at_retry_limit(monkeypatch) -> None:
+    monkeypatch.setattr(module, "set_organization_scope", _noop_scope)
+    organization_id = uuid4()
+    job = SimpleNamespace(
+        organization_id=organization_id,
+        status="running",
+        claimed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        retry_count=2,
+        available_at=None,
+        completed_at=None,
+        failure_reason=None,
+        claim_token="token-a",
+        claimed_by="worker-a",
+    )
+    session = _Session(_Result(values=[job]))
+
+    await WorkerJobRepository(session, organization_id, worker_id="worker-b").reclaim_stale(
+        timeout_seconds=60,
+        max_retries=3,
+    )
+
+    assert job.status == "failed"
+    assert job.retry_count == 3
+    assert job.failure_reason == "stale_claim_exhausted"
+    assert job.completed_at is not None
+
+
 async def _noop_scope(_session, _organization_id):
     return None

@@ -663,6 +663,12 @@ presenter/helper interface，但不得提前大量重寫 webhook或完成 Phase 
 
 **Dependency**：Phase 3 committed且stool media可正確保存。**Scope**：async AI pipeline；不做Timeline UI。
 
+- [x] P4-T01 — Port AIJobRunner into the current worker architecture
+- [x] P4-T02 — Implement claim, stale reclaim, bounded batch and retry/backoff
+- [x] P4-T03 — Add stool provider adapter and configuration
+- [x] P4-T04 — Filter only stool media and preserve raw output
+- [x] P4-T05 — Prove failure isolation from CareReport submission
+
 ### P4-T01 — Port AIJobRunner into the current worker architecture
 
 - Likely files: worker handler/runner、job repository、`services/worker/worker.py`。
@@ -915,3 +921,12 @@ Phase 5  feat(web): show stool analysis in animal timeline
   the three LINE-runtime cases used the real unavailable SDK because the current Next dev setup did
   not apply its pre-existing `LIFF_HANDOFF_E2E_MOCK` alias (the changed command contract is covered
   by passing Vitest tests); no failing product assertion was hidden or rewritten.
+- 2026-09-02 01:30 CST — Phase 4 implementation complete. Preserved the volunteer-access worker
+  loop and added an independent tenant-by-tenant AI loop with atomic claims, stale reclaim, bounded
+  batches, capped exponential retry, terminal-error classification and cancellation propagation.
+  Added the optional environment-only stool provider, raw/formal response envelope, and strict
+  current-org/current-report/`subject=stool` filtering before object download. Reports without
+  eligible stool media record a safe skip without a provider call. Provider, observation-persistence
+  and enqueue failures leave the submitted report readable and retryable. Phase 4 adapter, worker,
+  tenant-isolation, failure-isolation and existing volunteer-worker gate: 88 passed; Ruff and diff
+  checks passed. No Timeline frontend files changed.
