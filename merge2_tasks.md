@@ -791,6 +791,11 @@ patch可乾淨套用，也不得在此前移植。
 
 **Dependency**：Phase 1–5均已有獨立commit。這是完整regression/E2E gate，不預設修改code。
 
+- [x] P6-T01 — End-to-end volunteer walk-report acceptance
+- [x] P6-T02 — Questionnaire and draft lifecycle acceptance
+- [x] P6-T03 — Data, AI and Timeline acceptance
+- [x] P6-T04 — Security and regression acceptance
+
 ### P6-T01 — End-to-end volunteer walk-report acceptance
 
 - 驗證 Main → 志工服務 → 散步回報 → 找動物。
@@ -870,36 +875,36 @@ Phase 5  feat(web): show stool analysis in animal timeline
 
 ## 14. Final Acceptance Checklist
 
-- [ ] Integration branch確實從exact `5b9831f`建立，baseline evidence已記錄。
-- [ ] Alembic保持single head；walk-report schema revision接在implementation當時的current head。
-- [ ] 六題順序、codes與繁中文字完全符合canonical wording，舊13題不再是required workflow。
-- [ ] Stool-photo在Q4後；normal/soft/abnormal詢問，none/UNOBSERVED跳過，照片可略過。
-- [ ] UNOBSERVED不是CRM vocabulary option，也不計入option usage。
-- [ ] note與story分離；required-note無錯誤skip。
-- [ ] LINE submissions保存answer snapshots與真實option usage。
-- [ ] 同animal同日可提交多筆report，Today List已回報animal仍可再次回報。
-- [ ] QR/search/Today List都是正式入口並共用Animal Confirmation。
-- [ ] Search支援name/shelter-number partial match、多候選選擇與安全pagination。
-- [ ] Today List分尚未/已回報，顯示count/latest local time。
-- [ ] QR只作locator，confirm前不建立或改寫draft。
-- [ ] Same animal resume；different animal warning＋explicit confirm；switch後無media/note/story/context殘留。
-- [ ] Selection與submission都使用current volunteer authorization，不以DailyScope作第二allow-list。
-- [ ] Search、QR、today、draft、report、media、AI、timeline cross-org tests通過。
-- [ ] 「開始散步回報」在LIFF、manual copy、webhook matcher與tests完全一致且優先於自由文字。
-- [ ] LINE QR/stool/generic image依server-side state正確分流。
-- [ ] Walk-report in-chat UI以Emily final Flex/block-sticker設計為主，find/question/media/note/story/review/success/error/empty cards均有presenter/readability coverage。
-- [ ] `MediaAsset.subject`只由server-side state指派；`stool`語意固定，`portrait`僅在保留既有行為時使用，unknown/null media維持相容。
-- [ ] Adoption與walk-report postback/text/image雙向隔離，signature/idempotency無regression。
-- [ ] Rich Menu保留current IA；Volunteer Check-in完全未修改。
-- [ ] Current volunteer worker loop保留，AI runner具claim/reclaim/bounded retry/backoff。
-- [ ] 只有subject=stool且同organization的media會送provider；AI failure不阻擋report。
-- [ ] Timeline query有雙重organization filter與deterministic latest ordering。
-- [ ] Timeline API schema、frontend mapping/render與human review states有完整tests。
-- [ ] `9e534ebd`只在Phase 5 selective port，未帶回舊branch大範圍差異。
-- [ ] QR management、adoption、role menu、frontend build與backend quality regression gates通過。
-- [ ] `Separate workstream — QR→LINE CareReportHandoff`仍明確deferred且未偷偷接線。
-- [ ] Phase 1–5各自有dedicated local commit；Phase 6無diff時沒有empty commit。
-- [ ] 沒有unrelated changes、沒有push，最終`git diff --check`通過。
+- [x] Integration branch確實從exact `5b9831f`建立，baseline evidence已記錄。
+- [x] Alembic保持single head；walk-report schema revision接在implementation當時的current head。
+- [x] 六題順序、codes與繁中文字完全符合canonical wording，舊13題不再是required workflow。
+- [x] Stool-photo在Q4後；normal/soft/abnormal詢問，none/UNOBSERVED跳過，照片可略過。
+- [x] UNOBSERVED不是CRM vocabulary option，也不計入option usage。
+- [x] note與story分離；required-note無錯誤skip。
+- [x] LINE submissions保存answer snapshots與真實option usage。
+- [x] 同animal同日可提交多筆report，Today List已回報animal仍可再次回報。
+- [x] QR/search/Today List都是正式入口並共用Animal Confirmation。
+- [x] Search支援name/shelter-number partial match、多候選選擇與安全pagination。
+- [x] Today List分尚未/已回報，顯示count/latest local time。
+- [x] QR只作locator，confirm前不建立或改寫draft。
+- [x] Same animal resume；different animal warning＋explicit confirm；switch後無media/note/story/context殘留。
+- [x] Selection與submission都使用current volunteer authorization，不以DailyScope作第二allow-list。
+- [x] Search、QR、today、draft、report、media、AI、timeline cross-org tests通過。
+- [x] 「開始散步回報」在LIFF、manual copy、webhook matcher與tests完全一致且優先於自由文字。
+- [x] LINE QR/stool/generic image依server-side state正確分流。
+- [x] Walk-report in-chat UI以Emily final Flex/block-sticker設計為主，find/question/media/note/story/review/success/error/empty cards均有presenter/readability coverage。
+- [x] `MediaAsset.subject`只由server-side state指派；`stool`語意固定，`portrait`僅在保留既有行為時使用，unknown/null media維持相容。
+- [x] Adoption與walk-report postback/text/image雙向隔離，signature/idempotency無regression。
+- [x] Rich Menu保留current IA；Volunteer Check-in完全未修改。
+- [x] Current volunteer worker loop保留，AI runner具claim/reclaim/bounded retry/backoff。
+- [x] 只有subject=stool且同organization的media會送provider；AI failure不阻擋report。
+- [x] Timeline query有雙重organization filter與deterministic latest ordering。
+- [x] Timeline API schema、frontend mapping/render與human review states有完整tests。
+- [x] `9e534ebd`只在Phase 5 selective port，未帶回舊branch大範圍差異。
+- [x] QR management、adoption、role menu、frontend build與backend quality regression gates通過。
+- [x] `Separate workstream — QR→LINE CareReportHandoff`仍明確deferred且未偷偷接線。
+- [x] Phase 1–5各自有dedicated local commit；Phase 6無diff時沒有empty commit。
+- [x] 沒有unrelated changes、沒有push，最終`git diff --check`通過。
 
 ## Unattended Execution Log
 
@@ -946,3 +951,15 @@ Phase 5  feat(web): show stool analysis in animal timeline
   checks passed. Reviewed against `9e534ebd`; only the required timeline behavior was adapted, with
   dual-tenant filters, deterministic ties and typed contracts added rather than porting old branch
   architecture.
+- 2026-09-02 01:42 CST — Phase 6 integration acceptance complete. Alembic reports the single head
+  and current revision `0039_walk_report_story_media`. The full relevant backend, security,
+  isolation, contract and Python E2E suite passed 244/244; the full frontend suite passed 400/400,
+  with typecheck, production build, Prettier, full Ruff and diff checks passing. Focused Playwright
+  passed 16/19 across QR confirmation, cross-shelter denial/switch, responsive/accessibility,
+  management and timeline behavior. The remaining three LIFF runtime-mock cases reproduce the
+  Phase 3 pre-existing Next 15 dev alias issue: with and without `LIFF_HANDOFF_E2E_MOCK=1`, the
+  repository mock is not substituted and the real unavailable SDK leaves send count at zero. This
+  is non-blocking because the unavailable fallback itself passes and the exact `開始散步回報`
+  payload is covered by passing Vitest; no assertion or production code was weakened. Volunteer
+  Check-in remains untouched and no production caller was added for deferred
+  `consume_pending_handoff`.
