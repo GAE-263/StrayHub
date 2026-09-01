@@ -372,13 +372,22 @@ export async function mockManagementApi(
         items: [
           {
             id: "qr-a",
+            organization_id: "org-a",
             animal_id: "animal-a",
+            animal_name: "小森",
+            shelter_number: "A-001",
+            animal_status: "active",
+            area_name: "一區",
             status: "active",
             revoked: false,
+            created_at: "2026-08-14T00:00:00Z",
             deep_link: "https://example.test/animal/animal-a",
             token: null,
           },
         ],
+        page: 1,
+        page_size: 20,
+        total: 1,
       });
       return;
     }

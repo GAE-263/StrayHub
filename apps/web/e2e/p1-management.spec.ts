@@ -47,7 +47,11 @@ test.describe("P1 management routes", () => {
 
     await page.goto("/settings/qr-codes");
     await expect(page.getByText("目前沒有照護 QR 紀錄。")).toHaveCount(0);
-    await expect(page.getByText("active", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "小森" })).toHaveAttribute(
+      "href",
+      "/animals/animal-a",
+    );
+    await expect(page.getByText("QR 使用中", { exact: true })).toBeVisible();
 
     await page.goto("/settings/reportable-scope");
     await expect(page.getByText("Animal animal-a")).toBeVisible();

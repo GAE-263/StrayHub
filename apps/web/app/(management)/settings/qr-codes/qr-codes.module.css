@@ -1,0 +1,157 @@
+.scopeNote {
+  margin-top: 8px;
+}
+.listHeader {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+}
+.listHeader p {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+.recordList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.record {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 0.8fr) minmax(
+      280px,
+      auto
+    );
+  min-width: 0;
+  padding: 20px 0 20px 18px;
+  position: relative;
+}
+.record::before {
+  background: var(--accent);
+  border-radius: 999px;
+  bottom: 20px;
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 20px;
+  width: 4px;
+}
+.recordRevoked::before {
+  background: var(--muted);
+}
+.record:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.record:last-child::before {
+  bottom: 0;
+}
+.identity,
+.metadata,
+.actions {
+  min-width: 0;
+}
+.titleRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.titleRow h3 {
+  font-size: 1.075rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.animalLink {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 4px;
+}
+.animalLink:hover {
+  color: var(--primary);
+  text-decoration-color: currentColor;
+}
+.qrBadgeRevoked {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+.location {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  gap: 6px;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+.metadata {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+.metadata div {
+  min-width: 0;
+}
+.metadata dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+}
+.metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.animalInactiveBadge {
+  background: color-mix(in srgb, var(--warning) 13%, var(--surface));
+  color: var(--warning);
+}
+.actions {
+  justify-content: flex-end;
+}
+.legacyNote {
+  color: var(--warning);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.pageNotice {
+  margin: 16px 0 0;
+}
+@media (max-width: 1020px) {
+  .record {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  }
+  .actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 640px) {
+  .record {
+    align-items: start;
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr);
+    padding-left: 14px;
+  }
+  .record::before {
+    width: 3px;
+  }
+  .metadata {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .actions {
+    display: grid;
+    grid-column: auto;
+    width: 100%;
+  }
+  .actions :global(.ui-button) {
+    width: 100%;
+  }
+}
