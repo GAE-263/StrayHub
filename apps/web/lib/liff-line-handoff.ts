@@ -1,6 +1,6 @@
 import liff from "@line/liff";
 
-export const CARE_REPORT_TRIGGER_TEXT = "開始照護回報";
+export const CARE_REPORT_TRIGGER_TEXT = "開始散步回報";
 
 export type LineTriggerResult = {
   status: "sent" | "unavailable" | "failed";

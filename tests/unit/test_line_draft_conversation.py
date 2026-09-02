@@ -37,6 +37,7 @@ def draft(*, user_id, organization_id):
         current_step=DraftState.CONFIRMING_ANIMAL.value,
         answers={},
         note=None,
+        story=None,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         last_interaction_at=None,
         animal_id=uuid4(),
@@ -58,8 +59,8 @@ async def test_conversation_uses_draft_state_not_postback_step() -> None:
         event_id="event-1",
     )
 
-    assert result.state == DraftState.ANSWERING_COMPLETION
-    assert repository.draft.current_step == DraftState.ANSWERING_COMPLETION.value
+    assert result.state == DraftState.ANSWERING_WALK_COMPLETION
+    assert repository.draft.current_step == DraftState.ANSWERING_WALK_COMPLETION.value
 
 
 @pytest.mark.asyncio

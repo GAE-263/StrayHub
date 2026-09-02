@@ -5,7 +5,7 @@ from uuid import UUID
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
-from services.api.app.persistence.models.identity import SessionRecord
+from services.api.app.persistence.models.identity import SessionRecord, WebhookSession
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
@@ -49,10 +49,44 @@ class ActiveShelterContextService:
             if membership is None or organization is None or organization.status != "active":
                 raise DomainError("organization_access_denied", "無法存取此收容所資料", 404)
         previous_organization_id = session.active_organization_id
+        line_binding = await self.repository.get_line_binding_for_user(user.id)
+        rotate_webhook_context = (
+            line_binding is not None and previous_organization_id != organization_id
+        )
+        if rotate_webhook_context:
+            locked_binding = await self.repository.lock_line_binding(line_binding.line_user_id)
+            if locked_binding is None or locked_binding.user_id != user.id:
+                raise DomainError("line_binding_invalid", "LINE 身分綁定無效", 403)
+
+            # A line-bound user has one trusted webhook context. Revoke every
+            # session visible through that user's current active memberships,
+            # including an old context during initial None -> B selection.
+            await self.repository.set_authentication_user_scope(user.id)
+            # Auth-user RLS already exposes only this user's active membership
+            # rows. Do not apply the effective volunteer predicate here: its
+            # grant subquery is tenant-scoped and would hide every membership
+            # while no exact organization scope is selected.
+            memberships = await self.repository.memberships(user.id)
+            webhook_organizations = {item.organization_id for item in memberships}
+            webhook_organizations.add(organization_id)
+            if previous_organization_id is not None:
+                webhook_organizations.add(previous_organization_id)
+            for webhook_organization_id in webhook_organizations:
+                await self.repository.set_organization_scope(webhook_organization_id)
+                await self.repository.revoke_active_webhook_sessions(user.id)
         # Scope, session and audit belong to the caller's single transaction.
         # Never flush the target audit under the old organization scope.
         await self.repository.set_organization_scope(organization_id)
         session.active_organization_id = organization_id
+        if rotate_webhook_context:
+            await self.repository.add(
+                WebhookSession(
+                    user_id=user.id,
+                    organization_id=organization_id,
+                    status="active",
+                    expires_at=session.expires_at,
+                )
+            )
         if self.audit is not None:
             await self.audit.record(
                 organization_id=organization_id,

@@ -35,7 +35,7 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       },
       {
         href: "/settings/qr-codes",
-        label: "QR 綁定",
+        label: "照護 QR 管理",
         roles: ["PLATFORM_ADMIN", "SHELTER_ADMIN"],
         icon: "access",
       },

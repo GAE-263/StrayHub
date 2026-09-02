@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from scripts.sync_line_role_menus import (
     ENV_KEYS,
     load_role_definition,
+    resolve_role_image,
     to_line_rich_menu,
     write_env,
 )
@@ -72,3 +74,28 @@ def test_public_menu_has_only_volunteer_and_formal_adoption_entries() -> None:
     assert sum(area["bounds"]["width"] for area in rich_menu["areas"]) == 2500
     assert rich_menu["areas"][0]["bounds"]["x"] == 0
     assert rich_menu["areas"][1]["bounds"]["x"] == 1250
+
+
+def test_role_image_resolves_png_and_jpeg_content_types(tmp_path: Path) -> None:
+    (tmp_path / "default.png").write_bytes(b"png")
+    (tmp_path / "volunteer.jpeg").write_bytes(b"jpeg")
+
+    assert resolve_role_image(tmp_path, "default") == (
+        tmp_path / "default.png",
+        "image/png",
+    )
+    assert resolve_role_image(tmp_path, "volunteer") == (
+        tmp_path / "volunteer.jpeg",
+        "image/jpeg",
+    )
+
+
+def test_role_image_rejects_empty_or_ambiguous_files(tmp_path: Path) -> None:
+    (tmp_path / "default.png").write_bytes(b"")
+    with pytest.raises(ValueError, match="為空"):
+        resolve_role_image(tmp_path, "default")
+
+    (tmp_path / "default.png").write_bytes(b"png")
+    (tmp_path / "default.jpg").write_bytes(b"jpeg")
+    with pytest.raises(ValueError, match="重複"):
+        resolve_role_image(tmp_path, "default")

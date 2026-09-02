@@ -27,6 +27,7 @@ class CareReportDraft(IdentityMixin, AuditMixin, Base):
     modification_summary: Mapped[dict] = mapped_column(JSON, default=dict)
     reconfirmation_keys: Mapped[list] = mapped_column(JSON, default=list)
     note: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    story: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     last_interaction_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

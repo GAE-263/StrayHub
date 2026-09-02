@@ -5,7 +5,7 @@ const p1Routes = [
   ["/ai-review", "AI 人工覆核"],
   ["/shelters", "權限管理"],
   ["/settings/observation-options", "觀察詞彙"],
-  ["/settings/qr-codes", "QR 綁定"],
+  ["/settings/qr-codes", "照護 QR 管理"],
   ["/settings/reportable-scope", "可回報範圍"],
   ["/settings/audit", "稽核紀錄查詢"],
 ] as const;
@@ -46,8 +46,12 @@ test.describe("P1 management routes", () => {
     ).toBeVisible();
 
     await page.goto("/settings/qr-codes");
-    await expect(page.getByText("目前沒有 QR 綁定。")).toHaveCount(0);
-    await expect(page.getByText("active", { exact: true })).toBeVisible();
+    await expect(page.getByText("目前沒有照護 QR 紀錄。")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "小森" })).toHaveAttribute(
+      "href",
+      "/animals/animal-a",
+    );
+    await expect(page.getByText("QR 使用中", { exact: true })).toBeVisible();
 
     await page.goto("/settings/reportable-scope");
     await expect(page.getByText("Animal animal-a")).toBeVisible();

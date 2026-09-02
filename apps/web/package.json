@@ -10,6 +10,7 @@
     "test:mobile": "vitest run --environment jsdom",
     "test:a11y": "vitest run --environment jsdom",
     "test:e2e": "playwright test",
+    "test:e2e:handoff": "playwright test --config=playwright.handoff.config.ts",
     "test:e2e:list": "playwright test --list",
     "test:e2e:critical": "playwright test e2e/login-home.spec.ts e2e/management-context-switch.spec.ts e2e/volunteer-core.spec.ts e2e/care-agenda.spec.ts",
     "test:e2e:tooling": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test e2e/tooling-smoke.spec.ts",

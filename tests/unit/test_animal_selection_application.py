@@ -5,9 +5,18 @@ import pytest
 from services.api.app.api.errors import DomainError
 from services.api.app.application.animal_selection import (
     AnimalSelectionService,
+    FindAnimalAction,
     issue_animal_confirmation_token,
     verify_animal_confirmation_token,
 )
+
+
+def test_find_animal_hub_has_exact_delivery_neutral_actions() -> None:
+    assert list(FindAnimalAction) == [
+        FindAnimalAction.QR,
+        FindAnimalAction.SEARCH,
+        FindAnimalAction.TODAY,
+    ]
 
 
 def test_animal_confirmation_token_is_bound_to_actor_session_and_animal() -> None:
@@ -151,3 +160,49 @@ async def test_qr_from_other_organization_fails_before_animal_lookup() -> None:
         )
 
     assert error.value.code == "animal_not_found"
+
+
+@pytest.mark.asyncio
+async def test_search_page_preserves_query_and_has_more_metadata() -> None:
+    organization_id = uuid4()
+    animal = SimpleNamespace(id=uuid4(), organization_id=organization_id, status="active")
+
+    class Animals:
+        async def search_with_area_page(self, query, *, offset, limit):
+            assert (query, offset, limit) == ("  A-0  ", 2, 2)
+            return [(animal, None)], 5
+
+    class Authorization:
+        async def authorize(self, **_kwargs):
+            return SimpleNamespace()
+
+    page = await AnimalSelectionService(Animals(), object(), Authorization()).search_page(
+        user_id=uuid4(),
+        organization_id=organization_id,
+        membership_id=uuid4(),
+        role="VOLUNTEER",
+        query="  A-0  ",
+        page=2,
+        page_size=2,
+    )
+    assert page.total == 5
+    assert page.has_more is True
+    assert page.items[0].animal is animal
+
+
+def test_three_entry_points_share_confirmation_projection() -> None:
+    organization_id = uuid4()
+    animal = SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        name="小黑",
+        shelter_number="A-01",
+        current_photo_key="org/photo.jpg",
+    )
+    area = SimpleNamespace(name="A區")
+    from services.api.app.application.animal_selection import AnimalCandidate
+
+    confirmation = AnimalCandidate(animal, area).confirmation(organization_name="浪浪之家")
+    assert confirmation.organization_id == organization_id
+    assert confirmation.organization_name == "浪浪之家"
+    assert confirmation.photo_reference == "org/photo.jpg"

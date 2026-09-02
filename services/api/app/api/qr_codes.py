@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, Field
 from services.api.app.api.dependencies import (
     RequestContext,
     current_request_context,
@@ -16,7 +18,9 @@ from services.api.app.application.qr_token_service import (
     QrTokenService,
     printable_token_for,
 )
+from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.qr_code import AnimalQrCode
+from services.api.app.persistence.models.shelter_area import ShelterArea
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
 from sqlalchemy import select
@@ -27,6 +31,28 @@ router = APIRouter(prefix="/v1/management/qr-codes", tags=["Management Settings"
 
 class QrCreateRequest(BaseModel):
     animal_id: UUID
+
+
+class ManagementQrCodeListItem(BaseModel):
+    id: UUID
+    organization_id: UUID
+    animal_id: UUID
+    animal_name: str
+    shelter_number: str | None
+    animal_status: str
+    area_name: str | None
+    status: Literal["active", "revoked"]
+    revoked: bool
+    created_at: datetime
+    deep_link: str | None
+    token: None
+
+
+class ManagementQrCodeListResponse(BaseModel):
+    items: list[ManagementQrCodeListItem]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
 
 
 def _payload(value: AnimalQrCode, token: str | None = None) -> dict:
@@ -49,18 +75,47 @@ def _payload(value: AnimalQrCode, token: str | None = None) -> dict:
     }
 
 
-@router.get("")
+def _list_payload(
+    qr_code: AnimalQrCode,
+    animal: Animal,
+    area: ShelterArea | None,
+) -> dict:
+    return {
+        **_payload(qr_code),
+        "animal_name": animal.name,
+        "shelter_number": animal.shelter_number,
+        "animal_status": animal.status,
+        "area_name": area.name if area else None,
+        "created_at": qr_code.created_at,
+    }
+
+
+@router.get("", response_model=ManagementQrCodeListResponse)
 async def list_qr_codes(
-    animal_id: UUID | None = None,
+    animal_id: UUID | None = Query(default=None),  # noqa: B008
+    query: str | None = Query(default=None, max_length=200),  # noqa: B008
+    status_filter: Literal["all", "active", "revoked"] = Query(  # noqa: B008
+        default="all", alias="status"
+    ),
+    page: int = Query(default=1, ge=1),  # noqa: B008
+    page_size: int = Query(default=20, ge=1, le=100),  # noqa: B008
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
     organization_id = require_staff_or_admin(context)
-    query = select(AnimalQrCode).where(AnimalQrCode.organization_id == organization_id)
-    if animal_id is not None:
-        query = query.where(AnimalQrCode.animal_id == animal_id)
-    result = await session.execute(query.order_by(AnimalQrCode.created_at.desc()))
-    return {"items": [_payload(item) for item in result.scalars()]}
+    rows, total = await QrCodeRepository(session, organization_id).list_management(
+        animal_id=animal_id,
+        query=query,
+        status=status_filter,
+        page=page,
+        page_size=page_size,
+    )
+    return {
+        "items": [_list_payload(qr_code, animal, area) for qr_code, animal, area in rows],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

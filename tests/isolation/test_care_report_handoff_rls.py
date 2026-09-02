@@ -20,6 +20,7 @@ from services.api.app.application.animal_selection import (
     issue_animal_confirmation_token,
 )
 from services.api.app.application.care_report_handoff_service import CareReportHandoffService
+from services.api.app.application.line_draft_service import LineDraftService
 from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
@@ -28,6 +29,9 @@ from services.api.app.persistence.models.care_report_handoff import CareReportHa
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
+)
+from services.api.app.persistence.repositories.care_report_draft_repository import (
+    CareReportDraftRepository,
 )
 from services.api.app.persistence.repositories.care_report_handoff_repository import (
     CareReportHandoffRepository,
@@ -484,6 +488,63 @@ async def test_real_postgres_concurrent_consume_allows_exactly_one_winner() -> N
         assert successes[0].status == "consumed"
         assert len(failures) == 1
         assert failures[0].code == "handoff_already_consumed"
+    finally:
+        await engine.dispose()
+        await _cleanup_fixture(ids)
+
+
+@pytest.mark.asyncio
+async def test_draft_failure_savepoint_rolls_back_handoff_consumption() -> None:
+    ids = await _setup_fixture()
+    engine = create_async_engine(_async_database_url(), pool_pre_ping=True)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with sessions() as session:
+            async with session.begin():
+                await set_organization_scope(session, ids.organization_a)
+                try:
+                    async with session.begin_nested():
+                        handoff = await _service(
+                            session, ids.organization_a
+                        ).consume_pending_handoff(
+                            user_id=ids.user,
+                            organization_id=ids.organization_a,
+                        )
+                        await LineDraftService(
+                            CareReportDraftRepository(session, ids.organization_a)
+                        ).select_handoff_animal(
+                            volunteer_user_id=ids.user,
+                            membership_id=handoff.membership_id,
+                            animal_id=handoff.animal_id,
+                            source_event_id="forced-draft-failure",
+                        )
+                        raise RuntimeError("force savepoint rollback")
+                except RuntimeError:
+                    pass
+
+        connection = await asyncpg.connect(_database_url())
+        try:
+            await connection.execute("BEGIN")
+            await _set_platform(connection)
+            assert (
+                await connection.fetchval(
+                    "SELECT status FROM care_report_handoffs WHERE id = $1",
+                    ids.handoff_a,
+                )
+                == "pending"
+            )
+            assert (
+                await connection.fetchval(
+                    "SELECT count(*) FROM care_report_drafts "
+                    "WHERE organization_id = $1 AND volunteer_user_id = $2",
+                    ids.organization_a,
+                    ids.user,
+                )
+                == 0
+            )
+            await connection.execute("ROLLBACK")
+        finally:
+            await connection.close()
     finally:
         await engine.dispose()
         await _cleanup_fixture(ids)

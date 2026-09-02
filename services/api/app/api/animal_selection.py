@@ -62,6 +62,8 @@ class AnimalListResponse(BaseModel):
     items: list[AnimalCandidateResponse]
     page: int
     page_size: int
+    total: int
+    has_more: bool
 
 
 class QrResolveRequest(BaseModel):
@@ -150,6 +152,8 @@ async def list_reportable_animals(
         ],
         page=page,
         page_size=page_size,
+        total=len(candidates),
+        has_more=start + page_size < len(candidates),
     )
 
 
@@ -163,21 +167,24 @@ async def search_animals(
 ) -> AnimalListResponse:
     if context.organization_id is None:
         raise DomainError("shelter_context_required", "請先選擇目前收容所", 409)
-    candidates = await _selection_service(session, context.organization_id).list_candidates(
+    candidate_page = await _selection_service(session, context.organization_id).search_page(
         user_id=context.user_id,
         organization_id=context.organization_id,
         membership_id=context.membership_id,
         role=context.role,
         query=query,
+        page=page,
+        page_size=page_size,
     )
-    start = (page - 1) * page_size
     return AnimalListResponse(
         items=[
             await _candidate(candidate, organization_id=context.organization_id)
-            for candidate in candidates[start : start + page_size]
+            for candidate in candidate_page.items
         ],
         page=page,
         page_size=page_size,
+        total=candidate_page.total,
+        has_more=candidate_page.has_more,
     )
 
 

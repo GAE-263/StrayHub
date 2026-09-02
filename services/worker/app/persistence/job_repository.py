@@ -51,7 +51,7 @@ class WorkerJobRepository:
         await self.session.flush()
         return job, token
 
-    async def reclaim_stale(self, *, timeout_seconds: int) -> int:
+    async def reclaim_stale(self, *, timeout_seconds: int, max_retries: int = 3) -> int:
         await set_organization_scope(self.session, self.organization_id)
         threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
         result = await self.session.execute(
@@ -64,9 +64,12 @@ class WorkerJobRepository:
         jobs = list(result.scalars())
         now = datetime.now(timezone.utc)
         for job in jobs:
-            job.status = "retry_wait"
             job.retry_count += 1
-            job.available_at = now
+            terminal = job.retry_count >= max_retries
+            job.status = "failed" if terminal else "retry_wait"
+            job.failure_reason = "stale_claim_exhausted" if terminal else "stale_claim"
+            job.completed_at = now if terminal else None
+            job.available_at = None if terminal else now
             job.claim_token = None
             job.claimed_at = None
             job.claimed_by = None
@@ -80,6 +83,7 @@ class WorkerJobRepository:
         claim_token: str,
         status: str,
         failure_reason: str | None = None,
+        available_at: datetime | None = None,
     ) -> AIProcessingJob:
         if status not in {"succeeded", "failed", "retry_wait"}:
             raise DomainError("invalid_job_status", "AI Job 結束狀態無效", 422)
@@ -97,7 +101,7 @@ class WorkerJobRepository:
         job.status = status
         job.failure_reason = failure_reason
         job.completed_at = now if status in {"succeeded", "failed"} else None
-        job.available_at = now if status == "retry_wait" else None
+        job.available_at = (available_at or now) if status == "retry_wait" else None
         job.claim_token = None
         job.claimed_at = None
         job.claimed_by = None

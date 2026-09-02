@@ -20,6 +20,35 @@ def test_generated_contract_types_exist_for_openapi_source_of_truth() -> None:
     assert "CareReportHandoffCreateRequest" in content
     assert "CareReportHandoffResponse" in content
 
+    schemas_start = content.index("export interface components")
+    operations_start = content.index("export interface operations")
+    schemas = content[schemas_start:operations_start]
+    list_item_start = schemas.index("        ManagementQrCodeListItem:")
+    list_item_end = schemas.index("        };", list_item_start) + len("        };")
+    list_item = schemas[list_item_start:list_item_end]
+    for field in ("animal_name: string;", "animal_status: string;", "created_at: string;"):
+        assert field in list_item
+    for field in (
+        "shelter_number: string | null;",
+        "area_name: string | null;",
+        "deep_link: string | null;",
+        "token: null;",
+    ):
+        assert field in list_item
+        assert field.replace(":", "?:", 1) not in list_item
+
+    operation_start = content.index("    listManagementQrCodes:")
+    operation_end = content.index("    createManagementQrCode:", operation_start)
+    operation = content[operation_start:operation_end]
+    for parameter in (
+        "animal_id?: string;",
+        "query?: string;",
+        'status?: "all" | "active" | "revoked";',
+        'page?: components["parameters"]["Page"];',
+        'page_size?: components["parameters"]["PageSize"];',
+    ):
+        assert parameter in operation
+
 
 def test_volunteer_access_contract_has_expected_operation_and_schema_surface() -> None:
     feature = yaml.safe_load(

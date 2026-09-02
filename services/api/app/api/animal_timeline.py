@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -38,6 +38,33 @@ class TimelineEventResponse(BaseModel):
     status: str | None = None
 
 
+class StoolAnalysisResponse(BaseModel):
+    recognized: bool
+    score: int | None = None
+    score_label: str | None = None
+    has_abnormalities: bool
+    abnormality_details: str | None = None
+    assessment: str | None = None
+    recommendation: str | None = None
+    review_status: str
+    human_reviewed: bool
+
+
+class TimelineReportResponse(BaseModel):
+    id: UUID
+    submitted_at: datetime
+    volunteer_user_id: UUID
+    animal_name_snapshot: str
+    shelter_number_snapshot: str | None = None
+    note: str | None = None
+    observations: dict[str, str]
+    observation_snapshots: dict[str, dict[str, str]] | None = None
+    status: str
+    ai_job_status: str
+    media_ids: list[UUID]
+    stool_analysis: StoolAnalysisResponse | None = None
+
+
 class TimelineDayResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -47,7 +74,7 @@ class TimelineDayResponse(BaseModel):
     no_report_label: str | None = None
     has_activity: bool
     event_count: int
-    reports: list[dict]
+    reports: list[TimelineReportResponse]
     events: list[TimelineEventResponse]
     scheduled: list[TimelineEventResponse]
 
@@ -59,7 +86,9 @@ class TimelineResponse(BaseModel):
     open_reminders: list[TimelineEventResponse]
 
 
-def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
+def _serialize_day(
+    day, *, media_by_report: dict | None = None, stool_by_report: dict | None = None
+) -> dict:
     return {
         "date": day.date.isoformat(),
         "has_report": day.has_report,
@@ -77,6 +106,7 @@ def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
                 "observation_snapshots": report.answer_snapshots,
                 "status": report.status,
                 "ai_job_status": report.ai_job_status,
+                "stool_analysis": (stool_by_report or {}).get(report.id),
                 "media_ids": [
                     str(media.id) for media in (media_by_report or {}).get(report.id, [])
                 ],
@@ -240,11 +270,14 @@ async def animal_timeline(
                     "summary": action.reason or action.result_note or "",
                 }
             )
-    media_by_report = await TimelineRepository(session, context.organization_id).media_for_reports(
-        [report.id for day in days for report in day.reports]
-    )
+    report_ids = [report.id for day in days for report in day.reports]
+    media_by_report = await repository.media_for_reports(report_ids)
+    stool_by_report = await repository.stool_analyses_for_reports(report_ids)
     return {
-        "days": [_serialize_day(day, media_by_report=media_by_report) for day in days],
+        "days": [
+            _serialize_day(day, media_by_report=media_by_report, stool_by_report=stool_by_report)
+            for day in days
+        ],
         "animal_id": str(animalId),
         "organization_timezone": organization.timezone,
         "open_reminders": [item for day in days for item in day.scheduled],

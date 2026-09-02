@@ -35,6 +35,29 @@ const qr = {
     "/animal-confirmation?organization_id=org-a&qr_token=opaque-locator-123456",
 };
 
+const adminProfile = {
+  user: { id: "user-a", platform_role: null, status: "active" },
+  memberships: [
+    {
+      id: "membership-a",
+      organization_id: "org-a",
+      user_id: "user-a",
+      role: "SHELTER_ADMIN",
+      status: "active",
+    },
+  ],
+};
+
+const staffProfile = {
+  ...adminProfile,
+  memberships: [
+    {
+      ...adminProfile.memberships[0],
+      role: "STAFF",
+    },
+  ],
+};
+
 function response(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -98,7 +121,7 @@ afterEach(async () => {
 });
 
 describe("animal care QR card", () => {
-  it("shows explicit generate action when no active QR exists", async () => {
+  it("shows the create action to an admin when no active QR exists", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response({ items: [] }))
@@ -107,12 +130,32 @@ describe("animal care QR card", () => {
           organization_id: "org-a",
           organization_name: "虛構收容所 A",
         }),
-      );
+      )
+      .mockResolvedValueOnce(response(adminProfile));
     await renderCard(fetchMock);
 
     expect(container?.textContent).toContain("尚未建立照護 QR Code");
-    expect(container?.textContent).toContain("產生 QR Code");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container?.textContent).toContain("建立照護 QR");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps QR information read-only for staff", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ items: [qr] }))
+      .mockResolvedValueOnce(
+        response({
+          organization_id: "org-a",
+          organization_name: "虛構收容所 A",
+        }),
+      )
+      .mockResolvedValueOnce(response(staffProfile));
+    await renderCard(fetchMock);
+
+    expect(container?.querySelector("svg")).not.toBeNull();
+    expect(container?.textContent).toContain("重新列印");
+    expect(container?.textContent).not.toContain("建立照護 QR");
+    expect(container?.textContent).not.toContain("重新產生新 QR");
   });
 
   it("generates only after click and shows a scannable preview without raw token text", async () => {
@@ -125,9 +168,10 @@ describe("animal care QR card", () => {
           organization_name: "虛構收容所 A",
         }),
       )
+      .mockResolvedValueOnce(response(adminProfile))
       .mockResolvedValueOnce(response(qr, 201));
     await renderCard(fetchMock);
-    await click("產生 QR Code");
+    await click("建立照護 QR");
 
     const svg = container?.querySelector("svg");
     expect(svg?.getAttribute("aria-label")).toBe("小黑的照護回報 QR Code");
@@ -136,7 +180,7 @@ describe("animal care QR card", () => {
     expect(container?.textContent).toContain("A-013");
     expect(container?.textContent).toContain("虛構收容所 A");
     expect(container?.textContent).not.toContain("opaque-locator-123456");
-    expect(fetchMock.mock.calls[2][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[3][1]?.method).toBe("POST");
   });
 
   it("reuses an existing active QR without auto-creating another", async () => {
@@ -148,17 +192,18 @@ describe("animal care QR card", () => {
           organization_id: "org-a",
           organization_name: "虛構收容所 A",
         }),
-      );
+      )
+      .mockResolvedValueOnce(response(adminProfile));
     await renderCard(fetchMock);
 
     expect(container?.querySelector("svg")).not.toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(
       fetchMock.mock.calls.some((call) => call[1]?.method === "POST"),
     ).toBe(false);
   });
 
-  it("invokes print and requires confirmation before regeneration", async () => {
+  it("reprints without a mutation and warns that regeneration invalidates the current QR", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response({ items: [qr] }))
@@ -167,15 +212,46 @@ describe("animal care QR card", () => {
           organization_id: "org-a",
           organization_name: "虛構收容所 A",
         }),
-      );
+      )
+      .mockResolvedValueOnce(response(adminProfile));
     await renderCard(fetchMock);
 
-    await click("列印 QR Code");
+    await click("重新列印");
     expect(window.print).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(
+      fetchMock.mock.calls.some((call) => call[1]?.method === "POST"),
+    ).toBe(false);
 
-    await click("重新產生");
-    expect(container?.textContent).toContain("舊 QR Code 將無法使用");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await click("重新產生新 QR");
+    expect(container?.textContent).toContain("目前的 QR 會立即失效");
+    expect(container?.textContent).toContain("更換現場舊標籤");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("shows non-persistent physical label guidance after regeneration", async () => {
+    const replacement = { ...qr, id: "qr-b" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ items: [qr] }))
+      .mockResolvedValueOnce(
+        response({
+          organization_id: "org-a",
+          organization_name: "虛構收容所 A",
+        }),
+      )
+      .mockResolvedValueOnce(response(adminProfile))
+      .mockResolvedValueOnce(response(replacement));
+    await renderCard(fetchMock);
+
+    await click("重新產生新 QR");
+    await click("確認重新產生新 QR");
+
+    expect(container?.textContent).toContain("新 QR 已建立，舊 QR 已失效");
+    expect(container?.textContent).toContain("列印新的 QR 標籤");
+    expect(container?.textContent).toContain("移除舊標籤");
+    expect(container?.textContent).toContain("將新標籤貼至正確籠位");
+    expect(fetchMock.mock.calls[3][1]?.method).toBe("POST");
   });
 
   it("rejects a foreign-tenant QR response and renders no preview", async () => {
@@ -189,7 +265,8 @@ describe("animal care QR card", () => {
           organization_id: "org-a",
           organization_name: "虛構收容所 A",
         }),
-      );
+      )
+      .mockResolvedValueOnce(response(adminProfile));
     await renderCard(fetchMock);
 
     expect(container?.querySelector("svg")).toBeNull();

@@ -21,8 +21,9 @@ class AIJobVersion:
 
 def configured_ai_version() -> AIJobVersion:
     settings = get_settings()
+    stool_configured = bool(settings.stool_api_url and settings.stool_api_key)
     return AIJobVersion(
-        provider=settings.ai_provider,
+        provider="stool-analysis" if stool_configured else settings.ai_provider,
         model_name=settings.ai_model_name,
         model_version=settings.ai_model_version,
         prompt_template_id=settings.ai_prompt_template_id,

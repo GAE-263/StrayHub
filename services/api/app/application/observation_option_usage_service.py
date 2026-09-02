@@ -14,6 +14,8 @@ from services.api.app.persistence.repositories.observation_usage_repository impo
     ObservationOptionUsageRepository,
 )
 
+UNOBSERVED = "unobserved"
+
 
 class ObservationOptionUsageService:
     """Maintain a conservative, rebuildable index without blocking reports."""
@@ -112,6 +114,8 @@ class ObservationOptionUsageService:
             )
             option_code = raw_code if isinstance(raw_code, str) and raw_code else snapshot_code
             if not isinstance(option_code, str) or not option_code:
+                continue
+            if option_code == UNOBSERVED:
                 continue
             category, display_name, description, option_id = self._snapshot_value(
                 field, option_code, snapshot_values, options, category_codes

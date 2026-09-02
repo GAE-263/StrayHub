@@ -3,6 +3,11 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from services.api.app.api.animal_timeline import (
+    StoolAnalysisResponse,
+    TimelineDayResponse,
+    _serialize_day,
+)
 from services.api.app.application.timeline_service import TimelineService
 
 
@@ -84,3 +89,64 @@ async def test_timeline_date_range_returns_requested_days_and_no_report_state() 
     assert [day.state for day in days] == ["no_report", "has_report", "no_report"]
     assert days[1].report_count == 1
     assert repository.calls == [(date(2026, 8, 1), date(2026, 8, 3))]
+
+
+def test_timeline_stool_analysis_contract_is_explicit_and_nullable() -> None:
+    schema = TimelineDayResponse.model_json_schema()
+    report_schema = schema["$defs"]["TimelineReportResponse"]
+    assert report_schema["properties"]["stool_analysis"]["anyOf"][0] == {
+        "$ref": "#/$defs/StoolAnalysisResponse"
+    }
+    assert set(StoolAnalysisResponse.model_fields) == {
+        "recognized",
+        "score",
+        "score_label",
+        "has_abnormalities",
+        "abnormality_details",
+        "assessment",
+        "recommendation",
+        "review_status",
+        "human_reviewed",
+    }
+
+
+def test_serialize_day_includes_analysis_or_explicit_null() -> None:
+    report = SimpleNamespace(
+        id=uuid4(),
+        submitted_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
+        volunteer_user_id=uuid4(),
+        animal_name_snapshot="阿福",
+        shelter_number_snapshot=None,
+        note=None,
+        answers={"defecation": "defecation.normal"},
+        answer_snapshots=None,
+        status="saved",
+        ai_job_status="succeeded",
+    )
+    day = SimpleNamespace(
+        date=date(2026, 9, 2),
+        has_report=True,
+        report_count=1,
+        reports=[report],
+        events=[],
+        scheduled=[],
+    )
+    analysis = {
+        "recognized": True,
+        "score": 3,
+        "score_label": None,
+        "has_abnormalities": False,
+        "abnormality_details": None,
+        "assessment": "正常",
+        "recommendation": None,
+        "review_status": "confirmed",
+        "human_reviewed": True,
+    }
+
+    payload = _serialize_day(day, stool_by_report={report.id: analysis})
+    assert payload["reports"][0]["stool_analysis"] == analysis
+    TimelineDayResponse.model_validate(payload)
+
+    payload = _serialize_day(day)
+    assert payload["reports"][0]["stool_analysis"] is None
+    TimelineDayResponse.model_validate(payload)

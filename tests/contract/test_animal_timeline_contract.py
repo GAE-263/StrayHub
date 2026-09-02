@@ -61,4 +61,22 @@ def test_timeline_daily_summary_no_report_and_report_details_are_declared() -> N
         "status",
         "ai_job_status",
         "media_ids",
+        "stool_analysis",
     } <= set(report["properties"])
+    assert report["properties"]["stool_analysis"] == {
+        "anyOf": [
+            {"$ref": "#/components/schemas/StoolAnalysis"},
+            {"type": "null"},
+        ]
+    }
+    assert set(schemas["StoolAnalysis"]["required"]) == {
+        "recognized",
+        "score",
+        "score_label",
+        "has_abnormalities",
+        "abnormality_details",
+        "assessment",
+        "recommendation",
+        "review_status",
+        "human_reviewed",
+    }

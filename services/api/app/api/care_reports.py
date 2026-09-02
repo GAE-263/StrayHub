@@ -23,18 +23,21 @@ from services.api.app.application.observation_option_usage_service import (
 from services.api.app.application.report_correction import ReportCorrectionService
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.application.report_submission import ReportSubmissionService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
+from services.api.app.persistence.repositories.authentication_repository import (
+    AuthenticationRepository,
+)
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
 )
 from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
-from services.api.app.persistence.repositories.reportable_scope_repository import (
-    ReportableScopeRepository,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Drafts", "Care Reports"])
@@ -48,12 +51,14 @@ class DraftCreateRequest(BaseModel):
 class DraftUpdateRequest(BaseModel):
     answers: dict[str, str] | None = None
     note: str | None = None
+    story: str | None = None
 
 
 class CareReportCreateRequest(BaseModel):
     draft_id: UUID
     observations: dict[str, str]
     note: str | None = None
+    story: str | None = None
     media_ids: list[UUID] = []
 
 
@@ -88,6 +93,8 @@ class CareReportResponse(BaseModel):
     status: str
     observations: dict
     observation_snapshots: dict | None = None
+    note: str | None = None
+    story: str | None = None
     created_at: datetime
 
 
@@ -114,6 +121,8 @@ def _report_response(report: CareReport) -> CareReportResponse:
         status=report.status,
         observations=report.answers,
         observation_snapshots=report.answer_snapshots,
+        note=report.note,
+        story=report.story,
         created_at=report.created_at,
     )
 
@@ -156,21 +165,6 @@ async def _effective_note_validator(session: AsyncSession, organization_id: UUID
     return service.validate_note_requirement
 
 
-async def _validate_report_scope(
-    session: AsyncSession,
-    organization_id: UUID,
-    role: str,
-    volunteer_user_id: UUID,
-    animal_id: UUID,
-) -> bool:
-    if role != "VOLUNTEER":
-        return True
-    return await ReportableScopeRepository(session, organization_id).is_animal_reportable(
-        animal_id=animal_id,
-        volunteer_user_id=volunteer_user_id,
-    )
-
-
 @router.post(
     "/v1/care-report-drafts", response_model=DraftResponse, status_code=status.HTTP_201_CREATED
 )
@@ -186,13 +180,15 @@ async def create_draft(
     animal = await AnimalRepository(session, context.organization_id).get(payload.animal_id)
     if animal is None or animal.status != "active":
         raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-    if context.role == "VOLUNTEER" and not await ReportableScopeRepository(
-        session, context.organization_id
-    ).is_animal_reportable(
-        animal_id=animal.id,
-        volunteer_user_id=context.user_id,
-    ):
-        raise DomainError("animal_not_reportable", "動物目前不在你的今日可回報範圍", 403)
+    if context.role == "VOLUNTEER":
+        await VolunteerReportingAuthorizationService(
+            AuthenticationRepository(session), AnimalRepository(session, context.organization_id)
+        ).authorize(
+            user_id=context.user_id,
+            organization_id=context.organization_id,
+            membership_id=context.membership_id,
+            animal_id=animal.id,
+        )
     draft, raw_token = await CreateReportDraftService(
         CareReportDraftRepository(session, context.organization_id)
     ).create(
@@ -237,6 +233,8 @@ async def update_draft(
         draft.answers = {**draft.answers, **payload.answers}
     if payload.note is not None:
         draft.note = payload.note
+    if payload.story is not None:
+        draft.story = payload.story
     return _draft_response(draft)
 
 
@@ -312,17 +310,21 @@ async def create_care_report(
     animal = await AnimalRepository(session, context.organization_id).get(draft.animal_id)
     if animal is None:
         raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+    if context.role == "VOLUNTEER":
+        authorization = await VolunteerReportingAuthorizationService(
+            AuthenticationRepository(session), AnimalRepository(session, context.organization_id)
+        ).authorize(
+            user_id=context.user_id,
+            organization_id=context.organization_id,
+            membership_id=context.membership_id,
+            animal_id=animal.id,
+        )
+        assert authorization.animal is not None
+        animal = authorization.animal
     report = await ReportSubmissionService(
         draft_repository,
         CareReportRepository(session, context.organization_id),
         answer_validator=validator,
-        scope_validator=lambda animal_id: _validate_report_scope(
-            session,
-            organization_id,
-            context.role,
-            context.user_id,
-            animal_id,
-        ),
         audit=AuditService(session),
         note_validator=await _effective_note_validator(session, context.organization_id),
         answer_snapshots=answer_snapshots,
@@ -333,6 +335,7 @@ async def create_care_report(
         animal=animal,
         idempotency_key=idempotency_key,
         note=payload.note,
+        story=payload.story,
         media_asset_ids=payload.media_ids,
     )
     await session.commit()

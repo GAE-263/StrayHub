@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     ai_endpoint: str | None = None
     ai_api_key: str | None = None
     ai_timeout_seconds: float = Field(default=30.0, gt=0)
+    # Optional external stool-photo analysis service. Both values are required
+    # before the worker selects this provider; credentials stay environment-only.
+    stool_api_url: str | None = None
+    stool_api_key: SecretStr | None = None
+    stool_timeout_seconds: float = Field(default=30.0, gt=0)
 
     def line_role_menu_features_active(self) -> bool:
         environment = self.app_env.strip().lower()
@@ -159,6 +164,23 @@ class Settings(BaseSettings):
             placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
+
+        if process == "worker":
+            stool_key = (
+                self.stool_api_key.get_secret_value() if self.stool_api_key is not None else None
+            )
+            if bool(self.stool_api_url) != bool(stool_key):
+                problems.append("STOOL_API_URL and STOOL_API_KEY must be configured together")
+            if self.stool_api_url:
+                if is_loopback_url(self.stool_api_url):
+                    problems.append("STOOL_API_URL uses a loopback host")
+                placeholder("STOOL_API_KEY", stool_key)
+            elif self.ai_provider.strip().lower() != "mock":
+                missing("AI_ENDPOINT", self.ai_endpoint)
+                if self.ai_endpoint and is_loopback_url(self.ai_endpoint):
+                    problems.append("AI_ENDPOINT uses a loopback host")
+                placeholder("AI_API_KEY", self.ai_api_key)
+                missing("AI_MODEL_NAME", self.ai_model_name)
 
         if process in {"worker", "migration"}:
             if problems:

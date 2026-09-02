@@ -2081,7 +2081,31 @@ export interface components {
             token: null;
         };
         ManagementQrCodeList: {
-            items: components["schemas"]["ManagementQrCode"][];
+            items: components["schemas"]["ManagementQrCodeListItem"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        ManagementQrCodeListItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            animal_id: string;
+            animal_name: string;
+            shelter_number: string | null;
+            animal_status: string;
+            area_name: string | null;
+            /** @enum {string} */
+            status: "active" | "revoked";
+            revoked: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null */
+            deep_link: string | null;
+            /** @description raw token 不作為獨立欄位顯示；locator 僅存在 deep_link */
+            token: null;
         };
         ManagementQrCodeRequest: {
             /** Format: uuid */
@@ -2563,34 +2587,20 @@ export interface components {
             confirmation_token: string;
         };
         /**
-         * @description 照護完成狀態；未觀察與無法判斷不得解讀為已完成
+         * @description 散步完成狀態；Bot層另可記錄不屬於CRM選項的unobserved sentinel
          * @enum {string}
          */
-        CareCompletionCode: "care_completion.completed" | "care_completion.partially_completed" | "care_completion.not_provided" | "care_completion.not_observed" | "care_completion.uncertain";
-        /**
-         * @description 散步完成狀態；與散步反應的 walk.* 選項分開
-         * @enum {string}
-         */
-        WalkCompletionCode: "walk_completion.completed" | "walk_completion.partially_completed" | "walk_completion.not_done" | "walk_completion.not_observed" | "walk_completion.uncertain";
+        WalkCompletionCode: "walk_completion.completed" | "walk_completion.partially_completed" | "walk_completion.not_done";
         /** @description 由 CRM 有效 Observation Vocabulary 提供的穩定 Code；顯示名稱不得作為正式值 */
         ObservationAnswerCode: string;
         /** @description 可逐題保存的標準回報答案；草稿階段允許不完整，正式送出時必須符合 CareReportAnswers */
         DraftAnswers: {
-            care_completion?: components["schemas"]["CareCompletionCode"];
             walk_completion?: components["schemas"]["WalkCompletionCode"];
-            feeding?: components["schemas"]["ObservationAnswerCode"];
-            water?: components["schemas"]["ObservationAnswerCode"];
             activity?: components["schemas"]["ObservationAnswerCode"];
-            urination?: components["schemas"]["ObservationAnswerCode"];
+            gait?: components["schemas"]["ObservationAnswerCode"];
             defecation?: components["schemas"]["ObservationAnswerCode"];
-            resource_guarding?: components["schemas"]["ObservationAnswerCode"];
-            human_interaction?: components["schemas"]["ObservationAnswerCode"];
             animal_interaction?: components["schemas"]["ObservationAnswerCode"];
-            emotion?: components["schemas"]["ObservationAnswerCode"];
-            walk_reaction?: components["schemas"]["ObservationAnswerCode"];
             appearance_special_status?: components["schemas"]["ObservationAnswerCode"];
-        } & {
-            [key: string]: unknown;
         };
         /** @description 正式 Care Report 必須完整包含的標準結構化答案；照片與心得不在此必要集合 */
         CareReportAnswers: components["schemas"]["DraftAnswers"] & Record<string, never>;
@@ -2598,6 +2608,7 @@ export interface components {
             /** @description 可只包含目前新增或修改的答案；後端依 Draft 目前狀態驗證，不接受跳步或略過必要題目 */
             answers?: components["schemas"]["DraftAnswers"];
             note?: string;
+            story?: string;
             media_ids?: string[];
         };
         Draft: {
@@ -2613,7 +2624,7 @@ export interface components {
             /** Format: uuid */
             membership_id: string;
             /** @enum {string} */
-            current_step: "selecting_animal" | "confirming_animal" | "answering_completion" | "answering_feeding" | "answering_water" | "answering_activity" | "answering_elimination" | "answering_behavior" | "answering_special_status" | "awaiting_media" | "awaiting_note" | "reviewing" | "submitting" | "submitted" | "cancelled" | "expired";
+            current_step: "selecting_animal" | "confirming_animal" | "answering_walk_completion" | "answering_activity" | "answering_gait" | "answering_defecation" | "awaiting_stool_media" | "answering_animal_interaction" | "answering_special_status" | "awaiting_note" | "awaiting_story" | "reviewing" | "submitting" | "submitted" | "cancelled" | "expired";
             answers: components["schemas"]["DraftAnswers"];
             media_ids?: string[];
             /** Format: date-time */
@@ -2631,6 +2642,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             organization_id: string;
+            /** @enum {string|null} */
+            readonly subject?: "stool" | "portrait" | null;
             /** @enum {string} */
             status: "temporary" | "processing" | "processed" | "attached" | "failed" | "unusable" | "archived";
             /** @constant */
@@ -2650,6 +2663,7 @@ export interface components {
             /** @description 標準回報完整結構化答案；照片與心得不屬於必要欄位 */
             observations: components["schemas"]["CareReportAnswers"];
             note?: string;
+            story?: string;
             media_ids?: string[];
         };
         CareReportCorrectionRequest: {
@@ -2679,6 +2693,8 @@ export interface components {
                     [key: string]: string;
                 };
             } | null;
+            note?: string | null;
+            story?: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -2715,6 +2731,18 @@ export interface components {
             status: "saved" | "amended" | "archived";
             ai_job_status: string;
             media_ids: string[];
+            stool_analysis: components["schemas"]["StoolAnalysis"] | null;
+        };
+        StoolAnalysis: {
+            recognized: boolean;
+            score: number | null;
+            score_label: string | null;
+            has_abnormalities: boolean;
+            abnormality_details: string | null;
+            assessment: string | null;
+            recommendation: string | null;
+            review_status: string;
+            human_reviewed: boolean;
         };
         ObservationCategoryListResponse: {
             items: components["schemas"]["ObservationCategory"][];
@@ -5691,6 +5719,10 @@ export interface operations {
         parameters: {
             query?: {
                 animal_id?: string;
+                query?: string;
+                status?: "all" | "active" | "revoked";
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
             };
             header?: never;
             path?: never;
@@ -5710,6 +5742,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     createManagementQrCode: {

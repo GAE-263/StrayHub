@@ -5,7 +5,23 @@ import pytest
 from services.api.app.application.ai_review import AIReviewService
 from services.api.app.persistence.models.ai_observation import AIObservation
 from services.worker.app.handlers.ai_handler import AIJobHandler
+from services.worker.app.infrastructure.ai_port import AIAnalysisEnvelope
 from services.worker.app.infrastructure.mock_ai_adapter import MockAIAdapter
+
+
+@pytest.mark.asyncio
+async def test_provider_envelope_preserves_raw_but_validates_only_formal_output() -> None:
+    ai_job = _job()
+    raw = {"score": 3, "recommendation": "raw review only"}
+    formal = {"observations": []}
+
+    processed = await AIJobHandler(
+        MockAIAdapter(result=AIAnalysisEnvelope(raw=raw, formal=formal))
+    ).handle(ai_job, note=None, cleaned_images=[b"stool"], allowed_codes=set())
+
+    assert processed.status == "succeeded"
+    assert processed.raw_ai_output == raw
+    assert processed.validation_result == {"status": "valid"}
 
 
 def _job() -> SimpleNamespace:

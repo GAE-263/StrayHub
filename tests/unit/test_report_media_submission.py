@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 from services.api.app.application.report_submission import ReportSubmissionService
-from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
 from services.api.app.persistence.models.animal import Animal
 
 
@@ -64,10 +63,12 @@ def make_draft(*, organization_id, volunteer_user_id, animal_id):
         membership_id=uuid4(),
         animal_id=animal_id,
         answers={
-            **{key: f"{key}.observed" for key in REQUIRED_ANSWER_KEYS},
-            "care_completion": "care_completion.completed",
             "walk_completion": "walk_completion.completed",
-            "walk_reaction": "walk.willing",
+            "activity": "activity.usual",
+            "gait": "gait.normal",
+            "defecation": "defecation.normal",
+            "animal_interaction": "animal_interaction.friendly",
+            "appearance_special_status": "appearance.none_found",
         },
         note=None,
         status="active",
