@@ -9,7 +9,7 @@ from services.api.app.application.line_qr_image_decoder import decode_qr_image
 
 def _qr_png(value: str) -> bytes:
     barcode = zxingcpp.create_barcode(value, zxingcpp.BarcodeFormat.QRCode)
-    generated = zxingcpp.write_barcode_to_image(barcode, size_hint=320)
+    generated = zxingcpp.write_barcode_to_image(barcode, scale=10)
     image = Image.fromarray(generated)
     output = BytesIO()
     image.save(output, format="PNG")
