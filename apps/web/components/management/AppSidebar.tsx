@@ -16,6 +16,12 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       { href: "/animals", label: "動物檔案", icon: "search" },
       { href: "/reports", label: "回報收件匣", icon: "audit" },
       { href: "/care-calendar", label: "照護行事曆", icon: "calendar" },
+      {
+        href: "/growth-diary",
+        label: "毛孩日記",
+        roles: ["STAFF", "SHELTER_ADMIN", "PLATFORM_ADMIN"],
+        icon: "history",
+      },
       { href: "/ai-review", label: "AI 人工覆核", icon: "ai" },
     ],
   },

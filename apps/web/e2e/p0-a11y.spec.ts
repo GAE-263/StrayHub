@@ -39,6 +39,7 @@ const routes = [
   "/animals/animal-a",
   "/animals/animal-a/timeline",
   "/care-calendar",
+  "/growth-diary",
   "/reports",
   "/reports/report-a",
   "/animal-confirmation",

@@ -5,7 +5,10 @@ from __future__ import annotations
 # ruff: noqa: E501
 import json
 import logging
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -103,6 +106,7 @@ from services.api.app.domain.line_webhook_security import verify_line_signature
 from services.api.app.infrastructure.ai.gemini_client import GeminiClient
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
+from services.api.app.infrastructure.storage.ports import ObjectScope
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import (
     set_authentication_user_scope,
@@ -148,6 +152,146 @@ from services.api.app.persistence.repositories.qr_code_repository import QrCodeR
 
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _GrowthDiaryStoredPhoto:
+    storage: Any
+    organization_id: UUID
+    object_key: str
+
+
+@dataclass
+class _GrowthDiaryPostCommit:
+    line: Any
+    event: dict
+    line_user_id: str | None
+    organization_id: UUID
+    entry_id: UUID
+    animal_name: str
+    note: str | None
+    has_photo: bool
+
+
+class _GrowthDiaryEventBoundary:
+    """Own one event's object compensation and post-commit side effects."""
+
+    def __init__(self, *, event_id: str, background_tasks: BackgroundTasks) -> None:
+        self.event_id = event_id
+        self.background_tasks = background_tasks
+        self.stored_photo: _GrowthDiaryStoredPhoto | None = None
+        self.post_commit: _GrowthDiaryPostCommit | None = None
+
+    def register_stored_photo(
+        self, *, storage: Any, organization_id: UUID, object_key: str
+    ) -> None:
+        self.stored_photo = _GrowthDiaryStoredPhoto(storage, organization_id, object_key)
+
+    def prepare_success(
+        self,
+        *,
+        line: Any,
+        event: dict,
+        line_user_id: str | None,
+        organization_id: UUID,
+        entry_id: UUID,
+        animal_name: str,
+        note: str | None,
+        has_photo: bool,
+    ) -> None:
+        self.post_commit = _GrowthDiaryPostCommit(
+            line=line,
+            event=event,
+            line_user_id=line_user_id,
+            organization_id=organization_id,
+            entry_id=entry_id,
+            animal_name=animal_name,
+            note=note,
+            has_photo=has_photo,
+        )
+
+    async def compensate(self) -> None:
+        photo = self.stored_photo
+        self.stored_photo = None
+        if photo is None:
+            return
+        try:
+            await photo.storage.delete(
+                scope=ObjectScope(photo.organization_id),
+                key=photo.object_key,
+            )
+        except Exception:
+            logger.exception(
+                "growth_diary_orphan_cleanup_failed",
+                extra={
+                    "organization_id": str(photo.organization_id),
+                    "webhook_event_id": self.event_id,
+                },
+            )
+
+    async def finish_after_commit(self) -> None:
+        action = self.post_commit
+        if action is None:
+            await self.compensate()
+            return
+
+        self.stored_photo = None
+        try:
+            await _reply(
+                action.line,
+                action.event,
+                [
+                    _text(
+                        "已記錄毛孩的成長日記！感謝分享 🐾 AI 小幫手正在看看，稍後會再傳訊息給你 🤖"
+                    )
+                ],
+            )
+        except Exception:
+            logger.exception(
+                "growth_diary_success_reply_failed",
+                extra={"webhook_event_id": self.event_id},
+            )
+
+        if action.line_user_id is None:
+            return
+        try:
+            self.background_tasks.add_task(
+                _run_growth_diary_ai_analysis,
+                action.line,
+                line_user_id=action.line_user_id,
+                organization_id=action.organization_id,
+                entry_id=action.entry_id,
+                animal_name=action.animal_name,
+                note=action.note,
+                has_photo=action.has_photo,
+            )
+        except Exception:
+            logger.exception(
+                "growth_diary_ai_task_registration_failed",
+                extra={"webhook_event_id": self.event_id},
+            )
+
+
+@asynccontextmanager
+async def _growth_diary_event_transaction(
+    session,
+    *,
+    event_id: str,
+    background_tasks: BackgroundTasks,
+):
+    boundary = _GrowthDiaryEventBoundary(
+        event_id=event_id,
+        background_tasks=background_tasks,
+    )
+    try:
+        async with session.begin():
+            yield boundary
+    except BaseException:
+        await boundary.compensate()
+        raise
+    else:
+        await boundary.finish_after_commit()
+
 
 VOLUNTEER_APPLICATION_COMMAND = "我要報名志工"
 WALK_REPORT_COMMAND = "開始散步回報"
@@ -1437,7 +1581,7 @@ async def _handle_growth_diary_message(
     *,
     adopter_user_id: UUID,
     pending_draft: GrowthDiaryDraft,
-    background_tasks: BackgroundTasks,
+    event_boundary: _GrowthDiaryEventBoundary,
 ) -> None:
     message = event.get("message", {})
     message_type = message.get("type")
@@ -1448,6 +1592,7 @@ async def _handle_growth_diary_message(
         return
 
     photo_key: str | None = None
+    photo_content_type: str | None = None
     note: str | None = None
     if message_type == "image":
         try:
@@ -1455,11 +1600,19 @@ async def _handle_growth_diary_message(
             photo_key = (
                 f"growth-diary/{pending_draft.inquiry_id}/{event.get('webhookEventId', '')}.media"
             )
-            await MediaProcessingService(MinioStorageAdapter()).store_cleaned(
+            storage = MinioStorageAdapter()
+            stored = await MediaProcessingService(storage).store_cleaned(
                 organization_id=pending_draft.organization_id,
                 object_key=photo_key,
                 data=content.content,
                 declared_content_type=content.content_type,
+                output_policy="growth_diary_webp",
+            )
+            photo_content_type = stored.metadata.content_type
+            event_boundary.register_stored_photo(
+                storage=storage,
+                organization_id=pending_draft.organization_id,
+                object_key=stored.key,
             )
         except Exception:
             await _reply(line, event, [_text("照片處理失敗，請重新傳送一次，或改用文字記錄。")])
@@ -1478,8 +1631,18 @@ async def _handle_growth_diary_message(
         animal_id=pending_draft.animal_id,
         adopter_user_id=adopter_user_id,
         photo_key=photo_key,
+        photo_content_type=photo_content_type,
         note=note,
     )
+    if note:
+        settings = get_settings()
+        configured = bool(settings.gemini_service_account_path or settings.gemini_api_key)
+        entry.ai_analysis_status = "pending" if configured else "unconfigured"
+        if not configured:
+            entry.ai_analyzed_at = datetime.now(timezone.utc)
+    else:
+        entry.ai_analysis_status = "not_applicable"
+        entry.ai_analyzed_at = datetime.now(timezone.utc)
     # Sharing (whether self-initiated or reminder-triggered) resets the
     # reminder cadence clock, so a scheduled nudge never fires right after
     # the adopter just shared on their own.
@@ -1489,23 +1652,17 @@ async def _handle_growth_diary_message(
     if inquiry is not None:
         inquiry.last_growth_diary_prompted_at = datetime.now(timezone.utc)
     await clear_pending_growth_diary_draft(session, adopter_user_id)
-    await _reply(
-        line,
-        event,
-        [_text("已記錄毛孩的成長日記！感謝分享 🐾 AI 小幫手正在看看，稍後會再傳訊息給你 🤖")],
-    )
     line_user_id = event.get("source", {}).get("userId")
-    if line_user_id:
-        background_tasks.add_task(
-            _run_growth_diary_ai_analysis,
-            line,
-            line_user_id=line_user_id,
-            organization_id=pending_draft.organization_id,
-            entry_id=entry.id,
-            animal_name=inquiry.animal_name_snapshot if inquiry is not None else "毛孩",
-            note=note,
-            has_photo=photo_key is not None,
-        )
+    event_boundary.prepare_success(
+        line=line,
+        event=event,
+        line_user_id=line_user_id,
+        organization_id=pending_draft.organization_id,
+        entry_id=entry.id,
+        animal_name=inquiry.animal_name_snapshot if inquiry is not None else "毛孩",
+        note=note,
+        has_photo=photo_key is not None,
+    )
 
 
 async def _run_growth_diary_ai_analysis(
@@ -1536,17 +1693,30 @@ async def _run_growth_diary_ai_analysis(
             entry = await session.get(GrowthDiaryEntry, entry_id)
             if entry is None:
                 return
-            result = (
-                await GrowthDiaryAiAnalysisService(gemini).analyze_entry(
+            if not note:
+                entry.ai_analysis_status = "not_applicable"
+                entry.ai_analyzed_at = datetime.now(timezone.utc)
+                result = None
+            elif gemini is None:
+                entry.ai_analysis_status = "unconfigured"
+                entry.ai_analyzed_at = datetime.now(timezone.utc)
+                result = None
+            else:
+                result = await GrowthDiaryAiAnalysisService(gemini).analyze_entry(
                     animal_name=animal_name, note=note, has_photo=has_photo
                 )
-                if gemini is not None
-                else None
-            )
+                entry.ai_analysis_status = "succeeded" if result is not None else "failed"
+                entry.ai_analyzed_at = datetime.now(timezone.utc)
             if result is not None:
                 entry.ai_mood = result.mood
                 entry.ai_reply = result.adopter_reply
                 entry.ai_staff_summary = result.staff_summary
+                entry.ai_provider = result.provider
+                entry.ai_model_name = result.model_name
+                entry.ai_model_version = result.model_version
+                entry.ai_prompt_version = result.prompt_version
+                entry.ai_output_schema_version = result.output_schema_version
+                entry.ai_raw_output = result.raw_output
                 reply_message = build_growth_diary_ai_reply_card(
                     mood=result.mood, reply_text=result.adopter_reply
                 )
@@ -2806,7 +2976,11 @@ async def webhook(
                 )
                 continue
             report_id_to_dispatch = None
-            async with session.begin():
+            async with _growth_diary_event_transaction(
+                session,
+                event_id=event_id,
+                background_tasks=background_tasks,
+            ) as growth_diary_event_boundary:
                 identity = LineWebhookRepository(session)
                 stored_event, claimed = await identity.claim_event(
                     webhook_event_id=event_id,
@@ -2931,7 +3105,7 @@ async def webhook(
                                 event,
                                 adopter_user_id=diary_adopter_user_id,
                                 pending_draft=pending_draft,
-                                background_tasks=background_tasks,
+                                event_boundary=growth_diary_event_boundary,
                             )
                         else:
                             await _reply(

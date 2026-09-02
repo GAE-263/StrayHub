@@ -13,7 +13,7 @@ import { StatusBanner } from "./StatusBanner";
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/animals",
+  usePathname: () => "/growth-diary",
 }));
 
 function collectManagementPages(directory: string): string[] {
@@ -45,8 +45,29 @@ describe("management shell primitives", () => {
   });
 
   it("keeps volunteer out of management navigation", () => {
-    const sidebar = React.createElement(AppSidebar, { role: "VOLUNTEER" });
-    expect(sidebar.props.role).toBe("VOLUNTEER");
+    const html = renderToStaticMarkup(<AppSidebar role="VOLUNTEER" />);
+    expect(html).not.toContain("毛孩日記");
+  });
+
+  it.each(["STAFF", "SHELTER_ADMIN", "PLATFORM_ADMIN"])(
+    "shows the active growth diary link for %s",
+    (role) => {
+      const html = renderToStaticMarkup(<AppSidebar role={role} />);
+      expect(html).toContain('href="/growth-diary"');
+      expect(html).toContain("毛孩日記");
+      expect(html).toContain('class="nav-link active"');
+    },
+  );
+
+  it("does not classify growth diary as the platform-only context exception", () => {
+    const layout = readFileSync(
+      join(process.cwd(), "components/management/ManagementLayout.tsx"),
+      "utf8",
+    );
+    expect(layout).toContain(
+      'const isPlatformGovernanceRoute = pathname === "/platform-admins"',
+    );
+    expect(layout).not.toMatch(/isPlatformGovernanceRoute\s*=.*growth-diary/);
   });
 
   it("keeps breadcrumb hierarchy labelled for assistive technology", () => {

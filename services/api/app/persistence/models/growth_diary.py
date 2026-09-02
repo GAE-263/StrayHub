@@ -1,6 +1,8 @@
+from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
@@ -28,6 +30,7 @@ class GrowthDiaryEntry(IdentityMixin, AuditMixin, Base):
     animal_id: Mapped[UUID] = mapped_column(ForeignKey("animals.id"), index=True)
     adopter_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    photo_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # Populated asynchronously by a background Gemini analysis task (see
     # growth_diary_ai_analysis_service.py) — nullable/additive so a row is
@@ -39,3 +42,11 @@ class GrowthDiaryEntry(IdentityMixin, AuditMixin, Base):
     )  # positive|neutral|concern
     ai_reply: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     ai_staff_summary: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    ai_analysis_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ai_provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ai_model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ai_model_version: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ai_prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ai_output_schema_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ai_raw_output: Mapped[dict[str, Any] | str | None] = mapped_column(JSON, nullable=True)
+    ai_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

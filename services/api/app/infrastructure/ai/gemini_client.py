@@ -68,6 +68,7 @@ class GeminiGrowthDiaryAnalysis:
     mood: str  # positive | neutral | concern
     adopter_reply: str
     staff_summary: str
+    raw_output: str | None = None
 
 
 _VALID_GROWTH_DIARY_MOODS = {"positive", "neutral", "concern"}
@@ -280,5 +281,8 @@ class GeminiClient:
         if mood not in _VALID_GROWTH_DIARY_MOODS:
             mood = "neutral"
         return GeminiGrowthDiaryAnalysis(
-            mood=mood, adopter_reply=adopter_reply, staff_summary=staff_summary
+            mood=mood,
+            adopter_reply=adopter_reply,
+            staff_summary=staff_summary,
+            raw_output=text,
         )

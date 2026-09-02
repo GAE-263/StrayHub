@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.api.errors import DomainError
+from services.api.app.persistence.models.adoption_inquiry import AdoptionInquiry
+from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.growth_diary import GrowthDiaryDraft, GrowthDiaryEntry
 from services.api.app.persistence.models.identity import LineUserBinding, OrganizationMembership
 
@@ -26,14 +29,43 @@ class GrowthDiaryRepository:
         animal_id: UUID,
         adopter_user_id: UUID,
         photo_key: str | None,
+        photo_content_type: str | None = None,
         note: str | None,
     ) -> GrowthDiaryEntry:
+        if not note and photo_key is None:
+            raise DomainError("growth_diary_content_required", "日記必須包含文字或照片", 422)
+        if photo_key is not None and photo_content_type != "image/webp":
+            raise DomainError("untrusted_growth_diary_photo", "日記照片格式無法確認", 422)
+        if photo_key is None and photo_content_type is not None:
+            raise DomainError("invalid_growth_diary_photo_metadata", "日記照片資料不一致", 422)
+
+        inquiry_result = await self.session.execute(
+            select(AdoptionInquiry).where(
+                AdoptionInquiry.id == inquiry_id,
+                AdoptionInquiry.organization_id == self.organization_id,
+                AdoptionInquiry.target_animal_id == animal_id,
+                AdoptionInquiry.adopter_user_id == adopter_user_id,
+            )
+        )
+        if inquiry_result.scalar_one_or_none() is None:
+            raise DomainError("growth_diary_source_not_found", "日記來源不存在或無法存取", 404)
+
+        animal_result = await self.session.execute(
+            select(Animal).where(
+                Animal.id == animal_id,
+                Animal.organization_id == self.organization_id,
+            )
+        )
+        if animal_result.scalar_one_or_none() is None:
+            raise DomainError("growth_diary_source_not_found", "日記來源不存在或無法存取", 404)
+
         entry = GrowthDiaryEntry(
             organization_id=self.organization_id,
             inquiry_id=inquiry_id,
             animal_id=animal_id,
             adopter_user_id=adopter_user_id,
             photo_key=photo_key,
+            photo_content_type=photo_content_type,
             note=note,
         )
         self.session.add(entry)
@@ -47,6 +79,82 @@ class GrowthDiaryRepository:
             .order_by(GrowthDiaryEntry.created_at.desc())
         )
         return list(result.scalars())
+
+    def _management_query(self, *, query: str | None = None, mood: str | None = None):
+        statement = (
+            select(GrowthDiaryEntry, Animal)
+            .join(
+                Animal,
+                and_(
+                    Animal.id == GrowthDiaryEntry.animal_id,
+                    Animal.organization_id == self.organization_id,
+                ),
+            )
+            .join(
+                AdoptionInquiry,
+                and_(
+                    AdoptionInquiry.id == GrowthDiaryEntry.inquiry_id,
+                    AdoptionInquiry.organization_id == self.organization_id,
+                    AdoptionInquiry.target_animal_id == GrowthDiaryEntry.animal_id,
+                ),
+            )
+            .where(GrowthDiaryEntry.organization_id == self.organization_id)
+        )
+        normalized_query = query.strip().lower() if query else ""
+        if normalized_query:
+            pattern = f"%{normalized_query}%"
+            statement = statement.where(
+                or_(
+                    func.lower(Animal.name).like(pattern),
+                    func.lower(Animal.shelter_number).like(pattern),
+                )
+            )
+        if mood == "unanalyzed":
+            statement = statement.where(GrowthDiaryEntry.ai_mood.is_(None))
+        elif mood and mood != "all":
+            statement = statement.where(GrowthDiaryEntry.ai_mood == mood)
+        return statement
+
+    async def count_for_management(
+        self, *, query: str | None = None, mood: str | None = None
+    ) -> int:
+        statement = self._management_query(query=query, mood=mood).with_only_columns(
+            func.count(GrowthDiaryEntry.id), maintain_column_froms=True
+        )
+        result = await self.session.execute(statement)
+        return int(result.scalar_one())
+
+    async def list_for_management(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        query: str | None = None,
+        mood: str | None = None,
+    ) -> list[tuple[GrowthDiaryEntry, Animal]]:
+        statement = (
+            self._management_query(query=query, mood=mood)
+            .order_by(GrowthDiaryEntry.created_at.desc(), GrowthDiaryEntry.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+        result = await self.session.execute(statement)
+        return list(result.all())
+
+    async def get_for_management(self, entry_id: UUID) -> tuple[GrowthDiaryEntry, Animal] | None:
+        result = await self.session.execute(
+            self._management_query().where(GrowthDiaryEntry.id == entry_id)
+        )
+        return result.one_or_none()
+
+    async def get_photo_for_management(self, entry_id: UUID) -> GrowthDiaryEntry | None:
+        statement = (
+            self._management_query()
+            .with_only_columns(GrowthDiaryEntry, maintain_column_froms=True)
+            .where(GrowthDiaryEntry.id == entry_id)
+        )
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
 
     async def list_staff_line_user_ids(self) -> list[str]:
         """Every active STAFF/SHELTER_ADMIN in this organization who also has
