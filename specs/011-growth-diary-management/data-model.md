@@ -24,7 +24,7 @@
 
 | 欄位 | 型別 | 規則 |
 |---|---|---|
-| `photo_content_type` | string nullable | sanitization 結果；只接受 `image/*`，legacy 可 null |
+| `photo_content_type` | string nullable | 新照片固定 `image/webp`；legacy 可 null，不可信時 photo endpoint fail closed |
 | `ai_analysis_status` | string nullable | `pending/succeeded/failed/unconfigured/not_applicable`；null 表示 legacy |
 | `ai_provider` | string nullable | 成功呼叫時保存，例如 `google_gemini` |
 | `ai_model_name` | string nullable | 呼叫時使用的模型識別 |
@@ -36,8 +36,8 @@
 
 ### Invariants
 
-- entry、inquiry、animal 的 `organization_id` 必須一致；建立與管理讀取都由 server 驗證。
-- 新資料 `photo_key` 有值時必須保存合法 `photo_content_type`；legacy 缺少 content type 時照片 endpoint fail closed。
+- entry、inquiry、animal 的 `organization_id` 必須彼此一致且等於 active organization；建立、count、list、detail、photo 與 join 均由 server explicit scope，client 不提供 organization id。
+- 新資料 `photo_key` 有值時 `photo_content_type` 必須為 `image/webp`；legacy 缺少或不是可信 `image/webp` 時照片 endpoint fail closed，不以現行設定推測歷史 MIME。
 - `note` 與 `photo_key` 至少一個應存在；管理頁仍安全呈現異常 legacy 資料。
 - AI 背景更新不得修改 `note`、`photo_key`、正式動物狀態或醫療資料。
 - `ai_mood=concern` 只能呈現「AI 建議人工查看」，不得用於診斷、自動排序或正式等級。
@@ -45,9 +45,10 @@
 ### AI transitions
 
 ```text
-entry with analyzable note → pending → succeeded | failed | unconfigured
-photo-only entry          → not_applicable
-pre-migration entry       → null → response derives legacy/unavailable
+entry with analyzable note + configured client → pending → succeeded | failed
+entry with note + no configured client          → unconfigured
+photo-only entry                                → not_applicable
+pre-migration entry                             → null → response derives legacy/unavailable
 ```
 
 ## GrowthDiaryListItem（read model）
@@ -88,10 +89,62 @@ filter 必須在 count、排序與 pagination 前套用。`unanalyzed` 包含沒
 ```text
 GrowthDiaryEntry (organization_id, photo_key, photo_content_type)
   → ObjectStoragePort.get(ObjectScope(organization_id), photo_key)
-  → authenticated same-origin image response
+  → buffered bytes (final size <= 2 MB)
+  → authenticated same-origin image/webp response
   → authFetch Blob URL (revoked on unmount/context switch)
 ```
 
+成功 response 固定包含：
+
+- `Content-Type: image/webp`
+- `Cache-Control: private, no-store`
+- `X-Content-Type-Options: nosniff`
+
+## FinalSanitizedPhoto（暫態 value，不新增資料表）
+
+由既有 media sanitization pipeline 在記憶體中產生，只有最終成功結果會交給 object storage。
+
+| 屬性 | 規則 |
+|---|---|
+| accepted input | JPEG／PNG／WebP，實際格式必須與 declared MIME 相符 |
+| input size | compressed bytes `<= 10 MB` |
+| pixel limit | `width * height <= 25,000,000`，在完整 decode 前檢查 |
+| frame | animated input 只使用第一 frame |
+| orientation | resize 前套用 EXIF orientation |
+| metadata | final output 不保留 EXIF 或其他來源 metadata |
+| alpha | 透明來源保留 alpha channel |
+| upscale | 禁止；小於 target 的圖片保持原尺寸 |
+| attempt 1 | long edge `<= 1600 px`、WebP quality `82` |
+| attempt 2 | attempt 1 超過 2 MB 時，long edge `<= 1600 px`、quality `72` |
+| attempt 3 | attempt 2 仍超過 2 MB 時，long edge `<= 1280 px`、quality `68` |
+| final size | `<= 2 MB`，否則拒絕 |
+| content type | 固定 `image/webp` |
+| checksum/size | 只依 final WebP bytes 計算 |
+
+原始 JPEG／PNG／WebP、EXIF 版本及每次 fallback intermediate bytes 只存在 request memory，不寫入 object storage 或資料庫。
+
+## Photo persistence state and compensation
+
+這是 request 內的暫態 ownership，不新增 saga、job 或狀態資料表：
+
+```text
+received
+  → sanitized_in_memory
+  → object_stored (compensation token active)
+  → entry_flushed
+  → transaction_committed (token cleared; durable)
+  → success reply / AI task registration
+```
+
+Failure rules：
+
+- input/sanitization failure：沒有 object、沒有 GrowthDiaryEntry。
+- storage put failure：沒有 GrowthDiaryEntry；adapter 不應回報成功 object。
+- DB insert/flush/commit failure after storage success：DB rollback，使用 token 的 organization scope + object key 呼叫 `ObjectStoragePort.delete()`。
+- compensation delete failure：記錄 `growth_diary_orphan_cleanup_failed` structured exception log 並保留原始 DB root cause；不向 LINE 或 management response 暴露 object key。
+- compensation ownership 位於擁有 `async with session.begin()` 的 webhook per-event orchestration，因 commit 發生在 Growth Diary handler 返回之後；只在 handler 內 cleanup 不足以涵蓋 commit failure。
+- success reply 與 AI task registration 在 commit 後執行；post-commit LINE／task failure 不回滾或刪除已 durable 的 entry/object，只記錄外部 side-effect failure，原始日記保持可用。
+
 ## Migration
 
-新增 additive Alembic revision，擴充 `growth_diary_entries` 的 photo metadata、analysis status 與 provenance。既有資料允許 null，不做不可信 backfill；downgrade 只移除新增欄位，不改原始日記。
+新增 additive Alembic revision，擴充 `growth_diary_entries` 的 photo metadata、analysis status 與 provenance。既有資料允許 null，不做不可信 MIME/provenance backfill；downgrade 只移除新增欄位，不改原始日記。新圖片的 final bytes 只存在 object storage，資料表不新增 original/intermediate media 欄位。

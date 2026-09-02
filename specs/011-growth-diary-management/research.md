@@ -10,7 +10,7 @@
 
 ## 2. 資訊架構與視覺方向
 
-**Decision**：採「返家後生活札記」時間軸，以提交時間節點串接響應式日記卡；卡片依序呈現動物識別、原始照片／文字、AI 工作人員摘要與給領養人的回覆。桌面照片與內容雙欄，手機上下堆疊，不使用 table。
+**Decision**：採「返家後生活札記」時間軸，以提交時間節點串接響應式日記卡；卡片依序呈現動物識別、領養人提交照片的安全正規化版本／原始文字、AI 工作人員摘要與給領養人的回覆。桌面照片與內容雙欄，手機上下堆疊，不使用 table。
 
 **Rationale**：時間是日記真正的結構；照片、長文字與 AI 分區放入 table 會在手機產生橫向捲動，也弱化原始資料與衍生資料的界線。
 
@@ -38,11 +38,11 @@
 
 ## 5. Private photo delivery
 
-**Decision**：list 回 `photo_endpoint`；前端以 `authFetch` 取得 Blob、建立 object URL，unmount／tenant switch 時 revoke。新增 `GET /v1/management/growth-diary-entries/{entry_id}/photo`，先驗證 role、active organization、entry id + organization，再從 private storage 讀取；回覆使用已保存的 sanitized content type、`Cache-Control: private`、`nosniff`。不存在、跨 tenant、無照片與 storage failure 統一 404。
+**Decision**：list 回 `photo_endpoint`；前端以 `authFetch` 取得 Blob、建立 object URL，unmount／tenant switch 時 revoke。新增 `GET /v1/management/growth-diary-entries/{entry_id}/photo`，先驗證 role、active organization、entry id + organization，再從 private storage 以既有 `ObjectStoragePort.get()` buffered read 取得最多 2 MB 的 final WebP；回覆固定 `Content-Type: image/webp`、`Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`。不存在、跨 tenant、無可信 `photo_content_type`、無照片與 storage failure 統一 404。
 
 **Rationale**：production MinIO 使用容器內 hostname，瀏覽器無法解析；`<img>` 又不能附帶 sessionStorage Bearer token。authenticated Blob 能沿用 request-scope cancellation，也不把 credential 放 URL。
 
-**Alternatives considered**：繼續回 internal presigned URL、公開 MinIO、把 token 放 query string都違反 production reachability 或 private-media 安全。
+**Alternatives considered**：繼續回 internal presigned URL、公開 MinIO、把 token 放 query string都違反 production reachability 或 private-media 安全；新增 streaming port 在 2 MB final ceiling 下沒有必要，會擴大 architecture scope。
 
 ## 6. AI status、標示與 provenance
 
@@ -59,3 +59,51 @@
 **Rationale**：前端導覽不是安全邊界；真實 PostgreSQL isolation 才能證明 A/B 隔離，瀏覽器測試才能證明舊 response 與 Blob 不殘留。page-scoped CSS 可避免繼續膨脹 globals。
 
 **Alternatives considered**：只測 pure filter 或只測 E2E 都無法完整覆蓋契約、安全與錯誤定位。
+
+## 8. 既有圖片處理與 WebP normalization
+
+**Decision**：直接擴充 `services/api/app/application/media_sanitization.py` 與既有 `MediaProcessingService`，不建立 Growth Diary 專用 image service。Growth Diary 呼叫明確選用 WebP normalization policy；既有其他 media caller 的輸出契約不在本 feature 內變更。接受 MIME 與實際格式一致的 JPEG、PNG、WebP，原始 compressed input 最大 10 MB；只把 final sanitized WebP 傳給 storage。
+
+**Rationale**：現有流程已集中處理格式白名單、重新編碼、EXIF 移除、checksum 與 `ObjectMetadata`，且 Pillow 已是 runtime dependency。沿用同一 boundary 可避免安全政策分叉。現況會 `source.load()` 後才處理內容並保持原輸出格式；planned behavior 將加入 pre-decode pixel gate、orientation、第一幀、alpha、resize 與 WebP fallback。
+
+**Alternatives considered**：平行 image processor 會產生兩套媒體安全規則；保存 original 再離線壓縮會留下過大及含 metadata 的物件；兩者均拒絕。
+
+## 9. Pixel gate 與 Pillow decompression-bomb 配合
+
+**Decision**：`Image.open()` 只讀 header 後，立即取得 width/height 並在任何 `source.load()`、`ImageOps.exif_transpose()` 或 frame copy 前檢查 `width * height <= 25_000_000`。同時將 Pillow `DecompressionBombWarning` 在此流程中提升為可捕捉的拒絕錯誤，並捕捉 `DecompressionBombError`；application-level 25M limit 是正式產品邊界，Pillow threshold 是額外 defense-in-depth。
+
+**Rationale**：目前環境的 `Image.MAX_IMAGE_PIXELS` 是 89,478,485；Pillow 在超過該值時發出 warning，超過約兩倍時拋出 error，均高於本 feature 的 25M 限制。只依賴 Pillow 預設值或 10 MB compressed byte limit，不能阻止小型壓縮檔造成過高 decode memory。header 解析本身仍可能遭遇 Pillow warning/error，因此必須在 open 周圍配置 warning handling，再執行更低的 application gate。
+
+**Alternatives considered**：在 `source.load()` 後才檢查已經失去記憶體保護效果；全域修改 `Image.MAX_IMAGE_PIXELS` 會影響其他 Pillow consumer；只忽略 warning 則降低 defense-in-depth。三者均拒絕。
+
+## 10. Orientation、animation、alpha 與固定 fallback
+
+**Decision**：通過格式與 pixel gate 後，選取 animated input 的第一 frame，套用 EXIF orientation，再移除 EXIF/metadata；保留 alpha channel，不放大小圖片。輸出依序嘗試：長邊最多 1600 px、WebP quality 82；若大於 2 MB，以相同尺寸 quality 72；仍過大時長邊最多 1280 px、quality 68；最終仍大於 2 MB 則拒絕。每次嘗試都只存在記憶體，storage 只收到最後成功 bytes。
+
+**Rationale**：固定且可測試的 fallback 可限制 storage 與 photo response 上限，又不需背景壓縮任務。WebP 支援 alpha，能統一 JPEG/PNG/WebP 的新資料 MIME。orientation 必須在 resize 前套用，否則長邊判斷可能錯置；不 upscale 可避免小圖無益放大。
+
+**Alternatives considered**：無限品質迴圈難以預測；保存多尺寸或原檔增加 storage ownership；移除 alpha 或一律轉 RGB 會破壞透明圖片。均不採用。
+
+## 11. DB transaction 與 orphan compensation
+
+**Decision**：per-event webhook orchestration 擁有新 Growth Diary object 的 compensation token。`MediaProcessingService.store_cleaned()` 成功後登記 `organization_id + object_key`；只有外層 `async with session.begin()` 成功完成 commit 後才清除。insert、flush、handler 或 commit 任一失敗時，rollback 後以現有 `ObjectStoragePort.delete()` 補償刪除。Growth Diary handler 只準備成功 reply 與 AI task 參數，transaction commit 後才由 webhook orchestration 送出／註冊。cleanup failure 使用 `logger.exception` 記錄固定事件名 `growth_diary_orphan_cleanup_failed` 與 correlation 欄位，不覆蓋 root cause、不向使用者暴露 key。
+
+**Rationale**：目前 `_handle_growth_diary_message()` 在外層 webhook transaction 內先 put object 再 `add_entry()`，並在 commit 前送出成功 reply；真正 commit 發生在 handler 返回後，所以單純在 handler 內 try/except 無法捕捉 commit failure，也可能在 commit failure 後已告知使用者成功。將 compensation ownership與 Growth Diary post-commit side effect 放在既有 per-event transaction boundary，是涵蓋完整失敗面的最小修改，也不需要 distributed transaction。既有 event-based deterministic object key 讓相同 webhook retry 覆寫同一 scope/key，不會擴散成多個 orphan。
+
+**Alternatives considered**：只捕捉 DB insert failure 漏掉 commit failure；兩階段 commit、saga framework或新 background cleanup service超出範圍；忽略 delete failure無法觀測。均拒絕。
+
+## 12. Roles、raw output 與 audit policy
+
+**Decision**：STAFF、SHELTER_ADMIN、具有 active shelter context 的 PLATFORM_ADMIN 均可讀 list/detail/raw output/photo；VOLUNTEER、無 active shelter context 與其他 organization 均拒絕。list 只含 analysis/provenance summary，完整 provenance 與 raw output 只在 detail。第一版不為 list/detail/photo/raw-output read 新增 audit event。
+
+**Rationale**：現有 `require_staff_or_admin()` 已涵蓋三個 management role 且要求 active organization；後端與 RLS 仍是授權邊界。Constitution VIII 要求重要資料異動保留 audit，本 feature 是高頻 read-only flow，未新增 read audit 不構成 mutation audit 缺口；錯誤 logging、authentication、authorization 與既有 audit 行為不變。
+
+**Alternatives considered**：另建 permission abstraction 重複既有 role gate；把 raw output 放 list 增加不必要曝光與 payload；把每次照片請求寫入 mutation audit log 會造成高頻噪音。均不採用。
+
+## 13. Canonical OpenAPI ownership
+
+**Decision**：`specs/011-growth-diary-management/contracts/growth-diary-management.openapi.yaml` 作為 feature design contract；實作階段必須將 paths/schemas 合併到既有唯一 canonical `specs/001-volunteer-care-report/contracts/openapi.yaml`，再由現有 `packages/contracts` script 生成 TypeScript。
+
+**Rationale**：目前 `packages/contracts/package.json` 與 `check-generated.mjs` 都固定讀取 001 canonical。只更新 011 contract 不會改變 generated types，因此 plan 必須明確包含 canonical merge。
+
+**Alternatives considered**：為單一 feature 改成多契約生成或新增 bundler 會擴大 tooling scope；讓前端手寫型別會產生第二份不可驗證契約。均不採用。
