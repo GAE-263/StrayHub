@@ -242,9 +242,7 @@ class LineDraftConversationService:
         await self.draft_repository.session.flush()
         return ConversationResult(state=machine.state)
 
-    async def story_for_current(
-        self, *, volunteer_user_id: UUID, story: str
-    ) -> ConversationResult:
+    async def story_for_current(self, *, volunteer_user_id: UUID, story: str) -> ConversationResult:
         draft = await self.draft_repository.get_active_for_volunteer(volunteer_user_id)
         if draft is None or draft.current_step != DraftState.AWAITING_STORY.value:
             raise DomainError("invalid_story_step", "目前沒有可填寫小故事的回報", 409)

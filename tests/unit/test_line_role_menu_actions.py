@@ -61,9 +61,7 @@ def test_walk_command_routing_precedes_active_adoption_free_text() -> None:
     assert source.index("_is_walk_report_command(event)") < source.index(
         "_active_adoption_draft(session, line_user_id)"
     )
-    assert source.index('postback_values.get("flow"') < source.index(
-        "_handle_postback("
-    )
+    assert source.index('postback_values.get("flow"') < source.index("_handle_postback(")
 
 
 @pytest.mark.asyncio

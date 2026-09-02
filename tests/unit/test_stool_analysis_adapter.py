@@ -88,9 +88,10 @@ async def test_sends_base64_with_api_key_and_preserves_raw_envelope() -> None:
     }
     assert isinstance(result, AIAnalysisEnvelope)
     assert result.raw["recommendation"] == "完整原始建議"
-    assert validate_ai_output(result.formal, allowed_codes=_ALLOWED)["observations"][0][
-        "code"
-    ] == "defecation.normal"
+    assert (
+        validate_ai_output(result.formal, allowed_codes=_ALLOWED)["observations"][0]["code"]
+        == "defecation.normal"
+    )
 
 
 @pytest.mark.parametrize(
@@ -109,9 +110,7 @@ async def test_maps_only_to_canonical_defecation_codes(
     score: int, abnormal: bool, expected: str
 ) -> None:
     adapter, client = _adapter(
-        lambda _request: httpx.Response(
-            200, json=_payload(score=score, has_abnormalities=abnormal)
-        )
+        lambda _request: httpx.Response(200, json=_payload(score=score, has_abnormalities=abnormal))
     )
     async with client:
         result = await adapter.analyze(note=None, image_bytes=[b"jpeg"], version=_version())

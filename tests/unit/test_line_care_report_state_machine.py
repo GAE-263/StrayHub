@@ -23,8 +23,12 @@ def complete_answers() -> dict[str, str]:
 
 def test_frozen_six_question_contract() -> None:
     assert REQUIRED_ANSWER_KEYS == (
-        "walk_completion", "activity", "gait", "defecation",
-        "animal_interaction", "appearance_special_status",
+        "walk_completion",
+        "activity",
+        "gait",
+        "defecation",
+        "animal_interaction",
+        "appearance_special_status",
     )
 
 
@@ -66,10 +70,14 @@ def test_no_stool_values_are_valid_domain_answers(value: str) -> None:
 
 def test_back_from_q5_skips_stool_prompt_when_no_stool() -> None:
     machine = DraftStateMachine(state=DraftState.ANSWERING_ANIMAL_INTERACTION)
-    machine.answers.values.update({
-        "walk_completion": "walk_completion.completed", "activity": "activity.usual",
-        "gait": "gait.normal", "defecation": NO_STOOL_CODE,
-    })
+    machine.answers.values.update(
+        {
+            "walk_completion": "walk_completion.completed",
+            "activity": "activity.usual",
+            "gait": "gait.normal",
+            "defecation": NO_STOOL_CODE,
+        }
+    )
     assert machine.back() == DraftState.ANSWERING_DEFECATION
     assert "defecation" not in machine.answers.values
 

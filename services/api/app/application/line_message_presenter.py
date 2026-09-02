@@ -498,9 +498,7 @@ def daily_care_bubble(
                 }
             )
             current_section = cared
-        body_contents.append(
-            _animal_status_row(label, data, cared_caption=caption, cared=cared)
-        )
+        body_contents.append(_animal_status_row(label, data, cared_caption=caption, cared=cared))
     if more_data is not None:
         body_contents.append(
             {

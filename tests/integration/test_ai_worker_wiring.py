@@ -282,9 +282,7 @@ async def test_cross_organization_stool_media_is_filtered_before_download() -> N
     try:
         await _run(fixture, adapter, storage)
         assert adapter.requests == []
-        assert json.loads((await _job(fixture))["raw_ai_output"]) == {
-            "skipped": "no_stool_media"
-        }
+        assert json.loads((await _job(fixture))["raw_ai_output"]) == {"skipped": "no_stool_media"}
     finally:
         await _cleanup(fixture)
 

@@ -23,9 +23,9 @@ def test_disabled_option_is_rejected() -> None:
 
 
 def test_required_note_error_uses_human_label() -> None:
-    service = EffectiveObservationService({
-        "appearance.other": EffectiveOption("appearance.other", "其他", requires_note=True)
-    })
+    service = EffectiveObservationService(
+        {"appearance.other": EffectiveOption("appearance.other", "其他", requires_note=True)}
+    )
     with pytest.raises(DomainError, match="其他"):
         service.validate_note_requirement({"appearance_special_status": "appearance.other"}, None)
 

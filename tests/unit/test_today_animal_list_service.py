@@ -28,9 +28,7 @@ async def test_today_list_groups_count_and_latest_without_disabling_reported_ani
             assert kwargs["organization_id"] == organization_id
             return SimpleNamespace()
 
-    result = await TodayAnimalListService(
-        Animals(), Reports(), Authorization()
-    ).list_today(
+    result = await TodayAnimalListService(Animals(), Reports(), Authorization()).list_today(
         user_id=uuid4(),
         organization_id=organization_id,
         membership_id=uuid4(),
@@ -65,9 +63,7 @@ async def test_today_list_has_independent_group_pagination_metadata() -> None:
         async def authorize(self, **_kwargs):
             return SimpleNamespace()
 
-    result = await TodayAnimalListService(
-        Animals(), Reports(), Authorization()
-    ).list_today(
+    result = await TodayAnimalListService(Animals(), Reports(), Authorization()).list_today(
         user_id=uuid4(),
         organization_id=organization_id,
         membership_id=uuid4(),

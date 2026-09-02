@@ -48,14 +48,11 @@ class EffectiveObservationService:
         required_labels = [
             option.display_name
             for code in answers.values()
-            if (option := self.options.get(code)) is not None
-            and option.requires_note
+            if (option := self.options.get(code)) is not None and option.requires_note
         ]
         if required_labels and (not note or not note.strip()):
             labels = "、".join(dict.fromkeys(required_labels))
-            raise DomainError(
-                "observation_note_required", f"選擇「{labels}」時需要補充說明", 422
-            )
+            raise DomainError("observation_note_required", f"選擇「{labels}」時需要補充說明", 422)
 
     def build_quick_reply_options(self, *, category: str) -> list[dict[str, str]]:
         return [

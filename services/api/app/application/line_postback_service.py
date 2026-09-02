@@ -60,14 +60,13 @@ class LinePostbackService:
             if value is None:
                 raise DomainError("answer_required", "需要選擇回報答案", 422)
             draft.machine.answer_current(value)
-            if (
-                draft.machine.state == DraftState.AWAITING_STOOL_MEDIA
-                and value in {NO_STOOL_CODE, UNOBSERVED}
-            ):
+            if draft.machine.state == DraftState.AWAITING_STOOL_MEDIA and value in {
+                NO_STOOL_CODE,
+                UNOBSERVED,
+            }:
                 draft.machine.transition(DraftState.ANSWERING_ANIMAL_INTERACTION)
         elif (
-            action == "skip_stool_media"
-            and draft.machine.state == DraftState.AWAITING_STOOL_MEDIA
+            action == "skip_stool_media" and draft.machine.state == DraftState.AWAITING_STOOL_MEDIA
         ):
             draft.machine.transition(DraftState.ANSWERING_ANIMAL_INTERACTION)
         elif action == "skip_note" and draft.machine.state == DraftState.AWAITING_NOTE:
