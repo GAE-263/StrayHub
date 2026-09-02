@@ -43,11 +43,17 @@ async def test_worker_retries_iteration_failure_and_disposes_on_shutdown(
     assert bind.disposed is True
 
 
-def test_worker_registration_excludes_unapproved_adoption_ai_and_growth_diary() -> None:
+def test_worker_registration_includes_growth_diary_but_not_adoption_ai() -> None:
+    """毛孩日記's periodic reminder is a plain per-organization worker
+    iteration step (see GrowthDiaryReminderHandler), so it's registered here
+    like VolunteerAccessHandler. Adoption AI suitability/recommendation
+    analysis, in contrast, runs from FastAPI BackgroundTasks straight off
+    the LINE webhook request (see line_webhook.py) — it has no worker-side
+    component at all, so Gemini/AdoptionAi never appear in this module."""
     source = inspect.getsource(worker)
 
     assert "VolunteerAccessHandler" in source
-    assert "GrowthDiary" not in source
+    assert "GrowthDiaryReminderHandler" in source
     assert "AdoptionAi" not in source
     assert "Gemini" not in source
 

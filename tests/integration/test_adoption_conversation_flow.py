@@ -151,9 +151,15 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
                         event_id=f"e-answer-{index}",
                     )
 
-                # AI is optional: the deterministic pool is immediately selectable.
-                assert result.state == AdoptionDraftState.SELECTING_MATCHED_ANIMAL
+                # PRESENTING_MATCHES pauses at AWAITING_AI_RECOMMENDATIONS for
+                # the AI background task to rerank the rule-based pool (see
+                # line_webhook.py) — simulated here directly since that task
+                # itself isn't exercised at this layer.
+                assert result.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
                 assert result.candidate_match_ids[0] == medium_high
+                pending_draft = await repository.get_by_token(token)
+                pending_draft.current_step = AdoptionDraftState.SELECTING_MATCHED_ANIMAL.value
+                await session.flush()
 
                 await conversation.handle(
                     token=token,
@@ -285,7 +291,13 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
                     value=None,
                     event_id="e-confirm-answers",
                 )
-                assert result.state == AdoptionDraftState.AWAITING_ADOPTER_NAME
+                assert result.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+
+                # In production this next hop is driven by the AI background
+                # task itself (see line_webhook.py), not a user action.
+                pending_draft = await repository.get_by_token(token)
+                pending_draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+                await session.flush()
 
                 # 留下聯絡方式現在拆成三步：姓名 → 方便聯繫時間 → 手機號碼。
                 await conversation.handle(
@@ -336,7 +348,12 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
 
 
 @pytest.mark.asyncio
-async def test_specific_animal_path_does_not_wait_for_optional_ai() -> None:
+async def test_entered_awaiting_ai_suitability_fires_only_on_the_transition_edge() -> None:
+    """`entered_awaiting_ai_suitability` gates the AI suitability analysis
+    background task (see line_webhook.py) — it must be True only on the one
+    `handle()` call that actually moves the draft into that state (the
+    confirm_answers action out of CONFIRMING_ANSWERS), not on any other
+    call, so the analysis fires exactly once per draft."""
     organization_id, adopter_id = uuid4(), uuid4()
     await engine.dispose(close=False)
     target_animal_id = uuid4()
@@ -428,9 +445,15 @@ async def test_specific_animal_path_does_not_wait_for_optional_ai() -> None:
                     value=None,
                     event_id="e-confirm-answers",
                 )
-                assert result.state == AdoptionDraftState.AWAITING_ADOPTER_NAME
-                assert result.entered_awaiting_ai_suitability is False
+                assert result.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+                assert result.entered_awaiting_ai_suitability is True
 
+                # A later call that moves the draft on from here (in
+                # production, the AI background task doing so directly) must
+                # not report the entering edge again.
+                pending_draft = await repository.get_by_token(token)
+                pending_draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+                await session.flush()
                 result = await conversation.handle(
                     token=token,
                     adopter_user_id=adopter_id,

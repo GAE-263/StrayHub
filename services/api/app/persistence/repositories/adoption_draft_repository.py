@@ -17,10 +17,9 @@ def adoption_draft_token_digest(token: str) -> str:
 class AdoptionDraftRepository:
     """Unlike every other tenant-scoped repository, `organization_id` may be
     `None` here: an adopter's first turn (SELECTING_ORGANIZATION) happens
-    before any shelter is chosen. `get_active_for_adopter` may be called
-    before a shelter is chosen only after the caller establishes the
-    authenticated adopter-owner database scope. Every other method still
-    filters by `organization_id`, matching the normal tenant-scoped shape.
+    before any shelter is chosen. Only `get_active_for_adopter` is safe to
+    call while unscoped — every other method still filters by
+    `organization_id`, matching the normal tenant-scoped repository shape.
     """
 
     def __init__(self, session: AsyncSession, organization_id: UUID | None) -> None:
@@ -46,7 +45,7 @@ class AdoptionDraftRepository:
         return result.scalar_one_or_none()
 
     async def get_active_for_adopter(self, adopter_user_id: UUID) -> AdoptionDraft | None:
-        """Require adopter-owner or authorized organization scope from the caller."""
+        """Not scoped by organization_id — safe to call before a shelter is chosen."""
         result = await self.session.execute(
             select(AdoptionDraft).where(
                 AdoptionDraft.adopter_user_id == adopter_user_id,
