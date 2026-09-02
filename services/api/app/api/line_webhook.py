@@ -5,12 +5,14 @@ from __future__ import annotations
 # ruff: noqa: E501
 import json
 import logging
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, BackgroundTasks, Header, Request
 from services.api.app.api.errors import DomainError
+from services.api.app.application.adoption_ai_analysis_service import AdoptionAiAnalysisService
 from services.api.app.application.animal_selection import (
     AnimalSelectionService,
     TodayAnimalListService,
@@ -22,14 +24,19 @@ from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
 )
+from services.api.app.application.growth_diary_ai_analysis_service import (
+    GrowthDiaryAiAnalysisService,
+)
 from services.api.app.application.line_adoption_conversation import (
     LineAdoptionConversationService,
 )
 from services.api.app.application.line_adoption_draft_service import LineAdoptionDraftService
 from services.api.app.application.line_adoption_flex import (
+    AiSuitabilityCard,
     MatchReportCard,
     QuestionOption,
     ShelterCard,
+    build_ai_suitability_card,
     build_animal_confirm_card,
     build_info_card,
     build_match_report,
@@ -41,6 +48,13 @@ from services.api.app.application.line_draft_conversation import (
     LineDraftConversationService,
 )
 from services.api.app.application.line_draft_service import LineDraftService
+from services.api.app.application.line_growth_diary_flex import (
+    AdoptedAnimalOption,
+    GrowthDiaryHistoryEntry,
+    build_animal_picker,
+    build_growth_diary_ai_reply_card,
+    build_growth_diary_history_carousel,
+)
 from services.api.app.application.line_image_service import LineImageService
 from services.api.app.application.line_menu_actions import (
     MENU_LIFF_ACTIONS,
@@ -70,6 +84,7 @@ from services.api.app.application.media_access import (
     MediaAccessService,
     issue_adoption_photo_token,
 )
+from services.api.app.application.media_service import MediaProcessingService
 from services.api.app.application.ports.line_messaging import LineMessagingPort
 from services.api.app.application.report_job_dispatch import ReportJobDispatchService
 from services.api.app.application.volunteer_reporting_authorization import (
@@ -85,6 +100,7 @@ from services.api.app.domain.line_care_report_state import (
     DraftStateMachine,
 )
 from services.api.app.domain.line_webhook_security import verify_line_signature
+from services.api.app.infrastructure.ai.gemini_client import GeminiClient
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.database.engine import session_factory
@@ -92,9 +108,14 @@ from services.api.app.persistence.database.scope import (
     set_authentication_user_scope,
     set_organization_scope,
 )
+from services.api.app.persistence.models.growth_diary import GrowthDiaryDraft, GrowthDiaryEntry
 from services.api.app.persistence.models.identity import LineUserBinding, User
 from services.api.app.persistence.repositories.adoption_draft_repository import (
     AdoptionDraftRepository,
+)
+from services.api.app.persistence.repositories.adoption_inquiry_repository import (
+    AdoptionInquiryRepository,
+    list_inquiries_for_adopter,
 )
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
@@ -107,6 +128,19 @@ from services.api.app.persistence.repositories.care_report_handoff_repository im
     CareReportHandoffRepository,
 )
 from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
+from services.api.app.persistence.repositories.growth_diary_repository import (
+    GrowthDiaryRepository,
+    list_entries_for_inquiries,
+)
+from services.api.app.persistence.repositories.growth_diary_repository import (
+    clear_pending_draft as clear_pending_growth_diary_draft,
+)
+from services.api.app.persistence.repositories.growth_diary_repository import (
+    get_pending_draft as get_pending_growth_diary_draft,
+)
+from services.api.app.persistence.repositories.growth_diary_repository import (
+    set_pending_draft as set_pending_growth_diary_draft,
+)
 from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
 from services.api.app.persistence.repositories.observation_repository import ObservationRepository
 from services.api.app.persistence.repositories.organization_repository import OrganizationRepository
@@ -117,6 +151,15 @@ logger = logging.getLogger(__name__)
 
 VOLUNTEER_APPLICATION_COMMAND = "我要報名志工"
 WALK_REPORT_COMMAND = "開始散步回報"
+# No dedicated Rich Menu tile exists for 毛孩日記 yet — the default menu's
+# exact two entries (志工／領養) are locked by
+# test_default_menu_offers_volunteer_and_adoption_entries, and switching an
+# adopter to their own menu at inquiry-submission time is explicitly
+# forbidden until a formal adoption-completed lifecycle exists (see
+# test_adoption_inquiry_submission_does_not_switch_to_adopter_menu). A typed
+# command, same pattern as VOLUNTEER_APPLICATION_COMMAND/WALK_REPORT_COMMAND,
+# is the entry point until one of those lands.
+GROWTH_DIARY_COMMAND = "毛孩日記"
 
 
 def _is_walk_report_command(event: dict) -> bool:
@@ -124,6 +167,14 @@ def _is_walk_report_command(event: dict) -> bool:
         event.get("type") == "message"
         and event.get("message", {}).get("type") == "text"
         and event.get("message", {}).get("text", "").strip() == WALK_REPORT_COMMAND
+    )
+
+
+def _is_growth_diary_command(event: dict) -> bool:
+    return (
+        event.get("type") == "message"
+        and event.get("message", {}).get("type") == "text"
+        and event.get("message", {}).get("text", "").strip() == GROWTH_DIARY_COMMAND
     )
 
 
@@ -747,6 +798,69 @@ async def _adoption_reply_for_state(
             await _reply(line, event, [_text("目前沒有符合條件的可領養動物，請聯繫工作人員協助。")])
             return
         card = build_match_report(cards, max_bubbles=5)
+    elif state == AdoptionDraftState.AWAITING_AI_SUITABILITY:
+        # Entered right after the questionnaire is confirmed — the AI call
+        # runs in the background (see _run_adoption_ai_suitability_analysis)
+        # and pushes its own result later; this is just the immediate,
+        # synchronous reply, plus whatever it's resumed into mid-wait.
+        if draft.ai_followup_target_animal_id is not None:
+            card = build_info_card(
+                "留下你的期待或特殊需求 🐾",
+                accent_index=1,
+                body="想要母狗、個性安靜的孩子都可以直接打字告訴我們",
+            )
+        else:
+            card = build_info_card(
+                "AI 正在分析適配度 🤖", accent_index=3, body="請稍候幾秒鐘，完成後會馬上通知你"
+            )
+    elif state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS:
+        card = build_info_card(
+            "AI 正在為你精選毛孩 🤖", accent_index=3, body="請稍候幾秒鐘，完成後會馬上通知你"
+        )
+    elif state == AdoptionDraftState.SELECTING_ALTERNATIVE_ANIMAL:
+        # 心有所屬・AI 適配度 <60% 後的替代名單 — draft.target_animal_id is
+        # still the ORIGINALLY chosen animal at this point (only changes once
+        # select_alternative_animal fires), so it's the one labelled "維持這隻".
+        repository = AnimalRepository(session, draft.organization_id)
+        cards = []
+        for result in draft.match_results or []:
+            animal = await repository.get(UUID(result["animal_id"]))
+            if animal is None:
+                continue
+            is_original = animal.id == draft.target_animal_id
+            cards.append(
+                MatchReportCard(
+                    animal_id=str(animal.id),
+                    name=animal.name,
+                    shelter_number=animal.shelter_number,
+                    photo_url=await _animal_photo_url(
+                        public_base_url, draft.organization_id, animal
+                    ),
+                    reasons=tuple(result.get("reasons", [])),
+                    selectable=True,
+                    select_action="select_alternative_animal",
+                    select_label="維持這隻" if is_original else "換成這隻",
+                )
+            )
+        if not cards:
+            await _reply(line, event, [_text("目前沒有可選擇的名單，請聯繫工作人員協助。")])
+            return
+        card = build_match_report(cards, max_bubbles=5)
+    elif state == AdoptionDraftState.CONFIRMING_ALTERNATIVE_ANIMAL:
+        animal = await AnimalRepository(session, draft.organization_id).get(draft.target_animal_id)
+        if animal is None:
+            await _reply(line, event, [_text("動物資料異常，請重新選擇。")])
+            return
+        card = build_animal_confirm_card(
+            name=animal.name,
+            shelter_number=animal.shelter_number,
+            photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
+            confirm_action=_action(
+                "確認是這隻",
+                urlencode({"action": "confirm_alternative_animal", "flow": "adoption"}),
+            ),
+            back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
+        )
     elif state == AdoptionDraftState.AWAITING_ADOPTER_NAME:
         card = build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名")
     elif state == AdoptionDraftState.AWAITING_CONTACT_TIME:
@@ -812,6 +926,662 @@ async def _adoption_reply_for_state(
     await _reply(line, event, [card])
 
 
+def _build_gemini_client(settings) -> GeminiClient | None:
+    """None when neither auth mode is configured — callers treat that as
+    "skip this background task silently". A service account (Vertex AI)
+    takes precedence over a plain API key (AI Studio) when both are set."""
+    if settings.gemini_service_account_path:
+        return GeminiClient(
+            model_name=settings.gemini_model_name,
+            service_account_path=settings.gemini_service_account_path,
+            location=settings.gemini_vertex_location,
+        )
+    if settings.gemini_api_key:
+        return GeminiClient(model_name=settings.gemini_model_name, api_key=settings.gemini_api_key)
+    return None
+
+
+async def _run_adoption_ai_suitability_analysis(
+    line,
+    *,
+    line_user_id: str,
+    organization_id: UUID,
+    draft_id: UUID,
+    animal_id: UUID,
+    public_base_url: str | None,
+) -> None:
+    """Background task (see `BackgroundTasks` in `webhook()`) — runs AFTER
+    the synchronous reply has already been sent, so it opens its own DB
+    session rather than reusing the request's (already closed by then).
+    Every failure mode (no API key, draft/animal vanished mid-flight, Gemini
+    call failed) degrades to silence or a best-effort fallback push rather
+    than raising — nothing here can affect the reply the adopter already
+    got."""
+    settings = get_settings()
+    gemini = _build_gemini_client(settings)
+    async with session_factory() as session:
+        async with session.begin():
+            await set_organization_scope(session, organization_id)
+            draft = await AdoptionDraftRepository(session, organization_id).get(draft_id)
+            animal = await AnimalRepository(session, organization_id).get(animal_id)
+            if (
+                draft is None
+                or animal is None
+                or draft.status != "active"
+                or draft.current_step != AdoptionDraftState.AWAITING_AI_SUITABILITY.value
+            ):
+                # The adopter cancelled, backed out, or otherwise moved on
+                # while this was running — nothing left to attach a result to.
+                return
+            result = (
+                await AdoptionAiAnalysisService(
+                    session, organization_id, gemini
+                ).analyze_suitability(answers=draft.answers, animal=animal)
+                if gemini is not None
+                else None
+            )
+            messages: list[dict] = []
+            if result is not None:
+                draft.ai_suitability_score = result.score
+                draft.ai_suitability_explanation = result.explanation
+                messages.append(
+                    build_ai_suitability_card(
+                        AiSuitabilityCard(
+                            animal_id=str(animal.id),
+                            name=animal.name,
+                            shelter_number=animal.shelter_number,
+                            photo_url=await _animal_photo_url(
+                                public_base_url, organization_id, animal
+                            ),
+                            score=result.score,
+                            explanation=result.explanation,
+                        )
+                    )
+                )
+            else:
+                if gemini is None:
+                    logger.info("adoption_ai_suitability_skipped_no_credentials")
+                messages.append(_text("AI 適配度分析暫時無法使用，不過還是可以繼續留下聯絡方式 🐾"))
+            # A score under 60 pauses here to ask about special requirements
+            # (see _handle_ai_followup_answer) instead of moving on to the
+            # adopter-name request — everything else (a good score, or no
+            # score at all) proceeds straight there now that AI has had its
+            # say.
+            if result is not None and result.score < 60:
+                draft.ai_followup_target_animal_id = animal.id
+                messages.append(
+                    _text(
+                        "如果不介意，可以告訴我們你對這隻毛孩的期待或特殊需求嗎？"
+                        "想要母狗、個性安靜的孩子都可以直接打字告訴我們 🐾"
+                    )
+                )
+            else:
+                draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+                messages.append(
+                    build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名")
+                )
+    # Push after the transaction above has committed — a push failure here
+    # (network, LINE API error) must not roll back the score/state that was
+    # just saved.
+    messages[-1]["quickReply"] = {"items": [_adoption_cancel_item()]}
+    try:
+        await line.push(to_user_id=line_user_id, messages=messages)
+    except Exception:
+        logger.exception("adoption_ai_suitability_push_failed")
+
+
+async def _run_adoption_ai_followup_recommendations(
+    line,
+    *,
+    line_user_id: str,
+    organization_id: UUID,
+    draft_id: UUID,
+    exclude_animal_id: UUID,
+    special_request: str,
+    public_base_url: str | None,
+) -> None:
+    """Background task for the second Gemini call — triggered by
+    `_handle_ai_followup_answer` once the adopter answers the "any special
+    requirements?" question. The originally-chosen animal is always offered
+    back as "維持這隻" alongside whatever AI alternatives come back — the
+    adopter must explicitly (re)confirm a target before contact info is
+    asked for, whether they stick with the original or switch (see
+    SELECTING_ALTERNATIVE_ANIMAL / CONFIRMING_ALTERNATIVE_ANIMAL)."""
+    settings = get_settings()
+    gemini = _build_gemini_client(settings)
+    async with session_factory() as session:
+        async with session.begin():
+            await set_organization_scope(session, organization_id)
+            draft = await AdoptionDraftRepository(session, organization_id).get(draft_id)
+            if draft is None or draft.status != "active":
+                return
+            original = await AnimalRepository(session, organization_id).get(exclude_animal_id)
+            alternatives: list[tuple] = []
+            if gemini is not None:
+                service = AdoptionAiAnalysisService(session, organization_id, gemini)
+                alternatives = (
+                    await service.recommend_alternatives(
+                        special_request=special_request, exclude_animal_id=exclude_animal_id
+                    )
+                    or []
+                )
+            else:
+                logger.info("adoption_ai_alternatives_skipped_no_credentials")
+
+            draft.ai_followup_target_animal_id = None
+            if original is None and not alternatives:
+                # Nothing left to offer a choice between — fall back straight
+                # to the adopter-name request, same as the old
+                # (pre-selection-step) graceful-degradation behaviour.
+                draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+                messages: list[dict] = [
+                    _text("這次沒有找到更適合的建議，不過你的申請資料工作人員都收到了 🐾"),
+                    build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名"),
+                ]
+            else:
+                candidate_ids: list[str] = []
+                match_results: list[dict] = []
+                cards: list[MatchReportCard] = []
+                if original is not None:
+                    candidate_ids.append(str(original.id))
+                    match_results.append(
+                        {"animal_id": str(original.id), "reasons": ["你原本選定的毛孩"]}
+                    )
+                    cards.append(
+                        MatchReportCard(
+                            animal_id=str(original.id),
+                            name=original.name,
+                            shelter_number=original.shelter_number,
+                            photo_url=await _animal_photo_url(
+                                public_base_url, organization_id, original
+                            ),
+                            reasons=("你原本選定的毛孩",),
+                            selectable=True,
+                            select_action="select_alternative_animal",
+                            select_label="維持這隻",
+                        )
+                    )
+                for animal, reason in alternatives:
+                    candidate_ids.append(str(animal.id))
+                    match_results.append({"animal_id": str(animal.id), "reasons": [reason]})
+                    cards.append(
+                        MatchReportCard(
+                            animal_id=str(animal.id),
+                            name=animal.name,
+                            shelter_number=animal.shelter_number,
+                            photo_url=await _animal_photo_url(
+                                public_base_url, organization_id, animal
+                            ),
+                            reasons=(reason,),
+                            selectable=True,
+                            select_action="select_alternative_animal",
+                            select_label="換成這隻",
+                        )
+                    )
+                draft.candidate_match_ids = candidate_ids
+                draft.match_results = match_results
+                draft.current_step = AdoptionDraftState.SELECTING_ALTERNATIVE_ANIMAL.value
+                intro = (
+                    "這幾隻毛孩你可以參考看看，也可以維持原本的選擇："
+                    if alternatives
+                    else "這次沒有找到其他更適合的建議，你原本選擇的毛孩依然是很棒的選擇 🐾"
+                )
+                messages = [_text(intro), build_match_report(cards, max_bubbles=5)]
+            messages[-1]["quickReply"] = {"items": [_adoption_cancel_item()]}
+    try:
+        await line.push(to_user_id=line_user_id, messages=messages)
+    except Exception:
+        logger.exception("adoption_ai_alternatives_push_failed")
+
+
+async def _run_adoption_ai_recommendation_curation(
+    line,
+    *,
+    line_user_id: str,
+    organization_id: UUID,
+    draft_id: UUID,
+    public_base_url: str | None,
+) -> None:
+    """Background task for 推薦名單's AI reranking — triggered once the
+    preference questionnaire is done and a rule-based candidate pool
+    (`draft.candidate_match_ids`/`match_results`, up to 5) has already been
+    computed synchronously. Degrades to that rule-based pool, unscored, if
+    Gemini is unavailable or fails — the adopter still gets a list."""
+    settings = get_settings()
+    gemini = _build_gemini_client(settings)
+    async with session_factory() as session:
+        async with session.begin():
+            await set_organization_scope(session, organization_id)
+            draft = await AdoptionDraftRepository(session, organization_id).get(draft_id)
+            if (
+                draft is None
+                or draft.status != "active"
+                or draft.current_step != AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS.value
+            ):
+                return
+            repository = AnimalRepository(session, organization_id)
+            candidates = [
+                animal
+                for animal in [
+                    await repository.get(UUID(result["animal_id"]))
+                    for result in draft.match_results or []
+                ]
+                if animal is not None
+            ]
+            if not candidates:
+                messages: list[dict] = [_text("目前沒有符合條件的可領養動物，請聯繫工作人員協助。")]
+            else:
+                curated: list[tuple] | None = None
+                if gemini is not None:
+                    curated = await AdoptionAiAnalysisService(
+                        session, organization_id, gemini
+                    ).curate_recommendations(answers=draft.answers, candidates=candidates)
+                else:
+                    logger.info("adoption_ai_recommendation_curation_skipped_no_credentials")
+                if curated:
+                    draft.candidate_match_ids = [str(animal.id) for animal, _, _ in curated]
+                    draft.match_results = [
+                        {"animal_id": str(animal.id), "score": score, "reasons": [explanation]}
+                        for animal, score, explanation in curated
+                    ]
+                    cards = [
+                        MatchReportCard(
+                            animal_id=str(animal.id),
+                            name=animal.name,
+                            shelter_number=animal.shelter_number,
+                            photo_url=await _animal_photo_url(
+                                public_base_url, organization_id, animal
+                            ),
+                            score=score,
+                            reasons=(explanation,),
+                            rank=rank,
+                            selectable=True,
+                        )
+                        for rank, (animal, score, explanation) in enumerate(curated, start=1)
+                    ]
+                    intro = f"🤖 AI 幫你精選了 {len(cards)} 隻適合的毛孩："
+                else:
+                    # No Gemini, or the call failed/returned nothing usable —
+                    # fall back to the rule-based pool already sitting in
+                    # match_results, unscored (its raw rule score isn't a
+                    # percentage a Flex card should show as one).
+                    draft.match_results = [
+                        {"animal_id": str(animal.id), "reasons": []} for animal in candidates
+                    ]
+                    cards = [
+                        MatchReportCard(
+                            animal_id=str(animal.id),
+                            name=animal.name,
+                            shelter_number=animal.shelter_number,
+                            photo_url=await _animal_photo_url(
+                                public_base_url, organization_id, animal
+                            ),
+                            rank=rank,
+                            selectable=True,
+                        )
+                        for rank, animal in enumerate(candidates[:3], start=1)
+                    ]
+                    intro = "為你推薦以下毛孩，請選擇一隻："
+                messages = [_text(intro), build_match_report(cards, max_bubbles=5)]
+            draft.current_step = AdoptionDraftState.SELECTING_MATCHED_ANIMAL.value
+            messages[-1]["quickReply"] = {"items": [_adoption_cancel_item()]}
+    try:
+        await line.push(to_user_id=line_user_id, messages=messages)
+    except Exception:
+        logger.exception("adoption_ai_recommendation_push_failed")
+
+
+async def _resolve_growth_diary_pending(
+    session, line_user_id: str
+) -> tuple[UUID, GrowthDiaryDraft] | None:
+    """Peek-first, mirroring `_active_adoption_draft`: returns None for any
+    LINE user with no binding or no pending diary entry, so every other flow
+    (adoption, volunteer) falls through completely unaffected. Sets
+    authentication-user scope on a hit — growth_diary_drafts/entries and
+    adoption_inquiries all carry an owner-or-tenant RLS policy (see
+    0041_growth_diary) precisely so this adopter-scoped, cross-shelter peek
+    works before any specific organization is known."""
+    binding = await LineWebhookRepository(session).binding(line_user_id)
+    if binding is None:
+        return None
+    await set_authentication_user_scope(session, binding.user_id)
+    draft = await get_pending_growth_diary_draft(session, binding.user_id)
+    if draft is None:
+        return None
+    return binding.user_id, draft
+
+
+async def _reply_growth_diary_entry_choice(
+    session, line, event: dict, *, adopter_user_id: UUID
+) -> None:
+    """Tapping the Rich Menu's "毛孩日記" tile (or typing the
+    GROWTH_DIARY_COMMAND text shortcut — no dedicated tile exists yet
+    without a formal adoption-completed lifecycle to key an adopter-only
+    Rich Menu switch off; see test_adoption_inquiry_submission_does_not_
+    switch_to_adopter_menu) lands here first — a choice between writing a
+    new entry and reviewing past ones, not straight into the share flow
+    (回顧 lives one level under this choice, not beside it)."""
+    inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
+    if not inquiries:
+        await _reply(
+            line, event, [_text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")]
+        )
+        return
+    card = build_info_card(
+        "毛孩日記 📔",
+        accent_index=1,
+        body="想寫新的一篇，還是回顧之前的紀錄呢？",
+        actions=[
+            (
+                "📝",
+                "寫新的一篇",
+                _action(
+                    "寫新的一篇",
+                    urlencode({"action": "start_growth_diary_entry", "flow": "growth_diary"}),
+                ),
+            ),
+            (
+                "📖",
+                "日記回顧",
+                _action(
+                    "日記回顧",
+                    urlencode({"action": "view_growth_diary_history", "flow": "growth_diary"}),
+                ),
+            ),
+        ],
+    )
+    await _reply(line, event, [card])
+
+
+async def _handle_growth_diary_postback(
+    session,
+    line,
+    event: dict,
+    *,
+    adopter_user_id: UUID,
+    pending_draft: GrowthDiaryDraft | None,
+) -> None:
+    values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
+    action = values.get("action", [""])[0]
+    value = values.get("value", [None])[0]
+
+    if action == "start_growth_diary":
+        await _reply_growth_diary_entry_choice(
+            session, line, event, adopter_user_id=adopter_user_id
+        )
+        return
+
+    if action == "start_growth_diary_entry":
+        inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
+        if not inquiries:
+            await _reply(
+                line, event, [_text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")]
+            )
+            return
+        if len(inquiries) == 1:
+            await _start_growth_diary_entry(session, line, event, adopter_user_id, inquiries[0])
+            return
+        options = [
+            AdoptedAnimalOption(
+                inquiry_id=str(inquiry.id),
+                animal_name=inquiry.animal_name_snapshot,
+                shelter_number=inquiry.shelter_number_snapshot,
+            )
+            for inquiry in inquiries
+        ]
+        await _reply(line, event, [build_animal_picker(options)])
+        return
+
+    if action == "select_growth_diary_animal":
+        inquiry_id = _uuid_value(value or "")
+        inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
+        inquiry = next((item for item in inquiries if item.id == inquiry_id), None)
+        if inquiry is None:
+            raise DomainError("inquiry_not_found", "找不到這筆領養紀錄", 404)
+        await _start_growth_diary_entry(session, line, event, adopter_user_id, inquiry)
+        return
+
+    if action == "view_growth_diary_history":
+        await _reply_growth_diary_history(session, line, event, adopter_user_id=adopter_user_id)
+        return
+
+    if action == "snooze_growth_diary_reminder":
+        # Pushes the reminder cadence clock forward without starting a
+        # pending draft — the adopter just isn't ready to share right now.
+        inquiry_id = _uuid_value(value or "")
+        inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
+        inquiry = next((item for item in inquiries if item.id == inquiry_id), None)
+        if inquiry is None:
+            raise DomainError("inquiry_not_found", "找不到這筆領養紀錄", 404)
+        inquiry.last_growth_diary_prompted_at = datetime.now(timezone.utc)
+        await _reply(line, event, [_text("好的，我們晚點再提醒你 🐾")])
+        return
+
+    raise DomainError("invalid_postback_action", "目前步驟不允許此操作", 409)
+
+
+async def _reply_growth_diary_history(session, line, event: dict, *, adopter_user_id: UUID) -> None:
+    """毛孩日記回顧 — read-only across every shelter this adopter has ever
+    adopted through (like `list_inquiries_for_adopter`), never touches
+    pending-draft or reminder-cadence state."""
+    inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
+    entries = await list_entries_for_inquiries(session, [inquiry.id for inquiry in inquiries])
+    if not entries:
+        await _reply(
+            line,
+            event,
+            [_text("目前還沒有任何毛孩日記紀錄，快去跟毛孩互動然後回來分享第一篇吧 🐾")],
+        )
+        return
+    inquiries_by_id = {inquiry.id: inquiry for inquiry in inquiries}
+    history_entries: list[GrowthDiaryHistoryEntry] = []
+    for entry in entries:
+        inquiry = inquiries_by_id.get(entry.inquiry_id)
+        photo_url = None
+        if entry.photo_key:
+            try:
+                photo_url = await MediaAccessService(
+                    MinioStorageAdapter(), entry.organization_id
+                ).signed_url(
+                    media_organization_id=entry.organization_id,
+                    object_key=entry.photo_key,
+                    expires_seconds=300,
+                )
+            except Exception:
+                photo_url = None
+        history_entries.append(
+            GrowthDiaryHistoryEntry(
+                date_label=entry.created_at.strftime("%m/%d"),
+                animal_name=inquiry.animal_name_snapshot if inquiry is not None else "毛孩",
+                kind="photo" if entry.photo_key else "text",
+                note=entry.note,
+                mood=entry.ai_mood,
+                reply=entry.ai_reply,
+                photo_url=photo_url,
+            )
+        )
+    await _reply(
+        line,
+        event,
+        [
+            _text("這是毛孩的成長日記回顧，由新到舊："),
+            build_growth_diary_history_carousel(history_entries),
+        ],
+    )
+
+
+async def _start_growth_diary_entry(session, line, event, adopter_user_id: UUID, inquiry) -> None:
+    await set_pending_growth_diary_draft(
+        session,
+        adopter_user_id=adopter_user_id,
+        organization_id=inquiry.organization_id,
+        inquiry_id=inquiry.id,
+        animal_id=inquiry.target_animal_id,
+    )
+    await _reply(
+        line,
+        event,
+        [
+            _text(
+                f"請直接傳一張照片，或用文字描述「{inquiry.animal_name_snapshot}」"
+                "最近的成長狀況（例如體重、活動力、趣事）。輸入「取消」可以取消這次紀錄。"
+            )
+        ],
+    )
+
+
+async def _handle_growth_diary_message(
+    session,
+    line,
+    event: dict,
+    *,
+    adopter_user_id: UUID,
+    pending_draft: GrowthDiaryDraft,
+    background_tasks: BackgroundTasks,
+) -> None:
+    message = event.get("message", {})
+    message_type = message.get("type")
+
+    if message_type == "text" and message.get("text", "").strip() == "取消":
+        await clear_pending_growth_diary_draft(session, adopter_user_id)
+        await _reply(line, event, [_text("已取消這次成長日記紀錄。")])
+        return
+
+    photo_key: str | None = None
+    note: str | None = None
+    if message_type == "image":
+        try:
+            content = await line.get_image_content(message_id=message["id"])
+            photo_key = (
+                f"growth-diary/{pending_draft.inquiry_id}/{event.get('webhookEventId', '')}.media"
+            )
+            await MediaProcessingService(MinioStorageAdapter()).store_cleaned(
+                organization_id=pending_draft.organization_id,
+                object_key=photo_key,
+                data=content.content,
+                declared_content_type=content.content_type,
+            )
+        except Exception:
+            await _reply(line, event, [_text("照片處理失敗，請重新傳送一次，或改用文字記錄。")])
+            return
+    elif message_type == "text":
+        note = message.get("text", "").strip()
+        if not note:
+            await _reply(line, event, [_text("請傳一張照片，或輸入文字記錄成長狀況。")])
+            return
+    else:
+        await _reply(line, event, [_text("請直接傳照片或輸入文字記錄成長日記。")])
+        return
+
+    entry = await GrowthDiaryRepository(session, pending_draft.organization_id).add_entry(
+        inquiry_id=pending_draft.inquiry_id,
+        animal_id=pending_draft.animal_id,
+        adopter_user_id=adopter_user_id,
+        photo_key=photo_key,
+        note=note,
+    )
+    # Sharing (whether self-initiated or reminder-triggered) resets the
+    # reminder cadence clock, so a scheduled nudge never fires right after
+    # the adopter just shared on their own.
+    inquiry = await AdoptionInquiryRepository(session, pending_draft.organization_id).get(
+        pending_draft.inquiry_id
+    )
+    if inquiry is not None:
+        inquiry.last_growth_diary_prompted_at = datetime.now(timezone.utc)
+    await clear_pending_growth_diary_draft(session, adopter_user_id)
+    await _reply(
+        line,
+        event,
+        [_text("已記錄毛孩的成長日記！感謝分享 🐾 AI 小幫手正在看看，稍後會再傳訊息給你 🤖")],
+    )
+    line_user_id = event.get("source", {}).get("userId")
+    if line_user_id:
+        background_tasks.add_task(
+            _run_growth_diary_ai_analysis,
+            line,
+            line_user_id=line_user_id,
+            organization_id=pending_draft.organization_id,
+            entry_id=entry.id,
+            animal_name=inquiry.animal_name_snapshot if inquiry is not None else "毛孩",
+            note=note,
+            has_photo=photo_key is not None,
+        )
+
+
+async def _run_growth_diary_ai_analysis(
+    line,
+    *,
+    line_user_id: str,
+    organization_id: UUID,
+    entry_id: UUID,
+    animal_name: str,
+    note: str | None,
+    has_photo: bool,
+) -> None:
+    """Background task (runs after the synchronous "已記錄...AI 小幫手正在看看"
+    reply) — one Gemini call produces both the adopter-facing reply and the
+    staff-facing observation summary; a "concern" mood additionally pushes a
+    LINE alert to every STAFF/SHELTER_ADMIN in the organization who has a
+    LINE binding. Photo-only entries (no note) skip the Gemini call entirely
+    (see GrowthDiaryAiAnalysisService) and just get a warm canned
+    acknowledgement."""
+    settings = get_settings()
+    gemini = _build_gemini_client(settings)
+    reply_message: dict | None = None
+    staff_message: dict | None = None
+    staff_line_user_ids: list[str] = []
+    async with session_factory() as session:
+        async with session.begin():
+            await set_organization_scope(session, organization_id)
+            entry = await session.get(GrowthDiaryEntry, entry_id)
+            if entry is None:
+                return
+            result = (
+                await GrowthDiaryAiAnalysisService(gemini).analyze_entry(
+                    animal_name=animal_name, note=note, has_photo=has_photo
+                )
+                if gemini is not None
+                else None
+            )
+            if result is not None:
+                entry.ai_mood = result.mood
+                entry.ai_reply = result.adopter_reply
+                entry.ai_staff_summary = result.staff_summary
+                reply_message = build_growth_diary_ai_reply_card(
+                    mood=result.mood, reply_text=result.adopter_reply
+                )
+                if result.mood == "concern":
+                    staff_line_user_ids = await GrowthDiaryRepository(
+                        session, organization_id
+                    ).list_staff_line_user_ids()
+                    staff_message = _text(
+                        "⚠️ 毛孩日記異常通知\n"
+                        f"{animal_name} 的領養者剛回報疑似健康狀況異常：\n"
+                        f"「{result.staff_summary}」\n"
+                        "請儘快確認並視需要主動聯繫領養者。"
+                    )
+            elif has_photo:
+                # No note to analyze (or no credentials/a failed call) but a
+                # photo was shared — still acknowledge it warmly rather than
+                # going silent.
+                reply_message = _text(
+                    f"謝謝分享{animal_name}的照片！看到牠現在的樣子真替你們開心 🥰"
+                )
+            elif gemini is None:
+                logger.info("growth_diary_ai_analysis_skipped_no_credentials")
+    if reply_message is not None:
+        try:
+            await line.push(to_user_id=line_user_id, messages=[reply_message])
+        except Exception:
+            logger.exception("growth_diary_ai_reply_push_failed")
+    if staff_message is not None:
+        for staff_line_user_id in staff_line_user_ids:
+            try:
+                await line.push(to_user_id=staff_line_user_id, messages=[staff_message])
+            except Exception:
+                logger.exception("growth_diary_staff_alert_push_failed")
+
+
 async def _handle_adoption_start(
     session, line, event: dict, line_user_id: str, *, public_base_url: str | None
 ) -> None:
@@ -831,7 +1601,13 @@ async def _handle_adoption_start(
 
 
 async def _handle_adoption_postback(
-    session, line, event: dict, *, draft, public_base_url: str | None
+    session,
+    line,
+    event: dict,
+    *,
+    draft,
+    public_base_url: str | None,
+    background_tasks: BackgroundTasks,
 ) -> None:
     values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
     action = values.get("action", [""])[0]
@@ -918,6 +1694,41 @@ async def _handle_adoption_postback(
     if updated is not None:
         if updated.organization_id is not None:
             await set_organization_scope(session, updated.organization_id)
+        # AI suitability analysis is scoped to 心有所屬 only for now — the
+        # extra checks are cheap insurance against a future graph change
+        # silently over-firing this.
+        line_user_id = event.get("source", {}).get("userId")
+        if (
+            result.entered_awaiting_ai_suitability
+            and updated.path == "specific_animal"
+            and updated.organization_id is not None
+            and updated.target_animal_id is not None
+            and line_user_id
+        ):
+            background_tasks.add_task(
+                _run_adoption_ai_suitability_analysis,
+                line,
+                line_user_id=line_user_id,
+                organization_id=updated.organization_id,
+                draft_id=updated.id,
+                animal_id=updated.target_animal_id,
+                public_base_url=public_base_url,
+            )
+        # Same idea, for 推薦名單's AI-curated recommendation list.
+        if (
+            result.entered_awaiting_ai_recommendations
+            and updated.path == "recommend_me"
+            and updated.organization_id is not None
+            and line_user_id
+        ):
+            background_tasks.add_task(
+                _run_adoption_ai_recommendation_curation,
+                line,
+                line_user_id=line_user_id,
+                organization_id=updated.organization_id,
+                draft_id=updated.id,
+                public_base_url=public_base_url,
+            )
         await _adoption_reply_for_state(
             session, line, event, draft=updated, public_base_url=public_base_url
         )
@@ -928,11 +1739,54 @@ async def _true_async(_value) -> bool:
 
 
 async def _handle_adoption_text(
-    session, line, event: dict, *, draft, text: str, public_base_url: str | None
+    session,
+    line,
+    event: dict,
+    *,
+    draft,
+    text: str,
+    public_base_url: str | None,
+    background_tasks: BackgroundTasks,
 ) -> None:
     if draft.organization_id is not None:
         await set_organization_scope(session, draft.organization_id)
     repository = AdoptionDraftRepository(session, draft.organization_id)
+    if draft.current_step == AdoptionDraftState.AWAITING_AI_SUITABILITY.value:
+        # No phone number/name is accepted yet at this step — the contact
+        # info ask waits for the AI result. Any text here is either the
+        # answer to the AI's low-score follow-up question, or (if that
+        # hasn't arrived yet) just a stray message to gently defer.
+        if draft.ai_followup_target_animal_id is not None:
+            target_animal_id = draft.ai_followup_target_animal_id
+            draft.ai_followup_target_animal_id = None
+            await session.flush()
+            line_user_id = event.get("source", {}).get("userId")
+            if line_user_id and draft.organization_id is not None:
+                background_tasks.add_task(
+                    _run_adoption_ai_followup_recommendations,
+                    line,
+                    line_user_id=line_user_id,
+                    organization_id=draft.organization_id,
+                    draft_id=draft.id,
+                    exclude_animal_id=target_animal_id,
+                    special_request=text.strip(),
+                    public_base_url=public_base_url,
+                )
+            await _reply(
+                line,
+                event,
+                [
+                    _text(
+                        "收到了，謝謝告訴我們！我們馬上幫你看看有沒有更適合的毛孩，"
+                        "找到後會再傳訊息通知你 🐾"
+                    )
+                ],
+            )
+            return
+        await _reply(
+            line, event, [_text("AI 適配度分析還在進行中，完成後會馬上通知你，請稍等一下下 🤖")]
+        )
+        return
     if draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
         matches = [
             animal
@@ -1923,7 +2777,11 @@ def _uuid_value(value: str) -> UUID | None:
 
 
 @router.post("/webhook", openapi_extra={"security": []})
-async def webhook(request: Request, x_line_signature: str | None = Header(default=None)) -> dict:
+async def webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_line_signature: str | None = Header(default=None),
+) -> dict:
     raw_body = await request.body()
     settings = get_settings()
     verify_line_signature(
@@ -1986,6 +2844,9 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         else {}
                     )
                     action = postback_values.get("action", [""])[0]
+                    growth_diary_entry_action = (
+                        action if postback_values.get("flow", [""])[0] == "growth_diary" else None
+                    )
                     if action == "start_adoption_matching":
                         await _handle_adoption_start(
                             session,
@@ -2013,6 +2874,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             event,
                             draft=adoption_draft,
                             public_base_url=public_base_url,
+                            background_tasks=background_tasks,
                         )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
@@ -2029,6 +2891,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             draft=adoption_draft,
                             text=event["message"].get("text", ""),
                             public_base_url=public_base_url,
+                            background_tasks=background_tasks,
                         )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
@@ -2043,6 +2906,84 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             event,
                             [build_info_card("領養媒合目前不接受照片，請使用卡片按鈕繼續。")],
                         )
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
+                    growth_diary_pending = await _resolve_growth_diary_pending(
+                        session, line_user_id
+                    )
+                    if growth_diary_pending is not None:
+                        diary_adopter_user_id, pending_draft = growth_diary_pending
+                        if event.get("type") == "postback":
+                            await _handle_growth_diary_postback(
+                                session,
+                                line,
+                                event,
+                                adopter_user_id=diary_adopter_user_id,
+                                pending_draft=pending_draft,
+                            )
+                        elif event.get("type") == "message" and event.get("message", {}).get(
+                            "type"
+                        ) in {"image", "text"}:
+                            await _handle_growth_diary_message(
+                                session,
+                                line,
+                                event,
+                                adopter_user_id=diary_adopter_user_id,
+                                pending_draft=pending_draft,
+                                background_tasks=background_tasks,
+                            )
+                        else:
+                            await _reply(
+                                line,
+                                event,
+                                [_text("請直接傳照片或文字記錄成長日記，暫不支援這種訊息類型。")],
+                            )
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
+                    if growth_diary_entry_action in {
+                        "start_growth_diary",
+                        "start_growth_diary_entry",
+                        "select_growth_diary_animal",
+                        "view_growth_diary_history",
+                        "snooze_growth_diary_reminder",
+                    }:
+                        # Never lazily create an identity here (unlike adoption
+                        # entry) — if this LINE user has no binding at all, they
+                        # cannot possibly have a completed AdoptionInquiry yet.
+                        binding = await LineWebhookRepository(session).binding(line_user_id)
+                        if binding is None:
+                            await _reply(
+                                line,
+                                event,
+                                [_text("請先透過「領養媒合」完成一次領養意願，才能使用毛孩日記。")],
+                            )
+                        else:
+                            await set_authentication_user_scope(session, binding.user_id)
+                            await _handle_growth_diary_postback(
+                                session,
+                                line,
+                                event,
+                                adopter_user_id=binding.user_id,
+                                pending_draft=None,
+                            )
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
+                    if _is_growth_diary_command(event):
+                        binding = await LineWebhookRepository(session).binding(line_user_id)
+                        if binding is None:
+                            await _reply(
+                                line,
+                                event,
+                                [_text("請先透過「領養媒合」完成一次領養意願，才能使用毛孩日記。")],
+                            )
+                        else:
+                            await set_authentication_user_scope(session, binding.user_id)
+                            await _reply_growth_diary_entry_choice(
+                                session, line, event, adopter_user_id=binding.user_id
+                            )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
