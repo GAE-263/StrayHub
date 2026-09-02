@@ -833,7 +833,9 @@ async def _adoption_reply_for_state(
                     animal_id=str(animal.id),
                     name=animal.name,
                     shelter_number=animal.shelter_number,
-                    photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
+                    photo_url=await _animal_photo_url(
+                        public_base_url, draft.organization_id, animal
+                    ),
                     reasons=tuple(result.get("reasons", [])),
                     selectable=True,
                     select_action="select_alternative_animal",
@@ -854,7 +856,8 @@ async def _adoption_reply_for_state(
             shelter_number=animal.shelter_number,
             photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
             confirm_action=_action(
-                "確認是這隻", urlencode({"action": "confirm_alternative_animal", "flow": "adoption"})
+                "確認是這隻",
+                urlencode({"action": "confirm_alternative_animal", "flow": "adoption"}),
             ),
             back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
         )
@@ -1357,9 +1360,7 @@ async def _handle_growth_diary_postback(
     raise DomainError("invalid_postback_action", "目前步驟不允許此操作", 409)
 
 
-async def _reply_growth_diary_history(
-    session, line, event: dict, *, adopter_user_id: UUID
-) -> None:
+async def _reply_growth_diary_history(session, line, event: dict, *, adopter_user_id: UUID) -> None:
     """毛孩日記回顧 — read-only across every shelter this adopter has ever
     adopted through (like `list_inquiries_for_adopter`), never touches
     pending-draft or reminder-cadence state."""
