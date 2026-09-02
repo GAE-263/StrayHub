@@ -59,7 +59,20 @@ class TimelineResponse(BaseModel):
     open_reminders: list[TimelineEventResponse]
 
 
-def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
+def _volunteer_label(user_id, surnames: dict) -> str:
+    """Surname plus a stable short code: enough to tell volunteers apart and
+    follow one through the history, without revealing the full name."""
+    short_code = str(user_id)[:8]
+    surname = surnames.get(user_id)
+    return f"{surname} #{short_code}" if surname else f"志工 #{short_code}"
+
+
+def _serialize_day(
+    day,
+    *,
+    media_by_report: dict | None = None,
+    volunteer_surnames: dict | None = None,
+) -> dict:
     return {
         "date": day.date.isoformat(),
         "has_report": day.has_report,
@@ -70,6 +83,9 @@ def _serialize_day(day, *, media_by_report: dict | None = None) -> dict:
                 "id": str(report.id),
                 "submitted_at": report.submitted_at.isoformat(),
                 "volunteer_user_id": str(report.volunteer_user_id),
+                "volunteer_label": _volunteer_label(
+                    report.volunteer_user_id, volunteer_surnames or {}
+                ),
                 "animal_name_snapshot": report.animal_name_snapshot,
                 "shelter_number_snapshot": report.shelter_number_snapshot,
                 "note": report.note,
@@ -243,8 +259,18 @@ async def animal_timeline(
     media_by_report = await TimelineRepository(session, context.organization_id).media_for_reports(
         [report.id for day in days for report in day.reports]
     )
+    volunteer_surnames = await repository.volunteer_surnames(
+        [report.volunteer_user_id for day in days for report in day.reports]
+    )
     return {
-        "days": [_serialize_day(day, media_by_report=media_by_report) for day in days],
+        "days": [
+            _serialize_day(
+                day,
+                media_by_report=media_by_report,
+                volunteer_surnames=volunteer_surnames,
+            )
+            for day in days
+        ],
         "animal_id": str(animalId),
         "organization_timezone": organization.timezone,
         "open_reminders": [item for day in days for item in day.scheduled],

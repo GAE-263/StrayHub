@@ -94,9 +94,15 @@ describe("AnimalTimeline", () => {
     expect(container?.textContent).toContain("未觀察");
     expect(container?.textContent).toContain("情緒");
     expect(container?.textContent).toContain("無法判斷");
-    expect(container?.textContent).toContain("照片：2 張");
-    expect(container?.textContent).toContain("AI 處理：等待處理（pending）");
-    expect(container?.textContent).toContain("人工資料狀態：已保存（saved）");
+    const fields =
+      container?.querySelector(".timeline-report .timeline-field-grid")
+        ?.textContent ?? "";
+    expect(fields).toContain("照片");
+    expect(fields).toContain("2 張");
+    expect(fields).toContain("AI 處理");
+    expect(fields).toContain("等待處理（pending）");
+    expect(fields).toContain("人工資料狀態");
+    expect(fields).toContain("已保存（saved）");
   });
 
   it("keeps loading, empty and error states distinguishable", async () => {

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.persistence.models.care_report import CareReport, CareReportMedia, MediaAsset
+from services.api.app.persistence.models.identity import OrganizationMembership
 from services.api.app.persistence.models.medical_care import (
     CareReminderAction,
     CareReminderOccurrence,
@@ -43,6 +44,24 @@ class TimelineRepository:
             .order_by(CareReport.submitted_at, CareReport.id)
         )
         return list(result.scalars())
+
+    async def volunteer_surnames(self, user_ids: list[UUID]) -> dict[UUID, str]:
+        """Surnames only; the full name never leaves the encrypted PII store."""
+        if not user_ids:
+            return {}
+        # Scoping to this organization's memberships keeps a surname from
+        # crossing into another shelter's history.
+        result = await self.session.execute(
+            select(
+                OrganizationMembership.user_id,
+                OrganizationMembership.volunteer_surname,
+            ).where(
+                OrganizationMembership.user_id.in_(set(user_ids)),
+                OrganizationMembership.organization_id == self.organization_id,
+                OrganizationMembership.volunteer_surname.is_not(None),
+            )
+        )
+        return {user_id: surname for user_id, surname in result.all()}
 
     async def media_for_reports(self, report_ids: list[UUID]) -> dict[UUID, list[MediaAsset]]:
         if not report_ids:

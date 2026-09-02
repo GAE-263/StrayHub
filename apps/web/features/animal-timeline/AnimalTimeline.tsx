@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useState } from "react";
 import { statusSummary } from "../../components/management/ui-status";
 import {
@@ -8,6 +9,7 @@ import {
   LoadingState,
 } from "../../components/management/StateViews";
 import { TimelineDaySection } from "./TimelineDaySection";
+import { DEFAULT_TIMELINE_TIMEZONE, localDateTime } from "./timelineFormat";
 
 type ObservationSnapshot = {
   code?: string;
@@ -22,6 +24,7 @@ export type TimelineDay = {
     id: string;
     submittedAt?: string;
     volunteerUserId?: string;
+    volunteerLabel?: string | null;
     note?: string | null;
     observations?: Record<string, string>;
     observationSnapshots?: Record<string, ObservationSnapshot>;
@@ -49,6 +52,7 @@ type Props = {
   days: TimelineDay[];
   loading?: boolean;
   error?: string;
+  timezone?: string;
 };
 
 const OBSERVATION_LABELS: Record<string, string> = {
@@ -90,7 +94,12 @@ function observationEntries(
   });
 }
 
-export function AnimalTimeline({ days, loading = false, error }: Props) {
+export function AnimalTimeline({
+  days,
+  loading = false,
+  error,
+  timezone = DEFAULT_TIMELINE_TIMEZONE,
+}: Props) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
   if (loading) return <LoadingState title="正在載入動物歷程…" />;
@@ -98,10 +107,11 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
   if (days.length === 0) return <EmptyState title="目前沒有可顯示的歷程" />;
 
   return (
-    <ol aria-label="動物近 14 天歷程">
+    <ol className="animal-timeline" aria-label="動物近 14 天歷程">
       {days.map((day) => (
         <TimelineDaySection
           key={day.date}
+          timezone={timezone}
           date={day.date}
           hasReport={day.hasReport}
           reportCount={day.reportCount}
@@ -133,16 +143,48 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
                 key={report.id}
                 aria-label={`回報 ${report.id}`}
               >
-                <p>
-                  回報時間：{report.submittedAt ?? "未提供"}
-                  {report.volunteerUserId
-                    ? `；回報者：${report.volunteerUserId}`
-                    : ""}
+                <header className="timeline-report-head">
+                  <span className="timeline-report-time">
+                    {localDateTime(report.submittedAt, timezone) ??
+                      "回報時間未提供"}
+                  </span>
+                  {report.volunteerUserId ? (
+                    <Link
+                      className="timeline-report-author"
+                      href={`/volunteers/access?user_id=${report.volunteerUserId}`}
+                    >
+                      回報者：
+                      {report.volunteerLabel ??
+                        `志工 #${report.volunteerUserId.slice(0, 8)}`}
+                    </Link>
+                  ) : null}
+                </header>
+                <dl className="timeline-field-grid">
+                  <div>
+                    <dt>AI 處理</dt>
+                    <dd>{statusSummary(report.aiJobStatus)}</dd>
+                  </div>
+                  <div>
+                    <dt>人工資料狀態</dt>
+                    <dd>{statusSummary(report.status)}</dd>
+                  </div>
+                  <div>
+                    <dt>照片</dt>
+                    <dd>{report.mediaIds?.length ?? 0} 張</dd>
+                  </div>
+                  <div>
+                    <dt>結構化觀察</dt>
+                    <dd>{entries.length} 項</dd>
+                  </div>
+                </dl>
+                <p className="timeline-report-note">
+                  心得：{report.note ?? "沒有心得"}
                 </p>
-                <p>心得：{report.note ?? "沒有心得"}</p>
-                <p>結構化觀察：{entries.length} 項</p>
                 {entries.length > 0 ? (
-                  <dl aria-label="結構化觀察答案" className="detail-list">
+                  <dl
+                    aria-label="結構化觀察答案"
+                    className="timeline-observation-grid"
+                  >
                     {entries.map((entry) => (
                       <div key={entry.key}>
                         <dt>{entry.label}</dt>
@@ -151,9 +193,6 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
                     ))}
                   </dl>
                 ) : null}
-                <p>照片：{report.mediaIds?.length ?? 0} 張</p>
-                <p>AI 處理：{statusSummary(report.aiJobStatus)}</p>
-                <p>人工資料狀態：{statusSummary(report.status)}</p>
               </article>
             );
           })}

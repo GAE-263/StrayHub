@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   AccessGrantTable,
@@ -12,6 +14,17 @@ export default function VolunteerAccessPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [grants, setGrants] = useState<AccessGrant[]>([]);
   const [error, setError] = useState("");
+  const searchParams = useSearchParams();
+  // Care history links here to follow one volunteer; without the filter the
+  // whole org's grants would be dumped on the reader.
+  const focusUserId = searchParams.get("user_id") ?? "";
+  const visibleGrants = useMemo(
+    () =>
+      focusUserId
+        ? grants.filter((grant) => grant.user_id === focusUserId)
+        : grants,
+    [grants, focusUserId],
+  );
 
   async function load(id: string) {
     const response = await authFetch(
@@ -57,7 +70,14 @@ export default function VolunteerAccessPage() {
         </div>
       </div>
       {error ? <p role="alert">{error}</p> : null}
-      <AccessGrantTable grants={grants} onMutate={mutate} />
+      {focusUserId ? (
+        <p className="volunteer-access-focus">
+          只顯示志工 #{focusUserId.slice(0, 8)} 的授權紀錄（
+          {visibleGrants.length} 筆）
+          <Link href="/volunteers/access">顯示全部</Link>
+        </p>
+      ) : null}
+      <AccessGrantTable grants={visibleGrants} onMutate={mutate} />
     </div>
   );
 }

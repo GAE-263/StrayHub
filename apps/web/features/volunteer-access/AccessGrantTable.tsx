@@ -15,6 +15,7 @@ import { Toast } from "../../components/ui/toast";
 
 export type AccessGrant = {
   id: string;
+  user_id?: string;
   display_name: string;
   status: string;
   valid_from: string;

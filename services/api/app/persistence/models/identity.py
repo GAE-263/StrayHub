@@ -51,6 +51,9 @@ class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
+    # Surname only, copied from the application at approval so staff can tell
+    # volunteers apart without revealing the encrypted full name.
+    volunteer_surname: Mapped[str | None] = mapped_column(String(20), nullable=True)
     archived_from_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

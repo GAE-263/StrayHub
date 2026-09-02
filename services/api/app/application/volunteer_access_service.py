@@ -16,6 +16,7 @@ from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
+from services.api.app.domain.personal_name import surname_of
 from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import (
     effective_grant_duration_hours,
@@ -396,6 +397,10 @@ class VolunteerAccessService:
             user_id=user_id,
             status="pending",
             source_channel="liff",
+            # The surname is captured here because this is the only point the
+            # plaintext name exists; afterwards it lives encrypted on the
+            # profile and reading it back would require an audited reveal.
+            applicant_surname=surname_of(applicant_name),
             client_request_id=client_request_id,
             previous_application_id=previous_application_id,
             submitted_at=submitted_at,
@@ -686,6 +691,7 @@ class VolunteerAccessService:
                         valid_from=start,
                         expires_at=end,
                         access_version=1,
+                        volunteer_surname=application.applicant_surname,
                     )
                 )
             else:
@@ -693,6 +699,8 @@ class VolunteerAccessService:
                 membership.valid_from = start
                 membership.expires_at = end
                 membership.access_version += 1
+                if application.applicant_surname:
+                    membership.volunteer_surname = application.applicant_surname
             grant = await self.repository.add(
                 VolunteerAccessGrant(
                     organization_id=self.repository.organization_id,

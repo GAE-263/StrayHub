@@ -11,6 +11,7 @@ import {
   mapDays,
   type ApiDay,
 } from "../../../../../features/animal-timeline/timelineMapping";
+import { DEFAULT_TIMELINE_TIMEZONE } from "../../../../../features/animal-timeline/timelineFormat";
 import { Breadcrumbs } from "../../../../../components/management/Breadcrumbs";
 import { buildTimelineQuery } from "../../../management-query";
 import { MedicalHistoryPanel } from "../../../../../features/medical-care/MedicalHistoryPanel";
@@ -23,6 +24,7 @@ export default function AnimalTimelinePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [range, setRange] = useState({ start: "", end: "" });
+  const [timezone, setTimezone] = useState(DEFAULT_TIMELINE_TIMEZONE);
   const latestRequest = useRef(0);
   const pendingRequest = useRef<AbortController | null>(null);
 
@@ -44,9 +46,15 @@ export default function AnimalTimelinePage({ params }: Props) {
           { signal: controller.signal },
         );
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = (await response.json()) as { days: ApiDay[] };
-        if (!controller.signal.aborted && requestId === latestRequest.current)
+        const data = (await response.json()) as {
+          days: ApiDay[];
+          organization_timezone?: string;
+        };
+        if (!controller.signal.aborted && requestId === latestRequest.current) {
           setDays(mapDays(data.days));
+          if (data.organization_timezone)
+            setTimezone(data.organization_timezone);
+        }
       } catch (requestError) {
         if (!controller.signal.aborted && requestId === latestRequest.current)
           setError(
@@ -101,7 +109,12 @@ export default function AnimalTimelinePage({ params }: Props) {
           if (nextRange.start && nextRange.end) void loadTimeline(nextRange);
         }}
       />
-      <AnimalTimeline days={days} loading={loading} error={error} />
+      <AnimalTimeline
+        days={days}
+        loading={loading}
+        error={error}
+        timezone={timezone}
+      />
       <MedicalHistoryPanel animalId={animalId} />
     </div>
   );

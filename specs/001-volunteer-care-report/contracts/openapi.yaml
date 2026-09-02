@@ -3651,6 +3651,7 @@ components:
         id: { type: string, format: uuid }
         submitted_at: { type: string, format: date-time }
         volunteer_user_id: { type: string, format: uuid }
+        volunteer_label: { type: string }
         animal_name_snapshot: { type: string }
         shelter_number_snapshot: { type: [string, "null"] }
         note: { type: [string, "null"] }
