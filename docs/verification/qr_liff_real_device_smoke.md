@@ -65,26 +65,37 @@ was written to this record.
 
 | Command | Result |
 | --- | --- |
-| `npm --prefix apps/web run test` | PASS — 72 files, 310 tests |
+| `npm --prefix apps/web run test` | PASS — 82 files, 405 tests |
 | `npm --prefix apps/web run typecheck` | PASS |
 | `npm --prefix apps/web run build` | PASS |
 | `npm --prefix apps/web run format:check` | PASS |
-| `LIFF_HANDOFF_E2E_MOCK=1 npm --prefix apps/web run test:e2e -- e2e/animal-confirmation-qr.spec.ts e2e/manager-animal-qr.spec.ts` | PASS — 17 tests |
+| `npm --prefix apps/web run test:e2e:handoff` | PASS — 12 tests on isolated port/cache |
+| `npm --prefix apps/web run test:e2e -- e2e/manager-animal-qr.spec.ts` | PASS — 8 tests |
 | Focused QR/handoff backend tests | PASS — 15 tests |
 | Real PostgreSQL QR tampering and handoff RLS/isolation tests | PASS — 6 tests |
 | `uv run ruff check services/api/app tests` | PASS |
-| `uv run ruff format --check services/api/app tests` | PASS |
+| Ruff format check for the seven Python files changed by the handoff workstream | PASS |
+| `uv run ruff format --check services/api/app tests` | PRE-EXISTING — 11 untouched files require formatting |
 
-The Playwright run verifies the same-shelter producer, explicit authorized cross-shelter
-switch, unauthorized no-identity response, exact-number fallback, supported/unavailable/
-failed LINE trigger paths, duplicate protection, close failure fallback, manager QR preview,
-responsive layouts, accessibility, and A4 print media. These are mocked platform checks and
-are not evidence of real LINE behavior.
+`npm --prefix apps/web run test:e2e:handoff` executes only
+`e2e/animal-confirmation-qr.spec.ts`. Its 12 Playwright cases verify the same-shelter producer,
+explicit authorized cross-shelter switch, unauthorized no-identity response, exact-number
+fallback, supported/unavailable/failed LINE trigger paths, duplicate protection, close failure
+fallback, responsive layouts, and accessibility. These are mocked platform checks and are not
+evidence of real LINE behavior.
 
-An initial Playwright attempt reused a generated non-mock Next.js bundle and therefore took
-the expected manual fallback instead of invoking the LIFF mock. Removing only the generated
-`.next` cache and compiling with `LIFF_HANDOFF_E2E_MOCK=1` produced the passing 17-test run.
-No source change was required.
+Manager QR preview and A4 print-media behavior are covered separately by
+`npm --prefix apps/web run test:e2e -- e2e/manager-animal-qr.spec.ts`; they are not part of
+`test:e2e:handoff`.
+
+The handoff suite now owns an isolated Next.js server on port 3002, disables server reuse,
+and runs from an automatically cleaned system-temporary app copy with its own
+`.next-liff-handoff-e2e` cache. Its server process sets `LIFF_HANDOFF_E2E_MOCK=1`; the alias
+is disabled in production even if that variable is set.
+This prevents a previously generated non-mock bundle or an unrelated dev server from silently
+turning the supported/send-failure/close-failure cases into the unavailable fallback. The
+mock remains suite-specific, cannot rewrite the repository's Next-generated TypeScript files,
+and is not used for volunteer entry or application tests.
 
 ## Real-device matrix
 
@@ -103,7 +114,7 @@ No source change was required.
 | Printed QR scan | UNRUN |
 | Same-shelter animal card and confirmation | PASS — user-observed |
 | Pending `CareReportHandoff` creation from real LIFF | PASS — persisted `pending`, `source=liff_scan`, fixed 15-minute TTL |
-| Exact `開始照護回報` message from `sendMessages` | PASS — user-observed |
+| Exact `開始散步回報` message from `sendMessages` | PASS — user-observed after protocol synchronization |
 | Duplicate automatic trigger count | PASS — exactly one, user-observed |
 | Synthetic public webhook receipt and signature | PASS |
 | Real LINE webhook receipt and trusted identity | PASS — signed message events were persisted after trusted identity/context resolution |
@@ -113,8 +124,8 @@ No source change was required.
 | Unauthorized cross-shelter identity non-disclosure | UNRUN |
 | Revoked/invalid QR | UNRUN |
 | Inactive animal | UNRUN |
-| Bot handoff consumption | DEFERRED TO BOT TEAM — webhook currently enters the legacy draft conversation directly |
-| 15-minute consumer TTL | DEFERRED TO BOT TEAM |
+| Bot handoff consumption | IMPLEMENTED IN CODE — real-device rerun still required |
+| 15-minute consumer TTL | IMPLEMENTED AND AUTOMATED-TESTED — real-device rerun still required |
 
 ## Real-device execution checklist
 
@@ -129,7 +140,7 @@ After explicit tunnel approval and LINE Developers sign-in:
 5. Test screen and, if practical, physical printed QR scans on a real phone.
 6. Run same-shelter, authorized cross-shelter cancel/confirm, unauthorized cross-shelter,
    revoked QR, and inactive-animal scenarios.
-7. From LINE chat, verify exactly one `開始照護回報` message and successful return to chat.
+7. From LINE chat, verify exactly one `開始散步回報` message and successful return to chat.
 8. From an external camera/browser, verify pending handoff creation and manual fallback.
 9. Confirm webhook signature and trusted LINE identity only after real Messaging channel
    credentials are configured outside the repository.
@@ -137,15 +148,10 @@ After explicit tunnel approval and LINE Developers sign-in:
 
 ## Known limitations
 
-- Bot-side handoff consumption, `CareReportDraft`, questionnaire, and submission are outside
-  this smoke and remain owned by the report-flow team.
-- The real `開始照護回報` webhook reached the backend and passed signature and trusted LINE
-  identity/context resolution. It then failed with the persisted error code
-  `draft_access_denied`, producing `草稿不存在或無法存取`. The corresponding `liff_scan`
-  handoff remained `pending` and unconsumed. This is the documented Bot integration gap:
-  `line_webhook.py` does not yet call
-  `CareReportHandoffService.consume_pending_handoff(...)` before entering the legacy draft
-  conversation. It is not a QR/LIFF producer defect and was not changed in Item 4.
+- The earlier real-device run predated the Bot consumer: its webhook passed signature and
+  trusted identity/context resolution, then failed with `draft_access_denied` while leaving the
+  `liff_scan` handoff pending. The production consumer has since been implemented, but that
+  historical device result is not relabeled as a pass; the full LIFF→LINE flow must be rerun.
 - Real `sendMessages`, `closeWindow`, `scanCodeV2`, physical QR scanning, and console settings
   cannot be inferred from browser mocks.
 - A safe manager QR preview was captured without raw URL/token text. Phone/LINE evidence has

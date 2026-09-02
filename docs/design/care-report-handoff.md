@@ -20,7 +20,7 @@ Volunteer
 → show animal confirmation card
 → confirm
 → create/replace pending handoff
-→ send "開始照護回報" when possible
+→ send "開始散步回報" when possible
 → return to LINE
 → LINE webhook resolves trusted user identity
 → atomically consume pending handoff
@@ -39,7 +39,9 @@ sendMessages unavailable
 
 The implemented cross-shelter LIFF flow explicitly confirms a switch before resolving animal
 identity or creating the handoff. The handoff records the final, server-verified organization;
-it never performs a silent organization switch.
+it never performs a silent organization switch. That explicit active-shelter switch also
+rotates an existing LINE `WebhookSession` to the same verified organization in the same
+transaction, so subsequent trusted webhook handling uses the LIFF-selected tenant.
 
 ## Ownership boundary
 
@@ -104,7 +106,7 @@ privilege was introduced.
 - QR possession is not authorization.
 - The LINE trigger text is not authorization.
 - Bot trusts verified webhook LINE identity, not message or postback payload.
-- `開始照護回報` contains no animal, organization, membership, confirmation-token,
+- `開始散步回報` contains no animal, organization, membership, confirmation-token,
   handoff-token, or PII value.
 - A handoff is bound to one organization, user, membership, and animal.
 - Membership and its matching grant must be effective when creating and consuming.
@@ -144,11 +146,10 @@ QR resolution remains limited to the verified current organization. Cross-shelte
 use the narrow authorized preflight described below; they do not perform a global animal
 lookup or automatic switch.
 
-The existing HTTP draft creation, final submission, and legacy LINE selection/conversation
-paths still contain their prior scope checks. Those report-flow-team paths are explicitly
-deferred; the future handoff consumer can create a draft through `LineDraftService` without
-that HTTP draft gate, but its final submission authorization must be cut over by the owning
-team before the end-to-end Bot flow ships.
+The HTTP draft creation path retains its confirmation-token gate. The LINE handoff consumer
+creates or resumes a draft through `LineDraftService` only after trusted webhook identity
+resolution and handoff reauthorization. Final submission uses the same current volunteer
+authorization boundary; neither path treats `DailyReportableScope` as a second allow-list.
 
 ## Implemented LIFF / QR producer
 
@@ -209,7 +210,7 @@ succeeds, `apps/web/lib/liff-line-handoff.ts` attempts exactly one automatic pro
 for that handoff. It sends only this payload:
 
 ```json
-[{ "type": "text", "text": "開始照護回報" }]
+[{ "type": "text", "text": "開始散步回報" }]
 ```
 
 The eligibility rule follows the installed `@line/liff` 2.30 runtime: LIFF must have an
@@ -223,17 +224,18 @@ because the installed SDK's availability API does not list that function.
 After a successful send, the page displays `正在返回 LINE 繼續照護回報…` and calls
 `liff.closeWindow()` only in an initialized in-client runtime. If closing is unavailable or
 throws, the pending handoff is kept and the manual fallback remains usable. The fallback
-tells the volunteer to return to LINE, select `照護回報` or type `開始照護回報`, and notes
+tells the volunteer to return to LINE, select `散步回報` or type `開始散步回報`, and notes
 that confirmation remains for about 15 minutes. Physical QR deep links outside LINE are an
 expected fallback case. No automatic retry occurs after a failure, and component operation
 epochs prevent a late result from resurrecting stale or unmounted UI.
 
 LIFF does not consume the handoff, extend its TTL, create a `CareReportDraft`, submit a
 report, or claim that a report was submitted. Messaging API push is not required. The exact
-trigger currently has no dedicated Bot consumer in `services/api/app/api/line_webhook.py`;
-Bot integration remains responsible for resolving the trusted webhook identity and calling
-the service below. LINE Developers console enablement and real-client behavior still require
-physical-device validation.
+trigger is consumed by `services/api/app/api/line_webhook.py` only after trusted LINE identity
+and organization resolution. Handoff consumption and draft mutation share a database
+savepoint, so a draft failure rolls back consumption while the outer webhook transaction can
+still record its failure result. LINE Developers console enablement and real-client behavior
+still require physical-device validation.
 
 ## Management Animal QR lifecycle
 
@@ -300,7 +302,7 @@ manager generates or reuses active Animal QR
 
 `DailyReportableScope` is not consulted or configured by this manager QR lifecycle.
 
-## Integration contract for Bot agent
+## Implemented Bot consumer contract
 
 1. Receive a trusted LINE webhook.
 2. Resolve `LineUserBinding`, internal user, and the verified `WebhookSession` organization.
@@ -408,7 +410,7 @@ Errors do not expose animal details.
 
 ### Happy path
 
-LIFF confirms animal A and creates a pending handoff. Sending `開始照護回報` causes the
+LIFF confirms animal A and creates a pending handoff. Sending `開始散步回報` causes the
 trusted webhook flow to lock and consume it. The Bot creates the draft from the returned
 server-side context in the same transaction.
 
@@ -442,7 +444,7 @@ does not disclose animal details.
 
 ## What the Bot team must NOT do
 
-- Do not parse animal identity from `開始照護回報`.
+- Do not parse animal identity from `開始散步回報`.
 - Do not accept client-provided `animal_id` as handoff truth.
 - Do not perform global cross-tenant handoff lookup.
 - Do not revive expired or consumed handoffs.

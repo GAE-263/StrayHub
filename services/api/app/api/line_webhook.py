@@ -15,6 +15,9 @@ from services.api.app.application.animal_selection import (
     AnimalSelectionService,
     TodayAnimalListService,
 )
+from services.api.app.application.care_report_handoff_service import (
+    CareReportHandoffService,
+)
 from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
@@ -99,6 +102,9 @@ from services.api.app.persistence.repositories.authentication_repository import 
 )
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
+)
+from services.api.app.persistence.repositories.care_report_handoff_repository import (
+    CareReportHandoffRepository,
 )
 from services.api.app.persistence.repositories.care_report_repository import CareReportRepository
 from services.api.app.persistence.repositories.line_webhook_repository import LineWebhookRepository
@@ -977,9 +983,7 @@ async def _walk_confirmation_bubble(session, organization_id: UUID, candidate) -
     photo_url = None
     if candidate.animal.current_photo_key:
         try:
-            photo_url = await MediaAccessService(
-                MinioStorageAdapter(), organization_id
-            ).signed_url(
+            photo_url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
                 media_organization_id=organization_id,
                 object_key=candidate.animal.current_photo_key,
                 expires_seconds=300,
@@ -992,9 +996,7 @@ async def _walk_confirmation_bubble(session, organization_id: UUID, candidate) -
         area_label=candidate.area.name if candidate.area else "未維護",
         organization_name=organization.name if organization else "目前收容所",
         photo_url=photo_url,
-        confirm_data=urlencode(
-            {"action": "confirm_animal", "animal_id": str(candidate.animal.id)}
-        ),
+        confirm_data=urlencode({"action": "confirm_animal", "animal_id": str(candidate.animal.id)}),
     )
 
 
@@ -1127,9 +1129,7 @@ async def _today_list_bubble(
         done=result.reported_total,
         total=total,
         shown_through=shown,
-        more_data=(
-            urlencode({"action": "today_overview", "page": page + 1}) if has_more else None
-        ),
+        more_data=(urlencode({"action": "today_overview", "page": page + 1}) if has_more else None),
     )
 
 
@@ -1159,11 +1159,13 @@ async def _walk_entry_bubble(
         organization_id=organization_id,
         membership_id=membership_id,
     )
-    draft = await CareReportDraftRepository(
-        session, organization_id
-    ).get_active_for_volunteer(user_id)
+    draft = await CareReportDraftRepository(session, organization_id).get_active_for_volunteer(
+        user_id
+    )
     if draft is None:
         return _find_dog_hub_bubble()
+    if (draft.modification_summary or {}).get("handoff_selection"):
+        return await _handoff_switch_bubble(session, organization_id, draft)
     animal = await animals.get(draft.animal_id)
     animal_name = animal.name if animal is not None else "上一隻毛孩"
     return prompt_bubble(
@@ -1175,6 +1177,122 @@ async def _walk_entry_bubble(
         choices=[
             (f"繼續回報 {animal_name}", "action=resume_draft", "↩"),
             ("重新找動物", "action=find_dog", "🔎"),
+        ],
+    )
+
+
+async def _handoff_switch_bubble(session, organization_id: UUID, draft) -> dict:
+    animals = AnimalRepository(session, organization_id)
+    previous = await animals.get(draft.animal_id)
+    candidate = (
+        await animals.get(draft.candidate_animal_id)
+        if draft.candidate_animal_id is not None
+        else None
+    )
+    if candidate is None:
+        raise DomainError("draft_switch_conflict", "回報草稿已變更，請重新確認", 409)
+    previous_name = previous.name if previous is not None else "上一隻毛孩"
+    return prompt_bubble(
+        title="還有一筆回報沒送出",
+        caption="散步回報",
+        body_text=f"切換會清除 {previous_name} 的答案、照片與文字。",
+        glyph="⚠️",
+        tone=PEACH,
+        choices=[
+            (f"繼續回報 {previous_name}", "action=cancel_handoff_switch", "↩"),
+            (f"改成回報 {candidate.name}", "action=confirm_handoff_switch", "🔄"),
+        ],
+    )
+
+
+async def _handle_walk_report_command(session, line, event: dict, line_user_id: str) -> None:
+    user_id, organization_id, membership_id, _ = await _resolve_context(session, line_user_id)
+    handoff = None
+    handoff_error: DomainError | None = None
+    decision = None
+
+    # A savepoint keeps handoff consumption and draft mutation atomic while
+    # allowing the outer webhook transaction to record a safe failure result.
+    async with session.begin_nested():
+        animals = AnimalRepository(session, organization_id)
+        try:
+            handoff = await CareReportHandoffService(
+                CareReportHandoffRepository(session, organization_id),
+                authorization=VolunteerReportingAuthorizationService(
+                    AuthenticationRepository(session), animals
+                ),
+            ).consume_pending_handoff(
+                user_id=user_id,
+                organization_id=organization_id,
+            )
+        except DomainError as error:
+            if error.code not in {
+                "no_pending_handoff",
+                "handoff_already_consumed",
+                "handoff_expired",
+            }:
+                raise
+            handoff_error = error
+
+        if handoff is not None:
+            draft_repository = CareReportDraftRepository(session, organization_id)
+            decision = await LineDraftService(
+                draft_repository,
+                ttl_seconds=get_settings().draft_ttl_seconds,
+            ).select_handoff_animal(
+                volunteer_user_id=user_id,
+                membership_id=handoff.membership_id,
+                animal_id=handoff.animal_id,
+                source_event_id=event.get("webhookEventId", ""),
+            )
+            if decision.action.value == "created":
+                await LineDraftConversationService(draft_repository).handle(
+                    token=decision.token,
+                    volunteer_user_id=user_id,
+                    action="confirm_animal",
+                    value=None,
+                    event_id=event.get("webhookEventId", ""),
+                )
+
+    if handoff_error is not None:
+        messages = []
+        if handoff_error.code == "handoff_expired":
+            messages.append(_text("動物確認已逾時，請重新掃描確認。"))
+        messages.append(
+            await _walk_entry_bubble(
+                session,
+                user_id=user_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
+            )
+        )
+        await _reply(line, event, messages)
+        return
+
+    assert handoff is not None and decision is not None
+    if decision.action.value == "needs_switch_confirmation":
+        await _reply(
+            line,
+            event,
+            [await _handoff_switch_bubble(session, organization_id, decision.draft)],
+        )
+        return
+
+    animal = await AnimalRepository(session, organization_id).get(handoff.animal_id)
+    animal_name = animal.name if animal is not None else "這隻毛孩"
+    await _reply_next_step(
+        session,
+        line,
+        event,
+        organization_id=organization_id,
+        draft=decision.draft,
+        raw_token=decision.token or "",
+        lead=[
+            _text(
+                f"已恢復 {animal_name} 的未完成回報。"
+                if decision.action.value == "resumed"
+                else f"開始回報 {animal_name}。"
+            )
         ],
     )
 
@@ -1417,10 +1535,18 @@ async def _reply_next_step(
                     story=draft.story,
                     animal_name=animal.name if animal is not None else "",
                     choices=[
-                        ("送出回報", f"action={'submit' if raw_token else 'submit_current'}&draft_token={raw_token}", "✅"),
+                        (
+                            "送出回報",
+                            f"action={'submit' if raw_token else 'submit_current'}&draft_token={raw_token}",
+                            "✅",
+                        ),
                         ("再改一下", f"action=back&draft_token={raw_token}", "✏️"),
                         ("換一隻", f"action=reselect_animal&draft_token={raw_token}", "🔄"),
-                        ("取消回報", f"action={'cancel' if raw_token else 'cancel_current'}&draft_token={raw_token}", "🗑"),
+                        (
+                            "取消回報",
+                            f"action={'cancel' if raw_token else 'cancel_current'}&draft_token={raw_token}",
+                            "🗑",
+                        ),
                     ],
                 ),
             ],
@@ -1477,7 +1603,16 @@ async def _handle_postback(
         await _reply(
             line,
             event,
-            [prompt_bubble(title="輸入編號或名字", caption="散步回報", body_text="直接輸入名字或收容編號的一部分。", glyph="🔤", tone=LILAC, choices=[])],
+            [
+                prompt_bubble(
+                    title="輸入編號或名字",
+                    caption="散步回報",
+                    body_text="直接輸入名字或收容編號的一部分。",
+                    glyph="🔤",
+                    tone=LILAC,
+                    choices=[],
+                )
+            ],
         )
         return None
     if action == "search_results":
@@ -1596,14 +1731,48 @@ async def _handle_postback(
             source_event_id=event.get("webhookEventId", ""),
         )
         if decision.action.value == "needs_switch_confirmation":
-            previous = await AnimalRepository(session, organization_id).get(decision.draft.animal_id)
+            previous = await AnimalRepository(session, organization_id).get(
+                decision.draft.animal_id
+            )
             previous_name = previous.name if previous is not None else "上一隻毛孩"
-            await _reply(line, event, [prompt_bubble(title="還有一筆回報沒送出", caption="散步回報", body_text=f"切換會清除 {previous_name} 的答案、照片與文字。", glyph="⚠️", tone=PEACH, choices=[(f"繼續回報 {previous_name}", "action=resume_draft", "↩"), (f"改成回報 {animal.name}", urlencode({"action": "confirm_animal", "animal_id": str(animal.id), "switch": "1", "expected_animal_id": str(decision.draft.animal_id)}), "🔄")])])
+            await _reply(
+                line,
+                event,
+                [
+                    prompt_bubble(
+                        title="還有一筆回報沒送出",
+                        caption="散步回報",
+                        body_text=f"切換會清除 {previous_name} 的答案、照片與文字。",
+                        glyph="⚠️",
+                        tone=PEACH,
+                        choices=[
+                            (f"繼續回報 {previous_name}", "action=resume_draft", "↩"),
+                            (
+                                f"改成回報 {animal.name}",
+                                urlencode(
+                                    {
+                                        "action": "confirm_animal",
+                                        "animal_id": str(animal.id),
+                                        "switch": "1",
+                                        "expected_animal_id": str(decision.draft.animal_id),
+                                    }
+                                ),
+                                "🔄",
+                            ),
+                        ],
+                    )
+                ],
+            )
             return None
         draft = decision.draft
         raw_token = decision.token or token
-        if decision.action.value == "created" or DraftState(draft.current_step) == DraftState.CONFIRMING_ANIMAL:
-            await LineDraftConversationService(CareReportDraftRepository(session, organization_id)).handle(
+        if (
+            decision.action.value == "created"
+            or DraftState(draft.current_step) == DraftState.CONFIRMING_ANIMAL
+        ):
+            await LineDraftConversationService(
+                CareReportDraftRepository(session, organization_id)
+            ).handle(
                 token=raw_token or None,
                 volunteer_user_id=user_id,
                 action="confirm_animal",
@@ -1623,6 +1792,54 @@ async def _handle_postback(
             draft=draft,
             raw_token=raw_token,
             lead=[_text(message)],
+        )
+        return None
+    if action == "confirm_handoff_switch":
+        draft_repository = CareReportDraftRepository(session, organization_id)
+        draft = await draft_repository.get_active_for_volunteer(user_id)
+        if draft is None or draft.candidate_animal_id is None:
+            raise DomainError("handoff_switch_not_pending", "目前沒有待確認的動物切換", 409)
+        authorized = await VolunteerReportingAuthorizationService(
+            AuthenticationRepository(session), AnimalRepository(session, organization_id)
+        ).authorize(
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
+            animal_id=draft.candidate_animal_id,
+            animal_unavailable_status=409,
+        )
+        assert authorized.animal is not None
+        switched = await LineDraftService(
+            draft_repository,
+            ttl_seconds=get_settings().draft_ttl_seconds,
+        ).confirm_handoff_switch(volunteer_user_id=user_id)
+        await _reply_next_step(
+            session,
+            line,
+            event,
+            organization_id=organization_id,
+            draft=switched,
+            raw_token="",
+            lead=[_text(f"已改成回報 {authorized.animal.name}，舊內容已清除。")],
+        )
+        return None
+    if action == "cancel_handoff_switch":
+        draft_repository = CareReportDraftRepository(session, organization_id)
+        draft = await LineDraftService(
+            draft_repository,
+            ttl_seconds=get_settings().draft_ttl_seconds,
+        ).cancel_handoff_switch(volunteer_user_id=user_id)
+        animal = await AnimalRepository(session, organization_id).get(draft.animal_id)
+        await _reply_next_step(
+            session,
+            line,
+            event,
+            organization_id=organization_id,
+            draft=draft,
+            raw_token="",
+            lead=[
+                _text(f"已保留 {animal.name if animal is not None else '原本毛孩'} 的回報內容。")
+            ],
         )
         return None
     if action == "resume_draft" and not token:
@@ -1751,23 +1968,11 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
                     if _is_walk_report_command(event):
-                        # Separate workstream — QR→LINE CareReportHandoff.
-                        # The exact command intentionally opens the in-chat locator; it must not
-                        # consume a pending LIFF handoff until that integration is authorized.
-                        user_id, organization_id, membership_id, _ = await _resolve_context(
-                            session, line_user_id
-                        )
-                        await _reply(
+                        await _handle_walk_report_command(
+                            session,
                             line,
                             event,
-                            [
-                                await _walk_entry_bubble(
-                                    session,
-                                    user_id=user_id,
-                                    organization_id=organization_id,
-                                    membership_id=membership_id,
-                                )
-                            ],
+                            line_user_id,
                         )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
@@ -1923,9 +2128,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                             session, organization_id
                         ).get_active_for_volunteer(user_id)
                         if draft is None:
-                            image = await line.get_image_content(
-                                message_id=event["message"]["id"]
-                            )
+                            image = await line.get_image_content(message_id=event["message"]["id"])
                             raw_token = decode_qr_image(image.content)
                             candidate = await _selection_service(
                                 session, organization_id
@@ -1946,9 +2149,7 @@ async def webhook(request: Request, x_line_signature: str | None = Header(defaul
                                 ],
                             )
                             await identity.complete_event(stored_event)
-                            results.append(
-                                {"webhook_event_id": event_id, "status": "processed"}
-                            )
+                            results.append({"webhook_event_id": event_id, "status": "processed"})
                             continue
                         if draft.current_step != DraftState.AWAITING_STOOL_MEDIA.value:
                             raise DomainError("invalid_draft_step", "目前回報步驟不接受照片", 409)

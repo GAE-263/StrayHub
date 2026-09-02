@@ -841,8 +841,8 @@ patch可乾淨套用，也不得在此前移植。
 以下項目不屬本 integration；即使實作時發現相關hook或TODO也不得順便處理：
 
 1. **OUT OF SCOPE — Volunteer Check-in**：保留現有placeholder，不修改、不實作、不刪除。
-2. **Separate workstream — QR→LINE CareReportHandoff**：`consume_pending_handoff` production caller、
-   handoff consume/resume UX與跨裝置生命週期另案處理。
+2. **Separate workstream — QR→LINE CareReportHandoff**：本項在 Phase 1–6 執行時明確
+   deferred；後續人工授權已開啟另案實作，不回溯混入原 Phase commits。
 3. Persistent QR physical replacement/label printing tracking。
 4. 與本散步回報無關的 QR lifecycle hardening、QR management redesign或token policy變更。
 5. Adoption redesign、adoption state/schema/menu視覺改造。
@@ -902,7 +902,8 @@ Phase 5  feat(web): show stool analysis in animal timeline
 - [x] Timeline API schema、frontend mapping/render與human review states有完整tests。
 - [x] `9e534ebd`只在Phase 5 selective port，未帶回舊branch大範圍差異。
 - [x] QR management、adoption、role menu、frontend build與backend quality regression gates通過。
-- [x] `Separate workstream — QR→LINE CareReportHandoff`仍明確deferred且未偷偷接線。
+- [x] Phase 1–6 期間 `Separate workstream — QR→LINE CareReportHandoff`保持 deferred；
+  後續僅在獲得明確人工授權後接線。
 - [x] Phase 1–5各自有dedicated local commit；Phase 6無diff時沒有empty commit。
 - [x] 沒有unrelated changes、沒有push，最終`git diff --check`通過。
 
@@ -963,3 +964,25 @@ Phase 5  feat(web): show stool analysis in animal timeline
   payload is covered by passing Vitest; no assertion or production code was weakened. Volunteer
   Check-in remains untouched and no production caller was added for deferred
   `consume_pending_handoff`.
+- 2026-09-02 — Post-integration handoff workstream authorized. Added the trusted webhook
+  consumer for exact `開始散步回報`, tenant/user-bound one-time consumption, atomic
+  handoff+draft savepoint behavior, same-animal resume, and explicit server-state-only
+  different-animal switch confirmation. Volunteer Check-in remains untouched.
+- 2026-09-02 — Isolated the handoff LIFF mock behind a dedicated Playwright configuration,
+  port 3002, non-reused server and temporary app/cache copy, with a production guard.
+  The complete animal-confirmation handoff suite now passes 12/12, including supported,
+  unavailable, send-failure and close-failure runtimes. Normal volunteer entry/application
+  regression tests pass 52/52 without the alias.
+
+### Diff Review Remediation
+
+- [x] Initial selection synchronizes WebhookSession — `None → B`, `A → B`, same-shelter,
+  rollback, and tenant-scoped handoff consumption regressions pass.
+- [x] E2E temp cleanup is run-owned — each UUID marker names one validated temp directory;
+  the concurrent ownership test proves cleanup B leaves A intact.
+- [x] Revoked binding cannot create WebhookSession — the locked binding is authoritative and
+  the revoke-race regression preserves the original HTTP and webhook contexts.
+- [x] Verification documentation matches actual suite coverage — the 12-case handoff spec and
+  separate 8-case manager QR/A4 spec are listed independently.
+- [x] Temp app copy excludes local .env secrets — `.env*` is excluded except the explicit safe
+  `.env.example`, with filter regression coverage.
