@@ -43,13 +43,7 @@ class _Audit:
 def _report():
     now = datetime.now(timezone.utc)
     answers = {
-        key: (
-            "care_completion.completed"
-            if key == "care_completion"
-            else "walk_completion.completed"
-            if key == "walk_completion"
-            else f"{key}.observed"
-        )
+        key: ("walk_completion.completed" if key == "walk_completion" else f"{key}.observed")
         for key in REQUIRED_ANSWER_KEYS
     }
     return CareReport(
@@ -79,12 +73,7 @@ async def test_owner_can_correct_within_edit_window_and_history_is_saved() -> No
         actor_user_id=report.volunteer_user_id,
         actor_role="VOLUNTEER",
         observations={
-            **{
-                key: f"{key}.corrected"
-                for key in REQUIRED_ANSWER_KEYS
-                if key not in {"care_completion", "walk_completion"}
-            },
-            "care_completion": "care_completion.partially_completed",
+            **{key: f"{key}.corrected" for key in REQUIRED_ANSWER_KEYS if key != "walk_completion"},
             "walk_completion": "walk_completion.partially_completed",
         },
         note="補充觀察",
