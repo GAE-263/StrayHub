@@ -54,7 +54,7 @@ npm --prefix packages/contracts run check
 UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/contract/test_growth_diary_management_contract.py tests/contract/test_generated_contract_types.py
 ```
 
-Expected：011 feature contract 已合併至 `specs/001-volunteer-care-report/contracts/openapi.yaml` 唯一 canonical；FastAPI runtime schema 與 generated TypeScript 一致。list schema 不含 `ai_raw_output`，detail 才包含完整 provenance/raw output；photo 只宣告 `image/webp`、`private, no-store`、`nosniff`。
+Expected：011 feature contract 已合併至 `specs/001-volunteer-care-report/contracts/openapi.yaml` 唯一 canonical；FastAPI runtime schema 與 generated TypeScript 一致。list schema 不含 `ai_raw_output`，detail 才包含完整 provenance/raw output；photo media type 由 `content.image/webp` 表達，response headers 只額外宣告 `private, no-store` 與 `nosniff`，runtime 仍實際回傳 `Content-Type: image/webp`。
 
 ## 4. Frontend validation
 

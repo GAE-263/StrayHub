@@ -38,7 +38,7 @@
 
 ## 5. Private photo delivery
 
-**Decision**：list 回 `photo_endpoint`；前端以 `authFetch` 取得 Blob、建立 object URL，unmount／tenant switch 時 revoke。新增 `GET /v1/management/growth-diary-entries/{entry_id}/photo`，先驗證 role、active organization、entry id + organization，再從 private storage 以既有 `ObjectStoragePort.get()` buffered read 取得最多 2 MB 的 final WebP；回覆固定 `Content-Type: image/webp`、`Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`。不存在、跨 tenant、無可信 `photo_content_type`、無照片與 storage failure 統一 404。
+**Decision**：list 回 `photo_endpoint`；前端以 `authFetch` 取得 Blob、建立 object URL，unmount／tenant switch 時 revoke。新增 `GET /v1/management/growth-diary-entries/{entry_id}/photo`，先驗證 role、active organization、entry id + organization，再從 private storage 以既有 `ObjectStoragePort.get()` buffered read 取得最多 2 MB 的 final WebP；runtime 回覆固定 `Content-Type: image/webp`、`Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`，OpenAPI MIME 只由 `content.image/webp` 表達，不把 `Content-Type` 重複列為 response header。不存在、跨 tenant、無可信 `photo_content_type`、無照片與 storage failure 統一 404。
 
 **Rationale**：production MinIO 使用容器內 hostname，瀏覽器無法解析；`<img>` 又不能附帶 sessionStorage Bearer token。authenticated Blob 能沿用 request-scope cancellation，也不把 credential 放 URL。
 

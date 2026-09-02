@@ -100,6 +100,8 @@ GrowthDiaryEntry (organization_id, photo_key, photo_content_type)
 - `Cache-Control: private, no-store`
 - `X-Content-Type-Options: nosniff`
 
+以上 `Content-Type` 是 runtime HTTP requirement；OpenAPI 由 `content.image/webp` 表達 media type，不在 `headers` 重複宣告。
+
 ## FinalSanitizedPhoto（暫態 value，不新增資料表）
 
 由既有 media sanitization pipeline 在記憶體中產生，只有最終成功結果會交給 object storage。

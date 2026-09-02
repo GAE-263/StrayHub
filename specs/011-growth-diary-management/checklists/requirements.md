@@ -41,7 +41,7 @@
 - [x] WebP fallback 固定為 1600/82 → 1600/72 → 1280/68，final 上限 2 MB
 - [x] 只保存 final WebP；checksum、size、MIME 均來自 final bytes
 - [x] 新資料 `photo_key != null` 時 `photo_content_type=image/webp`；legacy MIME 不可信時 fail closed
-- [x] Photo contract 只宣告 `image/webp`、`private, no-store`、`nosniff`
+- [x] Photo OpenAPI media type 只由 `content.image/webp` 表達，headers 不重複宣告 `Content-Type`；runtime 仍要求 `image/webp`、`private, no-store`、`nosniff`
 - [x] 第一版沿用 `ObjectStoragePort.get()` buffered read，不新增 streaming abstraction
 - [x] sanitization/storage/DB/cleanup failure ownership 與 integration acceptance 已定義
 - [x] storage success + DB commit failure 由 webhook per-event transaction boundary 補償刪除

@@ -121,7 +121,7 @@ tests/unit/test_media_sanitization.py
 ## Phase 1: Design Summary
 
 - [data-model.md](./data-model.md) 定義原始資料 invariant、final WebP metadata、媒體處理暫態狀態、AI state/provenance、list/detail read models、filter/page 與 additive migration。
-- [contracts/growth-diary-management.openapi.yaml](./contracts/growth-diary-management.openapi.yaml) 定義 active-shelter list/detail/photo、auth、query bounds、nullable、安全錯誤與 private image headers。
+- [contracts/growth-diary-management.openapi.yaml](./contracts/growth-diary-management.openapi.yaml) 定義 active-shelter list/detail/photo、auth、query bounds、nullable、安全錯誤；photo media type 由 `content.image/webp` 表達，額外 headers 只宣告 cache 與 nosniff。
 - [quickstart.md](./quickstart.md) 定義 migration、Ruff/Pytest、contract generation、Vitest/typecheck/Prettier、Playwright、responsive/a11y 與 A→B switch 驗收。
 
 ### Implementation sequence

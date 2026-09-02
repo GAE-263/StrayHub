@@ -46,7 +46,6 @@ paths:
         "200":
           description: Buffered final WebP, authenticated and scoped to the active shelter
           headers:
-            Content-Type: { schema: { type: string, const: image/webp } }
             Cache-Control: { schema: { type: string, const: "private, no-store" } }
             X-Content-Type-Options: { schema: { type: string, const: nosniff } }
           content:
