@@ -336,6 +336,7 @@ def test_gce_release_workflow_automatically_deploys_exact_release_branch_sha() -
     assert deployment.index("Require deployment configuration") < deployment.index(
         "google-github-actions/auth"
     )
+    assert "actions: read" in deployment
     assert "^[0-9a-f]{64}$" in deployment
     assert "terraform apply" not in workflow
     assert "service-account-key" not in workflow.lower()
