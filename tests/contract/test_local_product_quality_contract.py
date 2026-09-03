@@ -106,6 +106,14 @@ def test_line_demo_provides_session_keys_before_starting_api() -> None:
     assert script.index("openssl genpkey") < script.index("uv run python -m uvicorn")
 
 
+def test_line_demo_provides_public_photo_origin_before_starting_api() -> None:
+    script = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+
+    assignment = 'export WEB_PUBLIC_BASE_URL="$NGROK_URL"'
+    assert assignment in script
+    assert script.index(assignment) < script.index("uv run python -m uvicorn")
+
+
 def test_local_demo_scripts_provide_ephemeral_pii_key_before_starting_api() -> None:
     for relative_path in ("scripts/demo.sh", "scripts/demo-line.sh"):
         script = (ROOT / relative_path).read_text(encoding="utf-8")

@@ -144,6 +144,9 @@ if [[ ! "$NGROK_URL" =~ ^https:// ]]; then
   echo "NGROK_URL 必須是 HTTPS 保留網址，例如 https://your-domain.ngrok.app" >&2
   exit 2
 fi
+# LINE fetches Flex Message images server-side, so its URL must use the public
+# tunnel origin rather than the local FastAPI address inferred behind Next.js.
+export WEB_PUBLIC_BASE_URL="$NGROK_URL"
 require_command uv
 require_command npm
 require_command curl
