@@ -157,7 +157,6 @@ jobs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
       release_id: ${{ steps.bundle.outputs.release_id }}
     permissions:
-      actions: read
       contents: read
       id-token: write
     steps:
@@ -249,6 +248,7 @@ jobs:
       name: production
       url: https://strayhub.enadv.quest
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
