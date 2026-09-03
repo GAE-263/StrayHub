@@ -176,6 +176,7 @@ class DraftStateMachine:
         return self.answer_current(value)
 
     def back(self) -> DraftState:
+        previous: DraftState | None
         if self.state == DraftState.ANSWERING_ANIMAL_INTERACTION:
             previous = (
                 DraftState.ANSWERING_DEFECATION

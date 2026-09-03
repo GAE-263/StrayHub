@@ -13,6 +13,10 @@ def test_generated_contract_types_exist_for_openapi_source_of_truth() -> None:
     assert "DraftAnswers" in content
     assert "MedicalRecordCreate" in content
     assert "CareReminderSeriesCreate" in content
+    assert "GrowthDiaryListResponse" in content
+    assert "GrowthDiaryDetail" in content
+    assert '"/v1/management/growth-diary-entries"' in content
+    assert '"/v1/management/growth-diary-entries/{entryId}/photo"' in content
     assert "OccurrenceAction" in content
     assert '"/v1/management/care-agenda"' in content
     assert '"/v1/care-report-handoffs"' in content
@@ -36,6 +40,17 @@ def test_generated_contract_types_exist_for_openapi_source_of_truth() -> None:
     ):
         assert field in list_item
         assert field.replace(":", "?:", 1) not in list_item
+
+    growth_list_start = schemas.index("        GrowthDiaryListItem:")
+    growth_list_end = schemas.index("        };", growth_list_start) + len("        };")
+    growth_list = schemas[growth_list_start:growth_list_end]
+    assert "ai_raw_output" not in growth_list
+
+    growth_detail_start = schemas.index("        GrowthDiaryDetail:")
+    growth_detail_end = schemas.index("        };", growth_detail_start) + len("        };")
+    growth_detail = schemas[growth_detail_start:growth_detail_end]
+    assert "ai_raw_output" in growth_detail
+    assert "ai_provenance" in growth_detail
 
     operation_start = content.index("    listManagementQrCodes:")
     operation_end = content.index("    createManagementQrCode:", operation_start)

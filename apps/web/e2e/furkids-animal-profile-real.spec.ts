@@ -29,6 +29,12 @@ for (const viewport of [
     await page.getByLabel("帳號", { exact: true }).fill("demo-furkids-admin");
     await page.getByLabel("密碼", { exact: true }).fill("local-only-password");
     await page.getByRole("button", { name: "登入", exact: true }).click();
+    await page
+      .getByLabel("目前收容所", { exact: true })
+      .selectOption({ label: "毛小孩幸福聯盟協會（FURKIDS-ASIA）" });
+    await page
+      .getByRole("button", { name: "進入管理工作台", exact: true })
+      .click();
     await expect(
       page.getByRole("heading", { name: "管理工作台總覽", exact: true }),
     ).toBeVisible();

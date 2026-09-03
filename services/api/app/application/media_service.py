@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
-from services.api.app.application.media_sanitization import sanitize_image
+from services.api.app.application.media_sanitization import ImageOutputPolicy, sanitize_image
 from services.api.app.infrastructure.storage.ports import (
     ObjectMetadata,
     ObjectScope,
@@ -27,9 +27,16 @@ class MediaProcessingService:
         self.storage = storage
 
     @staticmethod
-    def sanitize(data: bytes, *, declared_content_type: str) -> SanitizedMedia:
+    def sanitize(
+        data: bytes,
+        *,
+        declared_content_type: str,
+        output_policy: ImageOutputPolicy = "preserve",
+    ) -> SanitizedMedia:
         cleaned, content_type, checksum = sanitize_image(
-            data, declared_content_type=declared_content_type
+            data,
+            declared_content_type=declared_content_type,
+            output_policy=output_policy,
         )
         return SanitizedMedia(cleaned, content_type, checksum)
 
@@ -40,8 +47,13 @@ class MediaProcessingService:
         object_key: str,
         data: bytes,
         declared_content_type: str,
+        output_policy: ImageOutputPolicy = "preserve",
     ) -> StoredObject:
-        cleaned = self.sanitize(data, declared_content_type=declared_content_type)
+        cleaned = self.sanitize(
+            data,
+            declared_content_type=declared_content_type,
+            output_policy=output_policy,
+        )
         metadata = ObjectMetadata(
             content_type=cleaned.content_type,
             size=len(cleaned.data),

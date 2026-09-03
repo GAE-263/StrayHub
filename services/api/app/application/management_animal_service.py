@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -9,16 +10,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
-from services.api.app.application.media_access import MediaAccessService
 from services.api.app.domain.animal_profile import (
     AnimalProfile,
     AnimalProfileUpdate,
     profile_values,
 )
-from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.persistence.models.animal import Animal
+from services.api.app.persistence.models.care_report import MediaAsset
 from services.api.app.persistence.models.medical_care import CareReminderSeries
 from services.api.app.persistence.models.shelter_area import ShelterArea
+
+ALLOWED_MANAGEMENT_PHOTO_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+
+
+@dataclass(frozen=True)
+class ManagementAnimalPhoto:
+    object_key: str
+    content_type: str
 
 
 class ManagementAnimalService:
@@ -62,17 +70,37 @@ class ManagementAnimalService:
             if parent_name:
                 payload["area_path"] = f"{parent_name} / {area.name}"
         if animal.current_photo_key:
-            try:
-                payload["photo_url"] = await MediaAccessService(
-                    MinioStorageAdapter(), self.organization_id
-                ).signed_url(
-                    media_organization_id=animal.organization_id,
-                    object_key=animal.current_photo_key,
-                    expires_seconds=300,
-                )
-            except Exception:
-                pass  # An unavailable photo must not block the profile.
+            payload["photo_url"] = f"/v1/management/animals/{animal.id}/photo"
         return payload
+
+    async def photo(self, animal_id: UUID) -> ManagementAnimalPhoto:
+        row = await self.session.execute(
+            select(Animal, MediaAsset)
+            .outerjoin(
+                MediaAsset,
+                and_(
+                    MediaAsset.organization_id == self.organization_id,
+                    MediaAsset.object_key == Animal.current_photo_key,
+                ),
+            )
+            .where(
+                Animal.id == animal_id,
+                Animal.organization_id == self.organization_id,
+            )
+        )
+        pair = row.one_or_none()
+        if pair is None:
+            raise DomainError("animal_photo_not_found", "照片不存在或無法存取", 404)
+        animal, media = pair
+        if (
+            not animal.current_photo_key
+            or media is None
+            or media.status != "processed"
+            or not media.exif_removed
+            or media.content_type not in ALLOWED_MANAGEMENT_PHOTO_TYPES
+        ):
+            raise DomainError("animal_photo_not_found", "照片不存在或無法存取", 404)
+        return ManagementAnimalPhoto(animal.current_photo_key, media.content_type)
 
     async def list(
         self,

@@ -5,7 +5,7 @@
 ## 前置條件
 
 - Docker Desktop／Docker Compose
-- Python 3.11+ 與 `uv`
+- Python 3.12 與 `uv`
 - Node.js、npm
 - 已依 `.env.example` 建立 local-only `.env` 與 JWT keys
 - local LINE verifier 能把測試 id token 映射到虛構 LINE user id

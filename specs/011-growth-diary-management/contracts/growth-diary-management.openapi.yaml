@@ -1,0 +1,135 @@
+openapi: 3.1.0
+info:
+  title: StrayHub Growth Diary Management Contract
+  version: 1.0.0
+paths:
+  /v1/management/growth-diary-entries:
+    get:
+      summary: List growth diary entries for the active shelter
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: query, schema: { type: string, maxLength: 120 } }
+        - in: query
+          name: mood
+          schema: { type: string, enum: [all, concern, positive, neutral, unanalyzed], default: all }
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: page_size, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Active-shelter-scoped page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GrowthDiaryListResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/management/growth-diary-entries/{entryId}:
+    get:
+      summary: Get one diary entry with complete AI provenance and raw output
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/EntryId" }]
+      responses:
+        "200":
+          description: Active-shelter-scoped diary detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GrowthDiaryDetail" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/management/growth-diary-entries/{entryId}/photo:
+    get:
+      summary: Read one normalized private diary photo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/EntryId" }]
+      responses:
+        "200":
+          description: Buffered final WebP, authenticated and scoped to the active shelter
+          headers:
+            Cache-Control: { schema: { type: string, const: "private, no-store" } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            image/webp: { schema: { type: string, contentEncoding: binary } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    EntryId:
+      in: path
+      name: entryId
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Unified safe error response
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    GrowthDiaryAiSummary:
+      type: object
+      required: [status, provenance_status, mood, adopter_reply, staff_summary]
+      properties:
+        status:
+          type: string
+          enum: [pending, succeeded, failed, unconfigured, not_applicable, legacy, unavailable]
+        provenance_status: { type: string, enum: [available, legacy_missing, unavailable] }
+        mood: { type: [string, "null"], enum: [positive, neutral, concern, null] }
+        adopter_reply: { type: [string, "null"] }
+        staff_summary: { type: [string, "null"] }
+    GrowthDiaryAiProvenance:
+      type: object
+      required: [provenance_status, provider, model_name, model_version, prompt_version, output_schema_version, analyzed_at]
+      properties:
+        provenance_status: { type: string, enum: [available, legacy_missing, unavailable] }
+        provider: { type: [string, "null"] }
+        model_name: { type: [string, "null"] }
+        model_version: { type: [string, "null"] }
+        prompt_version: { type: [string, "null"] }
+        output_schema_version: { type: [string, "null"] }
+        analyzed_at: { type: [string, "null"], format: date-time }
+    GrowthDiaryListItem:
+      type: object
+      required: [id, inquiry_id, animal_id, animal_name, shelter_number, has_photo, photo_endpoint, note, ai_analysis, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        inquiry_id: { type: string, format: uuid }
+        animal_id: { type: string, format: uuid }
+        animal_name: { type: [string, "null"] }
+        shelter_number: { type: [string, "null"] }
+        has_photo: { type: boolean }
+        photo_endpoint: { type: [string, "null"] }
+        note: { type: [string, "null"], maxLength: 2000 }
+        ai_analysis: { $ref: "#/components/schemas/GrowthDiaryAiSummary" }
+        created_at: { type: string, format: date-time }
+    GrowthDiaryDetail:
+      allOf:
+        - { $ref: "#/components/schemas/GrowthDiaryListItem" }
+        - type: object
+          required: [ai_provenance, ai_raw_output]
+          properties:
+            ai_provenance: { $ref: "#/components/schemas/GrowthDiaryAiProvenance" }
+            ai_raw_output:
+              oneOf:
+                - { type: object, additionalProperties: true }
+                - { type: string }
+                - { type: "null" }
+    GrowthDiaryListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/GrowthDiaryListItem" }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }

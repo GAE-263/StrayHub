@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockManagementApi } from "./fixtures";
+import { mockManagementApi, type GrowthDiaryFixtureItem } from "./fixtures";
 
 async function setup(
   page: Page,
@@ -237,4 +237,130 @@ test("late A timeline/medical responses cannot populate B list", async ({
   ).toHaveCount(0);
   expect(pending).toBe(beforeSwitch);
   expect(foreignRequests).toEqual([]);
+});
+
+function diaryItem(
+  organizationId: string,
+  suffix: string,
+  hasPhoto: boolean,
+): GrowthDiaryFixtureItem {
+  return {
+    id: `00000000-0000-4000-8000-0000000000${suffix}`,
+    inquiry_id: "10000000-0000-4000-8000-000000000001",
+    animal_id: "20000000-0000-4000-8000-000000000001",
+    animal_name: `${organizationId} 毛孩 ${suffix}`,
+    shelter_number: `${organizationId}-${suffix}`,
+    has_photo: hasPhoto,
+    photo_endpoint: hasPhoto
+      ? `/v1/management/growth-diary-entries/00000000-0000-4000-8000-0000000000${suffix}/photo`
+      : null,
+    note: `${organizationId} diary text ${suffix}`,
+    ai_analysis: {
+      status: "succeeded",
+      provenance_status: "available",
+      mood: "neutral",
+      adopter_reply: "謝謝分享。",
+      staff_summary: `${organizationId} summary`,
+    },
+    created_at: "2026-09-01T10:00:00Z",
+  };
+}
+
+test("delayed A diary JSON and Blob lifecycles cannot publish after switching to B or re-login", async ({
+  page,
+}) => {
+  const events: string[] = [];
+  const failedDiaryRequests: string[] = [];
+  page.on("requestfailed", (request) => {
+    if (request.url().includes("/growth-diary-entries/")) {
+      failedDiaryRequests.push(new URL(request.url()).pathname);
+    }
+  });
+  const organizations = ["a", "b"].map((id) => ({
+    id: `org-${id}`,
+    code: `ORG-${id.toUpperCase()}`,
+    name: `Shelter ${id.toUpperCase()}`,
+    role: "SHELTER_ADMIN",
+    status: "active",
+    timezone: "Asia/Taipei",
+    timezone_version: 1,
+  }));
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("e2e_skip_auto_auth") !== "1") {
+      sessionStorage.setItem("access_token", "test-access");
+    }
+    const originalRevoke = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = (url: string) => {
+      const count = Number(sessionStorage.getItem("diary_revoke_count") ?? 0);
+      sessionStorage.setItem("diary_revoke_count", String(count + 1));
+      originalRevoke(url);
+    };
+  });
+  await mockManagementApi(page, {
+    organizations,
+    platformRole: null,
+    growthDiaryEvents: events,
+    growthDiaryEntries: (_params, organizationId) => {
+      const items =
+        organizationId === "org-a"
+          ? [diaryItem("org-a", "11", true), diaryItem("org-a", "12", true)]
+          : [diaryItem("org-b", "21", false)];
+      return { items, page: 1, page_size: 20, total: items.length };
+    },
+    growthDiaryPhotoDelay: (entryId, organizationId) =>
+      organizationId === "org-a" && entryId.endsWith("12") ? 3_000 : 0,
+    growthDiaryDetailDelay: (_entryId, organizationId) =>
+      organizationId === "org-a" ? 3_000 : 0,
+  });
+
+  await page.goto("/growth-diary");
+  await expect(page.getByText("org-a diary text 11")).toBeVisible();
+  await expect.poll(() => events).toContain("photo:finish:org-a");
+  await expect.poll(() => events).toContain("photo:start:org-a");
+  await page.getByRole("button", { name: "查看 AI 來源" }).first().click();
+  await expect.poll(() => events).toContain("detail:start:org-a");
+
+  await page.getByLabel("切換目前收容所").selectOption("org-b");
+  await expect(page.getByText("org-a diary text 11")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/animals$/);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Number(sessionStorage.getItem("diary_revoke_count") ?? 0),
+      ),
+    )
+    .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(() => failedDiaryRequests.some((path) => path.endsWith("/photo")), {
+      timeout: 7_000,
+    })
+    .toBe(true);
+  await expect
+    .poll(
+      () =>
+        failedDiaryRequests.some(
+          (path) =>
+            path.includes("/growth-diary-entries/") && !path.endsWith("/photo"),
+        ),
+      { timeout: 7_000 },
+    )
+    .toBe(true);
+
+  await page.goto("/growth-diary");
+  await expect(page.getByText("org-b diary text 21")).toBeVisible();
+  await expect(page.getByText(/org-a diary text/)).toHaveCount(0);
+
+  await page.evaluate(() => {
+    sessionStorage.setItem("e2e_skip_auto_auth", "1");
+    sessionStorage.removeItem("access_token");
+  });
+  await page.reload();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.evaluate(() => {
+    sessionStorage.setItem("access_token", "test-access");
+    sessionStorage.removeItem("e2e_skip_auto_auth");
+  });
+  await page.goto("/growth-diary");
+  await expect(page.getByText("org-b diary text 21")).toBeVisible();
+  await expect(page.getByText(/org-a diary text/)).toHaveCount(0);
 });

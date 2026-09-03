@@ -202,6 +202,34 @@ test("照護行事曆日期與篩選可由鍵盤操作", async ({ page }) => {
   await expect(date).toBeFocused();
 });
 
+test("毛孩日記搜尋、篩選與 AI 來源可由鍵盤操作", async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("access_token", "test-access");
+    sessionStorage.setItem("active_organization_id", "org-a");
+  });
+  await mockManagementApi(page);
+  await page.goto("/growth-diary");
+  const query = page.getByLabel("動物名稱或收容編號");
+  await query.focus();
+  await page.keyboard.type("米糕");
+  await page.keyboard.press("Tab");
+  const mood = page.getByLabel("關注狀態");
+  await expect(mood).toBeFocused();
+  await mood.selectOption("concern");
+  const search = page.getByRole("button", { name: "搜尋", exact: true });
+  await search.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("org-a 米糕", { exact: true })).toBeVisible();
+
+  const provenance = page
+    .locator("article", { hasText: "org-a 米糕" })
+    .getByRole("button", { name: /AI 來源/ });
+  await provenance.focus();
+  await page.keyboard.press("Enter");
+  await expect(provenance).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("AI 原始輸出")).toBeVisible();
+});
+
 test("Sheet 的 Escape、取消與 focus restore 可用鍵盤完成", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.addInitScript(() =>

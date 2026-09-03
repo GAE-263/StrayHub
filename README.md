@@ -5,7 +5,7 @@
 ## 本機需求
 
 - Docker Desktop／Docker Compose
-- Python 3.11+（由 `uv` 管理執行環境）
+- Python 3.12（由 `uv` 管理執行環境）
 - `uv`
 - Node.js 與 npm
 - 本機可用的 `openssl`（首次展示且 JWT 金鑰尚未設定時使用）

@@ -5,7 +5,7 @@
 ## 1. 前置條件
 
 - Docker Desktop／Docker Compose
-- Python 3.11+、`uv`
+- Python 3.12、`uv`
 - Node.js、npm
 - 已依 `.env.example` 建立 local-only `.env` 與 JWT keys
 - 005 migrations、entry references、Membership/Grant fixtures 已可用

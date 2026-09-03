@@ -6,11 +6,15 @@ import hashlib
 import hmac
 import json
 import os
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import asyncpg
+import pytest
 from fastapi.testclient import TestClient
+from services.api.app.api import line_webhook
 from services.api.app.config.settings import get_settings
+from services.api.app.infrastructure.ai.gemini_client import GeminiGrowthDiaryAnalysis
 from services.api.app.main import app
 from services.api.app.persistence.database.engine import engine
 
@@ -287,3 +291,141 @@ def test_growth_diary_history_review_lists_past_entries(monkeypatch) -> None:
     finally:
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()
+
+
+class _AiTestSession:
+    def __init__(self, entry) -> None:
+        self.entry = entry
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
+    def begin(self):
+        return self
+
+    async def execute(self, _statement, *_args, **_kwargs):
+        return None
+
+    async def get(self, _model, _entry_id):
+        return self.entry
+
+
+class _AiTestLine:
+    def __init__(self) -> None:
+        self.pushes: list[dict] = []
+
+    async def push(self, **payload) -> None:
+        self.pushes.append(payload)
+
+
+class _AiClient:
+    model_name = "gemini-test"
+
+    def __init__(self, result) -> None:
+        self.result = result
+        self.calls = 0
+
+    async def analyze_growth_diary_entry(self, _prompt):
+        self.calls += 1
+        return self.result
+
+
+def _analysis_entry(**overrides):
+    values = {
+        "ai_analysis_status": "pending",
+        "ai_mood": None,
+        "ai_reply": None,
+        "ai_staff_summary": None,
+        "ai_provider": None,
+        "ai_model_name": None,
+        "ai_model_version": None,
+        "ai_prompt_version": None,
+        "ai_output_schema_version": None,
+        "ai_raw_output": None,
+        "ai_analyzed_at": None,
+        "note": "original note",
+        "photo_key": "original-photo.webp",
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+async def _run_analysis(monkeypatch, *, entry, gemini, note, has_photo):
+    session = _AiTestSession(entry)
+    line = _AiTestLine()
+    monkeypatch.setattr(line_webhook, "session_factory", lambda: session)
+    monkeypatch.setattr(line_webhook, "_build_gemini_client", lambda _settings: gemini)
+    await line_webhook._run_growth_diary_ai_analysis(
+        line,
+        line_user_id="U-ai-test",
+        organization_id=uuid4(),
+        entry_id=uuid4(),
+        animal_name="旺來",
+        note=note,
+        has_photo=has_photo,
+    )
+    return line
+
+
+@pytest.mark.asyncio
+async def test_growth_diary_ai_success_persists_status_and_complete_provenance(monkeypatch) -> None:
+    entry = _analysis_entry()
+    raw_output = '{"mood":"positive"}'
+    gemini = _AiClient(
+        GeminiGrowthDiaryAnalysis(
+            mood="positive",
+            adopter_reply="謝謝分享",
+            staff_summary="適應情況穩定",
+            raw_output=raw_output,
+        )
+    )
+
+    await _run_analysis(
+        monkeypatch,
+        entry=entry,
+        gemini=gemini,
+        note="今天精神很好",
+        has_photo=True,
+    )
+
+    assert entry.ai_analysis_status == "succeeded"
+    assert entry.ai_mood == "positive"
+    assert entry.ai_provider == "google_gemini"
+    assert entry.ai_model_name == "gemini-test"
+    assert entry.ai_model_version == "gemini-test"
+    assert entry.ai_prompt_version == "growth-diary-v1"
+    assert entry.ai_output_schema_version == "growth-diary-analysis-v1"
+    assert entry.ai_raw_output == raw_output
+    assert entry.ai_analyzed_at is not None
+    assert (entry.note, entry.photo_key) == ("original note", "original-photo.webp")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("gemini", "note", "has_photo", "expected_status"),
+    [
+        (_AiClient(None), "分析會失敗", False, "failed"),
+        (None, "未設定模型", False, "unconfigured"),
+        (_AiClient(None), None, True, "not_applicable"),
+    ],
+)
+async def test_growth_diary_ai_terminal_states_preserve_original_entry(
+    monkeypatch, gemini, note, has_photo, expected_status
+) -> None:
+    entry = _analysis_entry(note="original note", photo_key="original-photo.webp")
+
+    await _run_analysis(
+        monkeypatch,
+        entry=entry,
+        gemini=gemini,
+        note=note,
+        has_photo=has_photo,
+    )
+
+    assert entry.ai_analysis_status == expected_status
+    assert entry.ai_analyzed_at is not None
+    assert entry.ai_mood is None
+    assert (entry.note, entry.photo_key) == ("original note", "original-photo.webp")

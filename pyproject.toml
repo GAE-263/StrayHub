@@ -20,7 +20,7 @@ dependencies = [
   "sqlalchemy[asyncio]>=2.0,<3",
   "starlette>=0.46,<1",
   "uvicorn[standard]>=0.32,<1",
-  "zxing-cpp>=2.3,<3",
+  "zxing-cpp==3.1.1",
 ]
 
 [dependency-groups]
@@ -37,7 +37,7 @@ default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["services", "scripts", "tests"]
 
 [tool.ruff.lint]
@@ -64,7 +64,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 # The current typed boundary covers domain, observability and database setup;
 # repository/application SQLAlchemy result typing remains an incremental follow-up.
 files = ["services/api/app/domain", "services/api/app/observability", "services/api/app/persistence/database"]

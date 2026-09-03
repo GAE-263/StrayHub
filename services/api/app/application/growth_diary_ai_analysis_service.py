@@ -12,10 +12,28 @@ messaging here — line_webhook.py owns building/pushing messages."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from services.api.app.infrastructure.ai.gemini_client import (
     GeminiClient,
     GeminiGrowthDiaryAnalysis,
 )
+
+GROWTH_DIARY_PROMPT_VERSION = "growth-diary-v1"
+GROWTH_DIARY_OUTPUT_SCHEMA_VERSION = "growth-diary-analysis-v1"
+
+
+@dataclass(frozen=True)
+class GrowthDiaryAiAnalysisResult:
+    mood: str
+    adopter_reply: str
+    staff_summary: str
+    provider: str
+    model_name: str
+    model_version: str
+    prompt_version: str
+    output_schema_version: str
+    raw_output: str | None
 
 
 def _build_growth_diary_prompt(*, animal_name: str, note: str, has_photo: bool) -> str:
@@ -44,11 +62,26 @@ class GrowthDiaryAiAnalysisService:
 
     async def analyze_entry(
         self, *, animal_name: str, note: str | None, has_photo: bool
-    ) -> GeminiGrowthDiaryAnalysis | None:
+    ) -> GrowthDiaryAiAnalysisResult | None:
         if not note:
             return None
         prompt = _build_growth_diary_prompt(animal_name=animal_name, note=note, has_photo=has_photo)
-        return await self.gemini.analyze_growth_diary_entry(prompt)
+        result: GeminiGrowthDiaryAnalysis | None = await self.gemini.analyze_growth_diary_entry(
+            prompt
+        )
+        if result is None:
+            return None
+        return GrowthDiaryAiAnalysisResult(
+            mood=result.mood,
+            adopter_reply=result.adopter_reply,
+            staff_summary=result.staff_summary,
+            provider="google_gemini",
+            model_name=self.gemini.model_name,
+            model_version=self.gemini.model_name,
+            prompt_version=GROWTH_DIARY_PROMPT_VERSION,
+            output_schema_version=GROWTH_DIARY_OUTPUT_SCHEMA_VERSION,
+            raw_output=result.raw_output,
+        )
 
 
-__all__ = ["GrowthDiaryAiAnalysisService"]
+__all__ = ["GrowthDiaryAiAnalysisResult", "GrowthDiaryAiAnalysisService"]
