@@ -1,6 +1,6 @@
 # Immutable GCE Release Process
 
-Status: Phase F3 tooling **READY**; no production release performed
+Status: release-branch automatic deployment wiring **IMPLEMENTED IN REPOSITORY**; live activation pending
 
 Deletion safety: **BLOCKED**
 
@@ -17,30 +17,43 @@ clean Git SHA
   -> registry@sha256 references
   -> deterministic deployment-bundle.tar
   -> release-manifest.json + checksums.sha256
-  -> reviewed production approval
-  -> OS Login/IAP operator deployment
+  -> merge/push exact commit to release
+  -> WIF + OS Login/IAP deployment
+  -> exact receipt/runtime/public-health verification
 ```
 
 ## Build and publication
 
-`.github/workflows/gce-release.yml` adds a GCE verification gate. Pull requests and matching pushes
-run release contracts, Ruff, shell syntax/lint, production Compose/preflight, Terraform validation
-without backend access, the repository secret scan, and clean-SHA image builds. The repository's
-primary CI remains responsible for the full backend/frontend/contracts/critical-E2E matrix.
+`.github/workflows/gce-release.yml` adds a GCE verification and deployment gate. Pull requests and
+pushes to `main` run release verification without publication. Every push to `release`, without a
+path filter, runs release contracts, Ruff, shell syntax/lint, production Compose/preflight,
+Terraform validation without backend access, the repository secret scan, and clean-SHA image
+builds. The release workflow calls the repository's primary CI as a required reusable workflow, so
+its full backend/frontend/contracts/critical-E2E matrix must also pass before publication.
 
-Immutable publication is deliberately manual. A `workflow_dispatch` run must set `publish=true`,
-pass the `release-publication` environment review, and have all three repository variables:
+For this small-team workflow, merging the reviewed exact commit into `release` is the production
+approval. There is deliberately no required GitHub environment reviewer: `release-publication` and
+`production` provide identity separation, deployment history, and environment-scoped WIF subjects,
+not a second human approval. Direct pushes to `release` have the same effect and therefore must be
+restricted operationally to intentional releases.
+
+A `release` push publishes automatically and requires these repository/environment variables:
 
 ```text
 GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT
 GCP_ARTIFACT_REGISTRY
+GCP_RELEASE_DEPLOYER_SERVICE_ACCOUNT
+GCP_PRODUCTION_INSTANCE
+GCP_PRODUCTION_PROJECT
+GCP_PRODUCTION_ZONE
 ```
 
-The first two identify a separately reviewed short-lived GitHub OIDC/WIF publisher. The registry is
-a dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitly adopted legacy
-resource. Until that identity, registry, IAM, variables, and environment reviewers exist, CI
-publication is `DESIGNED_ONLY`. No service-account JSON or SSH private key is accepted.
+The publisher and deployer are separate short-lived GitHub OIDC/WIF identities. The registry is a
+dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitly adopted legacy
+resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM, `release`
+WIF condition, variables, and environments are configured, repository wiring is ready but live
+automatic deployment is blocked by configuration.
 
 The publish job builds from the full protected-branch SHA, applies OCI source/revision labels,
 pushes each image, resolves its registry digest, and runs:
@@ -88,18 +101,21 @@ infra/gce/scripts/release-manifest.py validate-artifact \
 Validation checks the JSON contract, checksums, safe tar paths, Compose hash, revision, and exact
 agreement between the manifest and `image-digests.env`.
 
-## Production approval and transport
+## Production trigger and transport
 
-The workflow never deploys to GCE. A reviewed production operator obtains the already-published
-artifact and connects through the existing OS Login/IAP boundary. Public TCP 22, static SSH keys,
-firewall changes, and production rebuilds are forbidden.
+After `verify-release` succeeds, `publish-release` builds and publishes the exact `release` SHA and
+uploads the validated bundle. `deploy-production` refuses a stale SHA, downloads the artifact by its
+immutable artifact ID, fails unless the downloaded archive matches the publisher's SHA-256 output,
+revalidates the manifest and file checksums, and transfers only the bundle files through IAP. Public
+TCP 22, static SSH keys, firewall changes, production rebuilds, and Terraform mutation are
+forbidden.
 
-The operator records a role—not credentials—in deployment provenance and runs:
+The CI deployer invokes the canonical host-side deployment command with non-interactive sudo:
 
 ```bash
-sudo /PATH/TO/deploy-release.sh \
-  --artifact-dir /PATH/TO/VERIFIED/release-bundle \
-  --deployment-role "StrayHub production deployment operator" \
+sudo -n /opt/strayhub/current/infra/gce/scripts/deploy-release.sh \
+  --artifact-dir /tmp/strayhub-ci-release-RUN_ID-GIT_SHA \
+  --deployment-role "GitHub Actions production deployer" \
   --confirm-production DEPLOY_STRAYHUB_PRODUCTION
 ```
 
@@ -115,6 +131,38 @@ downgrade. It then atomically changes `/opt/strayhub/current`, installs repo-own
 through systemd, verifies exact running image references plus API/Web/Worker/PostgreSQL/MinIO, and
 checks public Web/API health. A successful deployment writes a non-secret immutable receipt under
 `/var/lib/strayhub/releases/` and updates its `current.json` pointer.
+
+The final `verify-production` job reconnects through IAP and proves that the current pointer,
+manifest, successful receipt, and running digest set all match the expected release ID and Git SHA,
+then checks the canonical public Web/API health endpoints. It does not run authenticated acceptance
+or emit credentials.
+
+Manual `workflow_dispatch` publication remains available for recovery/testing. Automatic deployment
+from it is accepted only when `deploy=true` and the selected ref is `release`.
+
+### Live activation checklist
+
+Repository implementation does not grant cloud access. Before the first automatic deployment, an
+operator must separately verify all of the following in GitHub and GCP:
+
+- create the `release` branch from the intended `main` commit;
+- create/configure `production` without required reviewers and retain `release-publication` without
+  required reviewers;
+- set all seven non-secret variables listed above in the scopes used by their respective jobs;
+- extend the WIF provider condition to admit the exact `refs/heads/release` workflow identity for
+  the `release-publication` and `production` environments;
+- allow that WIF principal to impersonate only `strayhub-gce-deployer` with
+  `roles/iam.workloadIdentityUser`;
+- grant the deployer IAP tunnel access, OS Login with sudo, and only the Compute read permissions
+  needed to resolve the selected VM, scoped as narrowly as the current GCP policy permits;
+- confirm the VM still has OS Login enabled, accepts IAP TCP forwarding, and can pull the three
+  exact Artifact Registry digests; and
+- run a deliberate first release while observing publication, migration, receipt, runtime, and
+  public-health evidence.
+
+Do not create a service-account key or open public TCP 22 for this workflow. GitHub environment
+creation alone does not grant GCP permissions. These activation operations are intentionally not
+performed by the release workflow or Terraform during deployment.
 
 The first immutable release has no valid F3 `N-1`; the historical `e702d7d-e3` directory is not
 promoted to immutable provenance. Authenticated live acceptance remains an explicitly approved
