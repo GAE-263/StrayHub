@@ -1132,6 +1132,33 @@ paths:
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /v1/management/animals/{animalId}/photo:
+    get:
+      tags: [Management Animals]
+      operationId: getManagementAnimalPhoto
+      description: 透過目前登入者的收容所 context 讀取私人儲存中的毛孩主圖。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      responses:
+        "200":
+          description: 已驗證、已清除 EXIF 的目前毛孩圖片
+          headers:
+            Cache-Control:
+              schema: { type: string, const: "private, no-store" }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            image/jpeg:
+              schema: { type: string, contentEncoding: binary }
+            image/png:
+              schema: { type: string, contentEncoding: binary }
+            image/webp:
+              schema: { type: string, contentEncoding: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/management/animals/{animalId}/health-records:
     post:
       tags: [Management Animals]

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from services.api.app.api.dependencies import (
     RequestContext,
@@ -19,9 +20,11 @@ from services.api.app.application.line_staff_animal_input_service import (
 from services.api.app.application.management_animal_service import ManagementAnimalService
 from services.api.app.domain.animal_profile import AnimalProfile, AnimalProfileUpdate
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
+from services.api.app.infrastructure.storage.ports import ObjectScope
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/v1/management/animals", tags=["Management Animals"])
+logger = logging.getLogger(__name__)
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 
@@ -148,6 +151,50 @@ async def get_management_animal(
 ) -> dict:
     organization_id = require_staff_or_admin(context)
     return await ManagementAnimalService(session, organization_id).get(animal_id)
+
+
+@router.get(
+    "/{animal_id}/photo",
+    response_class=Response,
+    operation_id="getManagementAnimalPhoto",
+    responses={
+        **{code: {"model": ErrorResponse} for code in (401, 403, 404, 409)},
+        200: {
+            "description": "Authenticated current animal photo scoped to the active shelter",
+            "headers": {
+                "Cache-Control": {"schema": {"type": "string", "const": "private, no-store"}},
+                "X-Content-Type-Options": {"schema": {"type": "string", "const": "nosniff"}},
+            },
+            "content": {
+                media_type: {"schema": {"type": "string", "contentEncoding": "binary"}}
+                for media_type in ("image/jpeg", "image/png", "image/webp")
+            },
+        },
+    },
+)
+async def get_management_animal_photo(
+    animal_id: UUID,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> Response:
+    organization_id = require_staff_or_admin(context)
+    photo = await ManagementAnimalService(session, organization_id).photo(animal_id)
+    try:
+        content = await MinioStorageAdapter().get(
+            scope=ObjectScope(organization_id),
+            key=photo.object_key,
+        )
+    except Exception as exc:
+        logger.exception("management animal photo storage read failed")
+        raise DomainError("animal_photo_not_found", "照片不存在或無法存取", 404) from exc
+    return Response(
+        content=content,
+        media_type=photo.content_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.patch(

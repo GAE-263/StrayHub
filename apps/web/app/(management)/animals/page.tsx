@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { authFetch } from "../../../lib/auth";
 import {
   EmptyState,
@@ -22,6 +22,7 @@ import {
   type ManagementAnimal as Animal,
 } from "../../../lib/animal-profile";
 import styles from "../../../features/animal-management/animal-profile.module.css";
+import { AnimalPhoto } from "../../../features/animal-management/AnimalPhoto";
 
 type ListResponse = {
   items: Animal[];
@@ -184,8 +185,8 @@ export default function AnimalsPage() {
                   <td>
                     <div className={styles.directoryIdentity}>
                       {animal.photo_url && (
-                        <img
-                          src={animal.photo_url}
+                        <AnimalPhoto
+                          photoUrl={animal.photo_url}
                           alt={`${animal.name} 的照片`}
                         />
                       )}

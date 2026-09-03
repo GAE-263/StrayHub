@@ -16,6 +16,7 @@ import {
   type ManagementAnimal,
 } from "../../lib/animal-profile";
 import styles from "./animal-profile.module.css";
+import { AnimalPhoto } from "./AnimalPhoto";
 
 export function AnimalBasicProfile({
   animal,
@@ -28,7 +29,6 @@ export function AnimalBasicProfile({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const [photoFailed, setPhotoFailed] = useState(false);
   const editButton = useRef<HTMLButtonElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -223,12 +223,11 @@ export function AnimalBasicProfile({
         </form>
       ) : (
         <>
-          {animal.photo_url && !photoFailed && (
-            <img
+          {animal.photo_url && (
+            <AnimalPhoto
               className={styles.portrait}
-              src={animal.photo_url}
+              photoUrl={animal.photo_url}
               alt={`${animal.name} 的照片`}
-              onError={() => setPhotoFailed(true)}
             />
           )}
           <dl className={`detail-list ${styles.facts}`}>
