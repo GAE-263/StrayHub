@@ -245,6 +245,10 @@ def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> No
     deploy = (ROOT / "infra/gce/scripts/deploy-release.sh").read_text(encoding="utf-8")
     rollback = (ROOT / "infra/gce/scripts/rollback-release.sh").read_text(encoding="utf-8")
     rollforward = (ROOT / "infra/gce/scripts/rollforward-release.sh").read_text(encoding="utf-8")
+    ci_deploy = (ROOT / "infra/gce/scripts/deploy-release-ci.sh").read_text(encoding="utf-8")
+    receipt_verify = (ROOT / "infra/gce/scripts/verify-release-receipt.sh").read_text(
+        encoding="utf-8"
+    )
 
     for variable in ("STRAYHUB_API_IMAGE", "STRAYHUB_WORKER_IMAGE", "STRAYHUB_WEB_IMAGE"):
         assert variable in compose
@@ -273,19 +277,69 @@ def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> No
     assert rollforward.index("temporary roll-forward pointer exists") < rollforward.index(
         "systemctl stop strayhub.service"
     )
+    assert "--tunnel-through-iap" in ci_deploy
+    assert "validate-artifact" in ci_deploy
+    assert ci_deploy.index("validate-artifact") < ci_deploy.index("gcloud compute scp")
+    assert "/opt/strayhub/current/infra/gce/scripts/deploy-release.sh" in ci_deploy
+    assert "DEPLOY_STRAYHUB_PRODUCTION" in ci_deploy
+    assert "alembic downgrade" not in ci_deploy.lower()
+    assert "/opt/strayhub/current" in receipt_verify
+    assert "validate-release-dir" in receipt_verify
+    assert "verify-systemd-runtime.sh" in receipt_verify
+    assert 'receipt.get("verification") != "passed"' in receipt_verify
 
 
-def test_gce_release_workflow_has_no_automatic_production_deploy() -> None:
+def test_gce_release_workflow_automatically_deploys_exact_release_branch_sha() -> None:
     workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
+    ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release_push = workflow.split("  push:", maxsplit=1)[1].split(
+        "  workflow_dispatch:", maxsplit=1
+    )[0]
+    publication = workflow.split("  publish-release:", maxsplit=1)[1].split(
+        "  deploy-production:", maxsplit=1
+    )[0]
+    deployment = workflow.split("  deploy-production:", maxsplit=1)[1].split(
+        "  verify-production:", maxsplit=1
+    )[0]
 
     assert "id-token: write" in workflow
     assert "google-github-actions/auth" in workflow
     assert "workflow_dispatch" in workflow
+    assert "branches: [main, release]" in workflow
+    assert "paths:" not in release_push
+    assert "workflow_call:" in ci_workflow
     assert "environment: release-publication" in workflow
+    assert "name: production" in workflow
     assert "build-release-bundle.sh" in workflow
-    assert "gcloud compute ssh" not in workflow
+    assert "deploy-production:" in workflow
+    assert "verify-production:" in workflow
+    assert "uses: ./.github/workflows/ci.yml" in workflow
+    assert "needs: [full-quality-gate, verify-release]" in workflow
+    assert "needs: publish-release" in workflow
+    assert "github.ref == 'refs/heads/release'" in workflow
+    assert "Refuse stale release candidates" in workflow
+    assert "steps.artifact.outputs.artifact-id" in workflow
+    assert '"/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip"' in workflow
+    assert "sha256sum --check" in workflow
+    assert "deploy-release-ci.sh" in workflow
+    assert "verify-release-receipt.sh" in workflow
+    assert "--tunnel-through-iap" in workflow
+    assert "GCP_RELEASE_DEPLOYER_SERVICE_ACCOUNT" in workflow
+    assert "group: gce-immutable-release-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert publication.index("Require publication configuration") < publication.index(
+        "google-github-actions/auth"
+    )
+    assert deployment.index("Download and validate release artifact") < deployment.index(
+        "deploy-release-ci.sh"
+    )
+    assert deployment.index("Require deployment configuration") < deployment.index(
+        "google-github-actions/auth"
+    )
+    assert "^[0-9a-f]{64}$" in deployment
     assert "terraform apply" not in workflow
-    assert "service-account" not in workflow.lower()
+    assert "service-account-key" not in workflow.lower()
+    assert "alembic downgrade" not in workflow.lower()
 
 
 def test_generated_release_bundle_is_excluded_from_git_and_images() -> None:
