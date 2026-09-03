@@ -12,7 +12,7 @@
 
 ## Technical Context
 
-**Language/Version**：Python 3.11、TypeScript 5.7、React 19、Next.js 15.1
+**Language/Version**：Python 3.12、TypeScript 5.7、React 19、Next.js 15.1
 
 **Primary Dependencies**：FastAPI、Pydantic、SQLAlchemy 2 async、Alembic、asyncpg、既有 LINE identity／Messaging API adapters、Next.js App Router、React、openapi-typescript、Playwright、Vitest、`@axe-core/playwright`
 

@@ -14,7 +14,7 @@
 
 ## 技術脈絡
 
-**語言／版本**：Python `>=3.11`、FastAPI、Pydantic、SQLAlchemy 2.x、Alembic；前端使用 TypeScript 5.7、React 19、Next.js 15；Contract Types 使用 `openapi-typescript`。精確套件版本沿用現有 lockfile 與專案設定。
+**語言／版本**：Python `==3.12.*`、FastAPI、Pydantic、SQLAlchemy 2.x、Alembic；前端使用 TypeScript 5.7、React 19、Next.js 15；Contract Types 使用 `openapi-typescript`。精確套件版本沿用現有 lockfile 與專案設定。
 
 **主要依賴**：PostgreSQL／PostgreSQL RLS、`asyncpg`、既有 `RequestContext` 與 management access、`ObservationRepository`、`ObservationOptionService`、`AuditService`、Next.js 管理工作台、既有 `StateViews`、Vitest、Pytest、Ruff 與 generated OpenAPI types。
 
