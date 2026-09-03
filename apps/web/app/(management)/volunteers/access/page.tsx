@@ -26,9 +26,11 @@ export default function VolunteerAccessPage() {
     [grants, focusUserId],
   );
 
-  async function load(id: string) {
+  async function load(id: string, userId: string) {
+    const query = new URLSearchParams({ limit: "200" });
+    if (userId) query.set("user_id", userId);
     const response = await authFetch(
-      `/v1/organizations/${id}/volunteer-access-grants?limit=200`,
+      `/v1/organizations/${id}/volunteer-access-grants?${query.toString()}`,
     );
     if (!response.ok) throw new Error("無法載入志工授權");
     setGrants(((await response.json()) as { items: AccessGrant[] }).items);
@@ -37,8 +39,9 @@ export default function VolunteerAccessPage() {
   useEffect(() => {
     const id = window.sessionStorage.getItem("active_organization_id") ?? "";
     setOrganizationId(id);
-    if (id) void load(id).catch((reason) => setError(reason.message));
-  }, []);
+    if (id)
+      void load(id, focusUserId).catch((reason) => setError(reason.message));
+  }, [focusUserId]);
 
   async function mutate(grantId: string, payload: object) {
     const response = await authFetch(

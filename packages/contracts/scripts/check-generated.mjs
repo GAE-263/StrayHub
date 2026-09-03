@@ -84,13 +84,44 @@ try {
 
   for (const operation of volunteerOperations) {
     if (!current.includes(`    ${operation}: {`)) {
-      console.error(`Generated contract is missing volunteer operation: ${operation}`);
+      console.error(
+        `Generated contract is missing volunteer operation: ${operation}`,
+      );
       process.exit(1);
     }
   }
   for (const schema of volunteerSchemas) {
     if (!current.includes(`        ${schema}:`)) {
-      console.error(`Generated contract is missing volunteer schema: ${schema}`);
+      console.error(
+        `Generated contract is missing volunteer schema: ${schema}`,
+      );
+      process.exit(1);
+    }
+  }
+
+  for (const operation of [
+    "listGrowthDiaryEntries",
+    "getGrowthDiaryEntry",
+    "getGrowthDiaryPhoto",
+  ]) {
+    if (!current.includes(`    ${operation}: {`)) {
+      console.error(
+        `Generated contract is missing Growth Diary operation: ${operation}`,
+      );
+      process.exit(1);
+    }
+  }
+  for (const schema of [
+    "GrowthDiaryAiSummary",
+    "GrowthDiaryAiProvenance",
+    "GrowthDiaryListItem",
+    "GrowthDiaryDetail",
+    "GrowthDiaryListResponse",
+  ]) {
+    if (!current.includes(`        ${schema}:`)) {
+      console.error(
+        `Generated contract is missing Growth Diary schema: ${schema}`,
+      );
       process.exit(1);
     }
   }

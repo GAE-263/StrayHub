@@ -14,7 +14,6 @@ MENU_PLACEHOLDER_ACTIONS: dict[str, str] = {
     # 預設選單
     "shelter_info": "這裡將顯示收容所基本資訊（開發中）。",
     # 志工選單
-    "walk_report": "散步回報功能開發中，稍後開放。",
     "volunteer_checkin": "志工報到功能開發中，稍後開放。",
 }
 

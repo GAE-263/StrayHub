@@ -537,6 +537,16 @@ def test_runtime_openapi_management_volunteer_routes_declare_canonical_responses
     grant_schema = app.openapi()["components"]["schemas"]["VolunteerAccessGrant"]
     notification_schema = grant_schema["properties"]["notification"]
     assert notification_schema["anyOf"][0]["$ref"].endswith("/VolunteerNotification")
+    grant_list_parameters = {
+        parameter["name"]: parameter
+        for parameter in paths["/v1/organizations/{organizationId}/volunteer-access-grants"]["get"][
+            "parameters"
+        ]
+    }
+    assert grant_list_parameters["user_id"]["schema"]["anyOf"] == [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"},
+    ]
 
 
 def test_management_contract_supports_policy_and_resumable_decision_batches() -> None:

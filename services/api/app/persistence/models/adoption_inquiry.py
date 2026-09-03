@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
@@ -36,4 +36,14 @@ class AdoptionInquiry(IdentityMixin, AuditMixin, Base):
     )
     status_updated_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
+    )
+    # Copied from the draft's fields at submit time, once the Gemini
+    # suitability analysis has completed before submission — see AdoptionDraft.
+    ai_suitability_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ai_suitability_explanation: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # The 毛孩日記 reminder cadence clock (see
+    # services.api.app.domain.growth_diary_reminder) — the later of the last
+    # reminder pushed and the last entry the adopter submitted on their own.
+    last_growth_diary_prompted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

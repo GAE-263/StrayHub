@@ -33,8 +33,13 @@ async def test_media_policy_rejects_mismatched_mime_and_keeps_only_clean_object(
         data=_jpeg(),
         declared_content_type="image/jpeg",
     )
-    assert storage.metadata(scope=stored.scope, key=stored.key).exif_removed is True
-    assert b"Exif" not in await storage.get(scope=stored.scope, key=stored.key)
+    metadata = storage.metadata(scope=stored.scope, key=stored.key)
+    stored_bytes = await storage.get(scope=stored.scope, key=stored.key)
+    assert metadata.exif_removed is True
+    assert metadata.content_type == "image/jpeg"
+    assert b"Exif" not in stored_bytes
+    with Image.open(BytesIO(stored_bytes)) as image:
+        assert image.format == "JPEG", "existing callers retain their declared output contract"
 
 
 @pytest.mark.asyncio

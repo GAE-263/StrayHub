@@ -10,7 +10,7 @@
 
 ## Technical Context
 
-**Language/Version**: TypeScript／React／Next.js 15；Python 3.11+／FastAPI
+**Language/Version**: TypeScript／React／Next.js 15；Python 3.12／FastAPI
 
 **Primary Dependencies**: React 19、現有 UI primitives、SQLAlchemy、Pydantic、OpenAPI Typescript contract
 

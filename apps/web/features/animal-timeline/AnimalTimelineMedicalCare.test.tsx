@@ -6,6 +6,54 @@ import { mapDays } from "./timelineMapping";
 import { AnimalTodaySummary } from "../medical-care/AnimalTodaySummary";
 
 describe("animal medical timeline presentation", () => {
+  it("maps explicit stool analysis fields without losing false, zero, or null", () => {
+    const [day] = mapDays([
+      {
+        date: "2026-08-16",
+        has_report: true,
+        report_count: 1,
+        reports: [
+          {
+            id: "report-1",
+            stool_analysis: {
+              recognized: false,
+              score: 0,
+              score_label: null,
+              has_abnormalities: false,
+              abnormality_details: null,
+              assessment: null,
+              recommendation: null,
+              review_status: "pending",
+              human_reviewed: false,
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(day.reports?.[0].stoolAnalysis).toEqual({
+      recognized: false,
+      score: 0,
+      scoreLabel: null,
+      hasAbnormalities: false,
+      abnormalityDetails: null,
+      assessment: null,
+      recommendation: null,
+      reviewStatus: "pending",
+      humanReviewed: false,
+    });
+    expect(
+      mapDays([
+        {
+          date: "2026-08-17",
+          has_report: true,
+          report_count: 1,
+          reports: [{ id: "r" }],
+        },
+      ])[0].reports?.[0].stoolAnalysis,
+    ).toBeNull();
+  });
+
   it("labels scheduled and actual events independently of has_report", () => {
     const markup = renderToStaticMarkup(
       <AnimalTimeline

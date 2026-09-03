@@ -16,6 +16,18 @@ type ObservationSnapshot = {
   displayName?: string;
 };
 
+export type StoolAnalysis = {
+  recognized: boolean;
+  score: number | null;
+  scoreLabel: string | null;
+  hasAbnormalities: boolean;
+  abnormalityDetails: string | null;
+  assessment: string | null;
+  recommendation: string | null;
+  reviewStatus: string;
+  humanReviewed: boolean;
+};
+
 export type TimelineDay = {
   date: string;
   hasReport: boolean;
@@ -31,6 +43,7 @@ export type TimelineDay = {
     mediaIds?: string[];
     aiJobStatus?: string;
     status?: string;
+    stoolAnalysis?: StoolAnalysis | null;
   }>;
   events?: Array<{
     id: string;
@@ -75,6 +88,20 @@ const OBSERVATION_VALUE_LABELS: Record<string, string> = {
   not_observed: "未觀察",
   uncertain: "無法判斷",
 };
+
+const STOOL_REVIEW_LABELS: Record<string, string> = {
+  confirmed: "人工已確認",
+  rejected: "人工已拒絕",
+  corrected: "人工已修正",
+};
+
+function stoolAnalysisSummary(analysis: StoolAnalysis): string {
+  if (!analysis.recognized) return "照片無法辨識，未產生判讀";
+  if (analysis.score !== null) {
+    return `${analysis.score}/7 ${analysis.scoreLabel ?? ""}`.trim();
+  }
+  return analysis.scoreLabel ?? "未提供評分";
+}
 
 function observationEntries(
   observations: Record<string, string> | undefined,
@@ -192,6 +219,34 @@ export function AnimalTimeline({
                       </div>
                     ))}
                   </dl>
+                ) : null}
+                {report.stoolAnalysis ? (
+                  <section aria-label="AI 便便判讀">
+                    <p>
+                      AI 便便判讀：
+                      {stoolAnalysisSummary(report.stoolAnalysis)}（
+                      {STOOL_REVIEW_LABELS[report.stoolAnalysis.reviewStatus] ??
+                        "待人工覆核"}
+                      ）
+                    </p>
+                    {report.stoolAnalysis.recognized &&
+                    report.stoolAnalysis.assessment ? (
+                      <p>判讀：{report.stoolAnalysis.assessment}</p>
+                    ) : null}
+                    {report.stoolAnalysis.hasAbnormalities ? (
+                      <p>
+                        ⚠️ 異常：
+                        {report.stoolAnalysis.abnormalityDetails ?? "有異狀"}
+                      </p>
+                    ) : null}
+                    {report.stoolAnalysis.recognized &&
+                    report.stoolAnalysis.recommendation ? (
+                      <p className="muted">
+                        建議：{report.stoolAnalysis.recommendation}
+                        （日常照護參考，不具醫療診斷效力）
+                      </p>
+                    ) : null}
+                  </section>
                 ) : null}
               </article>
             );

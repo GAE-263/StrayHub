@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
@@ -77,7 +77,7 @@ class AnimalRepository:
         return list(result.all())
 
     async def search_with_area(self, query: str) -> list[tuple[Animal, ShelterArea | None]]:
-        pattern = f"%{query}%"
+        pattern = f"%{query.strip()}%"
         result = await self.session.execute(
             select(Animal, ShelterArea)
             .outerjoin(
@@ -96,6 +96,40 @@ class AnimalRepository:
             .order_by(Animal.name, Animal.shelter_number, Animal.id)
         )
         return list(result.all())
+
+    async def search_with_area_page(
+        self, query: str, *, offset: int, limit: int
+    ) -> tuple[list[tuple[Animal, ShelterArea | None]], int]:
+        normalized = query.strip()
+        if not normalized:
+            return [], 0
+        predicate = and_(
+            Animal.organization_id == self.organization_id,
+            Animal.status == "active",
+            or_(
+                Animal.shelter_number.ilike(f"%{normalized}%"),
+                Animal.name.ilike(f"%{normalized}%"),
+            ),
+        )
+        total = int(
+            (await self.session.scalar(select(func.count(Animal.id)).where(predicate))) or 0
+        )
+        result = await self.session.execute(
+            select(Animal, ShelterArea)
+            .outerjoin(
+                ShelterArea,
+                and_(
+                    ShelterArea.id == Animal.area_id,
+                    ShelterArea.organization_id == Animal.organization_id,
+                    ShelterArea.status == "active",
+                ),
+            )
+            .where(predicate)
+            .order_by(Animal.name, Animal.shelter_number, Animal.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.all()), total
 
     async def get_with_area(self, animal_id: UUID) -> tuple[Animal, ShelterArea | None] | None:
         result = await self.session.execute(

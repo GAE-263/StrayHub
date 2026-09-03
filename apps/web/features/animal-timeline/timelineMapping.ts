@@ -12,6 +12,17 @@ export type ApiReport = {
   media_ids?: string[];
   ai_job_status?: string;
   status?: string;
+  stool_analysis?: {
+    recognized: boolean;
+    score: number | null;
+    score_label: string | null;
+    has_abnormalities: boolean;
+    abnormality_details: string | null;
+    assessment: string | null;
+    recommendation: string | null;
+    review_status: string;
+    human_reviewed: boolean;
+  } | null;
 };
 
 export type ApiDay = {
@@ -84,6 +95,19 @@ export function mapDays(days: ApiDay[]): TimelineDay[] {
       mediaIds: report.media_ids,
       aiJobStatus: report.ai_job_status,
       status: report.status,
+      stoolAnalysis: report.stool_analysis
+        ? {
+            recognized: report.stool_analysis.recognized,
+            score: report.stool_analysis.score,
+            scoreLabel: report.stool_analysis.score_label,
+            hasAbnormalities: report.stool_analysis.has_abnormalities,
+            abnormalityDetails: report.stool_analysis.abnormality_details,
+            assessment: report.stool_analysis.assessment,
+            recommendation: report.stool_analysis.recommendation,
+            reviewStatus: report.stool_analysis.review_status,
+            humanReviewed: report.stool_analysis.human_reviewed,
+          }
+        : null,
     })),
     events: mapTimelineEvents(day).filter(
       (event) => event.occurrence === "actual",

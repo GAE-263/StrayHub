@@ -56,8 +56,9 @@ describe("AnimalTimeline", () => {
           reports: [
             {
               id: "report-1",
-              submittedAt: "2026-08-07T09:00:00+08:00",
-              volunteerUserId: "staff-1",
+              submittedAt: "2026-08-07T01:00:00Z",
+              volunteerUserId: "11111111-1111-4111-8111-111111111111",
+              volunteerLabel: "黃 #11111111",
               note: "原始心得",
               observations: {
                 urination: "urination.not_observed",
@@ -76,6 +77,17 @@ describe("AnimalTimeline", () => {
               mediaIds: ["media-1", "media-2"],
               aiJobStatus: "pending",
               status: "saved",
+              stoolAnalysis: {
+                recognized: true,
+                score: 4,
+                scoreLabel: "正常",
+                hasAbnormalities: false,
+                abnormalityDetails: null,
+                assessment: "狀態正常",
+                recommendation: "持續觀察",
+                reviewStatus: "confirmed",
+                humanReviewed: true,
+              },
             },
           ],
         },
@@ -103,6 +115,17 @@ describe("AnimalTimeline", () => {
     expect(fields).toContain("等待處理（pending）");
     expect(fields).toContain("人工資料狀態");
     expect(fields).toContain("已保存（saved）");
+    const author = container?.querySelector(".timeline-report-author");
+    expect(author?.textContent).toContain("黃 #11111111");
+    expect(author?.getAttribute("href")).toBe(
+      "/volunteers/access?user_id=11111111-1111-4111-8111-111111111111",
+    );
+    expect(
+      container?.querySelector(".timeline-report-time")?.textContent,
+    ).toContain("2026/8/7");
+    expect(
+      container?.querySelector('[aria-label="AI 便便判讀"]')?.textContent,
+    ).toContain("4/7 正常");
   });
 
   it("keeps loading, empty and error states distinguishable", async () => {
@@ -122,5 +145,90 @@ describe("AnimalTimeline", () => {
     expect(container?.querySelector('[role="alert"]')?.textContent).toContain(
       "403",
     );
+  });
+
+  it.each([
+    ["pending", "待人工覆核"],
+    ["unknown", "待人工覆核"],
+    ["confirmed", "人工已確認"],
+    ["rejected", "人工已拒絕"],
+    ["corrected", "人工已修正"],
+  ])(
+    "renders recognized stool analysis with %s review state",
+    async (reviewStatus, label) => {
+      await renderTimeline({
+        days: [
+          {
+            date: "2026-09-02",
+            hasReport: true,
+            reportCount: 1,
+            reports: [
+              {
+                id: "report-stool",
+                stoolAnalysis: {
+                  recognized: true,
+                  score: 5,
+                  scoreLabel: "偏軟",
+                  hasAbnormalities: true,
+                  abnormalityDetails: "顏色異常",
+                  assessment: "建議留意後續排便",
+                  recommendation: "若持續發生請諮詢獸醫",
+                  reviewStatus,
+                  humanReviewed: reviewStatus !== "pending",
+                },
+              },
+            ],
+          },
+        ],
+      });
+      await act(async () => {
+        (container?.querySelector("button") as HTMLButtonElement).click();
+      });
+
+      const section = container?.querySelector('[aria-label="AI 便便判讀"]');
+      expect(section?.textContent).toContain("5/7 偏軟");
+      expect(section?.textContent).toContain("判讀：建議留意後續排便");
+      expect(section?.textContent).toContain("異常：顏色異常");
+      expect(section?.textContent).toContain(label);
+      expect(section?.textContent).toContain("日常照護參考，不具醫療診斷效力");
+    },
+  );
+
+  it("renders unrecognized analysis but omits details and empty analysis sections", async () => {
+    await renderTimeline({
+      days: [
+        {
+          date: "2026-09-02",
+          hasReport: true,
+          reportCount: 2,
+          reports: [
+            {
+              id: "unrecognized",
+              stoolAnalysis: {
+                recognized: false,
+                score: null,
+                scoreLabel: null,
+                hasAbnormalities: false,
+                abnormalityDetails: null,
+                assessment: "不應顯示",
+                recommendation: "不應顯示",
+                reviewStatus: "succeeded",
+                humanReviewed: false,
+              },
+            },
+            { id: "no-analysis", stoolAnalysis: null },
+          ],
+        },
+      ],
+    });
+    await act(async () => {
+      (container?.querySelector("button") as HTMLButtonElement).click();
+    });
+
+    const sections = container?.querySelectorAll('[aria-label="AI 便便判讀"]');
+    expect(sections).toHaveLength(1);
+    expect(sections?.[0].textContent).toContain("照片無法辨識，未產生判讀");
+    expect(sections?.[0].textContent).toContain("待人工覆核");
+    expect(sections?.[0].textContent).not.toContain("不應顯示");
   });
 });

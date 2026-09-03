@@ -69,3 +69,35 @@ def test_profile_canonical_runtime_and_generated_contract_parity():
     generated = Path("packages/contracts/src/openapi.ts").read_text()
     assert '"/v1/management/animals/{animalId}/profile"' in generated
     assert "AnimalProfileUpdate:" in generated
+
+
+def test_management_animal_photo_contract_is_authenticated_binary_and_private():
+    canonical = yaml.safe_load(
+        Path("specs/001-volunteer-care-report/contracts/openapi.yaml").read_text()
+    )
+    runtime = app.openapi()
+    canonical_path = "/v1/management/animals/{animalId}/photo"
+    runtime_path = "/v1/management/animals/{animal_id}/photo"
+
+    operation = canonical["paths"][canonical_path]["get"]
+    assert operation["security"] == [{"bearerAuth": []}]
+    assert set(operation["responses"]) == {"200", "401", "403", "404", "409"}
+    assert set(operation["responses"]["200"]["content"]) == {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+    assert (
+        operation["responses"]["200"]["headers"]["Cache-Control"]["schema"]["const"]
+        == "private, no-store"
+    )
+    assert (
+        operation["responses"]["200"]["headers"]["X-Content-Type-Options"]["schema"]["const"]
+        == "nosniff"
+    )
+
+    runtime_operation = runtime["paths"][runtime_path]["get"]
+    assert runtime_operation["operationId"] == operation["operationId"]
+    assert set(runtime_operation["responses"]["200"]["content"]) == set(
+        operation["responses"]["200"]["content"]
+    )

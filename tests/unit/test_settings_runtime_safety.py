@@ -172,3 +172,30 @@ def test_external_ai_provider_requires_safe_key_but_mock_does_not() -> None:
         ).validate_runtime_safety()
 
     assert "AI_API_KEY" in str(caught.value)
+
+
+def test_worker_stool_provider_requires_complete_nonlocal_secret_pair() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        stool_api_url="https://stool.internal/analyze",
+        stool_api_key=None,
+    )
+
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        settings.validate_runtime_safety(process="worker")
+
+    assert "STOOL_API_URL and STOOL_API_KEY" in str(caught.value)
+
+
+def test_worker_stool_provider_accepts_safe_url_and_secret_without_leaking_it() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        stool_api_url="https://stool.internal/analyze",
+        stool_api_key="synthetic-provider-credential",
+    )
+
+    assert settings.validate_runtime_safety(process="worker") is settings

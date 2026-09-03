@@ -122,7 +122,7 @@ async def test_effective_options_include_platform_extension_and_disabled_history
         )
         assert not service.is_valid(extension_code)
         with pytest.raises(Exception, match="無效或已停用"):
-            service.validate_answer("emotion", extension_code)
+            service.validate_answer("appearance_special_status", extension_code)
         await connection.execute("ROLLBACK")
     finally:
         await connection.close()

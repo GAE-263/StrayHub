@@ -21,6 +21,7 @@ from services.api.app.api.errors import (
     request_validation_error_handler,
     sqlalchemy_error_handler,
 )
+from services.api.app.api.growth_diary import router as growth_diary_router
 from services.api.app.api.line_binding import router as line_binding_router
 from services.api.app.api.line_drafts import router as line_drafts_router
 from services.api.app.api.line_webhook import router as line_webhook_router
@@ -105,6 +106,7 @@ app.include_router(platform_admin_management_router)
 app.include_router(line_webhook_router)
 app.include_router(media_router)
 app.include_router(line_binding_router)
+app.include_router(growth_diary_router)
 app.include_router(line_drafts_router)
 app.include_router(volunteer_access_router)
 app.include_router(medical_records_router)

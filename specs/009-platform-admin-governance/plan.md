@@ -10,7 +10,7 @@
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+、TypeScript、React 19、Next.js 15
+**Language/Version**: Python 3.12、TypeScript、React 19、Next.js 15
 
 **Primary Dependencies**: FastAPI、SQLAlchemy、Pydantic、Alembic、Next.js、React、既有 AuditService 與 management shell
 

@@ -16,6 +16,8 @@ class MediaAsset(IdentityMixin, AuditMixin, Base):
     checksum: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(30), default="processed", index=True)
     purpose: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Assigned only by trusted server-side flows; null remains backward-compatible.
+    subject: Mapped[str | None] = mapped_column(String(20), nullable=True)
     exif_removed: Mapped[bool] = mapped_column(default=True)
 
 
@@ -36,6 +38,7 @@ class CareReport(IdentityMixin, AuditMixin, Base):
     animal_name_snapshot: Mapped[str] = mapped_column(String(200))
     shelter_number_snapshot: Mapped[str | None] = mapped_column(String(120), nullable=True)
     note: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    story: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="saved", index=True)
     ai_job_status: Mapped[str] = mapped_column(String(30), default="pending_enqueue")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

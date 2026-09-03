@@ -14,7 +14,7 @@ P0 沿用 005 的 Membership／Grant、entry reference 與有效期限規則，�
 
 ## Technical Context
 
-**Language/Version**：TypeScript 5.7、React 19、Next.js 15.1；Python 3.11、FastAPI 0.115+、SQLAlchemy 2.x
+**Language/Version**：TypeScript 5.7、React 19、Next.js 15.1；Python 3.12、FastAPI 0.115+、SQLAlchemy 2.x
 
 **Primary Dependencies**：Next.js App Router、`@line/liff`（新增前端 runtime dependency）、既有 `authFetch`／sessionStorage auth helper、FastAPI、Pydantic、既有 `LineIdentityVerifierPort`／`VolunteerEntryResolverPort`、PostgreSQL RLS、Playwright、Vitest、Pytest、`@axe-core/playwright`
 

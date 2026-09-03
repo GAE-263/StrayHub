@@ -10,7 +10,7 @@
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+、TypeScript、React 19、Next.js 15
+**Language/Version**: Python 3.12、TypeScript、React 19、Next.js 15
 
 **Primary Dependencies**: FastAPI、SQLAlchemy、Pydantic、Alembic（本功能不新增 migration）、Next.js、React、既有 `AlertDialog`／`Dialog`／`Toast` 元件
 

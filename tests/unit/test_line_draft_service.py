@@ -48,14 +48,14 @@ async def test_one_active_draft_per_volunteer_and_opaque_token() -> None:
 
 
 @pytest.mark.asyncio
-async def test_reselect_animal_preserves_answers_but_requires_reconfirmation() -> None:
+async def test_reselect_animal_clears_previous_animal_context() -> None:
     repository = FakeDraftRepository()
     service = LineDraftService(repository, ttl_seconds=60)
     original_animal_id = uuid4()
     draft, _ = await service.create(
         volunteer_user_id=uuid4(), membership_id=uuid4(), animal_id=original_animal_id
     )
-    draft.answers = {"feeding": "feeding.normal", "emotion": "emotion.calm"}
+    draft.answers = {"activity": "activity.usual", "gait": "gait.normal"}
 
     candidate_id = uuid4()
     await service.begin_reselection(draft.id, candidate_animal_id=candidate_id)
@@ -63,5 +63,5 @@ async def test_reselect_animal_preserves_answers_but_requires_reconfirmation() -
 
     assert draft.animal_id == candidate_id
     assert draft.candidate_animal_id is None
-    assert draft.reconfirmation_keys == ["feeding", "emotion"]
-    assert draft.answers == {"feeding": "feeding.normal", "emotion": "emotion.calm"}
+    assert draft.reconfirmation_keys == []
+    assert draft.answers == {}

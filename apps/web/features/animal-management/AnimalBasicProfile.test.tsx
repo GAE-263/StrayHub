@@ -122,3 +122,43 @@ it("focuses an accessible validation error and does not send invalid dates", asy
     container.querySelector('[role="alert"]'),
   );
 });
+
+it("integrates the authenticated animal photo without affecting profile facts", async () => {
+  document.body.appendChild(container);
+  root = createRoot(container);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(new Blob(["jpeg"], { type: "image/jpeg" }), {
+          status: 200,
+        }),
+    ),
+  );
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:profile-photo"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
+
+  await act(async () =>
+    root.render(
+      <AnimalBasicProfile
+        animal={{
+          ...animal,
+          photo_url: "/v1/management/animals/animal-a/photo",
+        }}
+        onSaved={vi.fn()}
+      />,
+    ),
+  );
+
+  expect(container.querySelector("img")?.getAttribute("src")).toBe(
+    "blob:profile-photo",
+  );
+  expect(container.textContent).toContain("獒一搓");
+  expect(container.textContent).toContain("藏獒");
+});

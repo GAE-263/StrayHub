@@ -1473,6 +1473,7 @@ async def reveal_volunteer_application_pii(
 async def list_volunteer_access_grants(
     organizationId: UUID,  # noqa: N803
     grant_status: GrantStatus | None = Query(default=None, alias="status"),  # noqa: B008
+    user_id: UUID | None = Query(default=None),  # noqa: B008
     cursor: str | None = None,
     limit: int = Query(default=100, ge=1, le=200),
     context: RequestContext = Depends(current_request_context),  # noqa: B008
@@ -1489,6 +1490,7 @@ async def list_volunteer_access_grants(
         repository = VolunteerAccessRepository(session, organizationId)
         grants = await repository.list_grants(
             status=grant_status,
+            user_id=user_id,
             cursor=_decode_application_cursor(cursor),
             limit=limit + 1,
         )

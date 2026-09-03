@@ -932,6 +932,23 @@ export interface paths {
         patch: operations["updateManagementAnimalProfile"];
         trace?: never;
     };
+    "/v1/management/animals/{animalId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 透過目前登入者的收容所 context 讀取私人儲存中的毛孩主圖。 */
+        get: operations["getManagementAnimalPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/management/animals/{animalId}/health-records": {
         parameters: {
             query?: never;
@@ -1816,6 +1833,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/management/growth-diary-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listGrowthDiaryEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/growth-diary-entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getGrowthDiaryEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/growth-diary-entries/{entryId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getGrowthDiaryPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2081,7 +2146,31 @@ export interface components {
             token: null;
         };
         ManagementQrCodeList: {
-            items: components["schemas"]["ManagementQrCode"][];
+            items: components["schemas"]["ManagementQrCodeListItem"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        ManagementQrCodeListItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            animal_id: string;
+            animal_name: string;
+            shelter_number: string | null;
+            animal_status: string;
+            area_name: string | null;
+            /** @enum {string} */
+            status: "active" | "revoked";
+            revoked: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null */
+            deep_link: string | null;
+            /** @description raw token 不作為獨立欄位顯示；locator 僅存在 deep_link */
+            token: null;
         };
         ManagementQrCodeRequest: {
             /** Format: uuid */
@@ -2563,34 +2652,20 @@ export interface components {
             confirmation_token: string;
         };
         /**
-         * @description 照護完成狀態；未觀察與無法判斷不得解讀為已完成
+         * @description 散步完成狀態；Bot層另可記錄不屬於CRM選項的unobserved sentinel
          * @enum {string}
          */
-        CareCompletionCode: "care_completion.completed" | "care_completion.partially_completed" | "care_completion.not_provided" | "care_completion.not_observed" | "care_completion.uncertain";
-        /**
-         * @description 散步完成狀態；與散步反應的 walk.* 選項分開
-         * @enum {string}
-         */
-        WalkCompletionCode: "walk_completion.completed" | "walk_completion.partially_completed" | "walk_completion.not_done" | "walk_completion.not_observed" | "walk_completion.uncertain";
+        WalkCompletionCode: "walk_completion.completed" | "walk_completion.partially_completed" | "walk_completion.not_done";
         /** @description 由 CRM 有效 Observation Vocabulary 提供的穩定 Code；顯示名稱不得作為正式值 */
         ObservationAnswerCode: string;
         /** @description 可逐題保存的標準回報答案；草稿階段允許不完整，正式送出時必須符合 CareReportAnswers */
         DraftAnswers: {
-            care_completion?: components["schemas"]["CareCompletionCode"];
             walk_completion?: components["schemas"]["WalkCompletionCode"];
-            feeding?: components["schemas"]["ObservationAnswerCode"];
-            water?: components["schemas"]["ObservationAnswerCode"];
             activity?: components["schemas"]["ObservationAnswerCode"];
-            urination?: components["schemas"]["ObservationAnswerCode"];
+            gait?: components["schemas"]["ObservationAnswerCode"];
             defecation?: components["schemas"]["ObservationAnswerCode"];
-            resource_guarding?: components["schemas"]["ObservationAnswerCode"];
-            human_interaction?: components["schemas"]["ObservationAnswerCode"];
             animal_interaction?: components["schemas"]["ObservationAnswerCode"];
-            emotion?: components["schemas"]["ObservationAnswerCode"];
-            walk_reaction?: components["schemas"]["ObservationAnswerCode"];
             appearance_special_status?: components["schemas"]["ObservationAnswerCode"];
-        } & {
-            [key: string]: unknown;
         };
         /** @description 正式 Care Report 必須完整包含的標準結構化答案；照片與心得不在此必要集合 */
         CareReportAnswers: components["schemas"]["DraftAnswers"] & Record<string, never>;
@@ -2598,6 +2673,7 @@ export interface components {
             /** @description 可只包含目前新增或修改的答案；後端依 Draft 目前狀態驗證，不接受跳步或略過必要題目 */
             answers?: components["schemas"]["DraftAnswers"];
             note?: string;
+            story?: string;
             media_ids?: string[];
         };
         Draft: {
@@ -2613,7 +2689,7 @@ export interface components {
             /** Format: uuid */
             membership_id: string;
             /** @enum {string} */
-            current_step: "selecting_animal" | "confirming_animal" | "answering_completion" | "answering_feeding" | "answering_water" | "answering_activity" | "answering_elimination" | "answering_behavior" | "answering_special_status" | "awaiting_media" | "awaiting_note" | "reviewing" | "submitting" | "submitted" | "cancelled" | "expired";
+            current_step: "selecting_animal" | "confirming_animal" | "answering_walk_completion" | "answering_activity" | "answering_gait" | "answering_defecation" | "awaiting_stool_media" | "answering_animal_interaction" | "answering_special_status" | "awaiting_note" | "awaiting_story" | "reviewing" | "submitting" | "submitted" | "cancelled" | "expired";
             answers: components["schemas"]["DraftAnswers"];
             media_ids?: string[];
             /** Format: date-time */
@@ -2631,6 +2707,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             organization_id: string;
+            /** @enum {string|null} */
+            readonly subject?: "stool" | "portrait" | null;
             /** @enum {string} */
             status: "temporary" | "processing" | "processed" | "attached" | "failed" | "unusable" | "archived";
             /** @constant */
@@ -2650,6 +2728,7 @@ export interface components {
             /** @description 標準回報完整結構化答案；照片與心得不屬於必要欄位 */
             observations: components["schemas"]["CareReportAnswers"];
             note?: string;
+            story?: string;
             media_ids?: string[];
         };
         CareReportCorrectionRequest: {
@@ -2679,6 +2758,8 @@ export interface components {
                     [key: string]: string;
                 };
             } | null;
+            note?: string | null;
+            story?: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -2700,6 +2781,7 @@ export interface components {
             submitted_at: string;
             /** Format: uuid */
             volunteer_user_id: string;
+            volunteer_label: string;
             animal_name_snapshot: string;
             shelter_number_snapshot?: string | null;
             note?: string | null;
@@ -2715,6 +2797,18 @@ export interface components {
             status: "saved" | "amended" | "archived";
             ai_job_status: string;
             media_ids: string[];
+            stool_analysis: components["schemas"]["StoolAnalysis"] | null;
+        };
+        StoolAnalysis: {
+            recognized: boolean;
+            score: number | null;
+            score_label: string | null;
+            has_abnormalities: boolean;
+            abnormality_details: string | null;
+            assessment: string | null;
+            recommendation: string | null;
+            review_status: string;
+            human_reviewed: boolean;
         };
         ObservationCategoryListResponse: {
             items: components["schemas"]["ObservationCategory"][];
@@ -3601,6 +3695,55 @@ export interface components {
             result: "success" | "denied";
             /** Format: date-time */
             created_at: string;
+        };
+        GrowthDiaryAiSummary: {
+            /** @enum {string} */
+            status: "pending" | "succeeded" | "failed" | "unconfigured" | "not_applicable" | "legacy" | "unavailable";
+            /** @enum {string} */
+            provenance_status: "available" | "legacy_missing" | "unavailable";
+            /** @enum {string|null} */
+            mood: "positive" | "neutral" | "concern" | null;
+            adopter_reply: string | null;
+            staff_summary: string | null;
+        };
+        GrowthDiaryAiProvenance: {
+            /** @enum {string} */
+            provenance_status: "available" | "legacy_missing" | "unavailable";
+            provider: string | null;
+            model_name: string | null;
+            model_version: string | null;
+            prompt_version: string | null;
+            output_schema_version: string | null;
+            /** Format: date-time */
+            analyzed_at: string | null;
+        };
+        GrowthDiaryListItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            inquiry_id: string;
+            /** Format: uuid */
+            animal_id: string;
+            animal_name: string | null;
+            shelter_number: string | null;
+            has_photo: boolean;
+            photo_endpoint: string | null;
+            note: string | null;
+            ai_analysis: components["schemas"]["GrowthDiaryAiSummary"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        GrowthDiaryDetail: components["schemas"]["GrowthDiaryListItem"] & {
+            ai_provenance: components["schemas"]["GrowthDiaryAiProvenance"];
+            ai_raw_output: {
+                [key: string]: unknown;
+            } | string | null;
+        };
+        GrowthDiaryListResponse: {
+            items: components["schemas"]["GrowthDiaryListItem"][];
+            page: number;
+            page_size: number;
+            total: number;
         };
     };
     responses: {
@@ -5457,6 +5600,36 @@ export interface operations {
             422: components["responses"]["ValidationError"];
         };
     };
+    getManagementAnimalPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                animalId: components["parameters"]["AnimalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已驗證、已清除 EXIF 的目前毛孩圖片 */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    "X-Content-Type-Options"?: "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     createManagementAnimalHealthRecord: {
         parameters: {
             query?: never;
@@ -5691,6 +5864,10 @@ export interface operations {
         parameters: {
             query?: {
                 animal_id?: string;
+                query?: string;
+                status?: "all" | "active" | "revoked";
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
             };
             header?: never;
             path?: never;
@@ -5710,6 +5887,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     createManagementQrCode: {
@@ -6308,6 +6486,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["GrantStatus"];
+                /** @description 限定查詢目前 organization 內指定志工的授權週期。 */
+                user_id?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -7056,6 +7236,87 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listGrowthDiaryEntries: {
+        parameters: {
+            query?: {
+                query?: string;
+                mood?: "all" | "concern" | "positive" | "neutral" | "unanalyzed";
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 目前 active shelter 的毛孩日記分頁 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrowthDiaryListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getGrowthDiaryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 含完整 AI provenance 與 raw output 的日記 detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrowthDiaryDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    getGrowthDiaryPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Buffered final WebP, authenticated and scoped to the active shelter */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    "X-Content-Type-Options"?: "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
         };
     };
 }

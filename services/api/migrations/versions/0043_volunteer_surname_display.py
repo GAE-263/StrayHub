@@ -10,8 +10,8 @@ pii_deleted_at purging.
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0039_volunteer_surname_display"
-down_revision = "0038_line_adoption"
+revision = "0043_volunteer_surname_display"
+down_revision = "0042_growth_diary_management"
 branch_labels = None
 depends_on = None
 

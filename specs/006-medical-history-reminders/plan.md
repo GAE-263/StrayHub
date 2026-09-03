@@ -10,7 +10,7 @@
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+；TypeScript 5.7；React 19；Next.js 15.1  
+**Language/Version**: Python 3.12；TypeScript 5.7；React 19；Next.js 15.1
 **Primary Dependencies**: FastAPI、Pydantic、SQLAlchemy 2 async、asyncpg、Alembic、Python `zoneinfo`、Next.js App Router、既有 UI primitives、openapi-typescript；不新增 calendar／recurrence runtime 套件  
 **Storage**: PostgreSQL 作正式 CRM 與稽核資料；既有 private object storage 保存通過清理的 JPEG／PNG／WebP 附件  
 **Testing**: Pytest、Ruff、mypy、Vitest、Playwright、axe、OpenAPI drift check、Alembic bootstrap／upgrade  

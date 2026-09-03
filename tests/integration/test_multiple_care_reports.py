@@ -4,18 +4,18 @@ from uuid import uuid4
 
 import pytest
 from services.api.app.application.report_submission import ReportSubmissionService
-from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
 from services.api.app.persistence.models.animal import Animal
 
 
 def _answers():
-    result = {key: f"{key}.observed" for key in REQUIRED_ANSWER_KEYS}
-    result.update(
-        care_completion="care_completion.completed",
-        walk_completion="walk_completion.completed",
-        walk_reaction="walk.willing",
-    )
-    return result
+    return {
+        "walk_completion": "walk_completion.completed",
+        "activity": "activity.usual",
+        "gait": "gait.normal",
+        "defecation": "defecation.normal",
+        "animal_interaction": "animal_interaction.friendly",
+        "appearance_special_status": "appearance.none_found",
+    }
 
 
 @pytest.mark.asyncio
@@ -61,15 +61,17 @@ async def test_same_day_reports_from_multiple_volunteers_keep_original_values() 
 
     drafts = Drafts()
     animal = Animal(id=animal_id, organization_id=organization_id, name="小黑", status="active")
-    for volunteer_id, value in ((uuid4(), "feeding.normal"), (uuid4(), "feeding.low")):
+    volunteer_id = uuid4()
+    for value, story in (("activity.usual", "第一次"), ("activity.higher", "第二次")):
         draft = SimpleNamespace(
             id=uuid4(),
             organization_id=organization_id,
             volunteer_user_id=volunteer_id,
             membership_id=uuid4(),
             animal_id=animal_id,
-            answers={**_answers(), "feeding": value},
+            answers={**_answers(), "activity": value},
             note=None,
+            story=story,
             status="active",
             current_step="reviewing",
             expires_at=datetime.now(timezone.utc),
@@ -83,7 +85,8 @@ async def test_same_day_reports_from_multiple_volunteers_keep_original_values() 
         )
 
     assert len(reports) == 2
-    assert {report.answers["feeding"] for report in reports} == {
-        "feeding.normal",
-        "feeding.low",
+    assert {report.answers["activity"] for report in reports} == {
+        "activity.usual",
+        "activity.higher",
     }
+    assert {report.story for report in reports} == {"第一次", "第二次"}

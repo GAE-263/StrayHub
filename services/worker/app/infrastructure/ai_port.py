@@ -14,6 +14,14 @@ class AIRequestVersion:
     prompt_template_id: str = "care-observation"
 
 
+@dataclass(frozen=True)
+class AIAnalysisEnvelope:
+    """Keep the complete provider payload separate from governed formal output."""
+
+    raw: object
+    formal: dict
+
+
 class AIClientPort(Protocol):
     async def analyze(
         self,

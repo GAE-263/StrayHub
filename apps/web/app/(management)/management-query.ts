@@ -19,6 +19,29 @@ export function buildAnimalsQuery({
   return params;
 }
 
+export type QrStatusFilter = "all" | "active" | "revoked";
+
+export function buildQrCodesQuery({
+  page,
+  query,
+  status,
+  pageSize = 20,
+}: {
+  page: number;
+  query: string;
+  status: QrStatusFilter;
+  pageSize?: number;
+}) {
+  const params = new URLSearchParams({
+    page: String(Math.max(1, Math.floor(page))),
+    page_size: String(pageSize),
+    status,
+  });
+  const normalizedQuery = query.trim();
+  if (normalizedQuery) params.set("query", normalizedQuery);
+  return params;
+}
+
 export function buildReportsQuery({
   fromDate,
   toDate,

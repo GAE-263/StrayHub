@@ -5,6 +5,18 @@ import { mockManagementApi } from "./fixtures";
 const deepLink =
   "/animal-confirmation?organization_id=org-a&qr_token=opaque-playwright-locator-123456";
 
+const adminOrganizations = [
+  {
+    id: "org-a",
+    code: "ORG-A",
+    name: "浪浪森友會 A",
+    role: "SHELTER_ADMIN",
+    status: "active",
+    timezone: "Asia/Taipei",
+    timezone_version: 1,
+  },
+];
+
 async function mockAnimalQrManagement(page: Page, initiallyReady = false) {
   let current = initiallyReady
     ? {
@@ -19,7 +31,10 @@ async function mockAnimalQrManagement(page: Page, initiallyReady = false) {
     : null;
   let createCount = 0;
 
-  await mockManagementApi(page);
+  await mockManagementApi(page, {
+    organizations: adminOrganizations,
+    platformRole: null,
+  });
   await page.route("**/v1/management/qr-codes**", async (route, request) => {
     if (request.method() === "POST" && request.url().endsWith("/qr-codes")) {
       createCount += 1;
@@ -75,7 +90,7 @@ test("manager generates, previews, and invokes print from the animal detail", as
   await expect(page.getByText("尚未建立照護 QR Code")).toBeVisible();
   expect(state.getCreateCount()).toBe(0);
 
-  await page.getByRole("button", { name: "產生 QR Code" }).click();
+  await page.getByRole("button", { name: "建立照護 QR" }).click();
   await expect(page.locator(".animal-care-qr-image svg")).toBeVisible();
   await expect(page.locator(".animal-qr-print-label")).toContainText("小森");
   await expect(page.locator(".animal-qr-print-label")).toContainText("A-001");
@@ -87,7 +102,7 @@ test("manager generates, previews, and invokes print from the animal detail", as
   );
   expect(state.getCreateCount()).toBe(1);
 
-  await page.getByRole("button", { name: "列印 QR Code" }).click();
+  await page.getByRole("button", { name: "重新列印" }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-print-invoked",
     "true",

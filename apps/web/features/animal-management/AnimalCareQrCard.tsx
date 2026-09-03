@@ -3,7 +3,8 @@
 import React from "react";
 import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { authFetch } from "../../lib/auth";
+import { authFetch, type CurrentUser } from "../../lib/auth";
+import { canManageCareQr } from "../../lib/management-capabilities";
 import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -44,14 +45,18 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
   const previewRef = useRef<HTMLElement>(null);
   const [qr, setQr] = useState<QrRecord | null>(null);
   const [organizationName, setOrganizationName] = useState("目前收容所");
+  const [canManage, setCanManage] = useState(false);
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
   const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [replacementGuidanceOpen, setReplacementGuidanceOpen] = useState(false);
 
   useEffect(() => {
     setQr(null);
     setRegenerateOpen(false);
+    setReplacementGuidanceOpen(false);
     setError("");
+    setCanManage(false);
     setOrganizationName("目前收容所");
     setPhase("loading");
     if (animal.status !== "active") {
@@ -68,15 +73,17 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
       authFetch("/v1/auth/active-shelter-context", {
         signal: controller.signal,
       }),
+      authFetch("/v1/auth/me", { signal: controller.signal }),
     ])
-      .then(async ([qrResponse, contextResponse]) => {
-        if (!qrResponse.ok || !contextResponse.ok)
+      .then(async ([qrResponse, contextResponse, profileResponse]) => {
+        if (!qrResponse.ok || !contextResponse.ok || !profileResponse.ok)
           throw new Error("load failed");
         const qrData = (await qrResponse.json()) as { items: QrRecord[] };
         const context = (await contextResponse.json()) as {
           organization_id: string;
           organization_name?: string;
         };
+        const profile = (await profileResponse.json()) as CurrentUser;
         if (
           context.organization_id !== animal.organizationId ||
           qrData.items.some(
@@ -89,6 +96,7 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
         }
         if (cancelled) return;
         setOrganizationName(context.organization_name ?? "目前收容所");
+        setCanManage(canManageCareQr(profile, context.organization_id));
         setQr(
           qrData.items.find(
             (item) => item.status === "active" && !item.revoked,
@@ -157,6 +165,7 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
       }
       setQr(value);
       setPhase("idle");
+      setReplacementGuidanceOpen(true);
     } catch {
       setError("目前無法重新產生 QR Code，請稍後再試。");
       setPhase("error");
@@ -246,15 +255,17 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
                 </section>
                 <div className="animal-care-qr-actions print-hidden">
                   <Button type="button" onClick={() => window.print()}>
-                    列印 QR Code
+                    重新列印
                   </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setRegenerateOpen(true)}
-                  >
-                    重新產生
-                  </Button>
+                  {canManage ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setRegenerateOpen(true)}
+                    >
+                      重新產生新 QR
+                    </Button>
+                  ) : null}
                 </div>
               </>
             ) : qr ? (
@@ -265,47 +276,81 @@ export function AnimalCareQrCard({ animal }: { animal: AnimalSummary }) {
                 <p className="muted">
                   如需重新列印，請重新產生並更換已張貼的舊標籤。
                 </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setRegenerateOpen(true)}
-                >
-                  重新產生
-                </Button>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setRegenerateOpen(true)}
+                  >
+                    重新產生新 QR
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <div className="animal-care-qr-empty-state">
                 <p>尚未建立照護 QR Code</p>
-                <Button type="button" onClick={() => void generate()}>
-                  產生 QR Code
-                </Button>
+                {canManage ? (
+                  <Button type="button" onClick={() => void generate()}>
+                    建立照護 QR
+                  </Button>
+                ) : null}
               </div>
             )}
           </>
         )}
       </CardContent>
-      <Dialog
-        open={regenerateOpen}
-        role="alertdialog"
-        title="確認重新產生 QR Code"
-        onClose={() => setRegenerateOpen(false)}
-      >
-        <p className="dialog-description">
-          重新產生後，舊 QR Code 將無法使用。已張貼的舊標籤需要更換。
-        </p>
-        <div className="dialog-actions">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setRegenerateOpen(false)}
+      {canManage ? (
+        <>
+          <Dialog
+            open={regenerateOpen}
+            role="alertdialog"
+            title="重新產生新的照護 QR？"
+            onClose={() => setRegenerateOpen(false)}
           >
-            取消
-          </Button>
-          <Button type="button" onClick={() => void regenerate()}>
-            確認重新產生
-          </Button>
-        </div>
-      </Dialog>
+            <p className="dialog-description">
+              重新產生後，目前的 QR 會立即失效。請列印新的
+              QR，並更換現場舊標籤。
+            </p>
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setRegenerateOpen(false)}
+              >
+                取消
+              </Button>
+              <Button type="button" onClick={() => void regenerate()}>
+                確認重新產生新 QR
+              </Button>
+            </div>
+          </Dialog>
+          <Dialog
+            open={replacementGuidanceOpen}
+            role="dialog"
+            title="新 QR 已建立，舊 QR 已失效"
+            onClose={() => setReplacementGuidanceOpen(false)}
+          >
+            <p className="dialog-description">請完成現場標籤更換：</p>
+            <ol>
+              <li>列印新的 QR 標籤</li>
+              <li>移除舊標籤</li>
+              <li>將新標籤貼至正確籠位</li>
+            </ol>
+            <div className="dialog-actions">
+              <Button type="button" onClick={() => window.print()}>
+                列印新 QR
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setReplacementGuidanceOpen(false)}
+              >
+                完成
+              </Button>
+            </div>
+          </Dialog>
+        </>
+      ) : null}
     </Card>
   );
 }

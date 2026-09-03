@@ -28,7 +28,7 @@ def _job() -> SimpleNamespace:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [TimeoutError(), ConnectionError(), asyncio.CancelledError()])
+@pytest.mark.parametrize("error", [TimeoutError(), ConnectionError()])
 async def test_ai_failure_keeps_report_and_timeline_non_normal(error: BaseException) -> None:
     job = _job()
     report = SimpleNamespace(
@@ -53,3 +53,28 @@ async def test_ai_failure_keeps_report_and_timeline_non_normal(error: BaseExcept
     assert result.status in {"failed", "invalid"}
     assert report.ai_job_status in {"failed", "invalid"}
     assert report.ai_job_status not in {"normal", "completed", "no_special_signal"}
+
+
+@pytest.mark.asyncio
+async def test_ai_cancellation_preserves_report_and_propagates_shutdown() -> None:
+    job = _job()
+    report = SimpleNamespace(
+        id=job.target_id,
+        organization_id=job.organization_id,
+        answers={"defecation": "defecation.normal"},
+        note="志工原始心得",
+        status="saved",
+        ai_job_status="enqueued",
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await AIJobHandler(MockAIAdapter(error=asyncio.CancelledError())).handle(
+            job,
+            note=report.note,
+            cleaned_images=[],
+            allowed_codes=set(),
+            report=report,
+        )
+
+    assert report.answers == {"defecation": "defecation.normal"}
+    assert report.status == "saved"

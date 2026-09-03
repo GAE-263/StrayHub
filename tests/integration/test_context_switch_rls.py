@@ -14,22 +14,33 @@ from httpx import ASGITransport, AsyncClient
 from scripts.configure_runtime_role import configure
 from services.api.app.api.dependencies import request_session
 from services.api.app.application.audit_service import AuditService
+from services.api.app.application.care_report_handoff_service import CareReportHandoffService
+from services.api.app.application.volunteer_reporting_authorization import (
+    VolunteerReportingAuthorizationService,
+)
 from services.api.app.main import app
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.audit import AuditRecord
+from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
 from services.api.app.persistence.models.identity import (
+    LineUserBinding,
     Organization,
     OrganizationMembership,
     SessionRecord,
     User,
+    WebhookSession,
 )
 from services.api.app.persistence.models.volunteer_access import (
     VolunteerAccessGrant,
     VolunteerApplication,
 )
+from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
+)
+from services.api.app.persistence.repositories.care_report_handoff_repository import (
+    CareReportHandoffRepository,
 )
 from sqlalchemy import event, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -47,6 +58,7 @@ async def runtime_api(request):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     orgs = [uuid4() for _ in range(3)]
     user_id, session_id = uuid4(), uuid4()
+    line_user_id = f"U{uuid4().hex}"
     try:
         result = await asyncio.to_thread(
             subprocess.run,
@@ -62,6 +74,14 @@ async def runtime_api(request):
         assert (await configure(url))["missing_grants"] == []
         async with factory() as session, session.begin():
             session.add(User(id=user_id, display_name="Switch test", status="active"))
+            await session.flush()
+            session.add(
+                LineUserBinding(
+                    line_user_id=line_user_id,
+                    user_id=user_id,
+                    status="active",
+                )
+            )
             session.add_all(
                 Organization(id=org, code=f"S-{org}", name=f"Shelter {i}", status="active")
                 for i, org in enumerate(orgs)
@@ -116,6 +136,14 @@ async def runtime_api(request):
                     id=session_id,
                     user_id=user_id,
                     active_organization_id=orgs[0],
+                    status="active",
+                    expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                )
+            )
+            session.add(
+                WebhookSession(
+                    user_id=user_id,
+                    organization_id=orgs[0],
                     status="active",
                     expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
                 )
@@ -178,6 +206,18 @@ async def test_authorized_switch_audit_scope_and_pool_reuse(runtime_api):
         assert response.json()["organization_id"] == str(org)
         current = await client.get("/v1/auth/active-shelter-context")
         assert current.json()["organization_id"] == str(org)
+        async with factory() as session:
+            await set_organization_scope(session, org)
+            webhook_sessions = (
+                await session.scalars(
+                    select(WebhookSession).where(
+                        WebhookSession.user_id == user,
+                        WebhookSession.status == "active",
+                    )
+                )
+            ).all()
+            assert len(webhook_sessions) == 1
+            assert webhook_sessions[0].organization_id == org
         animals = await client.get("/v1/management/animals")
         assert animals.status_code == 200, animals.text
         assert {row["organization_id"] for row in animals.json()["items"]} == {str(org)}
@@ -194,8 +234,9 @@ async def test_authorized_switch_audit_scope_and_pool_reuse(runtime_api):
             assert record.after_data == {"organization_id": str(orgs[1])}
 
 
+@pytest.mark.parametrize("runtime_api", ["VOLUNTEER"], indirect=True)
 async def test_initial_selection_audit_uses_target_scope(runtime_api):
-    client, factory, orgs, _, sid, _ = runtime_api
+    client, factory, orgs, user, sid, _ = runtime_api
     async with factory() as session, session.begin():
         record = await session.get(SessionRecord, sid)
         record.active_organization_id = None
@@ -203,6 +244,126 @@ async def test_initial_selection_audit_uses_target_scope(runtime_api):
         "/v1/auth/active-shelter-context", json={"organization_id": str(orgs[1])}
     )
     assert response.status_code == 200, response.text
+    assert response.json()["organization_id"] == str(orgs[1])
+    assert (await client.get("/v1/auth/active-shelter-context")).json()["organization_id"] == str(
+        orgs[1]
+    )
+
+    async with factory() as session, session.begin():
+        await set_organization_scope(session, orgs[1])
+        binding = await AuthenticationRepository(session).get_line_binding_for_user(user)
+        assert binding is not None and binding.user_id == user
+        webhook_sessions = (
+            await session.scalars(
+                select(WebhookSession).where(
+                    WebhookSession.user_id == user,
+                    WebhookSession.status == "active",
+                )
+            )
+        ).all()
+        assert len(webhook_sessions) == 1
+        assert webhook_sessions[0].organization_id == orgs[1]
+
+        membership = await AuthenticationRepository(session).get_effective_membership(user, orgs[1])
+        animal = (await AnimalRepository(session, orgs[1]).list_active())[0]
+        assert membership is not None
+        now = datetime.now(timezone.utc)
+        handoff = CareReportHandoff(
+            organization_id=orgs[1],
+            user_id=user,
+            membership_id=membership.id,
+            animal_id=animal.id,
+            status="pending",
+            source="liff_scan",
+            expires_at=now + timedelta(minutes=15),
+        )
+        session.add(handoff)
+        await session.flush()
+        consumed = await CareReportHandoffService(
+            CareReportHandoffRepository(session, orgs[1]),
+            authorization=VolunteerReportingAuthorizationService(
+                AuthenticationRepository(session), AnimalRepository(session, orgs[1])
+            ),
+        ).consume_pending_handoff(user_id=user, organization_id=orgs[1])
+        assert consumed.id == handoff.id
+        assert consumed.status == "consumed"
+
+    async with factory() as session:
+        await set_organization_scope(session, orgs[0])
+        assert (
+            await session.scalars(select(WebhookSession).where(WebhookSession.status == "active"))
+        ).all() == []
+
+
+async def test_same_shelter_selection_preserves_webhook_session(runtime_api):
+    client, factory, orgs, user, _, _ = runtime_api
+    async with factory() as session:
+        await set_organization_scope(session, orgs[0])
+        original = await session.scalar(
+            select(WebhookSession).where(
+                WebhookSession.user_id == user,
+                WebhookSession.status == "active",
+            )
+        )
+        assert original is not None
+        original_id = original.id
+
+    response = await client.put(
+        "/v1/auth/active-shelter-context", json={"organization_id": str(orgs[0])}
+    )
+    assert response.status_code == 200, response.text
+
+    async with factory() as session:
+        await set_organization_scope(session, orgs[0])
+        active = (
+            await session.scalars(
+                select(WebhookSession).where(
+                    WebhookSession.user_id == user,
+                    WebhookSession.status == "active",
+                )
+            )
+        ).all()
+        assert [item.id for item in active] == [original_id]
+
+
+async def test_revoked_binding_during_switch_does_not_change_context(runtime_api, monkeypatch):
+    client, factory, orgs, user, _, _ = runtime_api
+
+    async def revoked_while_waiting(self, line_user_id):
+        return None
+
+    monkeypatch.setattr(AuthenticationRepository, "lock_line_binding", revoked_while_waiting)
+    response = await client.put(
+        "/v1/auth/active-shelter-context", json={"organization_id": str(orgs[1])}
+    )
+    assert response.status_code == 403
+    assert response.json()["code"] == "line_binding_invalid"
+    assert (await client.get("/v1/auth/active-shelter-context")).json()["organization_id"] == str(
+        orgs[0]
+    )
+
+    async with factory() as session:
+        await set_organization_scope(session, orgs[0])
+        active_a = (
+            await session.scalars(
+                select(WebhookSession).where(
+                    WebhookSession.user_id == user,
+                    WebhookSession.status == "active",
+                )
+            )
+        ).all()
+        assert len(active_a) == 1
+    async with factory() as session:
+        await set_organization_scope(session, orgs[1])
+        active_b = (
+            await session.scalars(
+                select(WebhookSession).where(
+                    WebhookSession.user_id == user,
+                    WebhookSession.status == "active",
+                )
+            )
+        ).all()
+        assert active_b == []
 
 
 @pytest.mark.parametrize("failure", ["audit", "commit"])
@@ -245,6 +406,21 @@ async def test_failed_write_preserves_a_and_has_no_success_audit(runtime_api, mo
     async with factory() as session:
         await set_organization_scope(session, orgs[1])
         assert (await session.scalars(select(AuditRecord))).all() == []
+        assert (
+            await session.scalars(select(WebhookSession).where(WebhookSession.status == "active"))
+        ).all() == []
+    async with factory() as session:
+        await set_organization_scope(session, orgs[0])
+        assert (
+            len(
+                (
+                    await session.scalars(
+                        select(WebhookSession).where(WebhookSession.status == "active")
+                    )
+                ).all()
+            )
+            == 1
+        )
 
 
 async def test_unauthorized_target_preserves_a(runtime_api):

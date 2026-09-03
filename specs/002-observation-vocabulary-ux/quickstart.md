@@ -5,7 +5,7 @@
 ## 前置條件
 
 - Docker Desktop／Docker Compose
-- Python 3.11+、`uv`
+- Python 3.12、`uv`
 - Node.js 與 npm
 - 位於專案根目錄 `/Users/js/gae_cowork_project/StrayHub`
 

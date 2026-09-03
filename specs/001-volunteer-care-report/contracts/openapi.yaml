@@ -30,6 +30,7 @@ tags:
   - name: Management Reports
   - name: Management Settings
   - name: Management Audit
+  - name: Management Growth Diary
   - name: LINE Bot
   - name: Volunteer Applications
   - name: Volunteer Access Management
@@ -1131,6 +1132,33 @@ paths:
         "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /v1/management/animals/{animalId}/photo:
+    get:
+      tags: [Management Animals]
+      operationId: getManagementAnimalPhoto
+      description: 透過目前登入者的收容所 context 讀取私人儲存中的毛孩主圖。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AnimalId"
+      responses:
+        "200":
+          description: 已驗證、已清除 EXIF 的目前毛孩圖片
+          headers:
+            Cache-Control:
+              schema: { type: string, const: "private, no-store" }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            image/jpeg:
+              schema: { type: string, contentEncoding: binary }
+            image/png:
+              schema: { type: string, contentEncoding: binary }
+            image/webp:
+              schema: { type: string, contentEncoding: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFoundOrForbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /v1/management/animals/{animalId}/health-records:
     post:
       tags: [Management Animals]
@@ -1308,6 +1336,19 @@ paths:
             required: false,
             schema: { type: string, format: uuid },
           }
+        - {
+            name: query,
+            in: query,
+            required: false,
+            schema: { type: string, maxLength: 200 },
+          }
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [all, active, revoked], default: all },
+          }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: 動物 QR 綁定清單
@@ -1317,6 +1358,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
     post:
       tags: [Management Settings]
       operationId: createManagementQrCode
@@ -1905,6 +1947,12 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/GrantStatus'
+        - name: user_id
+          in: query
+          description: 限定查詢目前 organization 內指定志工的授權週期。
+          schema:
+            type: string
+            format: uuid
         - name: cursor
           in: query
           schema:
@@ -2326,6 +2374,59 @@ paths:
               schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /v1/management/growth-diary-entries:
+    get:
+      tags: [Management Growth Diary]
+      operationId: listGrowthDiaryEntries
+      parameters:
+        - { in: query, name: query, schema: { type: string, maxLength: 120 } }
+        - in: query
+          name: mood
+          schema: { type: string, enum: [all, concern, positive, neutral, unanalyzed], default: all }
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: page_size, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: 目前 active shelter 的毛孩日記分頁
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrowthDiaryListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /v1/management/growth-diary-entries/{entryId}:
+    get:
+      tags: [Management Growth Diary]
+      operationId: getGrowthDiaryEntry
+      parameters:
+        - { in: path, name: entryId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 含完整 AI provenance 與 raw output 的日記 detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrowthDiaryDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+  /v1/management/growth-diary-entries/{entryId}/photo:
+    get:
+      tags: [Management Growth Diary]
+      operationId: getGrowthDiaryPhoto
+      parameters:
+        - { in: path, name: entryId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Buffered final WebP, authenticated and scoped to the active shelter
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            image/webp: { schema: { type: string, contentEncoding: binary } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
 components:
   securitySchemes:
     bearerAuth:
@@ -2807,12 +2908,51 @@ components:
           }
     ManagementQrCodeList:
       type: object
-      required: [items]
+      required: [items, page, page_size, total]
       properties:
         items:
           {
             type: array,
-            items: { $ref: "#/components/schemas/ManagementQrCode" },
+            items: { $ref: "#/components/schemas/ManagementQrCodeListItem" },
+          }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+    ManagementQrCodeListItem:
+      type: object
+      required:
+        - id
+        - organization_id
+        - animal_id
+        - animal_name
+        - shelter_number
+        - animal_status
+        - area_name
+        - status
+        - revoked
+        - created_at
+        - deep_link
+        - token
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        animal_id: { type: string, format: uuid }
+        animal_name: { type: string }
+        shelter_number: { type: [string, "null"] }
+        animal_status: { type: string }
+        area_name: { type: [string, "null"] }
+        status: { type: string, enum: [active, revoked] }
+        revoked: { type: boolean }
+        created_at: { type: string, format: date-time }
+        deep_link:
+          {
+            type: [string, "null"],
+            description: 新格式 active QR 可重建的列印 locator；legacy 或 revoked QR 為 null,
+          }
+        token:
+          {
+            type: "null",
+            description: raw token 不作為獨立欄位顯示；locator 僅存在 deep_link,
           }
     ManagementQrCodeRequest:
       type: object
@@ -3412,17 +3552,6 @@ components:
       properties:
         animal_id: { type: string, format: uuid }
         confirmation_token: { type: string, minLength: 1 }
-    CareCompletionCode:
-      type: string
-      enum:
-        [
-          care_completion.completed,
-          care_completion.partially_completed,
-          care_completion.not_provided,
-          care_completion.not_observed,
-          care_completion.uncertain,
-        ]
-      description: 照護完成狀態；未觀察與無法判斷不得解讀為已完成
     WalkCompletionCode:
       type: string
       enum:
@@ -3430,33 +3559,22 @@ components:
           walk_completion.completed,
           walk_completion.partially_completed,
           walk_completion.not_done,
-          walk_completion.not_observed,
-          walk_completion.uncertain,
         ]
-      description: 散步完成狀態；與散步反應的 walk.* 選項分開
+      description: 散步完成狀態；Bot層另可記錄不屬於CRM選項的unobserved sentinel
     ObservationAnswerCode:
       type: string
       minLength: 1
       description: 由 CRM 有效 Observation Vocabulary 提供的穩定 Code；顯示名稱不得作為正式值
     DraftAnswers:
       type: object
-      additionalProperties: true
+      additionalProperties: false
       properties:
-        care_completion: { $ref: "#/components/schemas/CareCompletionCode" }
         walk_completion: { $ref: "#/components/schemas/WalkCompletionCode" }
-        feeding: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        water: { $ref: "#/components/schemas/ObservationAnswerCode" }
         activity: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        urination: { $ref: "#/components/schemas/ObservationAnswerCode" }
+        gait: { $ref: "#/components/schemas/ObservationAnswerCode" }
         defecation: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        resource_guarding:
-          { $ref: "#/components/schemas/ObservationAnswerCode" }
-        human_interaction:
-          { $ref: "#/components/schemas/ObservationAnswerCode" }
         animal_interaction:
           { $ref: "#/components/schemas/ObservationAnswerCode" }
-        emotion: { $ref: "#/components/schemas/ObservationAnswerCode" }
-        walk_reaction: { $ref: "#/components/schemas/ObservationAnswerCode" }
         appearance_special_status:
           { $ref: "#/components/schemas/ObservationAnswerCode" }
       description: 可逐題保存的標準回報答案；草稿階段允許不完整，正式送出時必須符合 CareReportAnswers
@@ -3466,18 +3584,11 @@ components:
         - type: object
           required:
             [
-              care_completion,
               walk_completion,
-              feeding,
-              water,
               activity,
-              urination,
+              gait,
               defecation,
-              resource_guarding,
-              human_interaction,
               animal_interaction,
-              emotion,
-              walk_reaction,
               appearance_special_status,
             ]
       description: 正式 Care Report 必須完整包含的標準結構化答案；照片與心得不在此必要集合
@@ -3488,6 +3599,7 @@ components:
           $ref: "#/components/schemas/DraftAnswers"
           description: 可只包含目前新增或修改的答案；後端依 Draft 目前狀態驗證，不接受跳步或略過必要題目
         note: { type: string }
+        story: { type: string, maxLength: 2000 }
         media_ids: { type: array, items: { type: string, format: uuid } }
     Draft:
       type: object
@@ -3518,15 +3630,15 @@ components:
               [
                 selecting_animal,
                 confirming_animal,
-                answering_completion,
-                answering_feeding,
-                answering_water,
+                answering_walk_completion,
                 answering_activity,
-                answering_elimination,
-                answering_behavior,
+                answering_gait,
+                answering_defecation,
+                awaiting_stool_media,
+                answering_animal_interaction,
                 answering_special_status,
-                awaiting_media,
                 awaiting_note,
+                awaiting_story,
                 reviewing,
                 submitting,
                 submitted,
@@ -3551,6 +3663,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         organization_id: { type: string, format: uuid }
+        subject: { type: [string, "null"], enum: [stool, portrait, null], readOnly: true }
         status:
           {
             type: string,
@@ -3583,6 +3696,7 @@ components:
           $ref: "#/components/schemas/CareReportAnswers"
           description: 標準回報完整結構化答案；照片與心得不屬於必要欄位
         note: { type: string }
+        story: { type: string, maxLength: 2000 }
         media_ids: { type: array, items: { type: string, format: uuid } }
     CareReportCorrectionRequest:
       type: object
@@ -3613,6 +3727,8 @@ components:
           additionalProperties:
             type: object
             additionalProperties: { type: string }
+        note: { type: [string, "null"] }
+        story: { type: [string, "null"], maxLength: 2000 }
         created_at: { type: string, format: date-time }
     TimelineResponse:
       type: object
@@ -3640,12 +3756,14 @@ components:
           id,
           submitted_at,
           volunteer_user_id,
+          volunteer_label,
           animal_name_snapshot,
           status,
           ai_job_status,
           observations,
           observation_snapshots,
           media_ids,
+          stool_analysis,
         ]
       properties:
         id: { type: string, format: uuid }
@@ -3666,6 +3784,34 @@ components:
         media_ids:
           type: array
           items: { type: string, format: uuid }
+        stool_analysis:
+          anyOf:
+            - { $ref: "#/components/schemas/StoolAnalysis" }
+            - { type: "null" }
+    StoolAnalysis:
+      type: object
+      required:
+        [
+          recognized,
+          score,
+          score_label,
+          has_abnormalities,
+          abnormality_details,
+          assessment,
+          recommendation,
+          review_status,
+          human_reviewed,
+        ]
+      properties:
+        recognized: { type: boolean }
+        score: { type: [integer, "null"], minimum: 1, maximum: 7 }
+        score_label: { type: [string, "null"] }
+        has_abnormalities: { type: boolean }
+        abnormality_details: { type: [string, "null"] }
+        assessment: { type: [string, "null"] }
+        recommendation: { type: [string, "null"] }
+        review_status: { type: string }
+        human_reviewed: { type: boolean }
     ObservationCategoryListResponse:
       type: object
       required: [items]
@@ -5049,3 +5195,61 @@ components:
         reason: { type: [string, 'null'] }
         result: { type: string, enum: [success, denied] }
         created_at: { type: string, format: date-time }
+    GrowthDiaryAiSummary:
+      type: object
+      required: [status, provenance_status, mood, adopter_reply, staff_summary]
+      properties:
+        status:
+          type: string
+          enum: [pending, succeeded, failed, unconfigured, not_applicable, legacy, unavailable]
+        provenance_status: { type: string, enum: [available, legacy_missing, unavailable] }
+        mood: { type: [string, 'null'], enum: [positive, neutral, concern, null] }
+        adopter_reply: { type: [string, 'null'] }
+        staff_summary: { type: [string, 'null'] }
+    GrowthDiaryAiProvenance:
+      type: object
+      required: [provenance_status, provider, model_name, model_version, prompt_version, output_schema_version, analyzed_at]
+      properties:
+        provenance_status: { type: string, enum: [available, legacy_missing, unavailable] }
+        provider: { type: [string, 'null'] }
+        model_name: { type: [string, 'null'] }
+        model_version: { type: [string, 'null'] }
+        prompt_version: { type: [string, 'null'] }
+        output_schema_version: { type: [string, 'null'] }
+        analyzed_at: { type: [string, 'null'], format: date-time }
+    GrowthDiaryListItem:
+      type: object
+      required: [id, inquiry_id, animal_id, animal_name, shelter_number, has_photo, photo_endpoint, note, ai_analysis, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        inquiry_id: { type: string, format: uuid }
+        animal_id: { type: string, format: uuid }
+        animal_name: { type: [string, 'null'] }
+        shelter_number: { type: [string, 'null'] }
+        has_photo: { type: boolean }
+        photo_endpoint: { type: [string, 'null'] }
+        note: { type: [string, 'null'], maxLength: 2000 }
+        ai_analysis: { $ref: '#/components/schemas/GrowthDiaryAiSummary' }
+        created_at: { type: string, format: date-time }
+    GrowthDiaryDetail:
+      allOf:
+        - { $ref: '#/components/schemas/GrowthDiaryListItem' }
+        - type: object
+          required: [ai_provenance, ai_raw_output]
+          properties:
+            ai_provenance: { $ref: '#/components/schemas/GrowthDiaryAiProvenance' }
+            ai_raw_output:
+              oneOf:
+                - { type: object, additionalProperties: true }
+                - { type: string }
+                - { type: 'null' }
+    GrowthDiaryListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/GrowthDiaryListItem' }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }

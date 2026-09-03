@@ -265,7 +265,7 @@ describe("QR-first animal confirmation page", () => {
     expect(container?.textContent).toContain("動物已確認");
     expect(lineHandoff.attempt).toHaveBeenCalledOnce();
     expect(container?.textContent).toContain("再點一次「照護回報」");
-    expect(container?.textContent).toContain("開始照護回報");
+    expect(container?.textContent).toContain("開始散步回報");
     expect(container?.textContent).toContain("約 15 分鐘");
     expect(window.location.href).not.toContain("confirmation-secret");
     expect(

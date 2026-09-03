@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import type { components } from "../../../packages/contracts/src/openapi";
 
 const organization = {
   id: "org-a",
@@ -33,6 +34,21 @@ type ReportFixture = {
   note: string | null;
 };
 
+export type QrFixture = {
+  id: string;
+  organization_id: string;
+  animal_id: string;
+  animal_name: string;
+  shelter_number: string | null;
+  animal_status: string;
+  area_name: string | null;
+  status: "active" | "revoked";
+  revoked: boolean;
+  created_at: string;
+  deep_link: string | null;
+  token: null;
+};
+
 type ListResponse<T> = {
   items: T[];
   page: number;
@@ -40,8 +56,66 @@ type ListResponse<T> = {
   total: number;
 };
 
+export type GrowthDiaryFixtureItem =
+  components["schemas"]["GrowthDiaryListItem"];
+export type GrowthDiaryFixtureDetail =
+  components["schemas"]["GrowthDiaryDetail"];
+export type GrowthDiaryFixturePage =
+  components["schemas"]["GrowthDiaryListResponse"];
+
+const growthDiaryPhoto = Buffer.from(
+  "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
+  "base64",
+);
+
+function defaultGrowthDiaryEntries(
+  organizationId: string,
+): GrowthDiaryFixtureItem[] {
+  const suffix = organizationId.slice(-1).toUpperCase();
+  return [
+    {
+      id: `00000000-0000-4000-8000-00000000000${suffix === "A" ? "1" : "3"}`,
+      inquiry_id: "10000000-0000-4000-8000-000000000001",
+      animal_id: "20000000-0000-4000-8000-000000000001",
+      animal_name: `${organizationId} 米糕`,
+      shelter_number: `${suffix}-102`,
+      has_photo: true,
+      photo_endpoint:
+        "/v1/management/growth-diary-entries/00000000-0000-4000-8000-000000000001/photo",
+      note: `${organizationId} 的近況文字`,
+      ai_analysis: {
+        status: "succeeded",
+        provenance_status: "available",
+        mood: "concern",
+        adopter_reply: "謝謝分享近況。",
+        staff_summary: "食慾變化，AI 建議人工查看。",
+      },
+      created_at: "2026-09-01T10:00:00Z",
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000002",
+      inquiry_id: "10000000-0000-4000-8000-000000000002",
+      animal_id: "20000000-0000-4000-8000-000000000002",
+      animal_name: `${organizationId} 花花`,
+      shelter_number: `${suffix}-103`,
+      has_photo: false,
+      photo_endpoint: null,
+      note: "今天在窗邊曬太陽。",
+      ai_analysis: {
+        status: "legacy",
+        provenance_status: "legacy_missing",
+        mood: null,
+        adopter_reply: null,
+        staff_summary: null,
+      },
+      created_at: "2026-08-31T09:00:00Z",
+    },
+  ];
+}
+
 export type ManagementFixtureOptions = {
   organizations?: (typeof organization)[];
+  platformRole?: string | null;
   activeOrganizationId?: string;
   memberships?: Array<{
     id: string;
@@ -62,6 +136,10 @@ export type ManagementFixtureOptions = {
   reportsStatus?: FixtureStatus;
   reports?: (params: URLSearchParams) => ListResponse<ReportFixture>;
   reportDelay?: (params: URLSearchParams) => number;
+  qrCodes?: (
+    params: URLSearchParams,
+    organizationId: string,
+  ) => ListResponse<QrFixture> | Promise<ListResponse<QrFixture>>;
   animalDetailStatus?: FixtureStatus;
   animalDetails?: Record<string, unknown>;
   reportDetailStatus?: FixtureStatus;
@@ -69,6 +147,24 @@ export type ManagementFixtureOptions = {
   timelineStatus?: FixtureStatus;
   timelines?: (animalId: string, params: URLSearchParams) => unknown;
   timelineDelay?: (animalId: string, params: URLSearchParams) => number;
+  noActiveOrganizationContext?: boolean;
+  growthDiaryStatus?:
+    | FixtureStatus
+    | ((params: URLSearchParams, organizationId: string) => FixtureStatus);
+  growthDiaryEntries?: (
+    params: URLSearchParams,
+    organizationId: string,
+  ) => GrowthDiaryFixturePage;
+  growthDiaryListDelay?: (
+    params: URLSearchParams,
+    organizationId: string,
+  ) => number;
+  growthDiaryDetails?: Record<string, GrowthDiaryFixtureDetail>;
+  growthDiaryDetailStatus?: FixtureStatus;
+  growthDiaryDetailDelay?: (entryId: string, organizationId: string) => number;
+  growthDiaryPhotoStatus?: FixtureStatus;
+  growthDiaryPhotoDelay?: (entryId: string, organizationId: string) => number;
+  growthDiaryEvents?: string[];
 };
 
 async function json(route: Route, body: unknown, status = 200) {
@@ -118,7 +214,8 @@ export async function mockManagementApi(
           id: "user-a",
           username: "local-staff-a",
           display_name: "林工作人員",
-          platform_role: "STAFF",
+          platform_role:
+            options.platformRole === undefined ? "STAFF" : options.platformRole,
           status: "active",
         },
         memberships,
@@ -158,6 +255,10 @@ export async function mockManagementApi(
           canSwitch ? contextSwitchStatus : 403,
         );
       } else {
+        if (options.noActiveOrganizationContext) {
+          await json(route, {});
+          return;
+        }
         const activeOrganization =
           organizations.find((item) => item.id === activeOrganizationId) ??
           organization;
@@ -289,6 +390,110 @@ export async function mockManagementApi(
       });
       return;
     }
+    if (url.pathname === "/v1/management/growth-diary-entries") {
+      const params = url.searchParams;
+      const requestOrganizationId = activeOrganizationId;
+      const entries = defaultGrowthDiaryEntries(requestOrganizationId);
+      const body = options.growthDiaryEntries
+        ? options.growthDiaryEntries(params, requestOrganizationId)
+        : {
+            items: entries,
+            page: Number(params.get("page") ?? 1),
+            page_size: Number(params.get("page_size") ?? 20),
+            total: entries.length,
+          };
+      options.growthDiaryEvents?.push(`list:start:${requestOrganizationId}`);
+      const growthDiaryStatus =
+        typeof options.growthDiaryStatus === "function"
+          ? options.growthDiaryStatus(params, requestOrganizationId)
+          : (options.growthDiaryStatus ?? 200);
+      try {
+        await respond(
+          route,
+          body,
+          growthDiaryStatus,
+          options.growthDiaryListDelay?.(params, requestOrganizationId) ?? 0,
+        );
+        options.growthDiaryEvents?.push(`list:finish:${requestOrganizationId}`);
+      } catch {
+        options.growthDiaryEvents?.push(`list:abort:${requestOrganizationId}`);
+      }
+      return;
+    }
+    const growthDiaryPhotoMatch = url.pathname.match(
+      /^\/v1\/management\/growth-diary-entries\/([^/]+)\/photo$/,
+    );
+    if (growthDiaryPhotoMatch) {
+      const entryId = growthDiaryPhotoMatch[1];
+      const requestOrganizationId = activeOrganizationId;
+      options.growthDiaryEvents?.push(`photo:start:${requestOrganizationId}`);
+      const delay = options.growthDiaryPhotoDelay?.(
+        entryId,
+        requestOrganizationId,
+      );
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      try {
+        if (options.growthDiaryPhotoStatus === "network") {
+          await route.abort("failed");
+        } else {
+          await route.fulfill({
+            status: options.growthDiaryPhotoStatus ?? 200,
+            contentType: "image/webp",
+            headers: {
+              "Cache-Control": "private, no-store",
+              "X-Content-Type-Options": "nosniff",
+            },
+            body: growthDiaryPhoto,
+          });
+        }
+        options.growthDiaryEvents?.push(
+          `photo:finish:${requestOrganizationId}`,
+        );
+      } catch {
+        options.growthDiaryEvents?.push(`photo:abort:${requestOrganizationId}`);
+      }
+      return;
+    }
+    const growthDiaryDetailMatch = url.pathname.match(
+      /^\/v1\/management\/growth-diary-entries\/([^/]+)$/,
+    );
+    if (growthDiaryDetailMatch) {
+      const entryId = growthDiaryDetailMatch[1];
+      const requestOrganizationId = activeOrganizationId;
+      const item = defaultGrowthDiaryEntries(requestOrganizationId).find(
+        (entry) => entry.id === entryId,
+      );
+      const detail = options.growthDiaryDetails?.[entryId] ?? {
+        ...(item ?? defaultGrowthDiaryEntries(requestOrganizationId)[0]),
+        ai_provenance: {
+          provenance_status: "available" as const,
+          provider: "google",
+          model_name: "gemini",
+          model_version: "2.5-flash",
+          prompt_version: "growth-diary-v1",
+          output_schema_version: "1",
+          analyzed_at: "2026-09-01T10:01:00Z",
+        },
+        ai_raw_output: { mood: "concern", source: requestOrganizationId },
+      };
+      options.growthDiaryEvents?.push(`detail:start:${requestOrganizationId}`);
+      try {
+        await respond(
+          route,
+          detail,
+          options.growthDiaryDetailStatus ?? 200,
+          options.growthDiaryDetailDelay?.(entryId, requestOrganizationId) ?? 0,
+        );
+        options.growthDiaryEvents?.push(
+          `detail:finish:${requestOrganizationId}`,
+        );
+      } catch {
+        options.growthDiaryEvents?.push(
+          `detail:abort:${requestOrganizationId}`,
+        );
+      }
+      return;
+    }
     if (
       url.pathname === "/v1/observation-categories" ||
       url.pathname === "/v1/observation-options"
@@ -366,18 +571,30 @@ export async function mockManagementApi(
       return;
     }
     if (url.pathname.endsWith("/management/qr-codes")) {
-      await json(route, {
-        items: [
-          {
-            id: "qr-a",
-            animal_id: "animal-a",
-            status: "active",
-            revoked: false,
-            deep_link: "https://example.test/animal/animal-a",
-            token: null,
-          },
-        ],
-      });
+      const body = options.qrCodes
+        ? await options.qrCodes(url.searchParams, activeOrganizationId)
+        : {
+            items: [
+              {
+                id: "qr-a",
+                organization_id: "org-a",
+                animal_id: "animal-a",
+                animal_name: "小森",
+                shelter_number: "A-001",
+                animal_status: "active",
+                area_name: "一區",
+                status: "active" as const,
+                revoked: false,
+                created_at: "2026-08-14T00:00:00Z",
+                deep_link: "https://example.test/animal/animal-a",
+                token: null,
+              },
+            ],
+            page: 1,
+            page_size: 20,
+            total: 1,
+          };
+      await json(route, body).catch(() => undefined);
       return;
     }
     if (url.pathname.endsWith("/management/reportable-scopes")) {

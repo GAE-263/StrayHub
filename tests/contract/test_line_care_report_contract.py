@@ -4,18 +4,11 @@ import yaml
 
 CONTRACT_PATH = Path("specs/001-volunteer-care-report/contracts/openapi.yaml")
 REQUIRED_ANSWER_KEYS = {
-    "care_completion",
     "walk_completion",
-    "feeding",
-    "water",
     "activity",
-    "urination",
+    "gait",
     "defecation",
-    "resource_guarding",
-    "human_interaction",
     "animal_interaction",
-    "emotion",
-    "walk_reaction",
     "appearance_special_status",
 }
 

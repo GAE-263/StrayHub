@@ -27,10 +27,13 @@ class LineImageService:
         draft_accepts_media: bool = True,
         draft_id: UUID | None = None,
         source_event_id: str | None = None,
+        subject: str | None = None,
         session=None,
     ) -> StoredObject:
         if not draft_accepts_media:
             raise DomainError("invalid_draft_step", "目前步驟不接受照片", 409)
+        if subject not in {None, "stool", "portrait"}:
+            raise DomainError("invalid_media_subject", "照片用途無效", 422)
         content = await self.line.get_image_content(message_id=message_id)
         stored = await self.media.store_cleaned(
             organization_id=organization_id,
@@ -46,6 +49,7 @@ class LineImageService:
                 checksum=stored.metadata.checksum,
                 status="temporary",
                 purpose="care_report_draft",
+                subject=subject,
                 exif_removed=True,
             )
             session.add(asset)

@@ -562,7 +562,7 @@ export default function AnimalConfirmationPage() {
                 <p>
                   請回到 LINE，再點一次「照護回報」
                   <br />
-                  或輸入「開始照護回報」。
+                  或輸入「開始散步回報」。
                 </p>
                 <p className="muted">此確認將保留約 15 分鐘。</p>
               </div>

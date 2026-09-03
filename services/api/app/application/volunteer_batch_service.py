@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, TypeVar
+from typing import Any
 from uuid import UUID, uuid4
 
 from services.api.app.api.errors import DomainError
@@ -22,10 +22,9 @@ from services.api.app.persistence.repositories.volunteer_access_repository impor
 )
 
 MAX_BATCH_CHUNK_SIZE = 500
-T = TypeVar("T")
 
 
-def chunk_targets(targets: Sequence[T], size: int = MAX_BATCH_CHUNK_SIZE) -> Iterator[list[T]]:
+def chunk_targets[T](targets: Sequence[T], size: int = MAX_BATCH_CHUNK_SIZE) -> Iterator[list[T]]:
     if size < 1 or size > MAX_BATCH_CHUNK_SIZE:
         raise DomainError("invalid_batch_chunk_size", "批次分段必須介於 1 到 500", 422)
     for start in range(0, len(targets), size):
@@ -74,7 +73,7 @@ class VolunteerBatchService:
         self.repository = repository
 
     @staticmethod
-    def chunks(items: Sequence[T]) -> list[list[T]]:
+    def chunks[T](items: Sequence[T]) -> list[list[T]]:
         return list(chunk_targets(items))
 
     @staticmethod
