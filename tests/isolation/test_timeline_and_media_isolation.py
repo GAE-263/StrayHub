@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from services.api.app.api import media as media_api
 from services.api.app.api.animal_timeline import _serialize_day
+from services.api.app.api.dependencies import RequestContext
 from services.api.app.api.errors import DomainError
 from services.api.app.application.media_access import MediaAccessService
 from services.api.app.application.timeline_service import TimelineService
@@ -102,3 +104,63 @@ async def test_staff_cannot_read_other_tenant_timeline_note_media_or_signed_url(
             media_organization_id=organization_b,
             object_key="reports/b/photo.jpg",
         )
+
+
+@pytest.mark.asyncio
+async def test_staff_signed_url_is_current_tenant_only_and_keeps_300_second_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = uuid4()
+    media_id = uuid4()
+    captured: dict[str, object] = {}
+
+    class Repository:
+        def __init__(self, _session, scoped_organization_id):
+            assert scoped_organization_id == organization_id
+
+        async def require_formal(self, requested_media_id):
+            assert requested_media_id == media_id
+            return SimpleNamespace(
+                organization_id=organization_id, object_key="reports/a/photo.jpg"
+            )
+
+    class Access:
+        def __init__(self, _storage, scoped_organization_id):
+            assert scoped_organization_id == organization_id
+
+        async def signed_url(self, **kwargs):
+            captured.update(kwargs)
+            return "https://storage.example/signed-photo"
+
+    monkeypatch.setattr(media_api, "MediaRepository", Repository)
+    monkeypatch.setattr(media_api, "MediaAccessService", Access)
+    response = await media_api.create_signed_download_url(
+        media_id,
+        context=RequestContext(
+            user_id=uuid4(),
+            organization_id=organization_id,
+            membership_id=uuid4(),
+            role="STAFF",
+        ),
+        session=object(),  # type: ignore[arg-type]
+    )
+
+    assert response.url == "https://storage.example/signed-photo"
+    assert captured == {
+        "media_organization_id": organization_id,
+        "object_key": "reports/a/photo.jpg",
+        "expires_seconds": 300,
+    }
+
+    with pytest.raises(DomainError) as denied:
+        await media_api.create_signed_download_url(
+            media_id,
+            context=RequestContext(
+                user_id=uuid4(),
+                organization_id=organization_id,
+                membership_id=uuid4(),
+                role="VOLUNTEER",
+            ),
+            session=object(),  # type: ignore[arg-type]
+        )
+    assert denied.value.status_code == 403

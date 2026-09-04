@@ -4,6 +4,22 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+reveal_entry_reference=0
+for argument in "$@"; do
+  case "$argument" in
+    --reveal-entry-reference) reveal_entry_reference=1 ;;
+    --help|-h)
+      echo "用法：$0 [--reveal-entry-reference]"
+      echo "預設隱藏 LIFF entry reference；互動確認後可顯示一次完整 Endpoint。"
+      exit 0
+      ;;
+    *)
+      echo "用法：$0 [--reveal-entry-reference]" >&2
+      exit 2
+      ;;
+  esac
+done
+
 read_dotenv_value() {
   local name="$1"
   local python_bin="python"
@@ -139,6 +155,17 @@ start_tunnel() {
 require_value LIFF_ID
 require_value SHELTER_ENTRY_REFERENCE
 require_value NGROK_URL
+entry_reference_reveal_confirmed=0
+if [[ "$reveal_entry_reference" == "1" ]]; then
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    echo "--reveal-entry-reference 只允許互動式 terminal。" >&2
+    exit 2
+  fi
+  read -r -p "輸入 REVEAL 以顯示一次完整 LIFF Endpoint（注意 terminal capture 風險）：" confirmation
+  if [[ "$confirmation" == "REVEAL" ]]; then
+    entry_reference_reveal_confirmed=1
+  fi
+fi
 NGROK_URL="${NGROK_URL%/}"
 if [[ ! "$NGROK_URL" =~ ^https:// ]]; then
   echo "NGROK_URL 必須是 HTTPS 保留網址，例如 https://your-domain.ngrok.app" >&2
@@ -246,11 +273,14 @@ echo
 echo "[Line Demo] PASS"
 echo "Local API:        ${API_BASE_URL}"
 echo "Web tunnel:       ${WEB_TUNNEL_URL}"
-echo "LIFF Endpoint:    ${LIFF_ENDPOINT_URL}"
+if [[ "$entry_reference_reveal_confirmed" == "1" ]]; then
+  echo "LIFF Endpoint (shown once): ${LIFF_ENDPOINT_URL}"
+else
+  echo "LIFF Endpoint:    ${WEB_TUNNEL_URL}/volunteer-entry?entry=[REDACTED]"
+fi
 echo "手機 LINE 入口:   ${LIFF_URL}"
 echo
-echo "請在 LINE Developers Console 設定 LIFF Endpoint URL："
-echo "  ${LIFF_ENDPOINT_URL}"
+echo "請在 LINE Developers Console 設定完整 LIFF Endpoint URL；需要顯示一次時以 --reveal-entry-reference 互動執行。"
 echo "按 Ctrl-C 會停止本腳本啟動的 API、Web、tunnel 與 worker。"
 
 wait "${pids[0]}"

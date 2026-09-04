@@ -7,6 +7,9 @@ import asyncio
 import hashlib
 import json
 import secrets
+import sys
+from collections.abc import Callable
+from typing import TextIO
 from uuid import UUID, uuid4
 
 from services.api.app.config.settings import get_settings
@@ -22,6 +25,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--actor-reference", default="SYSTEM_MIGRATION")
     parser.add_argument("--rotate-reference-id", type=UUID)
     parser.add_argument("--revoke-reference-id", type=UUID)
+    parser.add_argument(
+        "--reveal-reference",
+        action="store_true",
+        help="interactively reveal a newly issued reference exactly once",
+    )
     return parser
 
 
@@ -130,8 +138,42 @@ async def issue(
         await engine.dispose()
 
 
+def emit_result(
+    reference_id: UUID | None,
+    raw_reference: str | None,
+    *,
+    reveal: bool,
+    stdout: TextIO,
+    stderr: TextIO,
+    input_fn: Callable[[str], str],
+) -> None:
+    """Emit safe metadata by default and gate the one-time credential reveal."""
+    print(
+        json.dumps(
+            {
+                "reference_id": None if reference_id is None else str(reference_id),
+                "reference_issued": raw_reference is not None,
+            }
+        ),
+        file=stdout,
+    )
+    if raw_reference is None or not reveal:
+        return
+    if not stdout.isatty():
+        raise ValueError("--reveal-reference requires an interactive terminal")
+    confirmation = input_fn(
+        "Type REVEAL to display the new entry reference once (terminal capture risk): "
+    )
+    if confirmation != "REVEAL":
+        print("Entry reference reveal cancelled.", file=stderr)
+        return
+    print(json.dumps({"raw_reference": raw_reference}), file=stdout)
+
+
 def main() -> None:
     args = _parser().parse_args()
+    if args.reveal_reference and (not sys.stdin.isatty() or not sys.stdout.isatty()):
+        _parser().error("--reveal-reference requires an interactive terminal")
     actor_reference = None if args.actor_user_id else args.actor_reference
     reference_id, raw_reference = asyncio.run(
         issue(
@@ -142,8 +184,14 @@ def main() -> None:
             revoke_reference_id=args.revoke_reference_id,
         )
     )
-    # The raw reference is intentionally emitted exactly once and never persisted.
-    print(json.dumps({"reference_id": str(reference_id), "raw_reference": raw_reference}))
+    emit_result(
+        reference_id,
+        raw_reference,
+        reveal=args.reveal_reference,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        input_fn=input,
+    )
 
 
 if __name__ == "__main__":

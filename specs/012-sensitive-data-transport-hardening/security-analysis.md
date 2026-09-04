@@ -471,15 +471,61 @@ route map，不能只保護 HTTPS server。
    C01實作前應用一次真實vertical smoke確定最小清單。
 5. 已曝光demo password是否曾在其他環境/帳號重用？若有，incident scope需擴大；repo內無法證明。
 
-## 15. Recommended next Spec Kit command
+## 15. Historical planning handoff
 
-Spec、plan、research、data model、security boundary、quickstart與本現況分析已可支撐task generation。
-下一步建議：
+This section originally recommended `/speckit-tasks`; task generation and Phase A have
+since completed. Phase B evidence is recorded below. Phase C remains a separate,
+explicitly authorized implementation step and was not started in this change.
 
-```text
-/speckit-tasks
-```
+## 16. Phase B Implementation Evidence (2026-09-04)
 
-結論：**不應直接跳入 implementation**；應先以 `speckit-tasks` 將上述Task ID轉成依賴排序的
-`tasks.md`並review。現有spec/plan已在本輪更新完成，無需再開另一輪specify；完成tasks review後，
-先做Phase A，再進B/C。
+### Registry and capability lifecycle
+
+`contracts/sensitive-url-registry.yaml` is now the machine-readable source of truth for
+Class A/B/C/D. Runtime and deterministic tests confirm the existing lifecycle rather
+than changing it:
+
+| Capability | Verified behavior | Discrepancy |
+| --- | --- | --- |
+| Volunteer/adoption photo | 300 seconds; purpose, organization, animal, and current object key bound; replayable until expiry | None |
+| Staff signed media URL | 300 seconds; authenticated staff/admin and current organization required | None |
+| Animal QR | No fixed TTL; digest-backed; replayable until revoke; regenerate revokes the old record; tenant/resource bound | None |
+| LIFF entry | Database default 90 days; digest-backed; expiry/revoke/rotation and tenant resolution remain enforced; recovery retains entry only until the existing terminal/exchange point | Route-specific `Referrer-Policy: no-referrer` is not currently emitted |
+| Application-status URL token | No implementation found | Recorded as `not_found`, not treated as an exception |
+
+The QR page captures the locator then calls `history.replaceState` before resolution.
+The LIFF entry path removes legacy `id_token` before exchange and preserves the Class B
+entry only for the existing retry/recovery state machine. T013 therefore requires no
+frontend lifecycle code change. The missing route-specific no-referrer header is
+documented rather than silently changing product behavior or expanding this task.
+
+### Logging and output boundaries
+
+- Local, old-edge, and GCE nginx configs select a query-free and Referer-free format for
+  login, auth login/refresh/LIFF exchange, volunteer entry/application, animal
+  confirmation, and both public photo routes. Ordinary routes retain the standard
+  request/query and Referer diagnostics.
+- Application loggers share key-aware recursive masking for Class A/B fields, repeated
+  and percent-encoded query values, nested URLs, structured extras, Authorization, and
+  exception tracebacks. Uvicorn's five-value access tuple remains intact.
+- `AuditService` applies the same side-effect-free recursive copy to before/after JSON
+  and reason immediately before persistence. This is a preventive defense-in-depth
+  control; it is not evidence that historical audit rows contained secrets.
+- Entry issuance and demo helpers emit safe metadata by default. Raw entry references,
+  generated demo passwords, and entry-bearing LIFF endpoints require an explicit flag,
+  an interactive terminal, and `REVEAL` confirmation; redirected/non-TTY reveal fails
+  closed.
+
+### Next development-server limitation
+
+The repository-owned Next proxy route forwards registered Class B and ordinary query
+parameters but has no custom URL/body/error logging; runtime tests capture its
+stdout/stderr and verify fixed error responses. Next's framework-owned development
+request line is outside that route hook and may still show an initial raw URL when a
+development server is exposed directly. nginx removes query/Referer only when traffic
+traverses nginx. Eliminating the direct-development-tunnel exposure belongs to Phase C;
+this Phase B implementation intentionally did not change `demo-line.sh` routing or any
+tunnel allowlist.
+
+T008 remains **MANUAL ACTION REQUIRED**. Phase B neither rotates external credentials
+nor claims that ngrok/browser/remote log copies were removed.

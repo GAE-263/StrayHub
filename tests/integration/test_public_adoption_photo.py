@@ -8,6 +8,7 @@ import asyncpg
 import pytest
 from fastapi.testclient import TestClient
 from services.api.app.api import media as media_api
+from services.api.app.application import media_access
 from services.api.app.application.media_access import (
     VOLUNTEER_WALK_PHOTO,
     issue_adoption_photo_token,
@@ -101,9 +102,7 @@ async def _set_media_state(
         await connection.close()
 
 
-async def _replace_current_photo(
-    organization_id: UUID, animal_id: UUID, object_key: str
-) -> None:
+async def _replace_current_photo(organization_id: UUID, animal_id: UUID, object_key: str) -> None:
     connection = await asyncpg.connect(_database_url())
     try:
         await connection.execute(
@@ -169,6 +168,34 @@ def test_public_adoption_photo_streams_private_media_only_while_adoptable(monkey
         asyncio.run(_cleanup(organization_id))
 
 
+def test_walk_photo_capability_keeps_300_second_ttl_and_purpose_binding(monkeypatch) -> None:
+    organization_id = uuid4()
+    animal_id = uuid4()
+    monkeypatch.setattr(media_access.time, "time", lambda: 1_000)
+    token = issue_animal_photo_token(
+        purpose=VOLUNTEER_WALK_PHOTO,
+        organization_id=organization_id,
+        animal_id=animal_id,
+        object_key="animals/walk/current.jpg",
+    )
+
+    monkeypatch.setattr(media_access.time, "time", lambda: 1_300)
+    claims = media_access.verify_animal_photo_token(
+        token, animal_id=animal_id, expected_purpose=VOLUNTEER_WALK_PHOTO
+    )
+    assert claims.organization_id == organization_id
+    with pytest.raises(media_api.DomainError):
+        media_access.verify_animal_photo_token(
+            token,
+            animal_id=animal_id,
+            expected_purpose=media_access.PUBLIC_ADOPTION_PHOTO,
+        )
+
+    monkeypatch.setattr(media_access.time, "time", lambda: 1_301)
+    with pytest.raises(media_api.DomainError):
+        media_access.verify_animal_photo_token(token, animal_id=animal_id)
+
+
 def test_public_walk_photo_allows_active_non_adoptable_animal(monkeypatch) -> None:
     organization_id, animal_id, media_id = uuid4(), uuid4(), uuid4()
     object_key = f"test/walk/{animal_id}/primary.jpg"
@@ -191,14 +218,17 @@ def test_public_walk_photo_allows_active_non_adoptable_animal(monkeypatch) -> No
             animal_id=animal_id,
             object_key=object_key,
         )
-        response = TestClient(app).get(
-            f"/v1/public/animals/{animal_id}/photo?token={token}"
-        )
+        url = f"/v1/public/animals/{animal_id}/photo?token={token}"
+        with TestClient(app) as client:
+            response = client.get(url)
 
-        assert response.status_code == 200
-        assert response.content == photo_bytes
-        assert response.headers["content-type"] == "image/jpeg"
-        assert response.headers["x-content-type-options"] == "nosniff"
+            assert response.status_code == 200
+            assert response.content == photo_bytes
+            assert response.headers["content-type"] == "image/jpeg"
+            assert response.headers["x-content-type-options"] == "nosniff"
+            replay = client.get(url)
+            assert replay.status_code == 200
+            assert replay.content == photo_bytes
     finally:
         asyncio.run(engine.dispose(close=False))
         asyncio.run(_cleanup(organization_id))
@@ -245,9 +275,7 @@ def test_public_walk_photo_rejects_unsafe_media(
             object_key=object_key,
         )
 
-        response = TestClient(app).get(
-            f"/v1/public/animals/{animal_id}/photo?token={token}"
-        )
+        response = TestClient(app).get(f"/v1/public/animals/{animal_id}/photo?token={token}")
 
         assert response.status_code == 404
     finally:
@@ -274,9 +302,7 @@ def test_public_walk_photo_rejects_replaced_photo(monkeypatch) -> None:
     asyncio.run(_replace_current_photo(organization_id, animal_id, f"{old_key}.replacement"))
     try:
         asyncio.run(engine.dispose(close=False))
-        response = TestClient(app).get(
-            f"/v1/public/animals/{animal_id}/photo?token={token}"
-        )
+        response = TestClient(app).get(f"/v1/public/animals/{animal_id}/photo?token={token}")
 
         assert response.status_code == 404
     finally:
@@ -306,9 +332,7 @@ def test_public_walk_photo_capability_cannot_cross_shelters(monkeypatch) -> None
             object_key=object_b,
         )
 
-        response = TestClient(app).get(
-            f"/v1/public/animals/{animal_b}/photo?token={token}"
-        )
+        response = TestClient(app).get(f"/v1/public/animals/{animal_b}/photo?token={token}")
 
         assert response.status_code == 404
     finally:

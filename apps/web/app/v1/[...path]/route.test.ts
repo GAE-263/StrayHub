@@ -1,8 +1,76 @@
-import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+
 import { GET } from "./route";
 
 const originalApiBaseUrl = process.env.API_BASE_URL;
+
+describe("Next API proxy sensitive logging boundary", () => {
+  beforeEach(() => {
+    process.env.API_BASE_URL = "http://127.0.0.1:8001";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    if (originalApiBaseUrl === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = originalApiBaseUrl;
+  });
+
+  it("forwards ordinary and registered capability query without custom logging", async () => {
+    const sentinel = "proxy-capability-sentinel";
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const stderr = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const upstream = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      );
+    const request = new NextRequest(
+      `https://example.test/v1/public/animals/animal-a/photo?token=${sentinel}&page=2`,
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({
+        path: ["public", "animals", "animal-a", "photo"],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const target = upstream.mock.calls[0][0] as URL;
+    expect(target.pathname).toBe("/v1/public/animals/animal-a/photo");
+    expect(target.searchParams.get("token")).toBe(sentinel);
+    expect(target.searchParams.get("page")).toBe("2");
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it("returns a fixed error without printing raw target, body, or credential", async () => {
+    const sentinel = "proxy-error-secret-sentinel";
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const stderr = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error(`password=${sentinel}`),
+    );
+    const request = new NextRequest(
+      `https://example.test/v1/auth/login?password=${sentinel}`,
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ path: ["auth", "login"] }),
+    });
+    const rendered = JSON.stringify(await response.json());
+
+    expect(response.status).toBe(503);
+    expect(rendered).not.toContain(sentinel);
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
+  });
+});
 
 describe("/v1 proxy conditional responses", () => {
   beforeEach(() => {

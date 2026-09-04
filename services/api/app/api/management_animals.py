@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Header, Query, Response, UploadFile, status
@@ -21,10 +20,11 @@ from services.api.app.application.management_animal_service import ManagementAni
 from services.api.app.domain.animal_profile import AnimalProfile, AnimalProfileUpdate
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.infrastructure.storage.ports import ObjectScope
+from services.api.app.observability.logging import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/v1/management/animals", tags=["Management Animals"])
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 MANAGEMENT_PHOTO_CACHE_CONTROL = "private, max-age=300, must-revalidate"
@@ -194,9 +194,7 @@ async def get_management_animal(
                     }
                 },
                 "ETag": {"schema": {"type": "string"}},
-                "Vary": {
-                    "schema": {"type": "string", "const": MANAGEMENT_PHOTO_VARY}
-                },
+                "Vary": {"schema": {"type": "string", "const": MANAGEMENT_PHOTO_VARY}},
                 "X-Content-Type-Options": {"schema": {"type": "string", "const": "nosniff"}},
             },
             "content": {
@@ -214,9 +212,7 @@ async def get_management_animal(
                     }
                 },
                 "ETag": {"schema": {"type": "string"}},
-                "Vary": {
-                    "schema": {"type": "string", "const": MANAGEMENT_PHOTO_VARY}
-                },
+                "Vary": {"schema": {"type": "string", "const": MANAGEMENT_PHOTO_VARY}},
             },
         },
     },

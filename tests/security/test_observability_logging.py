@@ -1,5 +1,6 @@
 import io
 import logging
+from copy import deepcopy
 
 import pytest
 from services.api.app.observability.logging import (
@@ -93,9 +94,7 @@ def test_uvicorn_access_logger_redacts_photo_capabilities(path: str) -> None:
     original_propagate = logger.propagate
     output = io.StringIO()
     handler = logging.StreamHandler(output)
-    handler.setFormatter(
-        AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s')
-    )
+    handler.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s'))
     try:
         logger.handlers = [handler]
         logger.filters = []
@@ -131,9 +130,7 @@ def test_uvicorn_access_logger_preserves_ordinary_query_logging() -> None:
     original_propagate = logger.propagate
     output = io.StringIO()
     handler = logging.StreamHandler(output)
-    handler.setFormatter(
-        AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s')
-    )
+    handler.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s'))
     try:
         logger.handlers = [handler]
         logger.filters = []
@@ -163,6 +160,128 @@ def test_application_bootstrap_attaches_uvicorn_access_filter() -> None:
 
     assert main.app is not None
     assert any(
-        isinstance(item, SensitiveLogFilter)
-        for item in logging.getLogger("uvicorn.access").filters
+        isinstance(item, SensitiveLogFilter) for item in logging.getLogger("uvicorn.access").filters
     )
+    assert any(
+        isinstance(item, SensitiveLogFilter) for item in logging.getLogger("uvicorn.error").filters
+    )
+
+
+def test_mask_sensitive_handles_case_variants_lists_repeated_and_encoded_urls() -> None:
+    sentinel_values = (
+        "mixed-password-secret",
+        "first-id-secret",
+        "second-id-secret",
+        "nested-access-secret",
+        "authorization-secret",
+        "storage-signature-secret",
+        "camel-access-secret",
+    )
+    payload = {
+        "Temporary-Password": sentinel_values[0],
+        "events": [
+            {
+                "url": (
+                    "https://example.test/login?%69d_token=first-id-secret"
+                    "&ID_TOKEN=second-id-secret&page=2"
+                )
+            },
+            {
+                "next": (
+                    "https%3A%2F%2Fexample.test%2Fcallback%3Faccess_token%3D"
+                    "nested-access-secret%26status%3Dpending"
+                )
+            },
+            {
+                "url": (
+                    "https://storage.example/photo?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+                    "&X-Amz-Signature=storage-signature-secret"
+                )
+            },
+        ],
+        "headers": {"AUTHORIZATION": "Bearer authorization-secret"},
+        "AccessToken": "camel-access-secret",
+    }
+    original = deepcopy(payload)
+
+    masked = mask_sensitive(payload)
+    rendered = repr(masked)
+
+    assert payload == original
+    assert all(value not in rendered for value in sentinel_values)
+    assert "page=2" in rendered
+    assert "status" in rendered
+    assert rendered.count("[REDACTED]") >= 5
+
+
+def test_exception_traceback_is_redacted_without_losing_diagnostic_type() -> None:
+    logger = get_logger("strayhub.quality.exception")
+    original_handlers = logger.handlers[:]
+    original_propagate = logger.propagate
+    original_level = logger.level
+    output = io.StringIO()
+    handler = logging.StreamHandler(output)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+    try:
+        logger.handlers = [handler]
+        logger.propagate = False
+        logger.setLevel(logging.INFO)
+        try:
+            raise RuntimeError("password=exception-sentinel-secret")
+        except RuntimeError:
+            logger.exception("provider request failed")
+
+        rendered = output.getvalue()
+        assert "exception-sentinel-secret" not in rendered
+        assert "RuntimeError" in rendered
+        assert "provider request failed" in rendered
+        assert "[REDACTED]" in rendered
+    finally:
+        logger.handlers = original_handlers
+        logger.propagate = original_propagate
+        logger.setLevel(original_level)
+
+
+def test_uvicorn_access_logger_decodes_sensitive_keys_and_preserves_safe_query() -> None:
+    logger = logging.getLogger("uvicorn.access")
+    original_handlers = logger.handlers[:]
+    original_filters = logger.filters[:]
+    original_level = logger.level
+    original_propagate = logger.propagate
+    output = io.StringIO()
+    handler = logging.StreamHandler(output)
+    handler.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s'))
+    try:
+        logger.handlers = [handler]
+        logger.filters = []
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        configure_access_log_redaction()
+        logger.info(
+            '%s - "%s %s HTTP/%s" %d',
+            "127.0.0.1:12345",
+            "GET",
+            "/login?%70assword=encoded-secret&id_token=one&id_token=two&page=2",
+            "1.1",
+            200,
+        )
+
+        rendered = output.getvalue()
+        assert "encoded-secret" not in rendered
+        assert "id_token=one" not in rendered
+        assert "id_token=two" not in rendered
+        assert "page=2" in rendered
+    finally:
+        logger.handlers = original_handlers
+        logger.filters = original_filters
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+
+def test_raw_application_logger_modules_are_attached_to_central_filter() -> None:
+    from services.api.app.api import line_webhook, management_animals
+    from services.worker import worker
+    from services.worker.app.handlers import volunteer_access_handler
+
+    for module in (line_webhook, management_animals, worker, volunteer_access_handler):
+        assert any(isinstance(item, SensitiveLogFilter) for item in module.logger.filters)

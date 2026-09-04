@@ -16,6 +16,7 @@ from services.api.app.persistence.models.identity import (
     SessionRecord,
     User,
 )
+from services.api.app.persistence.models.volunteer_access import ShelterVolunteerEntryReference
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -123,6 +124,15 @@ def async_database_url() -> str:
     return os.environ["STRAYHUB_TEST_DATABASE_URL"].replace(
         "postgresql://", "postgresql+asyncpg://", 1
     )
+
+
+def test_entry_reference_lifecycle_contract_is_90_days_and_revocable() -> None:
+    table = ShelterVolunteerEntryReference.__table__
+
+    assert str(table.c.expires_at.server_default.arg) == "now() + interval '90 days'"
+    assert table.c.status.default.arg == "active"
+    assert table.c.revoked_at.nullable is True
+    assert table.c.rotation_group_id.nullable is False
 
 
 @pytest.mark.asyncio

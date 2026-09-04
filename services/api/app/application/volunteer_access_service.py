@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -27,6 +26,7 @@ from services.api.app.domain.volunteer_access import (
     validate_grant_period,
     validate_service_date_selection,
 )
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     OrganizationMembership,
@@ -48,7 +48,7 @@ from services.api.app.persistence.repositories.volunteer_service_summary_reposit
     VolunteerServiceSummaryRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +23,7 @@ from services.api.app.infrastructure.line.identity_verification_adapter import (
     LineIdentityVerifier,
 )
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -35,7 +35,7 @@ from services.worker.app.persistence.volunteer_access_repository import (
     WorkerVolunteerAccessRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _rich_menu_router() -> RichMenuRoutingService | None:

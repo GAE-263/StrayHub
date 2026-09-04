@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.observability.logging import mask_sensitive
 from services.api.app.persistence.database.base import model_dump_for_audit
 from services.api.app.persistence.models.audit import AuditRecord
 
@@ -47,9 +48,11 @@ class AuditService:
             resource_type=resource_type,
             resource_id=resource_id,
             source_channel=source_channel,
-            before_data=model_dump_for_audit(before) if before is not None else None,
-            after_data=model_dump_for_audit(after) if after is not None else None,
-            reason=reason,
+            before_data=(
+                mask_sensitive(model_dump_for_audit(before)) if before is not None else None
+            ),
+            after_data=(mask_sensitive(model_dump_for_audit(after)) if after is not None else None),
+            reason=mask_sensitive(reason) if reason is not None else None,
             result=result,
         )
         self.session.add(record)

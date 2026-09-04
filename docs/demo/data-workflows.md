@@ -36,9 +36,21 @@ The MOA importer owns only shelter/animal/source/photo/QR data, never identities
 ## Account decision
 
 Normal demo has five synthetic accounts. Interactive `demo.sh` generates a new
-high-entropy shared demo password for each bootstrap and displays it once. A
+high-entropy shared demo password for each bootstrap and withholds it by default. Use
+`--reveal-demo-password` plus the interactive `REVEAL` confirmation only when a human
+must see it once. A
 non-interactive run must provide `STRAYHUB_DEMO_PASSWORD` through its controlled
 environment; the bootstrap rotates hashes and expires existing demo sessions.
+
+`scripts.issue_volunteer_entry_reference` now emits only `reference_id` and issuance
+metadata by default. To reveal a newly issued raw reference once, run it in an
+interactive terminal with `--reveal-reference` and type `REVEAL`; redirected/non-TTY
+output fails closed. `scripts/demo-line.sh` likewise masks the entry-bearing LIFF
+Endpoint unless `--reveal-entry-reference` is explicitly confirmed in a terminal.
+Do not persist either reveal in shell transcripts, CI output, artifacts, issues, or
+screenshots. Existing automation that parsed `raw_reference` from default JSON must
+migrate to an approved interactive handoff; there is intentionally no non-interactive
+raw-output compatibility mode.
 
 - `demo-furkids-admin`: reuse existing account; explicit SHELTER_ADMIN membership
   in all three demo shelters for management switching. Not a platform administrator.

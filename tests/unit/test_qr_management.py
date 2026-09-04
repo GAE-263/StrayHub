@@ -1,3 +1,4 @@
+import hashlib
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -45,6 +46,12 @@ class _QrCodes:
         self.current.status = "revoked"
         self.current.revoked = True
         return self.current
+
+    async def resolve(self, raw_token):
+        if self.current is None or self.current.status != "active" or self.current.revoked:
+            return None
+        digest = hashlib.sha256(raw_token.encode()).hexdigest()
+        return self.current if digest == self.current.token_digest else None
 
 
 @pytest.mark.asyncio
@@ -155,3 +162,38 @@ async def test_regenerate_revokes_old_record_and_creates_new_active_qr() -> None
     assert replacement.id != current.id
     assert replacement.status == "active"
     assert token == issue_printable_qr_token(replacement.id)
+
+
+@pytest.mark.asyncio
+async def test_qr_token_replays_until_revoked_and_remains_tenant_bound() -> None:
+    organization_id = uuid4()
+    animal_id = uuid4()
+    qr_id = uuid4()
+    token = issue_printable_qr_token(qr_id)
+    current = SimpleNamespace(
+        id=qr_id,
+        organization_id=organization_id,
+        animal_id=animal_id,
+        token_digest=hashlib.sha256(token.encode()).hexdigest(),
+        status="active",
+        revoked=False,
+    )
+    repository = _QrCodes(organization_id, active=current, current=current)
+    service = QrTokenService(
+        _Animals(SimpleNamespace(id=animal_id, organization_id=organization_id, status="active")),
+        repository,
+    )
+
+    assert (await service.resolve(raw_token=token))[1] == animal_id
+    assert (await service.resolve(raw_token=token))[1] == animal_id
+    await service.revoke(qr_code_id=qr_id)
+    with pytest.raises(DomainError) as revoked:
+        await service.resolve(raw_token=token)
+    assert revoked.value.code == "animal_not_found"
+
+    foreign = SimpleNamespace(id=animal_id, organization_id=uuid4(), status="active")
+    repository.current.status = "active"
+    repository.current.revoked = False
+    with pytest.raises(DomainError) as cross_tenant:
+        await QrTokenService(_Animals(foreign), repository).resolve(raw_token=token)
+    assert cross_tenant.value.code == "cross_tenant_access"

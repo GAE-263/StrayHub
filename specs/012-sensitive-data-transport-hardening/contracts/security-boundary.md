@@ -11,6 +11,11 @@
 
 ## 2. URL policy contract
 
+The machine-readable source of truth is
+[`sensitive-url-registry.yaml`](./sensitive-url-registry.yaml). This prose explains the
+boundary; route/key classification, ownership, lifecycle, and review requirements must
+be updated in the registry first.
+
 ### Prohibited in URL
 
 `password`, `temporary_password`, `access_token`, `refresh_token`, `id_token`, `authorization`, provider secret／credential，以及任何可作為長效 bearer credential 的值。

@@ -36,7 +36,8 @@ npm ci --prefix apps/web
 - 平台治理：`demo-platform-admin`（無 Shelter Membership）。
 - 單一收容所志工：`demo-furkids-volunteer`、`demo-xindian-volunteer`、
   `demo-wugu-volunteer`；各自只有所屬收容所 membership/grant。
-- 互動式 `demo.sh` 每次產生新的高熵密碼並只顯示一次；非互動執行必須透過
+- 互動式 `demo.sh` 每次產生新的高熵密碼，預設不輸出；只有加上
+  `--reveal-demo-password` 並在 terminal 輸入 `REVEAL` 才顯示一次。非互動執行必須透過
   `STRAYHUB_DEMO_PASSWORD` 安全提供。Bootstrap 會輪替上述 synthetic account 並使既有
   session 失效。密碼不得放入 URL、版本庫或 shell argument。
 
@@ -229,6 +230,8 @@ START_WORKER=1
 
 ```bash
 ./scripts/demo-line.sh
+# 只有需要在 LINE Console 人工設定完整 Endpoint 時，互動確認後顯示 entry 一次：
+./scripts/demo-line.sh --reveal-entry-reference
 ```
 
 腳本使用 ngrok 的保留網址；先在 ngrok 建立或保留固定 HTTPS 網址，並完成本機
@@ -237,7 +240,9 @@ authtoken 設定，再將該網址設為 `NGROK_URL`。腳本只會公開 Web tu
 Internet；它不涵蓋 LINE Platform webhook。需要同時驗證 Bot webhook 與 LIFF 時，使用
 上方 `test_line_local.sh` 的 nginx single-origin 流程。腳本會以
 `ngrok http --url "$NGROK_URL"` 啟動，若實際 tunnel URL 不符合設定就會失敗，
-避免輸出會在重啟後變動的 LIFF Endpoint。腳本不會替你修改 LINE Developers Console；請將輸出的
+避免輸出會在重啟後變動的 LIFF Endpoint。預設輸出會遮蔽 entry reference；腳本不會替你修改
+LINE Developers Console，只有上述 explicit reveal 流程會顯示一次完整 Endpoint。請勿把該輸出
+保存到 log、CI artifact、issue 或截圖。
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 

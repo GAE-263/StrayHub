@@ -4,12 +4,14 @@ error_log logs/error.log notice;
 events {}
 
 http {
-    map $uri $strayhub_capability_access {
+    map $uri $strayhub_sensitive_access {
         default 0;
+        ~^/(login|volunteer-entry|volunteer-application|animal-confirmation)/?$ 1;
+        ~^/v1/auth/(login|refresh|liff/exchange)/?$ 1;
         ~^/v1/public/(adoption/)?animals/[^/]+/photo/?$ 1;
     }
 
-    map $strayhub_capability_access $strayhub_standard_access {
+    map $strayhub_sensitive_access $strayhub_standard_access {
         0 1;
         1 0;
     }
@@ -17,12 +19,12 @@ http {
     log_format strayhub_standard
         '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent '
         '"$http_referer" "$http_user_agent"';
-    log_format strayhub_capability
+    log_format strayhub_sensitive
         '$remote_addr - $remote_user [$time_local] '
         '"$request_method $uri $server_protocol" $status $body_bytes_sent rt=$request_time';
 
     access_log logs/access.log strayhub_standard if=$strayhub_standard_access;
-    access_log logs/access.log strayhub_capability if=$strayhub_capability_access;
+    access_log logs/access.log strayhub_sensitive if=$strayhub_sensitive_access;
 
     map $http_upgrade $connection_upgrade {
         default upgrade;

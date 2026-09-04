@@ -4,7 +4,6 @@ from __future__ import annotations
 # shape; E501 is suppressed for those literal payloads only.
 # ruff: noqa: E501
 import json
-import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -109,6 +108,7 @@ from services.api.app.infrastructure.ai.gemini_client import GeminiClient
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.infrastructure.storage.ports import ObjectScope
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import (
     set_authentication_user_scope,
@@ -153,7 +153,7 @@ from services.api.app.persistence.repositories.organization_repository import Or
 from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
 
 router = APIRouter(prefix="/v1/line", tags=["LINE Bot"])
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

@@ -33,6 +33,18 @@ def test_demo_script_is_executable_and_separates_demo_from_test_fixtures() -> No
     assert 'API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"' in text
 
 
+def test_demo_scripts_require_explicit_interactive_secret_reveal() -> None:
+    demo = (ROOT / "scripts/demo.sh").read_text(encoding="utf-8")
+    line_demo = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+
+    assert "--reveal-demo-password" in demo
+    assert "demo_password_reveal_confirmed" in demo
+    assert "Generated demo password (shown once" not in demo
+    assert "--reveal-entry-reference" in line_demo
+    assert "entry_reference_reveal_confirmed" in line_demo
+    assert 'echo "  ${LIFF_ENDPOINT_URL}"' not in line_demo
+
+
 def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
     script = ROOT / "scripts/demo-line.sh"
     assert script.exists()

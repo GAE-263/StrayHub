@@ -71,19 +71,24 @@ def test_local_nginx_configures_forwarded_and_websocket_headers() -> None:
     assert "Upgrade $http_upgrade" in next_location
 
 
-def test_local_nginx_redacts_only_capability_route_queries() -> None:
+def test_local_nginx_uses_safe_logging_for_every_sensitive_route_group() -> None:
     source = NGINX_TEMPLATE.read_text(encoding="utf-8")
-    capability_format = source.split("log_format strayhub_capability", 1)[1].split(";", 1)[0]
+    sensitive_format = source.split("log_format strayhub_sensitive", 1)[1].split(";", 1)[0]
     standard_format = source.split("log_format strayhub_standard", 1)[1].split(";", 1)[0]
 
-    assert "~^/v1/public/(adoption/)?animals/[^/]+/photo/?$ 1;" in source
-    assert "$request_method $uri $server_protocol" in capability_format
-    assert "$args" not in capability_format
-    assert "$request_uri" not in capability_format
-    assert '"$request"' not in capability_format
+    for route_pattern in (
+        "~^/(login|volunteer-entry|volunteer-application|animal-confirmation)/?$ 1;",
+        "~^/v1/auth/(login|refresh|liff/exchange)/?$ 1;",
+        "~^/v1/public/(adoption/)?animals/[^/]+/photo/?$ 1;",
+    ):
+        assert route_pattern in source
+    assert "$request_method $uri $server_protocol" in sensitive_format
+    for unsafe in ("$args", "$request_uri", '"$request"', "$http_referer"):
+        assert unsafe not in sensitive_format
     assert '"$request"' in standard_format
-    assert "access_log logs/access.log strayhub_capability " in source
-    assert "if=$strayhub_capability_access;" in source
+    assert "$http_referer" in standard_format
+    assert "access_log logs/access.log strayhub_sensitive " in source
+    assert "if=$strayhub_sensitive_access;" in source
 
 
 def test_line_local_helper_owns_one_named_tunnel_without_weakening_security() -> None:

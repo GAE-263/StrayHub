@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from uuid import uuid4
 
 from sqlalchemy import select
 
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.database.scope import (
     set_organization_scope,
     set_platform_scope,
@@ -24,7 +24,7 @@ from services.worker.app.persistence.session import create_worker_session_factor
 
 VOLUNTEER_WORK_INTERVAL_SECONDS = 60
 AI_WORK_INTERVAL_SECONDS = 15
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def active_organization_ids(factory) -> list:

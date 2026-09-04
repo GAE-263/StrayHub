@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -14,6 +13,7 @@ from services.api.app.application.ports.authentication import (
     PasswordHasherPort,
     VolunteerEntryResolverPort,
 )
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.models.identity import (
     OrganizationMembership,
     RefreshTokenRecord,
@@ -24,7 +24,7 @@ from services.api.app.persistence.repositories.authentication_repository import 
     AuthenticationRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _refresh_digest(token: str) -> str:

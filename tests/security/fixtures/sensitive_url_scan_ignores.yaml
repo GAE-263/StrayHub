@@ -1,0 +1,22 @@
+version: 1
+ignores:
+  - path: apps/web/app/(volunteer)/volunteer-entry/liffUrl.ts
+    rule: query_reader
+    parameter: id_token
+    reason: Reads a legacy Class A key only to remove it before LIFF exchange.
+    owner: volunteer-identity
+  - path: apps/web/lib/auth.ts
+    rule: query_reader
+    parameter: Authorization
+    reason: Headers.set writes the HTTP Authorization header; it does not read or construct a URL query.
+    owner: web-authentication
+  - path: scripts/sync_line_role_menus.py
+    rule: query_reader
+    parameter: LINE_CHANNEL_ACCESS_TOKEN
+    reason: os.environ.get reads a process environment variable; it is not a URL query reader.
+    owner: line-integration
+  - path: scripts/verify_acceptance_live.py
+    rule: query_reader
+    parameter: access_token
+    reason: dict.get reads a JSON response body before constructing an Authorization header.
+    owner: acceptance-tooling

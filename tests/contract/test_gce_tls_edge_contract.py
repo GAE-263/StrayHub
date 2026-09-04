@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GCE_ROOT = ROOT / "infra" / "gce"
 COMPOSE_PATH = GCE_ROOT / "docker-compose.production.yml"
 NGINX_PATH = ROOT / "infra" / "edge-nginx" / "strayhub.enadv.quest.conf"
+GCE_NGINX_PATH = GCE_ROOT / "nginx" / "strayhub.conf"
 ENV_PATH = GCE_ROOT / ".env.production.example"
 GENERATOR = GCE_ROOT / "scripts" / "generate-verification-tls-cert.sh"
 EDGE_DOC = ROOT / "docs" / "deployment" / "tls-dns-firewall.md"
@@ -59,6 +60,25 @@ def test_https_terminates_tls_and_preserves_b2_routes() -> None:
     assert config.count("client_max_body_size 1m;") == 1
     for route in ("location = /healthz", "location = /v1", "location ^~ /v1/", "location /"):
         assert route in config
+
+
+def test_edge_and_gce_configs_share_sensitive_route_safe_logging_contract() -> None:
+    for path in (NGINX_PATH, GCE_NGINX_PATH):
+        config = path.read_text(encoding="utf-8")
+        sensitive = config.split("log_format strayhub_sensitive", 1)[1].split(";", 1)[0]
+        standard = config.split("log_format strayhub_standard", 1)[1].split(";", 1)[0]
+
+        for route_pattern in (
+            "~^/(login|volunteer-entry|volunteer-application|animal-confirmation)/?$ 1;",
+            "~^/v1/auth/(login|refresh|liff/exchange)/?$ 1;",
+            "~^/v1/public/(adoption/)?animals/[^/]+/photo/?$ 1;",
+        ):
+            assert route_pattern in config
+        for unsafe in ('"$request"', "$request_uri", "$args", "$http_referer"):
+            assert unsafe not in sensitive
+        assert "$request_method $uri $server_protocol" in sensitive
+        assert '"$request"' in standard
+        assert "$http_referer" in standard
 
 
 def test_certificate_stays_on_old_edge_and_upstream_ports_are_explicit() -> None:
