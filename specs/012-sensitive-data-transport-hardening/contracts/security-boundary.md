@@ -53,25 +53,38 @@ request/response body
 
 ## 4. Tunnel route contract
 
+The machine-readable source of truth for the public development gateway is
+[`line-tunnel-allowlist.yaml`](./line-tunnel-allowlist.yaml). Every allowed method/path requires an
+owner and source evidence; an unlisted route is denied before FastAPI or Next.js.
+
 預設 LINE／LIFF public tunnel：
 
-- ALLOW：實際設定的 LINE webhook、必要 public photo endpoint、LIFF public pages、其必要 exchange/report API、Next static assets與健康檢查。
+- ALLOW：實際設定的 LINE webhook、必要 public photo endpoint、LIFF public pages、其必要 exchange/report API，以及精確的 Next static asset/HMR path。
 - DENY：`/login`、所有 management pages、`/v1/management/**`、platform-admin routes、非必要 debug／inspection path。
 - API allowlist 必須逐 route 維護，不得以 `/v1/**` catch-all 代替。
 - Web allowlist 必須支援 LIFF redirect／recovery 所需頁面，但不得以 `/` catch-all 代替。
 - 拒絕結果不得揭露帳號、tenant 或資源是否存在。
 
-遠端 management demo 不是預設 tunnel 的例外條目；必須使用獨立 opt-in mode 與 synthetic-only guard。
+遠端 management demo 不是預設 tunnel 的例外條目；目前決議為
+`NOT IMPLEMENTED — local-only management`。未來若有明確 owner requirement，必須另立部署/profile
+規格與 synthetic-only guard，不得擴張 LINE allowlist。
+
+### Route review workflow
+
+1. 從實際 frontend navigation/fetch、LINE producer 與 FastAPI decorator取得 evidence。
+2. 在 `line-tunnel-allowlist.yaml` 登錄 method、exact/pattern path、owner、reason與tests。
+3. 更新 local nginx marker/location；禁止 `/v1/**`、`/_next/**` 或 Web root pass-through。
+4. 執行 static checker、contract與runtime allow/deny matrix；沒有 evidence 的候選維持 deny。
 
 ## 5. Initial controlled-exception contract
 
-| Route family | Value | Purpose | Current lifetime | Required logging |
-|---|---|---|---:|---|
-| `/v1/public/(adoption/)?animals/{id}/photo` | `token` | LINE/adoption image | 300s | omit query and Referer |
-| `/animal-confirmation` | `qr_token` | resolve current animal | revocable QR lifecycle | omit/redact until scrubbed |
-| `/volunteer-entry`, `/volunteer-application` | `entry` | shelter/application target | stable opaque locator, server validated | redact value; retain route |
-| authenticated media download response | signed URL | direct object fetch | 300s | never log returned URL |
-| approved LIFF/OAuth callback | standard callback fields | complete provider protocol | provider/session bounded | scrub after exchange; no token values |
+| Route family                                 | Value                    | Purpose                    |                        Current lifetime | Required logging                      |
+| -------------------------------------------- | ------------------------ | -------------------------- | --------------------------------------: | ------------------------------------- |
+| `/v1/public/(adoption/)?animals/{id}/photo`  | `token`                  | LINE/adoption image        |                                    300s | omit query and Referer                |
+| `/animal-confirmation`                       | `qr_token`               | resolve current animal     |                  revocable QR lifecycle | omit/redact until scrubbed            |
+| `/volunteer-entry`, `/volunteer-application` | `entry`                  | shelter/application target | stable opaque locator, server validated | redact value; retain route            |
+| authenticated media download response        | signed URL               | direct object fetch        |                                    300s | never log returned URL                |
+| approved LIFF/OAuth callback                 | standard callback fields | complete provider protocol |                provider/session bounded | scrub after exchange; no token values |
 
 TTL changes are outside this contract unless supported by a separate threat/runtime review.
 

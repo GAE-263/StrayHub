@@ -366,11 +366,6 @@ NGINX_PID="$(sed -n '1p' "$NGINX_PID_FILE")"
 pid_is_owned_nginx "$NGINX_PID" || die "nginx process ownership could not be verified"
 
 PROXY_LOCAL_URL="http://127.0.0.1:${NGINX_LOCAL_PORT}"
-if curl --max-time 3 -fsS "$PROXY_LOCAL_URL/healthz" >/dev/null; then
-  pass "nginx → API health"
-else
-  die "nginx did not route /healthz to FastAPI"
-fi
 if curl --max-time 5 -fsS "$PROXY_LOCAL_URL/v1/public/volunteer-organizations" >/dev/null; then
   pass "nginx → API /v1"
 else
@@ -381,6 +376,14 @@ if curl --max-time 5 -fsS "$PROXY_LOCAL_URL${LIFF_ROUTE}" >/dev/null; then
 else
   die "nginx did not route ${LIFF_ROUTE} to Next.js"
 fi
+
+for denied_path in /login /v1/management/dashboard /v1/not-allowlisted; do
+  denied_status="$(curl --max-time 3 -sS -o /dev/null -w '%{http_code}' \
+    "$PROXY_LOCAL_URL${denied_path}")"
+  [[ "$denied_status" == "404" ]] || die \
+    "public gateway must deny ${denied_path}; received HTTP ${denied_status}"
+done
+pass "nginx default-deny boundary"
 
 hmr_headers="$(curl --http1.1 --max-time 2 -sS -D - -o /dev/null \
   -H 'Connection: Upgrade' \

@@ -1,0 +1,312 @@
+version: 1
+status: authoritative
+default_action: deny
+gateway: infra/local/nginx/line-local.conf.template
+policy:
+  query_behavior: preserve_on_allowlisted_routes
+  rejection_status: 404
+  rejection_body: generic_no_resource_detail
+  broad_patterns_forbidden: ["/**", "/v1/**", "/_next/**"]
+
+routes:
+  - id: line_webhook
+    methods: [POST]
+    path: /v1/line/webhook
+    upstream: api
+    owner: services/api/app/api/line_webhook.py
+    reason: LINE delivery endpoint; signature remains verified by FastAPI.
+    query_policy: preserve
+    evidence: [services/api/app/api/line_webhook.py, scripts/test_line_local.sh]
+    tests:
+      [
+        tests/security/test_line_webhook_signature.py,
+        tests/e2e/test_local_line_tunnel_boundary.py,
+      ]
+  - id: volunteer_entry_page
+    methods: [GET, HEAD]
+    path: /volunteer-entry
+    upstream: web
+    owner: apps/web/app/(volunteer)/volunteer-entry/page.tsx
+    reason: LIFF identity exchange and expired-session recovery entry.
+    query_policy: preserve
+    evidence:
+      [
+        apps/web/app/(volunteer)/volunteer-entry/VolunteerEntryClient.tsx,
+        apps/web/lib/liff-session.ts,
+      ]
+    tests: [apps/web/app/(volunteer)/volunteer-entry/page.test.tsx]
+  - id: volunteer_application_page
+    methods: [GET, HEAD]
+    path: /volunteer-application
+    upstream: web
+    owner: apps/web/app/(volunteer-onboarding)/volunteer-application/page.tsx
+    reason: Public LIFF volunteer application and status experience.
+    query_policy: preserve
+    evidence:
+      [
+        apps/web/app/(volunteer-onboarding)/volunteer-application/VolunteerApplicationClient.tsx,
+      ]
+    tests:
+      [
+        apps/web/app/(volunteer-onboarding)/volunteer-application/VolunteerApplicationClient.test.tsx,
+      ]
+  - id: animal_confirmation_page
+    methods: [GET, HEAD]
+    path: /animal-confirmation
+    upstream: web
+    owner: apps/web/app/(volunteer)/animal-confirmation/page.tsx
+    reason: Authenticated LIFF animal lookup, QR resolution and report handoff.
+    query_policy: preserve
+    evidence:
+      [
+        apps/web/app/(volunteer)/volunteer-entry/VolunteerEntryClient.tsx,
+        apps/web/app/(volunteer)/animal-confirmation/page.tsx,
+      ]
+    tests: [apps/web/e2e/animal-confirmation-qr.spec.ts]
+  - id: care_report_fallback_page
+    methods: [GET, HEAD]
+    path: /care-report
+    upstream: web
+    owner: apps/web/app/(volunteer)/care-report/page.tsx
+    reason: Authenticated LIFF fallback restores and updates interrupted report drafts.
+    query_policy: preserve
+    evidence:
+      [
+        apps/web/lib/liff-session.ts,
+        apps/web/app/(volunteer)/care-report/page.tsx,
+        apps/web/lib/route-access.ts,
+      ]
+    tests:
+      [apps/web/e2e/state-feedback.spec.ts, apps/web/e2e/volunteer-core.spec.ts]
+  - id: next_static_assets
+    methods: [GET, HEAD]
+    path_pattern: ^/_next/static/[A-Za-z0-9_./-]+$
+    upstream: web
+    owner: apps/web
+    reason: JavaScript chunks and CSS required to hydrate allowlisted LIFF pages.
+    query_policy: preserve
+    evidence: [apps/web/package.json, apps/web/next.config.ts]
+    tests: [tests/e2e/test_local_line_tunnel_boundary.py]
+  - id: next_dev_hmr
+    methods: [GET]
+    path: /_next/webpack-hmr
+    upstream: web
+    owner: scripts/test_line_local.sh
+    reason: WebSocket HMR used only by the local development helper behind the gateway.
+    query_policy: preserve
+    evidence: [scripts/test_line_local.sh]
+    tests: [tests/contract/test_line_local_helper.py]
+  - id: liff_exchange
+    methods: [POST]
+    path: /v1/auth/liff/exchange
+    upstream: api
+    owner: services/api/app/api/authentication.py
+    reason: Exchanges a LINE ID token from the JSON body for a StrayHub session.
+    query_policy: preserve
+    evidence:
+      [apps/web/app/(volunteer)/volunteer-entry/VolunteerEntryClient.tsx]
+    tests: [tests/security/test_liff_exchange_state_matrix.py]
+  - id: session_refresh
+    methods: [POST]
+    path: /v1/auth/refresh
+    upstream: api
+    owner: services/api/app/api/authentication.py
+    reason: LIFF session recovery uses a JSON-body refresh token.
+    query_policy: preserve
+    evidence: [apps/web/lib/api.ts]
+    tests: [apps/web/lib/auth.test.ts]
+  - id: current_identity
+    methods: [GET]
+    path: /v1/auth/me
+    upstream: api
+    owner: services/api/app/api/authentication.py
+    reason: Authenticated volunteer route boundary verifies effective membership and role.
+    query_policy: preserve
+    evidence: [apps/web/components/auth/AuthenticatedRouteBoundary.tsx]
+    tests: [apps/web/components/auth/AuthenticatedRouteBoundary.test.tsx]
+  - id: active_shelter_context
+    methods: [GET, PUT]
+    path: /v1/auth/active-shelter-context
+    upstream: api
+    owner: services/api/app/api/authentication.py
+    reason: Reads the active tenant and performs server-authorized QR tenant switching.
+    query_policy: preserve
+    evidence:
+      [
+        apps/web/components/auth/AuthenticatedRouteBoundary.tsx,
+        apps/web/app/(volunteer)/animal-confirmation/page.tsx,
+      ]
+    tests: [apps/web/app/(volunteer)/animal-confirmation/page.test.tsx]
+  - id: public_volunteer_organizations
+    methods: [GET]
+    path: /v1/public/volunteer-organizations
+    upstream: api
+    owner: services/api/app/api/volunteer_access.py
+    reason: Public application page organization directory.
+    query_policy: preserve
+    evidence:
+      [
+        apps/web/app/(volunteer-onboarding)/volunteer-application/VolunteerApplicationClient.tsx,
+      ]
+    tests: [tests/integration/test_public_volunteer_organizations.py]
+  - id: volunteer_application_status
+    methods: [POST]
+    path: /v1/volunteer-applications/status
+    upstream: api
+    owner: services/api/app/api/volunteer_access.py
+    reason: Resolve application status using body-bound LIFF identity and target.
+    query_policy: preserve
+    evidence: [apps/web/features/volunteer-access/VolunteerApplicationPage.tsx]
+    tests: [tests/security/test_volunteer_application_detail_boundaries.py]
+  - id: volunteer_application_self_status
+    methods: [POST]
+    path: /v1/volunteer-applications/self-status
+    upstream: api
+    owner: services/api/app/api/volunteer_access.py
+    reason: List the current LINE identity's own application statuses.
+    query_policy: preserve
+    evidence:
+      [apps/web/features/volunteer-access/VolunteerApplicationStatusPage.tsx]
+    tests:
+      [
+        apps/web/features/volunteer-access/VolunteerApplicationStatusPage.test.tsx,
+      ]
+  - id: volunteer_application_submit
+    methods: [POST]
+    path: /v1/volunteer-applications
+    upstream: api
+    owner: services/api/app/api/volunteer_access.py
+    reason: Submit a volunteer application from LIFF using a JSON body.
+    query_policy: preserve
+    evidence: [apps/web/features/volunteer-access/VolunteerApplicationPage.tsx]
+    tests: [tests/integration/test_volunteer_access_application.py]
+  - id: volunteer_application_withdraw
+    methods: [POST]
+    path_pattern: ^/v1/volunteer-applications/[0-9a-fA-F-]{36}/withdraw$
+    upstream: api
+    owner: services/api/app/api/volunteer_access.py
+    reason: Withdraw the current LINE identity's own application.
+    query_policy: preserve
+    evidence: [apps/web/features/volunteer-access/VolunteerApplicationPage.tsx]
+    tests: [tests/integration/test_volunteer_access_application.py]
+  - id: qr_resolve
+    methods: [POST]
+    path: /v1/qr-tokens/resolve
+    upstream: api
+    owner: services/api/app/api/animal_selection.py
+    reason: Resolve a QR capability within the authenticated volunteer tenant.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/animal-confirmation/page.tsx]
+    tests: [tests/unit/test_qr_management.py]
+  - id: qr_candidate_organization
+    methods: [POST]
+    path: /v1/qr-tokens/candidate-organization
+    upstream: api
+    owner: services/api/app/api/animal_selection.py
+    reason: Authorize a candidate tenant before an explicit context switch.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/animal-confirmation/page.tsx]
+    tests: [tests/security/test_qr_token_tampering.py]
+  - id: animal_search
+    methods: [GET]
+    path: /v1/animals/search
+    upstream: api
+    owner: services/api/app/api/animal_selection.py
+    reason: Authenticated exact or partial shelter-number lookup.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/animal-confirmation/page.tsx]
+    tests: [tests/integration/test_scope_free_animal_selection_api.py]
+  - id: animal_confirm
+    methods: [POST]
+    path_pattern: ^/v1/animals/[0-9a-fA-F-]{36}/confirm$
+    upstream: api
+    owner: services/api/app/api/animal_selection.py
+    reason: Confirm a tenant-owned animal and issue a body-only handoff credential.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/animal-confirmation/page.tsx]
+    tests: [tests/e2e/test_us1_animal_selection.py]
+  - id: care_report_handoff
+    methods: [POST]
+    path: /v1/care-report-handoffs
+    upstream: api
+    owner: services/api/app/api/care_report_handoffs.py
+    reason: Bind confirmed animal selection to the authenticated LINE session.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/animal-confirmation/page.tsx]
+    tests: [tests/unit/test_care_report_handoff_service.py]
+  - id: current_line_draft
+    methods: [GET]
+    path: /v1/line/care-report/drafts/current
+    upstream: api
+    owner: services/api/app/api/line_drafts.py
+    reason: Restore an interrupted LINE care-report draft in the LIFF fallback page.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/care-report/page.tsx]
+    tests: [tests/integration/test_line_draft_resume.py]
+  - id: update_care_report_draft
+    methods: [PATCH]
+    path_pattern: ^/v1/care-report-drafts/[0-9a-fA-F-]{36}$
+    upstream: api
+    owner: services/api/app/api/care_reports.py
+    reason: Save changes to the authenticated volunteer's recovered draft.
+    query_policy: preserve
+    evidence: [apps/web/app/(volunteer)/care-report/page.tsx]
+    tests: [tests/integration/test_multiple_care_reports.py]
+  - id: volunteer_walk_photo
+    methods: [GET, HEAD]
+    path_pattern: ^/v1/public/animals/[0-9a-fA-F-]{36}/photo$
+    upstream: api
+    owner: services/api/app/api/media.py
+    reason: LINE retrieves a current walk-photo capability over public HTTPS.
+    query_policy: preserve
+    evidence: [services/api/app/api/line_webhook.py]
+    tests: [tests/integration/test_public_adoption_photo.py]
+  - id: public_adoption_photo
+    methods: [GET, HEAD]
+    path_pattern: ^/v1/public/adoption/animals/[0-9a-fA-F-]{36}/photo$
+    upstream: api
+    owner: services/api/app/api/media.py
+    reason: LINE retrieves a current adoption-photo capability over public HTTPS.
+    query_policy: preserve
+    evidence: [services/api/app/api/line_webhook.py]
+    tests: [tests/integration/test_public_adoption_photo.py]
+
+decisions:
+  - route: /assigned-care/{occurrenceId}
+    decision: DENY
+    owner: product-owner-default-policy
+    date: 2026-09-04
+    reason: No LINE message, LIFF link producer or navigation flow references this page; direct E2E coverage alone is not public-entry evidence.
+    reconsider_when: A reviewed LINE/LIFF producer and tenant-safe vertical test are added.
+  - route: /care-report
+    decision: ALLOW
+    owner: volunteer-reporting
+    date: 2026-09-04
+    reason: Existing LIFF recovery, volunteer authorization, draft consumers and E2E prove it is the report fallback surface.
+    reconsider_when: The LIFF fallback is retired.
+  - route: remote-management-demo
+    decision: NOT_IMPLEMENTED_LOCAL_ONLY
+    owner: product-owner-default-policy
+    date: 2026-09-04
+    reason: No explicit owner requirement authorizes public management exposure; use a separate future deployment/profile specification.
+    reconsider_when: A product owner supplies an explicit synthetic-only remote demo requirement.
+
+explicit_denies:
+  - /login
+  - /
+  - /animals
+  - /reports
+  - /settings/**
+  - /platform-admins
+  - /assigned-care/**
+  - /v1/auth/login
+  - /v1/management/**
+  - /v1/platform/**
+  - /v1/organizations/**
+  - /docs
+  - /redoc
+  - /openapi.json
+  - /debug/**
+  - /internal/**
+  - /v1/** (unless listed above)
+  - /** (unless listed above)

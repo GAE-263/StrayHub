@@ -48,55 +48,117 @@ http {
         listen 127.0.0.1:__NGINX_PORT__;
         server_name localhost;
 
-        location = /healthz {
-            proxy_pass http://strayhub_api;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # allowlist: volunteer_entry_page
+        location = /volunteer-entry {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
+            proxy_pass http://strayhub_web;
         }
 
-        # No URI suffix on proxy_pass: FastAPI receives the complete /v1/... path.
-        location ^~ /v1/ {
-            proxy_pass http://strayhub_api;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $forwarded_proto;
-        }
-
+        # allowlist: volunteer_application_page
         location = /volunteer-application {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
             proxy_pass http://strayhub_web;
-            proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $forwarded_proto;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
         }
 
-        # Next.js assets and webpack HMR must never fall through to FastAPI.
-        location ^~ /_next/ {
+        # allowlist: animal_confirmation_page
+        location = /animal-confirmation {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
             proxy_pass http://strayhub_web;
-            proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $forwarded_proto;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
+        }
+
+        # allowlist: care_report_fallback_page
+        location = /care-report {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
+            proxy_pass http://strayhub_web;
+        }
+
+        # allowlist: next_static_assets
+        location ~ "^/_next/static/[A-Za-z0-9_./-]+$" {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
+            proxy_pass http://strayhub_web;
+        }
+
+        # allowlist: next_dev_hmr
+        location = /_next/webpack-hmr {
+            if ($request_method != GET) { return 404; }
+            proxy_pass http://strayhub_web;
+        }
+
+        # allowlist: line_webhook
+        location = /v1/line/webhook {
+            if ($request_method != POST) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: liff_exchange
+        # allowlist: session_refresh
+        # allowlist: volunteer_application_status
+        # allowlist: volunteer_application_self_status
+        # allowlist: volunteer_application_submit
+        # allowlist: qr_resolve
+        # allowlist: qr_candidate_organization
+        # allowlist: care_report_handoff
+        location ~ ^/v1/(auth/(liff/exchange|refresh)|volunteer-applications(/(status|self-status))?|qr-tokens/(resolve|candidate-organization)|care-report-handoffs)$ {
+            if ($request_method != POST) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: current_identity
+        # allowlist: public_volunteer_organizations
+        # allowlist: animal_search
+        # allowlist: current_line_draft
+        location ~ ^/v1/(auth/me|public/volunteer-organizations|animals/search|line/care-report/drafts/current)$ {
+            if ($request_method != GET) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: active_shelter_context
+        location = /v1/auth/active-shelter-context {
+            if ($request_method !~ ^(GET|PUT)$) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: volunteer_application_withdraw
+        location ~ "^/v1/volunteer-applications/[0-9a-fA-F-]{36}/withdraw$" {
+            if ($request_method != POST) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: animal_confirm
+        location ~ "^/v1/animals/[0-9a-fA-F-]{36}/confirm$" {
+            if ($request_method != POST) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: update_care_report_draft
+        location ~ "^/v1/care-report-drafts/[0-9a-fA-F-]{36}$" {
+            if ($request_method != PATCH) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: volunteer_walk_photo
+        location ~ "^/v1/public/animals/[0-9a-fA-F-]{36}/photo$" {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
+            proxy_pass http://strayhub_api;
+        }
+
+        # allowlist: public_adoption_photo
+        location ~ "^/v1/public/adoption/animals/[0-9a-fA-F-]{36}/photo$" {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
+            proxy_pass http://strayhub_api;
         }
 
         location / {
-            proxy_pass http://strayhub_web;
-            proxy_http_version 1.1;
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $forwarded_proto;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
+            default_type text/plain;
+            return 404;
         }
     }
 }

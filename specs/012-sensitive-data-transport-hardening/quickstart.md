@@ -13,6 +13,12 @@ Credential URL 事件請依 [`docs/security/credential-url-incident-runbook.md`]
 
 ## 2. Static policy validation
 
+執行：
+
+```bash
+uv run python scripts/check_sensitive_transport_policy.py
+```
+
 檢查範圍：
 
 ```text
@@ -74,10 +80,13 @@ nginx/Next/Uvicorn/application logs: no raw sentinel
 ALLOW  configured LINE webhook
 ALLOW  required LIFF pages and exchange/report APIs
 ALLOW  required public image capability
+ALLOW  /care-report（有 LIFF recovery 與 draft consumer 證據）
 DENY   /login
 DENY   management pages
 DENY   /v1/management/**
 DENY   platform-admin routes
+DENY   /assigned-care/{id}（目前沒有 LINE/LIFF public link producer）
+DENY   arbitrary /v1/** and unknown Next routes
 ```
 
 LINE webhook 測試必須保留有效 `X-Line-Signature`；不得為了 smoke 關閉簽章驗證。
@@ -96,6 +105,15 @@ LINE webhook 測試必須保留有效 `X-Line-Signature`；不得為了 smoke �
 
 預期原始 sentinel 次數為 0；method、path、status、latency 與 correlation 仍可辨識。掃描完成後清理暫存 artifact 並回報 `cleaned=true`。
 
+自動 synthetic runner：
+
+```bash
+uv run python scripts/verify_sensitive_transport_runtime.py
+```
+
+輸出只包含 run ID、sentinel digest、surface status 與 occurrence count。ngrok inspector、remote
+retention、真實瀏覽器 history/HAR 若未由 operator 檢查，必須標 `MANUAL_ACTION_REQUIRED`。
+
 ## 7. Suggested targeted commands
 
 依實際修改檔案選用 repository 已存在的 scripts：
@@ -105,6 +123,9 @@ npm --prefix apps/web test -- login
 npm --prefix apps/web run typecheck
 uv run pytest tests/security/test_observability_logging.py
 uv run pytest tests/contract/test_line_local_helper.py
+uv run pytest tests/e2e/test_local_line_tunnel_boundary.py
+uv run pytest tests/security/test_sensitive_transport_static_policy.py
+uv run pytest tests/security/test_sensitive_transport_runtime.py
 uv run pytest tests/contract/test_gce_production_nginx_contract.py
 uv run pytest tests/unit/test_qr_deep_link.py
 uv run pytest tests/unit/test_line_role_menu_actions.py
@@ -140,3 +161,16 @@ uv run pytest
 - Cross-tenant capability acceptance = 0。
 - Legitimate query／LINE／LIFF regression = 0。
 - Temporary evidence cleanup = true。
+
+## 10. Reviewer checklist
+
+- 新 login/form 是否仍有 `POST /login` fallback 及 hydration gate？
+- 新 redirect/query builder 是否把 Class A 放入 URL？
+- 新 QR、LIFF entry、signed URL 或 capability 是否先更新 Sensitive URL Registry？
+- 新 public LINE route 是否有 method、owner、consumer evidence、test，並更新 tunnel allowlist？
+- 新 logger/audit field 是否經 central redaction，exception 與 nested data 是否有 sentinel test？
+- nginx sensitive route 是否只使用 method、`$uri`、status、bytes、latency？
+- 文件或 test fixture 的例外是否為 exact path、具 owner/reason，而非 global skip？
+
+Deferred：MFA、OAuth/cookie migration、refresh-token redesign、全站 CSP、zero-trust、CDN/storage
+redesign、QR/LIFF TTL redesign。這些不屬於本 feature implementation。

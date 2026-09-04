@@ -63,3 +63,19 @@ notes_without_secret:
 ## Recovery limitation
 
 完成本 runbook 不代表所有第三方、同步裝置或備份副本已被證明刪除。結案只能聲明已輪替 credential、已撤銷 session、已清理可控制副本，以及仍無法驗證的 retention surface。
+
+## Engineering prevention checks
+
+事件處理不取代 repository 防回歸。修正或新增 form、URL builder、LIFF/QR capability、logger
+或 tunnel route 後執行：
+
+```bash
+uv run python scripts/check_sensitive_transport_policy.py
+uv run python scripts/verify_sensitive_transport_runtime.py
+uv run pytest tests/e2e/test_local_line_tunnel_boundary.py
+```
+
+第一個命令拒絕 unsafe login fallback、production hard-coded demo password、Class A URL、unsafe
+nginx sensitive format 與 tunnel catch-all。第二個命令只輸出 synthetic sentinel digest；外部
+ngrok inspector、瀏覽器同步 history 與 remote retention 仍必須保留為人工 evidence，不能用本機
+PASS 取代。

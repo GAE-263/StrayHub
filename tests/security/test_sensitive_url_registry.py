@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from scripts.check_sensitive_transport_policy import (
+    Candidate,
+    scan_url_candidates,
+    url_violations,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = (
@@ -46,23 +49,6 @@ REQUIRED_FIELDS = {
     "tests",
     "review_trigger",
 }
-SENSITIVE_KEY = re.compile(
-    r"(?:password|secret|credential|authorization|access[_-]?token|refresh[_-]?token|"
-    r"id[_-]?token|qr[_-]?token|entry(?:[_-]?reference)?|signed[_-]?url)",
-    re.IGNORECASE,
-)
-QUERY_LITERAL = re.compile(r"[?&](?P<key>[A-Za-z][A-Za-z0-9_.-]*)=")
-QUERY_READER = re.compile(
-    r"\.(?P<operation>get|has|set)\(\s*[\"'](?P<key>[A-Za-z][A-Za-z0-9_.-]*)[\"']"
-)
-
-
-@dataclass(frozen=True)
-class Candidate:
-    path: str
-    line: int
-    key: str
-    rule: str
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -71,22 +57,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return document
 
 
-def _registered_keys(registry: dict[str, Any]) -> dict[str, set[str]]:
-    result: dict[str, set[str]] = {}
-    for entry in registry["entries"]:
-        for key in [entry["parameter"], *entry.get("aliases", [])]:
-            result.setdefault(str(key).casefold(), set()).add(entry["class"])
-    return result
-
-
 def _scan_text(path: str, source: str) -> list[Candidate]:
-    candidates: list[Candidate] = []
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        for match in QUERY_LITERAL.finditer(line):
-            candidates.append(Candidate(path, line_number, match["key"], "query_construction"))
-        for match in QUERY_READER.finditer(line):
-            candidates.append(Candidate(path, line_number, match["key"], "query_reader"))
-    return candidates
+    return scan_url_candidates(path, source)
 
 
 def _violations(
@@ -94,33 +66,7 @@ def _violations(
     registry: dict[str, Any],
     ignores: dict[str, Any],
 ) -> list[str]:
-    known = _registered_keys(registry)
-    exact_ignores = {
-        (item["path"], item["rule"], item["parameter"].casefold()) for item in ignores["ignores"]
-    }
-    violations: list[str] = []
-    for candidate in candidates:
-        key = candidate.key.casefold()
-        classes = known.get(key, set())
-        ignored = (candidate.path, candidate.rule, key) in exact_ignores
-        if not SENSITIVE_KEY.search(key):
-            continue
-        if ignored:
-            continue
-        if not classes:
-            violations.append(
-                f"{candidate.path}:{candidate.line} unregistered sensitive URL key "
-                f"{candidate.key!r}; "
-                "register the exact route/key or remove it"
-            )
-            continue
-        if "A" in classes:
-            if candidate.rule != "query_reader":
-                violations.append(
-                    f"{candidate.path}:{candidate.line} Class A key "
-                    f"{candidate.key!r} is forbidden in URLs"
-                )
-    return violations
+    return [finding.render() for finding in url_violations(candidates, registry, ignores)]
 
 
 def _production_candidates() -> list[Candidate]:

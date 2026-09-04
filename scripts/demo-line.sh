@@ -56,7 +56,7 @@ load_dotenv_value() {
   fi
 }
 
-for dotenv_name in NGROK_URL API_HOST API_PORT WEB_HOST WEB_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE PII_LOCAL_KEY_BASE64; do
+for dotenv_name in NGROK_URL API_HOST API_PORT WEB_HOST WEB_PORT NGINX_PORT START_WORKER LIFF_ID LINE_LOGIN_CHANNEL_ID SHELTER_ENTRY_REFERENCE PII_LOCAL_KEY_BASE64; do
   load_dotenv_value "$dotenv_name"
 done
 
@@ -65,6 +65,9 @@ API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8001}"
 WEB_HOST="${WEB_HOST:-127.0.0.1}"
 WEB_PORT="${WEB_PORT:-3001}"
+NGINX_PORT="${NGINX_PORT:-8082}"
+NGINX_BIN="${NGINX_BIN:-nginx}"
+NGINX_TEMPLATE="infra/local/nginx/line-local.conf.template"
 START_WORKER="${START_WORKER:-1}"
 LIFF_ID="${LIFF_ID:-}"
 LINE_LOGIN_CHANNEL_ID="${LINE_LOGIN_CHANNEL_ID:-}"
@@ -177,6 +180,7 @@ export WEB_PUBLIC_BASE_URL="$NGROK_URL"
 require_command uv
 require_command npm
 require_command curl
+require_command python3
 if [[ "$LIFF_ID" != fake-* ]] && {
   [[ -z "$LINE_LOGIN_CHANNEL_ID" ]] || [[ "$LINE_LOGIN_CHANNEL_ID" == fake-* ]];
 }; then
@@ -185,8 +189,10 @@ if [[ "$LIFF_ID" != fake-* ]] && {
 fi
 export LINE_LOGIN_CHANNEL_ID
 require_command ngrok
+require_command "$NGINX_BIN"
 require_port_available "API" "$API_PORT"
 require_port_available "Web" "$WEB_PORT"
+require_port_available "Gateway" "$NGINX_PORT"
 
 if [[ -z "${AUTH_JWT_ACTIVE_PRIVATE_KEY:-}" || -z "${AUTH_JWT_ACTIVE_PUBLIC_KEY:-}" ]]; then
   require_command openssl
@@ -233,16 +239,11 @@ curl --max-time 5 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null || {
   exit 1
 }
 
-echo "[Line Demo] Starting Web tunnel (ngrok: ${NGROK_URL})"
-start_tunnel "Web" "$WEB_PORT" "$log_dir/web.log"
-WEB_TUNNEL_URL="$TUNNEL_URL"
-WEB_TUNNEL_HOST="${WEB_TUNNEL_URL#https://}"
-
-# Next.js proxies /v1 server-side, so FastAPI stays private on the same host.
+# FastAPI and Next.js remain private upstreams behind the allowlisted gateway.
 API_BASE_URL="http://${API_HOST}:${API_PORT}"
 echo "[Line Demo] Starting Next.js with local API proxy"
 API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
-  LINE_DEMO_WEB_ORIGIN_HOST="$WEB_TUNNEL_HOST" \
+  LINE_DEMO_WEB_ORIGIN_HOST="${NGROK_URL#https://}" \
   npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
 pids+=("$!")
 
@@ -257,8 +258,55 @@ curl --max-time 5 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/nu
   exit 1
 }
 
-echo "[Line Demo] Web tunnel health check"
-wait_for_tunnel_http "Web" "$WEB_TUNNEL_URL" "/volunteer-entry"
+NGINX_PREFIX="$log_dir/nginx"
+NGINX_CONFIG_FILE="$NGINX_PREFIX/line-local.conf"
+mkdir -p "$NGINX_PREFIX/logs"
+python3 - "$NGINX_TEMPLATE" "$NGINX_CONFIG_FILE" \
+  "$API_PORT" "$WEB_PORT" "$NGINX_PORT" <<'PY'
+from pathlib import Path
+import sys
+
+template_path, output_path, api_port, web_port, nginx_port = sys.argv[1:]
+text = Path(template_path).read_text(encoding="utf-8")
+for key, value in {
+    "__API_PORT__": api_port,
+    "__WEB_PORT__": web_port,
+    "__NGINX_PORT__": nginx_port,
+}.items():
+    text = text.replace(key, value)
+if "__" in text:
+    raise SystemExit("unresolved nginx template placeholder")
+Path(output_path).write_text(text, encoding="utf-8")
+PY
+"$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -t
+echo "[Line Demo] Starting default-deny LINE gateway"
+"$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -g "daemon off;" &
+pids+=("$!")
+for _ in $(seq 1 30); do
+  if curl --max-time 1 -fsS "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+curl --max-time 5 -fsS "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null || {
+  echo "Default-deny gateway health check failed" >&2
+  exit 1
+}
+for denied_path in /login /v1/management/dashboard /v1/not-allowlisted; do
+  denied_status="$(curl --max-time 3 -sS -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:${NGINX_PORT}${denied_path}")"
+  if [[ "$denied_status" != "404" ]]; then
+    echo "Gateway must deny ${denied_path}; received HTTP ${denied_status}" >&2
+    exit 1
+  fi
+done
+
+echo "[Line Demo] Starting public gateway tunnel (ngrok: ${NGROK_URL})"
+start_tunnel "Gateway" "$NGINX_PORT" "$log_dir/gateway.log"
+WEB_TUNNEL_URL="$TUNNEL_URL"
+
+echo "[Line Demo] Public gateway health check"
+wait_for_tunnel_http "Gateway" "$WEB_TUNNEL_URL" "/volunteer-entry"
 
 if [[ "$START_WORKER" == "1" ]]; then
   echo "[Line Demo] Starting worker"

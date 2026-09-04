@@ -72,6 +72,11 @@
 2. **Given** 開發者明確啟用遠端管理展示，**When** tunnel 啟動，**Then** 系統要求短效 credential、synthetic data 與醒目的暴露提示。
 3. **Given** tunnel 結束，**When** 開發者再次啟動，**Then** 不沿用上次的短效 credential 或敏感檢查紀錄。
 
+**Implementation disposition (2026-09-04)**: 產品 owner 尚未提出遠端 management demo
+需求，因此本 feature 採 `NOT IMPLEMENTED — local-only management`。Acceptance Scenario 2／3
+不建立隱含例外；若未來確有需求，必須另立獨立 deployment/profile 規格與 owner 審核，不得擴張
+LINE／LIFF allowlist。
+
 ---
 
 ### User Story 5 - 變更前即可阻止回歸 (Priority: P2)

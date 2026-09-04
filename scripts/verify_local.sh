@@ -6,6 +6,10 @@ cd "$ROOT_DIR"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/strayhub-uv-cache}"
 export STRAYHUB_TEST_DATABASE_URL="${STRAYHUB_TEST_DATABASE_URL:-postgresql://strayhub:strayhub@127.0.0.1:65432/strayhub_test}"
 export DATABASE_URL="postgresql+asyncpg://${STRAYHUB_TEST_DATABASE_URL#postgresql://}"
+
+echo "[SEC-C03] Sensitive transport static policy"
+uv run python scripts/check_sensitive_transport_policy.py
+
 uv run python -c 'from scripts.test_database import require_test_database; require_test_database()'
 
 COMPOSE_FILE="infra/local/docker-compose.yml"

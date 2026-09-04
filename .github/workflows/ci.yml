@@ -34,7 +34,11 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
+      - name: Install nginx runtime dependency
+        run: sudo apt-get update && sudo apt-get install --yes nginx
       - run: uv sync --dev
+      - name: Sensitive transport static policy
+        run: uv run python scripts/check_sensitive_transport_policy.py
       - run: uv run alembic upgrade head
       - run: uv run ruff check .
       - run: uv run ruff format --check .

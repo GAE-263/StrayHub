@@ -50,7 +50,7 @@ address bar、history、network target及login response均無credential；正常
 
 ### SEC-A01 / SEC-A03 — Login native fallback與基礎回歸
 
-- [X] T001 [P] [US1] 先在 `apps/web/app/login/page.test.tsx` 新增SSR/form contract failing tests，驗證form明確為`method="post" action="/login"`、初始submit disabled、username/password初值為空且autocomplete語意保留
+- [x] T001 [P] [US1] 先在 `apps/web/app/login/page.test.tsx` 新增SSR/form contract failing tests，驗證form明確為`method="post" action="/login"`、初始submit disabled、username/password初值為空且autocomplete語意保留
   - **Goal**: deterministic捕捉native GET與hard-coded prefill回歸。
   - **Files**: 新增`apps/web/app/login/page.test.tsx`；必要時只讀`apps/web/components/ui/input.tsx`與`button.tsx`。
   - **Dependencies**: 無；test first。
@@ -61,7 +61,7 @@ address bar、history、network target及login response均無credential；正常
   - **Parallel**: 可與T003、T009平行。
   - **Independent commit**: 否；與T002一起形成passing commit。
 
-- [X] T002 [US1] 在 `apps/web/app/login/page.tsx` 實作SEC-A01 fail-closed form與hydration gate，移除hard-coded username/password但保持JSON `POST /v1/auth/login`
+- [x] T002 [US1] 在 `apps/web/app/login/page.tsx` 實作SEC-A01 fail-closed form與hydration gate，移除hard-coded username/password但保持JSON `POST /v1/auth/login`
   - **Goal**: browser native fallback永不形成credential query，hydrated登入行為不變。
   - **Files**: `apps/web/app/login/page.tsx`。
   - **Dependencies**: T001。
@@ -74,7 +74,7 @@ address bar、history、network target及login response均無credential；正常
 
 ### SEC-A02 — Legacy credential URL canonicalization
 
-- [X] T003 [P] [US1] 先在 `apps/web/app/login/page.test.tsx` 與 `apps/web/e2e/login-url-safety.spec.ts` 新增legacy Class A query failing tests
+- [x] T003 [P] [US1] 先在 `apps/web/app/login/page.test.tsx` 與 `apps/web/e2e/login-url-safety.spec.ts` 新增legacy Class A query failing tests
   - **Goal**: 定義SSR/client清理時機、replace history、error handling與不反射credential的契約。
   - **Files**: `apps/web/app/login/page.test.tsx`、新增`apps/web/e2e/login-url-safety.spec.ts`。
   - **Dependencies**: 無；可先以現況頁面建立失敗證據。
@@ -85,7 +85,7 @@ address bar、history、network target及login response均無credential；正常
   - **Parallel**: 可與T001、T009平行。
   - **Independent commit**: 否；與T004一起形成passing commit。
 
-- [X] T004 [US1] 將login server/client邊界拆至 `apps/web/app/login/page.tsx` 與 `apps/web/app/login/LoginClient.tsx`，在最早可行時點canonicalize Class A query並套用login-specific no-store/no-referrer policy
+- [x] T004 [US1] 將login server/client邊界拆至 `apps/web/app/login/page.tsx` 與 `apps/web/app/login/LoginClient.tsx`，在最早可行時點canonicalize Class A query並套用login-specific no-store/no-referrer policy
   - **Goal**: 舊`/login?...credential...`不被採信，最終只留下`/login`且不新增敏感history entry。
   - **Files**: `apps/web/app/login/page.tsx`、新增`apps/web/app/login/LoginClient.tsx`；若現有Next header pattern可重用，限縮修改`apps/web/next.config.ts`，否則以login route response/page metadata完成。
   - **Dependencies**: T002、T003。
@@ -98,7 +98,7 @@ address bar、history、network target及login response均無credential；正常
 
 ### SEC-A03 — 完整browser/network matrix
 
-- [X] T005 [US1] 更新 `apps/web/e2e/login-home.spec.ts` 並完成 `apps/web/e2e/login-url-safety.spec.ts` 的成功、失敗、click、Enter與network assertions
+- [x] T005 [US1] 更新 `apps/web/e2e/login-home.spec.ts` 並完成 `apps/web/e2e/login-url-safety.spec.ts` 的成功、失敗、click、Enter與network assertions
   - **Goal**: E2E不再依賴預填帳密，並證明credential只在request body。
   - **Files**: `apps/web/e2e/login-home.spec.ts`、`apps/web/e2e/login-url-safety.spec.ts`、必要時`apps/web/e2e/fixtures.ts`。
   - **Dependencies**: T002、T004。
@@ -109,7 +109,7 @@ address bar、history、network target及login response均無credential；正常
   - **Parallel**: 否，與T006共用新spec，序列執行避免衝突。
   - **Independent commit**: 是，可作`SEC-A03 browser matrix` commit。
 
-- [X] T006 [US1] 在 `apps/web/e2e/login-url-safety.spec.ts` 與 `apps/web/playwright.config.ts`（僅如必要）加入no-JS/native fallback及deterministic hydration-race驗證
+- [x] T006 [US1] 在 `apps/web/e2e/login-url-safety.spec.ts` 與 `apps/web/playwright.config.ts`（僅如必要）加入no-JS/native fallback及deterministic hydration-race驗證
   - **Goal**: 覆蓋真正造成事件的JS disabled與handler尚未掛載視窗。
   - **Files**: `apps/web/e2e/login-url-safety.spec.ts`；只有需獨立project時才改`apps/web/playwright.config.ts`。
   - **Dependencies**: T005。
@@ -122,7 +122,7 @@ address bar、history、network target及login response均無credential；正常
 
 ### SEC-A04 — Incident containment（文件與人工操作分離）
 
-- [X] T007 [P] [US1] 在 `docs/security/credential-url-incident-runbook.md` 建立30分鐘incident runbook並由 `specs/012-sensitive-data-transport-hardening/quickstart.md` 連結
+- [x] T007 [P] [US1] 在 `docs/security/credential-url-incident-runbook.md` 建立30分鐘incident runbook並由 `specs/012-sensitive-data-transport-hardening/quickstart.md` 連結
   - **Goal**: 將stop、rotation、session invalidation、log cleanup與不可回收副本風險變成可重複流程。
   - **Files**: 新增`docs/security/credential-url-incident-runbook.md`、`specs/012-sensitive-data-transport-hardening/quickstart.md`。
   - **Dependencies**: 無；內容依security-analysis既定範圍。
@@ -159,7 +159,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
 
 ### SEC-B01 — Machine-readable Sensitive URL Registry
 
-- [X] T009 [P] [US2] 建立 `specs/012-sensitive-data-transport-hardening/contracts/sensitive-url-registry.yaml` 作唯一Sensitive URL Registry source of truth
+- [x] T009 [P] [US2] 建立 `specs/012-sensitive-data-transport-hardening/contracts/sensitive-url-registry.yaml` 作唯一Sensitive URL Registry source of truth
   - **Goal**: 完整登錄A/B/C/D與例外owner/review規則，不建立通用token service。
   - **Files**: 新增`specs/012-sensitive-data-transport-hardening/contracts/sensitive-url-registry.yaml`、更新`contracts/security-boundary.md`指向它。
   - **Dependencies**: 無；可與Phase A平行。
@@ -170,7 +170,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
   - **Parallel**: 可與T001-T007平行。
   - **Independent commit**: 是，policy-only commit。
 
-- [X] T010 [US2] 先在 `tests/security/test_sensitive_url_registry.py` 建立registry schema/completeness failing tests與精準ignore機制
+- [x] T010 [US2] 先在 `tests/security/test_sensitive_url_registry.py` 建立registry schema/completeness failing tests與精準ignore機制
   - **Goal**: CI可部分驗證新增route/query，且避免文件/fixture中的`password`字樣造成naive grep false positive。
   - **Files**: 新增`tests/security/test_sensitive_url_registry.py`、必要時新增`tests/security/fixtures/sensitive_url_scan_ignores.yaml`。
   - **Dependencies**: T009。
@@ -183,7 +183,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
 
 ### SEC-B04 — Capability lifecycle證據與最小修正
 
-- [X] T011 [P] [US2] 補強photo與staff signed URL tests於 `tests/integration/test_public_adoption_photo.py`、`tests/isolation/test_timeline_and_media_isolation.py`、`tests/security/test_observability_logging.py`
+- [x] T011 [P] [US2] 補強photo與staff signed URL tests於 `tests/integration/test_public_adoption_photo.py`、`tests/isolation/test_timeline_and_media_isolation.py`、`tests/security/test_observability_logging.py`
   - **Goal**: 鎖定既有300秒TTL、purpose/org/animal/object scope及response URL不被log。
   - **Files**: 上述三個既有test files；不改TTL。
   - **Dependencies**: T009。
@@ -194,7 +194,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
   - **Parallel**: 可與T012、T014、T016平行。
   - **Independent commit**: 是，test-only passing commit可獨立提交。
 
-- [X] T012 [P] [US2] 補強QR與LIFF entry lifecycle tests於 `tests/unit/test_qr_management.py`、`tests/isolation/test_liff_entry_isolation.py`、`apps/web/e2e/animal-confirmation-qr.spec.ts`、`apps/web/app/(volunteer)/volunteer-entry/page.test.tsx`
+- [x] T012 [P] [US2] 補強QR與LIFF entry lifecycle tests於 `tests/unit/test_qr_management.py`、`tests/isolation/test_liff_entry_isolation.py`、`apps/web/e2e/animal-confirmation-qr.spec.ts`、`apps/web/app/(volunteer)/volunteer-entry/page.test.tsx`
   - **Goal**: 證明QR可撤銷/重生/重放至撤銷、entry 90天/可撤銷/可rotate且兩者tenant-bound，並驗證URL scrub不破壞LIFF recovery。
   - **Files**: 指定四個test files；必要時`tests/unit/test_qr_deep_link.py`。
   - **Dependencies**: T009。
@@ -205,7 +205,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
   - **Parallel**: 可與T011、T014、T016平行。
   - **Independent commit**: 是，test-only passing commit可獨立提交。
 
-- [X] T013 [US2] 僅在T011/T012證明scrub/log lifecycle與spec不一致時，於 `apps/web/app/(volunteer)/volunteer-entry/VolunteerEntryClient.tsx`、`liffUrl.ts`、`VolunteerApplicationClient.tsx`、`apps/web/app/(volunteer)/animal-confirmation/page.tsx` 做最小修正（N/A：既有capture/recovery後replace生命週期符合contract；route-specific Referrer-Policy缺口已記錄為discrepancy，未在本task重設計）
+- [x] T013 [US2] 僅在T011/T012證明scrub/log lifecycle與spec不一致時，於 `apps/web/app/(volunteer)/volunteer-entry/VolunteerEntryClient.tsx`、`liffUrl.ts`、`VolunteerApplicationClient.tsx`、`apps/web/app/(volunteer)/animal-confirmation/page.tsx` 做最小修正（N/A：既有capture/recovery後replace生命週期符合contract；route-specific Referrer-Policy缺口已記錄為discrepancy，未在本task重設計）
   - **Goal**: Class B只在必要流程階段存在於URL，且不改TTL/授權模型。
   - **Files**: 列出的四個frontend lifecycle files及T012 tests；未發現差異時以N/A evidence關閉task、不製造無效code change。
   - **Dependencies**: T011、T012。
@@ -218,7 +218,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
 
 ### SEC-B05 — CLI與demo credential輸出安全
 
-- [X] T014 [P] [US2] 先在 `tests/contract/test_volunteer_entry_reference_cli.py` 與 `tests/contract/test_local_product_quality_contract.py` 建立CLI/default-output failing tests
+- [x] T014 [P] [US2] 先在 `tests/contract/test_volunteer_entry_reference_cli.py` 與 `tests/contract/test_local_product_quality_contract.py` 建立CLI/default-output failing tests
   - **Goal**: raw entry reference與runtime login credential不會因default/CI output被保存。
   - **Files**: 新增`tests/contract/test_volunteer_entry_reference_cli.py`、更新`tests/contract/test_local_product_quality_contract.py`。
   - **Dependencies**: T009。
@@ -229,7 +229,7 @@ C/D；photo、QR、entry、signed URL各自通過expiry/revocation/replay/tenant
   - **Parallel**: 可與T011/T012/T016平行。
   - **Independent commit**: 否；與T015一起形成passing commit。
 
-- [X] T015 [US2] 在 `scripts/issue_volunteer_entry_reference.py`、`scripts/demo.sh`、`scripts/demo-line.sh` 移除default raw credential輸出並提供明確interactive/explicit reveal流程
+- [x] T015 [US2] 在 `scripts/issue_volunteer_entry_reference.py`、`scripts/demo.sh`、`scripts/demo-line.sh` 移除default raw credential輸出並提供明確interactive/explicit reveal流程
   - **Goal**: 保留必要一次性發行能力，降低terminal/CI capture。
   - **Files**: 三個scripts、`README.md`與`docs/demo/data-workflows.md`中對應操作段落、T014 tests。
   - **Dependencies**: T014。
@@ -254,7 +254,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
 
 ### SEC-B02 — nginx sensitive-route safe logging
 
-- [X] T016 [P] [US3] 先擴充 `tests/contract/test_line_local_helper.py`、`tests/contract/test_gce_production_nginx_contract.py`、`tests/contract/test_gce_tls_edge_contract.py` 定義三套nginx sensitive-route log contract
+- [x] T016 [P] [US3] 先擴充 `tests/contract/test_line_local_helper.py`、`tests/contract/test_gce_production_nginx_contract.py`、`tests/contract/test_gce_tls_edge_contract.py` 定義三套nginx sensitive-route log contract
   - **Goal**: 在修改config前鎖定safe variables、實際route group及ordinary query例外。
   - **Files**: 三個指定contract test files。
   - **Dependencies**: T009提供route classification。
@@ -265,7 +265,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
   - **Parallel**: 可與T011/T012/T014/T018平行。
   - **Independent commit**: 否；與T017形成passing commit。
 
-- [X] T017 [US3] 在 `infra/local/nginx/line-local.conf.template`、`infra/edge-nginx/strayhub.enadv.quest.conf`、`infra/gce/nginx/strayhub.conf` 實作query-free/Referer-free sensitive route log map
+- [x] T017 [US3] 在 `infra/local/nginx/line-local.conf.template`、`infra/edge-nginx/strayhub.enadv.quest.conf`、`infra/gce/nginx/strayhub.conf` 實作query-free/Referer-free sensitive route log map
   - **Goal**: 所有部署/本機入口對相同敏感route產生最小但可診斷的access log。
   - **Files**: 三個nginx configs、T016 tests。
   - **Dependencies**: T016。
@@ -278,7 +278,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
 
 ### SEC-B03 — Application、exception與audit defense-in-depth
 
-- [X] T018 [P] [US3] 先擴充 `tests/security/test_observability_logging.py` 覆蓋application logger、exception、Authorization、nested/repeated/encoded URL與key variants
+- [x] T018 [P] [US3] 先擴充 `tests/security/test_observability_logging.py` 覆蓋application logger、exception、Authorization、nested/repeated/encoded URL與key variants
   - **Goal**: 證明不只`uvicorn.access`有redaction，並防止formatter結構被破壞。
   - **Files**: `tests/security/test_observability_logging.py`。
   - **Dependencies**: T009。
@@ -289,7 +289,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
   - **Parallel**: 可與T016、T020平行。
   - **Independent commit**: 否；與T019形成passing commit。
 
-- [X] T019 [US3] 在 `services/api/app/observability/logging.py`、`services/api/app/main.py` 及直接使用raw logger的API module套用既有最小redaction hook
+- [x] T019 [US3] 在 `services/api/app/observability/logging.py`、`services/api/app/main.py` 及直接使用raw logger的API module套用既有最小redaction hook
   - **Goal**: Uvicorn、application與exception log共享敏感結果，不重建logging architecture。
   - **Files**: `services/api/app/observability/logging.py`、`services/api/app/main.py`、確認需要時限縮修改`services/api/app/api/line_webhook.py`與`management_animals.py`改用`get_logger`。
   - **Dependencies**: T018。
@@ -300,7 +300,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
   - **Parallel**: 否，依賴T018。
   - **Independent commit**: 是，application logging commit。
 
-- [X] T020 [P] [US3] 先在 `tests/security/test_audit_sensitive_data.py` 建立AuditService defense-in-depth failing tests
+- [x] T020 [P] [US3] 先在 `tests/security/test_audit_sensitive_data.py` 建立AuditService defense-in-depth failing tests
   - **Goal**: 將audit視為最後防線，但不把現況誤報成已存在資料外洩。
   - **Files**: 新增`tests/security/test_audit_sensitive_data.py`。
   - **Dependencies**: T009。
@@ -311,7 +311,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
   - **Parallel**: 可與T018平行。
   - **Independent commit**: 否；與T021形成passing commit。
 
-- [X] T021 [US3] 在 `services/api/app/application/audit_service.py` 與必要的 `services/api/app/persistence/database/base.py` 加入central sensitive-field redaction/rejection
+- [x] T021 [US3] 在 `services/api/app/application/audit_service.py` 與必要的 `services/api/app/persistence/database/base.py` 加入central sensitive-field redaction/rejection
   - **Goal**: caller誤傳credential時audit DB不持久化Class A/B原值。
   - **Files**: 兩個指定files、T020 tests；優先重用`services/api/app/observability/logging.py`中無logging side effect的mask helper，若產生循環依賴則抽至既有security utility boundary而非新service。
   - **Dependencies**: T020；若重用T019 helper則亦依賴T019。
@@ -322,7 +322,7 @@ encoded structured data與exception，各受檢log/audit raw sentinel次數為0�
   - **Parallel**: 否，依賴T020/T019選型。
   - **Independent commit**: 是，audit hardening commit。
 
-- [X] T022 [US3] 在 `tests/security/test_next_proxy_sensitive_logging.py` 與 `apps/web/app/v1/[...path]/route.ts` 驗證Next proxy不自訂輸出raw URL/body，僅在runtime證明有自訂leak時加入最小safe diagnostic hook（以等價 `apps/web/app/v1/[...path]/route.test.ts` 驗證；repository proxy無custom leak，production route不需修改）
+- [x] T022 [US3] 在 `tests/security/test_next_proxy_sensitive_logging.py` 與 `apps/web/app/v1/[...path]/route.ts` 驗證Next proxy不自訂輸出raw URL/body，僅在runtime證明有自訂leak時加入最小safe diagnostic hook（以等價 `apps/web/app/v1/[...path]/route.test.ts` 驗證；repository proxy無custom leak，production route不需修改）
   - **Goal**: 關閉Next application-layer缺口但不破壞合法query forwarding。
   - **Files**: 新增`tests/security/test_next_proxy_sensitive_logging.py`或等價Web test；production change僅限`apps/web/app/v1/[...path]/route.ts`且須有實證。
   - **Dependencies**: T009、T018；nginx protection不作為Next安全假設。
@@ -347,7 +347,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
 
 ### SEC-C01 — Route evidence與default-deny tunnel
 
-- [ ] T023 [P] [US4] 從實際Web/API consumers產生並review `specs/012-sensitive-data-transport-hardening/contracts/line-tunnel-allowlist.yaml`，以vertical-flow證據決定`/care-report`與`/assigned-care/{id}`
+- [x] T023 [P] [US4] 從實際Web/API consumers產生並review `specs/012-sensitive-data-transport-hardening/contracts/line-tunnel-allowlist.yaml`，以vertical-flow證據決定`/care-report`與`/assigned-care/{id}`
   - **Goal**: 在改routing前取得最小且可追溯allowlist，不猜測open question。
   - **Files**: 新增`specs/012-sensitive-data-transport-hardening/contracts/line-tunnel-allowlist.yaml`、更新`contracts/security-boundary.md`。
   - **Dependencies**: T009 registry；可在Phase B logging implementation期間進行。
@@ -358,7 +358,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 可與T016-T022平行。
   - **Independent commit**: 是，route-policy commit。
 
-- [ ] T024 [US4] 先擴充 `tests/contract/test_line_local_helper.py` 建立default-deny config failing tests與完整allow/deny matrix
+- [x] T024 [US4] 先擴充 `tests/contract/test_line_local_helper.py` 建立default-deny config failing tests與完整allow/deny matrix
   - **Goal**: 保證local gateway不再把`/`與`/v1/` catch-all pass至app。
   - **Files**: `tests/contract/test_line_local_helper.py`；fixture讀T023 YAML。
   - **Dependencies**: T023。
@@ -369,7 +369,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 否，依賴route policy。
   - **Independent commit**: 否；與T025形成passing commit。
 
-- [ ] T025 [US4] 在 `infra/local/nginx/line-local.conf.template` 實作method/path default-deny allowlist並保留必要Next assets與WebSocket只在local dev
+- [x] T025 [US4] 在 `infra/local/nginx/line-local.conf.template` 實作method/path default-deny allowlist並保留必要Next assets與WebSocket只在local dev
   - **Goal**: 讓ngrok指向的單一gateway只轉送T023核准surface。
   - **Files**: local nginx template、T024 tests。
   - **Dependencies**: T017避免logging回歸、T024。
@@ -380,7 +380,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 否，與T017同檔需在其後。
   - **Independent commit**: 是，gateway allowlist commit。
 
-- [ ] T026 [US4] 修改 `scripts/demo-line.sh` 與 `scripts/test_line_local.sh` 共享T025 local nginx gateway，不再讓ngrok直接指向Next或不同catch-all路徑
+- [x] T026 [US4] 修改 `scripts/demo-line.sh` 與 `scripts/test_line_local.sh` 共享T025 local nginx gateway，不再讓ngrok直接指向Next或不同catch-all路徑
   - **Goal**: 防止修好一個helper、另一個仍公開整站。
   - **Files**: 兩個scripts、`tests/contract/test_line_local_helper.py`、必要時`tests/contract/test_local_product_quality_contract.py`。
   - **Dependencies**: T025、T015避免credential output回歸。
@@ -391,7 +391,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 否，依賴gateway。
   - **Independent commit**: 是，helper convergence commit。
 
-- [ ] T027 [US4] 在 `tests/e2e/test_local_line_tunnel_boundary.py` 建立synthetic runtime allow/deny與LINE vertical smoke
+- [x] T027 [US4] 在 `tests/e2e/test_local_line_tunnel_boundary.py` 建立synthetic runtime allow/deny與LINE vertical smoke
   - **Goal**: 用實際nginx routing證明contract，不要求CI連真實ngrok帳戶。
   - **Files**: 新增`tests/e2e/test_local_line_tunnel_boundary.py`、必要fixture限`tests/e2e/`。
   - **Dependencies**: T026。
@@ -404,7 +404,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
 
 ### SEC-C02 — Explicit remote management demo（非預設）
 
-- [ ] T028 [US4] 僅在產品owner確認保留遠端management demo時，於 `scripts/demo.sh` 與 `docs/demo/remote-management.md` 加入獨立explicit opt-in、synthetic guard及ephemeral credential/session revoke lifecycle
+- [x] T028 [US4] 僅在產品owner確認保留遠端management demo時，於 `scripts/demo.sh` 與 `docs/demo/remote-management.md` 加入獨立explicit opt-in、synthetic guard及ephemeral credential/session revoke lifecycle
   - **Goal**: 滿足spec US4第二情境，但不成為LINE demo預設例外。
   - **Files**: `scripts/demo.sh`、新增`docs/demo/remote-management.md`、`tests/contract/test_local_product_quality_contract.py`。
   - **Dependencies**: T007、T015、T026；需要owner decision。
@@ -429,7 +429,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
 
 ### SEC-C03 — Scoped static checks與cross-layer sentinel
 
-- [ ] T029 [P] [US5] 在 `tests/security/test_sensitive_transport_static_policy.py` 建立scoped static guard failing fixtures
+- [x] T029 [P] [US5] 在 `tests/security/test_sensitive_transport_static_policy.py` 建立scoped static guard failing fixtures
   - **Goal**: 定義login/form、URL construction、hard-coded runtime demo password、nginx與tunnel drift的精準規則。
   - **Files**: 新增`tests/security/test_sensitive_transport_static_policy.py`、新增`tests/security/fixtures/static-policy/`中的positive/negative小fixture。
   - **Dependencies**: T009/T010 registry schema、T023 tunnel policy。
@@ -440,7 +440,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 可與T032/T033平行，但依賴registry/tunnel policy文件。
   - **Independent commit**: 是，static policy tests commit。
 
-- [ ] T030 [US5] 將T010/T029 validator實作整理為 `scripts/check_sensitive_transport_policy.py`，提供deterministic CLI與remediation output
+- [x] T030 [US5] 將T010/T029 validator實作整理為 `scripts/check_sensitive_transport_policy.py`，提供deterministic CLI與remediation output
   - **Goal**: 本機與CI共用同一檢查，不複製規則。
   - **Files**: 新增`scripts/check_sensitive_transport_policy.py`、更新T010/T029 tests。
   - **Dependencies**: T010、T029。
@@ -451,7 +451,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 否，依賴測試規格。
   - **Independent commit**: 是，guard implementation commit。
 
-- [ ] T031 [US5] 將 `scripts/check_sensitive_transport_policy.py` 接入既有 `scripts/verify_local.sh` 與CI workflow的fast security gate
+- [x] T031 [US5] 將 `scripts/check_sensitive_transport_policy.py` 接入既有 `scripts/verify_local.sh` 與CI workflow的fast security gate
   - **Goal**: 讓未登錄sensitive URL與catch-all回歸在implementation前被拒絕。
   - **Files**: `scripts/verify_local.sh`、實際使用中的`.github/workflows/*.yml` security/test workflow、必要contract test；不得新增重複workflow。
   - **Dependencies**: T030。
@@ -462,7 +462,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 否，依賴checker穩定。
   - **Independent commit**: 是，CI integration commit。
 
-- [ ] T032 [P] [US5] 建立 `scripts/verify_sensitive_transport_runtime.py` 與 `tests/security/test_sensitive_transport_runtime.py` 的cross-layer synthetic sentinel runner
+- [x] T032 [P] [US5] 建立 `scripts/verify_sensitive_transport_runtime.py` 與 `tests/security/test_sensitive_transport_runtime.py` 的cross-layer synthetic sentinel runner
   - **Goal**: 可重複掃browser/network/nginx/Next/Uvicorn/application/audit/test artifact，報告只存digest。
   - **Files**: 新增兩個指定files；runtime temporary artifacts只放OS temp並cleanup。
   - **Dependencies**: T017、T019、T021、T022、T026。
@@ -475,7 +475,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
 
 ### SEC-C04 — 文件、review與final gate
 
-- [ ] T033 [P] [US5] 同步 `README.md`、`docs/security/credential-url-incident-runbook.md`、`specs/012-sensitive-data-transport-hardening/quickstart.md` 與 `contracts/security-boundary.md`
+- [x] T033 [P] [US5] 同步 `README.md`、`docs/security/credential-url-incident-runbook.md`、`specs/012-sensitive-data-transport-hardening/quickstart.md` 與 `contracts/security-boundary.md`
   - **Goal**: 讓developer知道A/B/C/D、registry更新、tunnel預設deny、incident及驗證命令。
   - **Files**: 四個指定documents。
   - **Dependencies**: T015、T017、T023、T026、T030；可在T032進行時撰寫。
@@ -486,7 +486,7 @@ route；login、management、platform、docs/debug/internal及未知route均不�
   - **Parallel**: 可與T032平行。
   - **Independent commit**: 是，documentation commit。
 
-- [ ] T034 [US5] 依 `specs/012-sensitive-data-transport-hardening/quickstart.md` 完成最終targeted、frontend、Python constitution與人工smoke驗收，記錄於 `specs/012-sensitive-data-transport-hardening/validation-result.md`
+- [x] T034 [US5] 依 `specs/012-sensitive-data-transport-hardening/quickstart.md` 完成最終targeted、frontend、Python constitution與人工smoke驗收，記錄於 `specs/012-sensitive-data-transport-hardening/validation-result.md`
   - **Goal**: 交付可merge、無scope creep且不含secret的完整evidence。
   - **Files**: 新增`specs/012-sensitive-data-transport-hardening/validation-result.md`；只有發現本feature regression才回到對應task修正，不順手擴scope。
   - **Dependencies**: T005-T033中本期採用的全部implementation；T028若owner判N/A則以decision evidence取代。

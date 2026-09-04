@@ -329,7 +329,22 @@ npm --prefix packages/contracts run check
 ./scripts/verify_local.sh
 ```
 
-Gate 會執行 Migration、空資料庫 Bootstrap、完整 Python／Frontend 測試、Ruff、TypeScript、Next build、OpenAPI generated types、MinIO／GCS adapter contract 與 Secret scan。沒有 Dockerfile 時，Docker build 會明確顯示為 skipped；這不代表 GCP 已部署。
+Sensitive transport fast gate：
+
+```bash
+uv run python scripts/check_sensitive_transport_policy.py
+uv run python scripts/verify_sensitive_transport_runtime.py
+```
+
+敏感 URL 依 Class A（禁止）、B（受限 capability）、C（公開 identifier）、D（一般 query）
+管理。新增 form、redirect、QR/LIFF/signed URL、logger 或 public route 前，先更新
+[`sensitive-url-registry.yaml`](specs/012-sensitive-data-transport-hardening/contracts/sensitive-url-registry.yaml)
+及必要時的
+[`line-tunnel-allowlist.yaml`](specs/012-sensitive-data-transport-hardening/contracts/line-tunnel-allowlist.yaml)。
+LINE/LIFF tunnel 預設 deny；`/login`、management 與未登錄 `/v1/**` 不對外。遠端 management
+demo 目前不實作，維持 [local-only decision](docs/demo/remote-management.md)。
+
+Gate 會先執行 sensitive transport static policy，再執行 Migration、空資料庫 Bootstrap、完整 Python／Frontend 測試、Ruff、TypeScript、Next build、OpenAPI generated types、MinIO／GCS adapter contract 與 Secret scan。沒有 Dockerfile 時，Docker build 會明確顯示為 skipped；這不代表 GCP 已部署。
 
 ## API／Contract／LINE 邊界
 

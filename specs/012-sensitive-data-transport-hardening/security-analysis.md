@@ -31,33 +31,33 @@ Sensitive URL Registry 及跨層 logging policy；Phase C 將 tunnel 改為 rout
 
 ### 2.1 confirmed
 
-| ID | 位置 | 現況與風險 | 發生條件／影響 |
-|---|---|---|---|
-| CF-01 | `apps/web/app/login/page.tsx:39-40, 65-70, 136-176` | Login form 無 `method`／`action`，只靠 `preventDefault()`；username/password 具 `name` 且 SSR 初值為固定 demo 帳密。 | hydration 前、JS disabled／failed 或 Enter 提交時，原生 GET 可把帳密寫入 URL。影響 address bar、history、log、tunnel inspector、分享與同源 Referer。|
-| CF-02 | `services/api/app/api/authentication.py:216-225` | 真正登入 API 是 JSON `POST /v1/auth/login`。Router 中沒有 GET login route。 | 正常 hydrated flow 不把 credential 放入 URL；原生 fallback 打到 Next `/login`，不是 API。|
-| CF-03 | `apps/web/app/login/page.tsx` 與 repository query consumer 搜尋 | Login page 沒有讀取 `searchParams`、username 或 password query。 | Legacy URL 不會直接登入，但也不會主動清除；秘密仍停留在 URL／history。|
-| CF-04 | `apps/web/e2e/login-home.spec.ts:13-24` | Login E2E 依賴預填 username/password，沒有 assertion request method/body 或 URL safety。 | 移除預填後既有測試需明確填 synthetic credential；目前不能阻止此回歸。|
-| CF-05 | 其他 Web forms | 多個 form 也只用 `onSubmit`；但已檢查到的管理 temporary-password inputs 沒有 `name`，不會被原生成功控制項序列化。 | 目前未發現第二個可重現的 password-in-query 點；仍應由 static contract 防止未來加 `name` 後重現。|
-| CF-06 | `services/api/app/observability/logging.py:8-67`、`services/api/app/main.py:41-43` | `SensitiveLogFilter` 能遮罩 token/secret/password/authorization 等，啟動時只明確掛到 `uvicorn.access`。 | Uvicorn request target 已受保護；一般 `logging.getLogger(__name__)` 與 handler 層的全域 coverage 未被證明。|
-| CF-07 | `tests/security/test_observability_logging.py` | 已測 photo capability Uvicorn redaction，並刻意保留 ordinary query。 | 目前沒有 `/login` query、Referer、application logger、exception 或 Next log 的跨層 sentinel test。|
-| CF-08 | `infra/local/nginx/line-local.conf.template:16-25`、`infra/edge-nginx/strayhub.enadv.quest.conf:10-19` | Standard format 記 `$request` 及 `$http_referer`；只有 public animal photo route 使用 query-free、Referer-free format。 | Login、LIFF entry、QR deep link 等若帶敏感 query，會進 standard access log。|
-| CF-09 | `infra/edge-nginx/strayhub.enadv.quest.conf:33`、`infra/gce/nginx/strayhub.conf:17` | HTTP→HTTPS redirect 保留 `$request_uri`。 | 若 client 已送達帶秘密 HTTP URL，第一個 HTTP request 已可被 access log／edge 看見，redirect 也會繼續攜帶 query。源頭禁止仍是主控制。|
-| CF-10 | `apps/web/app/v1/[...path]/route.ts:137-142` | Next proxy 將 `request.nextUrl.search` 原樣複製到 upstream。 | 合法 query 可運作，但任何已進 `/v1` URL 的秘密會再穿過 Next／Uvicorn；proxy 不是安全清理邊界。|
-| CF-11 | `scripts/test_line_local.sh`、`infra/local/nginx/line-local.conf.template` | 單一 ngrok 指向 local nginx；nginx 使用 `/v1/` 與 `/` catch-all。 | Internet 可到所有 Next route、所有 `/v1/**` API（仍受各 endpoint auth），不只 webhook／LIFF。|
-| CF-12 | `scripts/demo-line.sh:118, 209-242` | ngrok 直接指向 Next dev server，而 Next 再代理 `/v1`；同樣是 catch-all。 | `/login`、management pages、Next proxy APIs 全部暴露。|
-| CF-13 | Web route tree、FastAPI router registration | 公開 tunnel 可達 `/login`、`/`、`/animals/**`、`/reports/**`、`/settings/**`、`/shelters/**`、`/platform-admins`、`/volunteers/**`、volunteer pages、Next assets，以及所有 `/v1/**`。 | Authorization 仍在後端執行，但 attack surface 與 credential-stuffing 面被不必要擴大。|
-| CF-14 | `services/api/app/application/media_access.py:109-185, 217-296` | Animal photo capability 預設 300 秒，簽名且綁 purpose、organization、animal、object key digest；resolve 重新做 tenant/resource policy。 | Class B，可保留在 URL；必須 query-free logging，不應因本期任意改 TTL。|
-| CF-15 | `services/api/app/api/media.py:89-109` | Staff signed download URL 經 authenticated POST 取得，300 秒，storage adapter 生成。 | Class B；完整回傳 URL 不得進 app/audit log，storage host 的 log policy需納入 runtime 驗證。|
-| CF-16 | `services/api/app/application/qr_token_service.py:15-117`、`services/api/app/api/qr_codes.py:58-75` | QR token 是 HMAC opaque bearer，綁 QR id；DB 只存 digest，可 regenerate/revoke，但 token 本身沒有固定 TTL。Deep link 含 `organization_id` + `qr_token`。 | Class B；可重放至撤銷，初次頁面載入前仍可能進 edge/tunnel logs。|
-| CF-17 | `apps/web/app/(volunteer)/animal-confirmation/page.tsx:284-291` | QR payload 讀取後用 `history.replaceState` 清掉 query，API resolve 以 POST body 傳 token。 | 已有 browser-side scrub，但不能回收首次 HTTP request 已留下的 log。|
-| CF-18 | `ShelterVolunteerEntryReference` model／migration 0030、entry adapter | `entry` 為 32-byte random opaque reference，DB 存 digest，purpose/organization-bound，預設 90 天，可 revoke/rotate，resolver 檢查 expiry。 | Class B；不是短效值，需全程省略／遮罩及在 LIFF recovery 完成後清理。|
-| CF-19 | `VolunteerEntryClient.tsx`、`liffUrl.ts` | `entry` 會跨 LIFF redirect/recovery 保留；legacy `id_token` 會用 replace 清除，id token 後續以 POST body exchange。 | 現有 legacy scrub 是良好控制；`entry` 仍可能進 initial request、ngrok/nginx log。|
-| CF-20 | volunteer application frontend/API | Application status 使用 `POST /v1/volunteer-applications/status` 或 `/self-status`，LINE `id_token` 在 JSON body。 | repository 中沒有「application status short-lived URL token」；不得在 registry 虛構。|
-| CF-21 | GCE/edge nginx headers | 正式 nginx 使用 `Referrer-Policy: strict-origin-when-cross-origin`。 | 跨 origin 通常只送 origin；同 origin 導航/request 仍可能帶完整 path/query。Local LINE nginx 未設定此 header。|
-| CF-22 | `AuditService` 與 `model_dump_for_audit` | Audit persistence 會直接序列化 caller 提供的 before/after/reason，沒有中央敏感欄位 mask。 | 目前抽查的 account/QR audit 只存安全摘要，未找到 raw password/token；但未來 caller 誤傳時沒有最後防線。|
-| CF-23 | tracked env/deployment files | 真實 production secrets 由 Secret Manager/runtime file 注入；tracked `.env.example` 與 verification example 使用 fake/synthetic values。 | 未發現 tracked 真實 secret；這不代表本機 `.env` 或外部 log 未含秘密。|
-| CF-24 | README、seed/demo scripts、login UI | `local-only-password` 大量存在於 seed、文件、E2E、demo output；login UI 同時硬編碼帳號與密碼。 | Synthetic credential 本身可存在本機 fixture，但曾透過 public tunnel 可用且已進 URL，該實例須視為曝光、輪替並撤銷 session。|
-| CF-25 | frontend diagnostics search | LIFF diagnostics 只記 presence／state，不輸出 raw id token/entry；未找到 Sentry/PostHog/gtag 等自建 analytics。LIFF package 自帶 analytics dependency。 | 自建 analytics exposure：not found；第三方 LIFF/ngrok 行為仍需 runtime/供應商設定確認。|
+| ID    | 位置                                                                                                   | 現況與風險                                                                                                                                                                            | 發生條件／影響                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CF-01 | `apps/web/app/login/page.tsx:39-40, 65-70, 136-176`                                                    | Login form 無 `method`／`action`，只靠 `preventDefault()`；username/password 具 `name` 且 SSR 初值為固定 demo 帳密。                                                                  | hydration 前、JS disabled／failed 或 Enter 提交時，原生 GET 可把帳密寫入 URL。影響 address bar、history、log、tunnel inspector、分享與同源 Referer。 |
+| CF-02 | `services/api/app/api/authentication.py:216-225`                                                       | 真正登入 API 是 JSON `POST /v1/auth/login`。Router 中沒有 GET login route。                                                                                                           | 正常 hydrated flow 不把 credential 放入 URL；原生 fallback 打到 Next `/login`，不是 API。                                                            |
+| CF-03 | `apps/web/app/login/page.tsx` 與 repository query consumer 搜尋                                        | Login page 沒有讀取 `searchParams`、username 或 password query。                                                                                                                      | Legacy URL 不會直接登入，但也不會主動清除；秘密仍停留在 URL／history。                                                                               |
+| CF-04 | `apps/web/e2e/login-home.spec.ts:13-24`                                                                | Login E2E 依賴預填 username/password，沒有 assertion request method/body 或 URL safety。                                                                                              | 移除預填後既有測試需明確填 synthetic credential；目前不能阻止此回歸。                                                                                |
+| CF-05 | 其他 Web forms                                                                                         | 多個 form 也只用 `onSubmit`；但已檢查到的管理 temporary-password inputs 沒有 `name`，不會被原生成功控制項序列化。                                                                     | 目前未發現第二個可重現的 password-in-query 點；仍應由 static contract 防止未來加 `name` 後重現。                                                     |
+| CF-06 | `services/api/app/observability/logging.py:8-67`、`services/api/app/main.py:41-43`                     | `SensitiveLogFilter` 能遮罩 token/secret/password/authorization 等，啟動時只明確掛到 `uvicorn.access`。                                                                               | Uvicorn request target 已受保護；一般 `logging.getLogger(__name__)` 與 handler 層的全域 coverage 未被證明。                                          |
+| CF-07 | `tests/security/test_observability_logging.py`                                                         | 已測 photo capability Uvicorn redaction，並刻意保留 ordinary query。                                                                                                                  | 目前沒有 `/login` query、Referer、application logger、exception 或 Next log 的跨層 sentinel test。                                                   |
+| CF-08 | `infra/local/nginx/line-local.conf.template:16-25`、`infra/edge-nginx/strayhub.enadv.quest.conf:10-19` | Standard format 記 `$request` 及 `$http_referer`；只有 public animal photo route 使用 query-free、Referer-free format。                                                               | Login、LIFF entry、QR deep link 等若帶敏感 query，會進 standard access log。                                                                         |
+| CF-09 | `infra/edge-nginx/strayhub.enadv.quest.conf:33`、`infra/gce/nginx/strayhub.conf:17`                    | HTTP→HTTPS redirect 保留 `$request_uri`。                                                                                                                                             | 若 client 已送達帶秘密 HTTP URL，第一個 HTTP request 已可被 access log／edge 看見，redirect 也會繼續攜帶 query。源頭禁止仍是主控制。                 |
+| CF-10 | `apps/web/app/v1/[...path]/route.ts:137-142`                                                           | Next proxy 將 `request.nextUrl.search` 原樣複製到 upstream。                                                                                                                          | 合法 query 可運作，但任何已進 `/v1` URL 的秘密會再穿過 Next／Uvicorn；proxy 不是安全清理邊界。                                                       |
+| CF-11 | `scripts/test_line_local.sh`、`infra/local/nginx/line-local.conf.template`                             | 單一 ngrok 指向 local nginx；nginx 使用 `/v1/` 與 `/` catch-all。                                                                                                                     | Internet 可到所有 Next route、所有 `/v1/**` API（仍受各 endpoint auth），不只 webhook／LIFF。                                                        |
+| CF-12 | `scripts/demo-line.sh:118, 209-242`                                                                    | ngrok 直接指向 Next dev server，而 Next 再代理 `/v1`；同樣是 catch-all。                                                                                                              | `/login`、management pages、Next proxy APIs 全部暴露。                                                                                               |
+| CF-13 | Web route tree、FastAPI router registration                                                            | 公開 tunnel 可達 `/login`、`/`、`/animals/**`、`/reports/**`、`/settings/**`、`/shelters/**`、`/platform-admins`、`/volunteers/**`、volunteer pages、Next assets，以及所有 `/v1/**`。 | Authorization 仍在後端執行，但 attack surface 與 credential-stuffing 面被不必要擴大。                                                                |
+| CF-14 | `services/api/app/application/media_access.py:109-185, 217-296`                                        | Animal photo capability 預設 300 秒，簽名且綁 purpose、organization、animal、object key digest；resolve 重新做 tenant/resource policy。                                               | Class B，可保留在 URL；必須 query-free logging，不應因本期任意改 TTL。                                                                               |
+| CF-15 | `services/api/app/api/media.py:89-109`                                                                 | Staff signed download URL 經 authenticated POST 取得，300 秒，storage adapter 生成。                                                                                                  | Class B；完整回傳 URL 不得進 app/audit log，storage host 的 log policy需納入 runtime 驗證。                                                          |
+| CF-16 | `services/api/app/application/qr_token_service.py:15-117`、`services/api/app/api/qr_codes.py:58-75`    | QR token 是 HMAC opaque bearer，綁 QR id；DB 只存 digest，可 regenerate/revoke，但 token 本身沒有固定 TTL。Deep link 含 `organization_id` + `qr_token`。                              | Class B；可重放至撤銷，初次頁面載入前仍可能進 edge/tunnel logs。                                                                                     |
+| CF-17 | `apps/web/app/(volunteer)/animal-confirmation/page.tsx:284-291`                                        | QR payload 讀取後用 `history.replaceState` 清掉 query，API resolve 以 POST body 傳 token。                                                                                            | 已有 browser-side scrub，但不能回收首次 HTTP request 已留下的 log。                                                                                  |
+| CF-18 | `ShelterVolunteerEntryReference` model／migration 0030、entry adapter                                  | `entry` 為 32-byte random opaque reference，DB 存 digest，purpose/organization-bound，預設 90 天，可 revoke/rotate，resolver 檢查 expiry。                                            | Class B；不是短效值，需全程省略／遮罩及在 LIFF recovery 完成後清理。                                                                                 |
+| CF-19 | `VolunteerEntryClient.tsx`、`liffUrl.ts`                                                               | `entry` 會跨 LIFF redirect/recovery 保留；legacy `id_token` 會用 replace 清除，id token 後續以 POST body exchange。                                                                   | 現有 legacy scrub 是良好控制；`entry` 仍可能進 initial request、ngrok/nginx log。                                                                    |
+| CF-20 | volunteer application frontend/API                                                                     | Application status 使用 `POST /v1/volunteer-applications/status` 或 `/self-status`，LINE `id_token` 在 JSON body。                                                                    | repository 中沒有「application status short-lived URL token」；不得在 registry 虛構。                                                                |
+| CF-21 | GCE/edge nginx headers                                                                                 | 正式 nginx 使用 `Referrer-Policy: strict-origin-when-cross-origin`。                                                                                                                  | 跨 origin 通常只送 origin；同 origin 導航/request 仍可能帶完整 path/query。Local LINE nginx 未設定此 header。                                        |
+| CF-22 | `AuditService` 與 `model_dump_for_audit`                                                               | Audit persistence 會直接序列化 caller 提供的 before/after/reason，沒有中央敏感欄位 mask。                                                                                             | 目前抽查的 account/QR audit 只存安全摘要，未找到 raw password/token；但未來 caller 誤傳時沒有最後防線。                                              |
+| CF-23 | tracked env/deployment files                                                                           | 真實 production secrets 由 Secret Manager/runtime file 注入；tracked `.env.example` 與 verification example 使用 fake/synthetic values。                                              | 未發現 tracked 真實 secret；這不代表本機 `.env` 或外部 log 未含秘密。                                                                                |
+| CF-24 | README、seed/demo scripts、login UI                                                                    | `local-only-password` 大量存在於 seed、文件、E2E、demo output；login UI 同時硬編碼帳號與密碼。                                                                                        | Synthetic credential 本身可存在本機 fixture，但曾透過 public tunnel 可用且已進 URL，該實例須視為曝光、輪替並撤銷 session。                           |
+| CF-25 | frontend diagnostics search                                                                            | LIFF diagnostics 只記 presence／state，不輸出 raw id token/entry；未找到 Sentry/PostHog/gtag 等自建 analytics。LIFF package 自帶 analytics dependency。                               | 自建 analytics exposure：not found；第三方 LIFF/ngrok 行為仍需 runtime/供應商設定確認。                                                              |
 
 ### 2.2 likely（需 runtime 驗證）
 
@@ -118,20 +118,20 @@ event handler。hydration 前按鈕也是 enabled。敏感資料首次進入 URL
 
 ## 5. Sensitive URL Inventory
 
-| URL / parameter | 實際存在 | 現行傳輸 | 現行控制 | 主要缺口 |
-|---|---:|---|---|---|
-| `/login?username&password` | 是，異常 fallback | Browser native GET | API 不採信 query | source prevention、canonicalization、logs、tests |
-| `access_token`, `refresh_token` | 有 token，未發現 URL 使用 | JSON response、sessionStorage、Authorization/body | server-side session check | 非本期 session redesign；static URL ban |
-| LIFF `id_token` | 有；legacy URL 相容碼存在 | SDK→POST body | URL scrub、server verification | 首次 legacy request log policy |
-| `/volunteer-entry?entry=` | 是 | LIFF URL/recovery | opaque、digest-only DB、90d、purpose/org scope、revoke | nginx/ngrok log、scrub timing |
-| `/volunteer-application?...` | 是 | `view`, `organization_id`, legacy entry/liff.state | server verifies identity/target | distinguish public hint from capability; safe log |
-| `/animal-confirmation?organization_id&qr_token=` | 是 | QR deep link | HMAC opaque、digest DB、revoke、POST resolve、URL scrub | no fixed TTL；initial request log |
-| `/v1/public/.../photo?token=` | 是 | LINE/browser image URL | 300s、signed、purpose/org/resource bound、special logs | retain registry/runtime checks |
-| staff signed media URL | 是，response value | authenticated POST returns storage URL | 300s、tenant/role check | storage/tunnel logging not proven |
-| animal confirmation token | 是，但不在 URL | JSON response then POST body | user/org/membership/session/animal bound | register as body-only credential, not URL exception |
-| care-report handoff id | path/body workflow identifier | authenticated route/body | expiry and tenant authorization | Class C identifier; never sufficient alone |
-| `organization_id`, `animal_id`, resource UUID path | 是 | URL path/query | server-side tenant checks | Class C; do not treat as authorization proof |
-| search/page/date/status/cursor/`v` | 是 | ordinary query | normal endpoint auth | Class D; keep observability |
+| URL / parameter                                    |                      實際存在 | 現行傳輸                                           | 現行控制                                                | 主要缺口                                            |
+| -------------------------------------------------- | ----------------------------: | -------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
+| `/login?username&password`                         |             是，異常 fallback | Browser native GET                                 | API 不採信 query                                        | source prevention、canonicalization、logs、tests    |
+| `access_token`, `refresh_token`                    |     有 token，未發現 URL 使用 | JSON response、sessionStorage、Authorization/body  | server-side session check                               | 非本期 session redesign；static URL ban             |
+| LIFF `id_token`                                    |     有；legacy URL 相容碼存在 | SDK→POST body                                      | URL scrub、server verification                          | 首次 legacy request log policy                      |
+| `/volunteer-entry?entry=`                          |                            是 | LIFF URL/recovery                                  | opaque、digest-only DB、90d、purpose/org scope、revoke  | nginx/ngrok log、scrub timing                       |
+| `/volunteer-application?...`                       |                            是 | `view`, `organization_id`, legacy entry/liff.state | server verifies identity/target                         | distinguish public hint from capability; safe log   |
+| `/animal-confirmation?organization_id&qr_token=`   |                            是 | QR deep link                                       | HMAC opaque、digest DB、revoke、POST resolve、URL scrub | no fixed TTL；initial request log                   |
+| `/v1/public/.../photo?token=`                      |                            是 | LINE/browser image URL                             | 300s、signed、purpose/org/resource bound、special logs  | retain registry/runtime checks                      |
+| staff signed media URL                             |            是，response value | authenticated POST returns storage URL             | 300s、tenant/role check                                 | storage/tunnel logging not proven                   |
+| animal confirmation token                          |                是，但不在 URL | JSON response then POST body                       | user/org/membership/session/animal bound                | register as body-only credential, not URL exception |
+| care-report handoff id                             | path/body workflow identifier | authenticated route/body                           | expiry and tenant authorization                         | Class C identifier; never sufficient alone          |
+| `organization_id`, `animal_id`, resource UUID path |                            是 | URL path/query                                     | server-side tenant checks                               | Class C; do not treat as authorization proof        |
+| search/page/date/status/cursor/`v`                 |                            是 | ordinary query                                     | normal endpoint auth                                    | Class D; keep observability                         |
 
 ## 6. Sensitive URL Registry
 
@@ -140,61 +140,61 @@ Registry 應為單一 machine-readable source（建議放既有 security/contrac
 `reusable`, `revocation`, `tenant_binding`, `resource_binding`, `logging_policy`,
 `referer_policy`, `exposure_scope`, `scrub_event`, `mitigation`, `tests`。
 
-| Parameter / path | Class | Purpose / owner | TTL | Reusable / revoke | Log / Referer policy | Exposure / mitigation |
-|---|---|---|---:|---|---|---|
-| `password`, `temporary_password` | A Forbidden | authentication/account management | n/a | no | never log; no Referer | body only; static ban + form contract |
-| `access_token`, `refresh_token`, JWT, Authorization, provider/API secrets | A Forbidden | auth/provider | token-defined | bearer | never log | header/body only; never redirect/QR/hash |
-| LIFF `id_token` | A Forbidden | LINE identity exchange | provider-defined | bearer | never log | SDK→POST body; legacy query immediately replace |
-| public photo `token` | B Restricted Capability | `media_access` | 300s | bounded replay; expiry | omit query and Referer | public LINE/image route; purpose/org/animal/object bound |
-| `qr_token` | B Restricted Capability | `qr_token_service` | no fixed TTL | reusable until revoke/regenerate | omit/redact query and Referer | QR/deep link only; digest DB; scrub after capture |
-| `entry` / `shelter_entry_reference` | B Restricted Capability | volunteer access | 90d | reusable; revoke/rotate | omit/redact query and Referer | LIFF entry/recovery; purpose/org bound; scrub after exchange/recovery |
-| storage signed URL query | B Restricted Capability | media/storage | 300s | bounded replay; expiry | never app-log full URL | authorized response only; inspect storage access log |
-| standard OAuth/LIFF `code`/`state` if introduced | B Restricted Capability | provider callback | provider/session bound | protocol-defined | query-free callback log | only registered callback; scrub after exchange |
-| `organization_id` | C Public Identifier / hint | LIFF target, filters | n/a | yes | standard unless paired with B | never authorizes; server verifies membership/entry |
-| animal/media/report/handoff UUID path identifiers | C Public Identifier | resource addressing | n/a | yes | standard | authorization + tenant scope required |
-| search/page/date/sort/status/cursor/`v` | D Ordinary Query | UI/filter/cache | n/a | yes | standard log allowed | no credential semantics |
+| Parameter / path                                                          | Class                      | Purpose / owner                   |                    TTL | Reusable / revoke                | Log / Referer policy          | Exposure / mitigation                                                 |
+| ------------------------------------------------------------------------- | -------------------------- | --------------------------------- | ---------------------: | -------------------------------- | ----------------------------- | --------------------------------------------------------------------- |
+| `password`, `temporary_password`                                          | A Forbidden                | authentication/account management |                    n/a | no                               | never log; no Referer         | body only; static ban + form contract                                 |
+| `access_token`, `refresh_token`, JWT, Authorization, provider/API secrets | A Forbidden                | auth/provider                     |          token-defined | bearer                           | never log                     | header/body only; never redirect/QR/hash                              |
+| LIFF `id_token`                                                           | A Forbidden                | LINE identity exchange            |       provider-defined | bearer                           | never log                     | SDK→POST body; legacy query immediately replace                       |
+| public photo `token`                                                      | B Restricted Capability    | `media_access`                    |                   300s | bounded replay; expiry           | omit query and Referer        | public LINE/image route; purpose/org/animal/object bound              |
+| `qr_token`                                                                | B Restricted Capability    | `qr_token_service`                |           no fixed TTL | reusable until revoke/regenerate | omit/redact query and Referer | QR/deep link only; digest DB; scrub after capture                     |
+| `entry` / `shelter_entry_reference`                                       | B Restricted Capability    | volunteer access                  |                    90d | reusable; revoke/rotate          | omit/redact query and Referer | LIFF entry/recovery; purpose/org bound; scrub after exchange/recovery |
+| storage signed URL query                                                  | B Restricted Capability    | media/storage                     |                   300s | bounded replay; expiry           | never app-log full URL        | authorized response only; inspect storage access log                  |
+| standard OAuth/LIFF `code`/`state` if introduced                          | B Restricted Capability    | provider callback                 | provider/session bound | protocol-defined                 | query-free callback log       | only registered callback; scrub after exchange                        |
+| `organization_id`                                                         | C Public Identifier / hint | LIFF target, filters              |                    n/a | yes                              | standard unless paired with B | never authorizes; server verifies membership/entry                    |
+| animal/media/report/handoff UUID path identifiers                         | C Public Identifier        | resource addressing               |                    n/a | yes                              | standard                      | authorization + tenant scope required                                 |
+| search/page/date/sort/status/cursor/`v`                                   | D Ordinary Query           | UI/filter/cache                   |                    n/a | yes                              | standard log allowed          | no credential semantics                                               |
 
 Class A/B/C 是需求要求的最低分類；Class D 明確保留一般 query，避免把正常識別與查詢誤判
 為 credential。所謂「application status short-lived URL token」標記為 not found，不加入例外。
 
 ## 7. Login Remediation Strategy
 
-| 項目 | 決策 | 策略 |
-|---|---|---|
-| 明確 POST fallback | 必做 | form 設定 `method="post"`，使任何 native fallback 不可能形成 credential query。|
-| hydration 前 submit | 必做 | SSR 初始狀態 disable submit；client effect 完成後才 enable。測試 keyboard/Enter。|
-| action / no-action | 必做 | 採明確 `method="post" action="/login"` 作 fail-closed native fallback；SSR submit維持disabled，因此正常不會送出document POST，即使被強制提交也只會得到不支援的POST而不形成URL query。React handler仍攔截正常流程。不可只靠省略action。|
-| 正常 API contract | 必做 | 保持 JSON `POST /v1/auth/login`（不是背景文字中的 `/auth/login`），不改 response/session contract。|
-| password 預填 | 必做 | state 初值改空字串；E2E 明確填 synthetic password。|
-| username 預填 | 建議 | production UI 預設空值，保留 `autocomplete="username"`；若要 demo convenience，改由 local-only helper/fixture 明確提供，不進 URL。|
-| frontend hard-coded demo credential | 必做 | 從 login bundle 移除 username/password；seed/docs 可保留 synthetic fixture，但不得被 public tunnel 預設暴露。|
-| legacy sensitive query | 必做 | server/earliest render 不採信；以 replace semantics canonicalize `/login`，確保 history 不新增含秘密 entry。|
-| replace vs push | 必做 | 使用 replace；push 會留下舊 URL 在 back history。|
-| 清除時機 | 必做 | edge/server 最早可行位置優先，client effect 作補強；即使清除仍需 safe access log，因首個 request 已到 edge。|
-| Referrer-Policy | 必做 | `/login` 使用 `no-referrer`；不要依賴全站 `strict-origin-when-cross-origin` 保護同源 query。|
-| autocomplete | 必做 | username=`username`、password=`current-password` 保留；不要用 `autocomplete=off` 假裝修復。|
-| login error | 必做 | 保持泛化「帳號或密碼錯誤」；測試 response/UI/log 不反射 submitted values。|
-| frontend logging | 必做 | 禁止 console/error context 帶 form state、request body 或 sensitive URL；用 sentinel test。|
-| HttpOnly cookie/MFA/OAuth rewrite | 本期不做 | 與 password-in-URL 封堵無必要依賴，列 Deferred。|
+| 項目                                | 決策     | 策略                                                                                                                                                                                                                                   |
+| ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 明確 POST fallback                  | 必做     | form 設定 `method="post"`，使任何 native fallback 不可能形成 credential query。                                                                                                                                                        |
+| hydration 前 submit                 | 必做     | SSR 初始狀態 disable submit；client effect 完成後才 enable。測試 keyboard/Enter。                                                                                                                                                      |
+| action / no-action                  | 必做     | 採明確 `method="post" action="/login"` 作 fail-closed native fallback；SSR submit維持disabled，因此正常不會送出document POST，即使被強制提交也只會得到不支援的POST而不形成URL query。React handler仍攔截正常流程。不可只靠省略action。 |
+| 正常 API contract                   | 必做     | 保持 JSON `POST /v1/auth/login`（不是背景文字中的 `/auth/login`），不改 response/session contract。                                                                                                                                    |
+| password 預填                       | 必做     | state 初值改空字串；E2E 明確填 synthetic password。                                                                                                                                                                                    |
+| username 預填                       | 建議     | production UI 預設空值，保留 `autocomplete="username"`；若要 demo convenience，改由 local-only helper/fixture 明確提供，不進 URL。                                                                                                     |
+| frontend hard-coded demo credential | 必做     | 從 login bundle 移除 username/password；seed/docs 可保留 synthetic fixture，但不得被 public tunnel 預設暴露。                                                                                                                          |
+| legacy sensitive query              | 必做     | server/earliest render 不採信；以 replace semantics canonicalize `/login`，確保 history 不新增含秘密 entry。                                                                                                                           |
+| replace vs push                     | 必做     | 使用 replace；push 會留下舊 URL 在 back history。                                                                                                                                                                                      |
+| 清除時機                            | 必做     | edge/server 最早可行位置優先，client effect 作補強；即使清除仍需 safe access log，因首個 request 已到 edge。                                                                                                                           |
+| Referrer-Policy                     | 必做     | `/login` 使用 `no-referrer`；不要依賴全站 `strict-origin-when-cross-origin` 保護同源 query。                                                                                                                                           |
+| autocomplete                        | 必做     | username=`username`、password=`current-password` 保留；不要用 `autocomplete=off` 假裝修復。                                                                                                                                            |
+| login error                         | 必做     | 保持泛化「帳號或密碼錯誤」；測試 response/UI/log 不反射 submitted values。                                                                                                                                                             |
+| frontend logging                    | 必做     | 禁止 console/error context 帶 form state、request body 或 sensitive URL；用 sentinel test。                                                                                                                                            |
+| HttpOnly cookie/MFA/OAuth rewrite   | 本期不做 | 與 password-in-URL 封堵無必要依賴，列 Deferred。                                                                                                                                                                                       |
 
 ## 8. Logging Hardening Strategy
 
 採「共同分類、各層最小 hook」，不關閉整站 observability。
 
-| Route / surface | 現況 | 目標策略 |
-|---|---|---|
-| `/login` | nginx standard `$request` + Referer | query-free、Referer-free safe format；保留 method/path/status/bytes/latency/correlation。|
-| `/v1/auth/login`, refresh, LIFF exchange | POST body；access target通常無秘密 | safe-format；禁止 body/header/Referer，application errors 不記 credential。|
-| `/volunteer-entry`, `/volunteer-application` 含 entry | standard log | safe-format 或 route+classified keys redaction；不保存 raw entry/legacy id token。|
-| `/animal-confirmation` 含 qr_token | standard log | query-free、Referer-free。|
-| public photo capability | 已 special format | 保持並納入 registry contract。|
-| staff signed URL issue endpoint | standard path，URL 在 response | access log可保留 path；禁止 response body/app/audit log，另查 storage provider logs。|
-| ordinary management filters | standard log | 保留一般 query，不做全站 query shutdown。|
-| Uvicorn | root logger filter只掛 access logger | 擴充測試到 encoding/repeated/nested values；確認 filter 於所有 startup mode 生效。|
-| application/exception logs | logger 使用不一致 | 使用既有 `get_logger` 或 handler-level existing hook；不要大改 logging architecture。|
-| audit DB | serializer無 mask | 在 audit persistence boundary 加 fail-safe mask/reject，並保留 caller 僅傳摘要的原則。|
-| Next dev/proxy | runtime behavior未證明 | 避免自訂 log request URL/body；以 sentinel runtime test決定是否需最小 existing hook。|
-| CLI | entry raw value一次輸出 | 僅 interactive terminal 明示、CI capture guard、stderr 不回顯；不要把 raw value寫檔。|
+| Route / surface                                       | 現況                                 | 目標策略                                                                                  |
+| ----------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `/login`                                              | nginx standard `$request` + Referer  | query-free、Referer-free safe format；保留 method/path/status/bytes/latency/correlation。 |
+| `/v1/auth/login`, refresh, LIFF exchange              | POST body；access target通常無秘密   | safe-format；禁止 body/header/Referer，application errors 不記 credential。               |
+| `/volunteer-entry`, `/volunteer-application` 含 entry | standard log                         | safe-format 或 route+classified keys redaction；不保存 raw entry/legacy id token。        |
+| `/animal-confirmation` 含 qr_token                    | standard log                         | query-free、Referer-free。                                                                |
+| public photo capability                               | 已 special format                    | 保持並納入 registry contract。                                                            |
+| staff signed URL issue endpoint                       | standard path，URL 在 response       | access log可保留 path；禁止 response body/app/audit log，另查 storage provider logs。     |
+| ordinary management filters                           | standard log                         | 保留一般 query，不做全站 query shutdown。                                                 |
+| Uvicorn                                               | root logger filter只掛 access logger | 擴充測試到 encoding/repeated/nested values；確認 filter 於所有 startup mode 生效。        |
+| application/exception logs                            | logger 使用不一致                    | 使用既有 `get_logger` 或 handler-level existing hook；不要大改 logging architecture。     |
+| audit DB                                              | serializer無 mask                    | 在 audit persistence boundary 加 fail-safe mask/reject，並保留 caller 僅傳摘要的原則。    |
+| Next dev/proxy                                        | runtime behavior未證明               | 避免自訂 log request URL/body；以 sentinel runtime test決定是否需最小 existing hook。     |
+| CLI                                                   | entry raw value一次輸出              | 僅 interactive terminal 明示、CI capture guard、stderr 不回顯；不要把 raw value寫檔。     |
 
 nginx `map` 應由 `$uri` 判斷敏感 route；safe format 不使用 `$request`、`$request_uri`、`$args`
 或 `$http_referer`。如無法可靠逐 key redact，整條 query 省略。HTTP redirect server 也必須套用相同
@@ -485,13 +485,13 @@ explicitly authorized implementation step and was not started in this change.
 Class A/B/C/D. Runtime and deterministic tests confirm the existing lifecycle rather
 than changing it:
 
-| Capability | Verified behavior | Discrepancy |
-| --- | --- | --- |
-| Volunteer/adoption photo | 300 seconds; purpose, organization, animal, and current object key bound; replayable until expiry | None |
-| Staff signed media URL | 300 seconds; authenticated staff/admin and current organization required | None |
-| Animal QR | No fixed TTL; digest-backed; replayable until revoke; regenerate revokes the old record; tenant/resource bound | None |
-| LIFF entry | Database default 90 days; digest-backed; expiry/revoke/rotation and tenant resolution remain enforced; recovery retains entry only until the existing terminal/exchange point | Route-specific `Referrer-Policy: no-referrer` is not currently emitted |
-| Application-status URL token | No implementation found | Recorded as `not_found`, not treated as an exception |
+| Capability                   | Verified behavior                                                                                                                                                             | Discrepancy                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Volunteer/adoption photo     | 300 seconds; purpose, organization, animal, and current object key bound; replayable until expiry                                                                             | None                                                                   |
+| Staff signed media URL       | 300 seconds; authenticated staff/admin and current organization required                                                                                                      | None                                                                   |
+| Animal QR                    | No fixed TTL; digest-backed; replayable until revoke; regenerate revokes the old record; tenant/resource bound                                                                | None                                                                   |
+| LIFF entry                   | Database default 90 days; digest-backed; expiry/revoke/rotation and tenant resolution remain enforced; recovery retains entry only until the existing terminal/exchange point | Route-specific `Referrer-Policy: no-referrer` is not currently emitted |
+| Application-status URL token | No implementation found                                                                                                                                                       | Recorded as `not_found`, not treated as an exception                   |
 
 The QR page captures the locator then calls `history.replaceState` before resolution.
 The LIFF entry path removes legacy `id_token` before exchange and preserves the Class B
@@ -529,3 +529,20 @@ tunnel allowlist.
 
 T008 remains **MANUAL ACTION REQUIRED**. Phase B neither rotates external credentials
 nor claims that ngrok/browser/remote log copies were removed.
+
+## 17. Phase C Route and Exposure Decisions (2026-09-04)
+
+- `contracts/line-tunnel-allowlist.yaml` is the authoritative method/path inventory. The local
+  gateway is default-deny and preserves query strings only on registered routes.
+- `/care-report` is allowed because the LIFF recovery state machine, authenticated volunteer route,
+  draft consumers, and E2E tests prove a public fallback flow.
+- `/assigned-care/{occurrenceId}` remains denied. A page and direct E2E exist, but no LINE/LIFF link
+  producer or navigation entry was found; direct test coverage is not public exposure evidence.
+- Remote management demo is `NOT IMPLEMENTED — local-only management`; no owner requirement was
+  supplied, so it must be a separate future deployment/profile rather than a LINE tunnel exception.
+- `demo-line.sh` and `test_line_local.sh` now expose the same nginx gateway. Forbidden traffic is
+  rejected before Next development request logging or FastAPI routing.
+- Scoped static and runtime sentinel tools are CI/local guardrails. Automated surfaces may pass,
+  while ngrok inspector, remote retention, browser sync, and external incident cleanup remain manual.
+
+Final feature wording is: **code hardening complete; incident operational actions pending**.
