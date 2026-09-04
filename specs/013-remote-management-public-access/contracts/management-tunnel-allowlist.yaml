@@ -1,0 +1,309 @@
+version: 1
+status: planned-authoritative
+default_action: deny
+gateway: infra/local/nginx/line-local.conf.template
+policy:
+  query_behavior: preserve_on_allowlisted_routes
+  rejection_status: 404
+  rejection_body: generic_no_resource_detail
+  broad_patterns_forbidden: ["/**", "/v1/**", "/management/**", "/_next/**"]
+  authorization: fastapi_required
+  allowed_roles: [STAFF, SHELTER_ADMIN]
+  sensitive_route_logging: method_path_status_latency_request_id_only
+
+# YAML merge 後的每筆 effective route 都必須包含 FR-004 欄位；owner、purpose、roles、
+# query_policy、logging_policy 仍由個別 route 覆寫或補充。
+route_templates:
+  anonymous_page: &anonymous_page
+    caller: browser
+    authentication: none
+    sensitivity: class_a_entry_surface
+    rate_limit_expectation: gateway_baseline_only
+    evidence: [tests/e2e/test_remote_management_public_boundary.py]
+  authenticated_page: &authenticated_page
+    caller: authenticated_browser
+    authentication: bearer_session_and_public_profile
+    sensitivity: internal_management
+    rate_limit_expectation: authenticated_baseline_only
+    evidence: [tests/e2e/test_remote_management_public_boundary.py]
+  anonymous_login_api: &anonymous_login_api
+    caller: login_page
+    authentication: username_password_json_body
+    sensitivity: class_a_credential_transport
+    rate_limit_expectation: account_5_failures_15m_and_ip_20_attempts_15m
+    evidence: [tests/security/test_remote_login_abuse_control.py]
+  authenticated_api: &authenticated_api
+    caller: authenticated_management_web
+    authentication: bearer_session_public_profile_role_and_tenant
+    sensitivity: internal_management
+    rate_limit_expectation: authenticated_baseline_only
+    evidence: [tests/security/test_remote_management_access.py]
+
+routes:
+  - id: management_login_page
+    <<: *anonymous_page
+    methods: [GET, HEAD]
+    path: /login
+    upstream: web
+    owner: apps/web/app/login
+    purpose: Password login page with legacy-query canonicalization.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [ANONYMOUS]
+
+  - id: management_home_page
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path: /
+    upstream: web
+    owner: apps/web/app
+    purpose: Authenticated dashboard shell.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_animals_page
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path: /animals
+    upstream: web
+    owner: apps/web/app/(management)/animals
+    purpose: Tenant-scoped animal list.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_animal_detail_pages
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path_pattern: ^/animals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?:/timeline)?$
+    upstream: web
+    owner: apps/web/app/(management)/animals
+    purpose: Tenant-scoped animal detail and timeline pages.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_reports_page
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path: /reports
+    upstream: web
+    owner: apps/web/app/(management)/reports
+    purpose: Tenant-scoped report list.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_report_detail_page
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path_pattern: ^/reports/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+    upstream: web
+    owner: apps/web/app/(management)/reports
+    purpose: Tenant-scoped report detail.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_ai_review_page
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path: /ai-review
+    upstream: web
+    owner: apps/web/app/(management)/ai-review
+    purpose: Tenant-scoped AI review queue.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_care_calendar_page
+    <<: *authenticated_page
+    methods: [GET, HEAD]
+    path: /care-calendar
+    upstream: web
+    owner: apps/web/app/(management)/care-calendar
+    purpose: Tenant-scoped care calendar.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: password_login_api
+    <<: *anonymous_login_api
+    methods: [POST]
+    path: /v1/auth/login
+    upstream: api
+    owner: services/api/app/api/authentication.py
+    purpose: JSON-body password authentication with shared abuse controls.
+    query_policy: reject_nonempty
+    logging_policy: sensitive_path_only
+    roles: [ANONYMOUS]
+
+  - id: logout_api
+    <<: *authenticated_api
+    methods: [POST]
+    path: /v1/auth/logout
+    upstream: api
+    owner: services/api/app/api/authentication.py
+    purpose: Revoke current server-side session.
+    query_policy: reject_nonempty
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: organizations_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/organizations
+    upstream: api
+    owner: services/api/app/api/organization_management.py
+    purpose: List only organizations authorized for current identity.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: organization_areas_api
+    <<: *authenticated_api
+    methods: [GET]
+    path_pattern: ^/v1/organizations/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/areas$
+    upstream: api
+    owner: services/api/app/api/organization_management.py
+    purpose: Animal-list area filter for an authorized organization.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_dashboard_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/management/dashboard
+    upstream: api
+    owner: services/api/app/api/dashboard.py
+    purpose: Tenant-scoped dashboard summary.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_animals_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/management/animals
+    upstream: api
+    owner: services/api/app/api/management_animals.py
+    purpose: Tenant-scoped animal list/search.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_animal_detail_api
+    <<: *authenticated_api
+    methods: [GET]
+    path_pattern: ^/v1/management/animals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+    upstream: api
+    owner: services/api/app/api/management_animals.py
+    purpose: Tenant-scoped animal detail.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_animal_photo_api
+    <<: *authenticated_api
+    methods: [GET]
+    path_pattern: ^/v1/management/animals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/photo$
+    upstream: api
+    owner: services/api/app/api/management_animals.py
+    purpose: Authenticated current photo proxy for authorized animal.
+    query_policy: reject_nonempty
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: animal_timeline_api
+    <<: *authenticated_api
+    methods: [GET]
+    path_pattern: ^/v1/animals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/timeline$
+    upstream: api
+    owner: services/api/app/api/animal_timeline.py
+    purpose: Tenant-scoped animal history.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_reports_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/management/reports
+    upstream: api
+    owner: services/api/app/api/report_inbox.py
+    purpose: Tenant-scoped report list.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_report_detail_api
+    <<: *authenticated_api
+    methods: [GET]
+    path_pattern: ^/v1/management/reports/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+    upstream: api
+    owner: services/api/app/api/report_inbox.py
+    purpose: Tenant-scoped report detail.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_ai_review_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/management/ai-review
+    upstream: api
+    owner: services/api/app/api/ai_observations.py
+    purpose: Tenant-scoped AI review queue.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_ai_review_action_api
+    <<: *authenticated_api
+    methods: [POST]
+    path_pattern: ^/v1/management/ai-review/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/review$
+    upstream: api
+    owner: services/api/app/api/ai_observations.py
+    purpose: Existing authorized human review action; no other AI mutation is exposed.
+    query_policy: reject_nonempty
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_care_calendar_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/management/care-calendar
+    upstream: api
+    owner: services/api/app/api/care_reminders.py
+    purpose: Tenant-scoped care calendar.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+  - id: management_care_agenda_api
+    <<: *authenticated_api
+    methods: [GET]
+    path: /v1/management/care-agenda
+    upstream: api
+    owner: services/api/app/api/care_reminders.py
+    purpose: Supporting animal-detail care agenda read.
+    query_policy: preserve
+    logging_policy: sensitive_path_only
+    roles: [STAFF, SHELTER_ADMIN]
+
+explicit_denies:
+  - /v1/platform/**
+  - /admin/**
+  - /settings/**
+  - /volunteers/**
+  - /qr-management/**
+  - /docs
+  - /redoc
+  - /openapi.json
+  - /metrics
+  - /debug/**
+  - /internal/**
+  - browser_source_map_endpoints
+  - all_unlisted_mutation_routes

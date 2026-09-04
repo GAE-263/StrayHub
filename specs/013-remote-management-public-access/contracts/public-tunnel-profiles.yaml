@@ -1,0 +1,197 @@
+version: 1
+status: planned-authoritative
+
+registries:
+  line:
+    path: ../../012-sensitive-data-transport-hardening/contracts/line-tunnel-allowlist.yaml
+  management:
+    path: ./management-tunnel-allowlist.yaml
+
+# 012 registry 保持原檔不變；profile compiler 將 reason/tests 對應成 purpose/evidence，並以此
+# compatibility metadata 補足 013 FR-004。每個 LINE route id 必須恰好出現在一個 group，否則
+# composition fail closed。這些值描述既有行為，不改寫 owner/method/query/logging policy。
+legacy_line_registry_effective_metadata:
+  field_mapping:
+    purpose: reason
+    evidence: tests
+  groups:
+    signed_line_ingress:
+      route_ids: [line_webhook]
+      caller: LINE_PLATFORM
+      authentication: x_line_signature
+      roles: [EXTERNAL_LINE_SERVICE]
+      sensitivity: signed_integration
+      logging_policy: existing_standard_path
+      rate_limit_expectation: existing_webhook_controls
+    browser_entry_sensitive:
+      route_ids:
+        [volunteer_entry_page, volunteer_application_page, animal_confirmation_page]
+      caller: LIFF_BROWSER
+      authentication: public_html_then_endpoint_specific_auth
+      roles: [ANONYMOUS_ENTRY]
+      sensitivity: sensitive_entry_surface
+      logging_policy: existing_sensitive_path_only
+      rate_limit_expectation: gateway_baseline_only
+    browser_entry_standard:
+      route_ids: [care_report_fallback_page]
+      caller: LIFF_BROWSER
+      authentication: public_html_then_bearer_session
+      roles: [AUTHENTICATED_VOLUNTEER]
+      sensitivity: internal_workflow_entry
+      logging_policy: existing_standard_path
+      rate_limit_expectation: gateway_baseline_only
+    framework_dev_assets:
+      route_ids: [next_static_assets, next_dev_hmr]
+      caller: BROWSER_RUNTIME
+      authentication: none
+      roles: [PUBLIC_ASSET_CALLER]
+      sensitivity: ordinary_framework_resource
+      logging_policy: existing_standard_path
+      rate_limit_expectation: gateway_baseline_only
+    sensitive_identity_exchange:
+      route_ids: [liff_exchange, session_refresh]
+      caller: LIFF_BROWSER
+      authentication: body_credential_per_existing_contract
+      roles: [LINE_IDENTITY_OR_SESSION_HOLDER]
+      sensitivity: class_a_credential_transport
+      logging_policy: existing_sensitive_path_only
+      rate_limit_expectation: existing_endpoint_controls
+    authenticated_identity_context:
+      route_ids: [current_identity, active_shelter_context]
+      caller: AUTHENTICATED_BROWSER
+      authentication: bearer_session
+      roles: [AUTHORIZED_SESSION_ROLE]
+      sensitivity: internal_identity_context
+      logging_policy: shared_profile_sensitive_path_only
+      rate_limit_expectation: authenticated_baseline_only
+    public_volunteer_application:
+      route_ids:
+        - public_volunteer_organizations
+        - volunteer_application_status
+        - volunteer_application_self_status
+        - volunteer_application_submit
+        - volunteer_application_withdraw
+      caller: LIFF_APPLICANT
+      authentication: endpoint_specific_line_identity_or_public_contract
+      roles: [APPLICANT_OR_LINE_IDENTITY]
+      sensitivity: volunteer_application_boundary
+      logging_policy: existing_standard_path
+      rate_limit_expectation: existing_endpoint_controls
+    authenticated_volunteer_workflow:
+      route_ids:
+        - qr_resolve
+        - qr_candidate_organization
+        - animal_search
+        - animal_confirm
+        - care_report_handoff
+        - current_line_draft
+        - update_care_report_draft
+      caller: AUTHENTICATED_LIFF_BROWSER
+      authentication: bearer_session_and_existing_capability_rules
+      roles: [AUTHORIZED_VOLUNTEER]
+      sensitivity: internal_volunteer_workflow
+      logging_policy: existing_standard_path
+      rate_limit_expectation: authenticated_baseline_only
+    public_photo_capability:
+      route_ids: [volunteer_walk_photo, public_adoption_photo]
+      caller: LINE_IMAGE_FETCHER
+      authentication: class_b_query_capability
+      roles: [CAPABILITY_HOLDER]
+      sensitivity: class_b_url_capability
+      logging_policy: existing_sensitive_path_only
+      rate_limit_expectation: existing_capability_controls
+
+profiles:
+  line-only:
+    description: Existing default LINE/LIFF local tunnel boundary.
+    include_registries: [line]
+    exclude_route_ids: []
+    frontend_mode: development
+    public_management: false
+    activation_gate: none
+
+  shared-demo-production:
+    description: Production-like shared LINE plus core management demo.
+    include_registries: [line, management]
+    exclude_route_ids: [next_dev_hmr, next_static_assets]
+    frontend_mode: production
+    static_assets:
+      mode: next_build_manifest_exact_paths
+      allowed_page_route_ids:
+        - volunteer_entry_page
+        - volunteer_application_page
+        - animal_confirmation_page
+        - care_report_fallback_page
+        - management_login_page
+        - management_home_page
+        - management_animals_page
+        - management_animal_detail_pages
+        - management_reports_page
+        - management_report_detail_page
+        - management_ai_review_page
+        - management_care_calendar_page
+      include_shared_runtime_chunks: true
+      source_maps: deny
+      next_image: deny
+      unproven_assets: deny
+    public_management: true
+    activation_gate: remote_demo_runtime_gate
+
+  shared-demo-dev:
+    description: Explicit development-only shared profile with HMR.
+    include_registries: [line, management]
+    exclude_route_ids: []
+    frontend_mode: development
+    static_assets:
+      mode: registry_bounded_pattern
+    public_management: true
+    activation_gate: remote_demo_runtime_gate
+
+runtime_contract:
+  required_origin:
+    scheme: https
+    exact_reserved_host: true
+    forbid_userinfo: true
+    forbid_path: true
+    forbid_query: true
+    forbid_fragment: true
+    forbid_wildcard: true
+  local_validation:
+    loopback_allowed_only_with_explicit_test_flag: true
+  unknown_profile: fail
+  unknown_registry: fail
+  unknown_exclusion: fail
+  duplicate_route_id: fail
+  conflicting_method_path: fail
+  invalid_or_unanchored_pattern: fail
+  missing_or_unresolved_build_manifest_asset: fail
+  output: runtime_temporary_directory_only
+
+trusted_ingress:
+  client_ip_header: X-StrayHub-Trusted-Client-IP
+  profile_header: X-StrayHub-Public-Profile
+  edge_action: remove_then_set
+  api_trust_hop: configured_loopback_gateway_only
+  x_forwarded_for_is_authoritative: false
+  public_scheme_source: edge_overwrite
+  client_forwarded_proto_is_authoritative: false
+
+activation_gates:
+  remote_demo_runtime_gate:
+    all_required: true
+    evidence:
+      - exact_runtime_reserved_host_validated
+      - synthetic_demo_data_verified
+      - old_demo_password_rejected
+      - new_demo_password_accepted
+      - old_demo_sessions_revoked
+      - allow_and_deny_route_matrix_passed
+      - sensitive_log_sentinel_absent
+    missing_evidence: fail
+    output_redaction: required
+
+rollback:
+  maximum_total_seconds: 300
+  order:
+    - switch_gateway_to_line_only_and_verify_management_denied
+    - revoke_remote_management_demo_sessions_and_refresh_families
