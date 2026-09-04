@@ -40,9 +40,15 @@ class SensitiveLogFilter(logging.Filter):
     """Mask structured fields and formatted messages before any handler emits them."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        message = record.getMessage()
-        record.msg = mask_sensitive(message)
-        record.args = ()
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple):
+            # Uvicorn's AccessFormatter unpacks five positional fields from args.
+            # Sanitize those values without flattening the record structure.
+            record.msg = mask_sensitive(record.msg)
+            record.args = mask_sensitive(record.args)
+        else:
+            message = record.getMessage()
+            record.msg = mask_sensitive(message)
+            record.args = ()
         for key, value in list(record.__dict__.items()):
             if key not in _STANDARD_LOG_RECORD_FIELDS:
                 record.__dict__[key] = mask_sensitive(value)
@@ -54,3 +60,8 @@ def get_logger(name: str) -> logging.Logger:
     if not any(isinstance(item, SensitiveLogFilter) for item in logger.filters):
         logger.addFilter(SensitiveLogFilter())
     return logger
+
+
+def configure_access_log_redaction() -> None:
+    """Apply the existing sensitive-value policy to Uvicorn request targets."""
+    get_logger("uvicorn.access")

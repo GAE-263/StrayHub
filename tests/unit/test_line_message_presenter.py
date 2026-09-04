@@ -1,3 +1,4 @@
+import pytest
 from services.api.app.application.effective_observation_service import EffectiveOption
 from services.api.app.application.line_message_presenter import (
     animal_confirmation_bubble,
@@ -90,6 +91,40 @@ def test_confirmation_shows_full_identity_photo_and_both_actions() -> None:
     assert {"A-001", "北區 A3", "浪浪森友會 A", "確認是這隻", "重新選擇"} <= set(texts)
     assert any("小森" in text for text in texts)
     assert bubble["contents"]["hero"]["url"] == "https://example.test/photo.jpg"
+
+
+@pytest.mark.parametrize(
+    "photo_url",
+    [
+        None,
+        "http://strayhub.example/photo.jpg",
+        "https://localhost/photo.jpg",
+        "https://127.0.0.1/photo.jpg",
+        "https://minio:9000/photo.jpg",
+        "https://10.0.0.1/photo.jpg",
+        "https://storage.googleapis.com/private-bucket/photo.jpg",
+        "https://private-bucket.storage.googleapis.com/photo.jpg",
+        "not-a-url",
+    ],
+)
+def test_confirmation_omits_unsafe_photo_but_keeps_identity_and_actions(
+    photo_url: str | None,
+) -> None:
+    bubble = animal_confirmation_bubble(
+        animal_name="小森",
+        shelter_number="A-001",
+        area_label="北區 A3",
+        organization_name="浪浪森友會 A",
+        photo_url=photo_url,
+        confirm_data="action=confirm_animal&animal_id=animal-a",
+    )
+
+    assert "hero" not in bubble["contents"]
+    texts = _texts(bubble)
+    assert {"A-001", "北區 A3", "浪浪森友會 A", "確認是這隻", "重新選擇"} <= set(
+        texts
+    )
+    assert any("小森" in text for text in texts)
 
 
 def test_today_list_has_two_sections_counts_local_time_and_pagination() -> None:

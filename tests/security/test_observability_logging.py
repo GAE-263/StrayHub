@@ -1,6 +1,14 @@
+import io
 import logging
 
-from services.api.app.observability.logging import get_logger, mask_sensitive
+import pytest
+from services.api.app.observability.logging import (
+    SensitiveLogFilter,
+    configure_access_log_redaction,
+    get_logger,
+    mask_sensitive,
+)
+from uvicorn.logging import AccessFormatter
 
 
 def test_mask_sensitive_redacts_nested_security_and_audit_fields() -> None:
@@ -67,4 +75,94 @@ def test_volunteer_identity_and_provider_recipient_fields_are_redacted() -> None
             "provider-secret",
             "recipient-secret",
         )
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/public/animals/abc/photo?token=ANIMAL-CAPABILITY-SECRET",
+        "/v1/public/adoption/animals/abc/photo?token=ADOPTION-CAPABILITY-SECRET",
+    ],
+)
+def test_uvicorn_access_logger_redacts_photo_capabilities(path: str) -> None:
+    logger = logging.getLogger("uvicorn.access")
+    original_handlers = logger.handlers[:]
+    original_filters = logger.filters[:]
+    original_level = logger.level
+    original_propagate = logger.propagate
+    output = io.StringIO()
+    handler = logging.StreamHandler(output)
+    handler.setFormatter(
+        AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s')
+    )
+    try:
+        logger.handlers = [handler]
+        logger.filters = []
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+        configure_access_log_redaction()
+        logger.info(
+            '%s - "%s %s HTTP/%s" %d',
+            "127.0.0.1:12345",
+            "GET",
+            path,
+            "1.1",
+            200,
+        )
+
+        rendered = output.getvalue()
+        assert "CAPABILITY-SECRET" not in rendered
+        assert "token=[REDACTED]" in rendered
+        assert sum(isinstance(item, SensitiveLogFilter) for item in logger.filters) == 1
+    finally:
+        logger.handlers = original_handlers
+        logger.filters = original_filters
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+
+def test_uvicorn_access_logger_preserves_ordinary_query_logging() -> None:
+    logger = logging.getLogger("uvicorn.access")
+    original_handlers = logger.handlers[:]
+    original_filters = logger.filters[:]
+    original_level = logger.level
+    original_propagate = logger.propagate
+    output = io.StringIO()
+    handler = logging.StreamHandler(output)
+    handler.setFormatter(
+        AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s')
+    )
+    try:
+        logger.handlers = [handler]
+        logger.filters = []
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+        configure_access_log_redaction()
+        logger.info(
+            '%s - "%s %s HTTP/%s" %d',
+            "127.0.0.1:12345",
+            "GET",
+            "/v1/animals?page=2",
+            "1.1",
+            200,
+        )
+
+        assert "/v1/animals?page=2" in output.getvalue()
+    finally:
+        logger.handlers = original_handlers
+        logger.filters = original_filters
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+
+def test_application_bootstrap_attaches_uvicorn_access_filter() -> None:
+    from services.api.app import main
+
+    assert main.app is not None
+    assert any(
+        isinstance(item, SensitiveLogFilter)
+        for item in logging.getLogger("uvicorn.access").filters
     )

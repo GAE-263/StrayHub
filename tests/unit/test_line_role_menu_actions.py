@@ -65,6 +65,186 @@ def test_walk_command_routing_precedes_active_adoption_free_text() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("is_adoptable", [True, False])
+async def test_walk_confirmation_uses_public_capability_for_active_animals(
+    monkeypatch: pytest.MonkeyPatch, is_adoptable: bool
+) -> None:
+    organization_id = uuid4()
+    animal = SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        name="小森",
+        shelter_number="A-001",
+        status="active",
+        is_adoptable=is_adoptable,
+        current_photo_key="animals/a/primary.jpg",
+    )
+    candidate = SimpleNamespace(animal=animal, area=SimpleNamespace(name="北區 A3"))
+
+    class Authentication:
+        def __init__(self, session):
+            assert session == "session"
+
+        async def get_organization(self, scoped_organization_id):
+            assert scoped_organization_id == organization_id
+            return SimpleNamespace(name="浪浪森友會 A")
+
+    class Photos:
+        def __init__(self, session):
+            assert session == "session"
+
+        async def issue_url(self, **kwargs):
+            assert kwargs == {
+                "public_base_url": "https://strayhub.example",
+                "organization_id": organization_id,
+                "animal": animal,
+                "purpose": line_webhook.VOLUNTEER_WALK_PHOTO,
+            }
+            return f"https://strayhub.example/v1/public/animals/{animal.id}/photo?token=safe"
+
+    monkeypatch.setattr(line_webhook, "AuthenticationRepository", Authentication)
+    monkeypatch.setattr(line_webhook, "ExternalAnimalPhotoService", Photos)
+
+    bubble = await line_webhook._walk_confirmation_bubble(
+        "session",
+        organization_id,
+        candidate,
+        public_base_url="https://strayhub.example",
+    )
+
+    assert bubble["contents"]["hero"]["url"].startswith(
+        f"https://strayhub.example/v1/public/animals/{animal.id}/photo"
+    )
+
+
+@pytest.mark.asyncio
+async def test_walk_confirmation_photo_failure_keeps_confirmation_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = uuid4()
+    animal = SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        name="小森",
+        shelter_number="A-001",
+        status="active",
+        is_adoptable=False,
+        current_photo_key="animals/a/primary.jpg",
+    )
+    candidate = SimpleNamespace(animal=animal, area=SimpleNamespace(name="北區 A3"))
+
+    class Authentication:
+        def __init__(self, _session):
+            pass
+
+        async def get_organization(self, _organization_id):
+            return SimpleNamespace(name="浪浪森友會 A")
+
+    class Photos:
+        def __init__(self, _session):
+            pass
+
+        async def issue_url(self, **_kwargs):
+            raise RuntimeError("synthetic capability failure")
+
+    monkeypatch.setattr(line_webhook, "AuthenticationRepository", Authentication)
+    monkeypatch.setattr(line_webhook, "ExternalAnimalPhotoService", Photos)
+
+    bubble = await line_webhook._walk_confirmation_bubble(
+        "session",
+        organization_id,
+        candidate,
+        public_base_url="https://strayhub.example",
+    )
+
+    assert "hero" not in bubble["contents"]
+    actions = [
+        item["action"]["data"]
+        for item in bubble["contents"]["body"]["contents"]
+        if "action" in item
+    ]
+    assert any("action=confirm_animal" in action for action in actions)
+    assert "action=find_dog" in actions
+
+
+@pytest.mark.asyncio
+async def test_single_text_result_uses_shared_walk_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = uuid4()
+    candidate = SimpleNamespace(animal=SimpleNamespace(id=uuid4()))
+    calls = []
+
+    class Selection:
+        async def search_page(self, **_kwargs):
+            return SimpleNamespace(items=(candidate,), total=1)
+
+    async def confirmation(session, scoped_organization_id, selected, *, public_base_url):
+        calls.append((session, scoped_organization_id, selected, public_base_url))
+        return {"type": "text", "text": "confirmation"}
+
+    monkeypatch.setattr(line_webhook, "_selection_service", lambda *_args: Selection())
+    monkeypatch.setattr(line_webhook, "_walk_confirmation_bubble", confirmation)
+
+    result = await line_webhook._search_result_bubble(
+        "session",
+        user_id=uuid4(),
+        organization_id=organization_id,
+        membership_id=uuid4(),
+        query="小森",
+        page=1,
+        public_base_url="https://strayhub.example",
+    )
+
+    assert result == {"type": "text", "text": "confirmation"}
+    assert calls == [("session", organization_id, candidate, "https://strayhub.example")]
+
+
+@pytest.mark.asyncio
+async def test_select_animal_postback_uses_shared_walk_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = uuid4()
+    animal = SimpleNamespace(id=uuid4())
+    candidate = SimpleNamespace(animal=animal)
+    calls = []
+
+    class Selection:
+        async def confirm(self, **_kwargs):
+            return candidate
+
+    async def confirmation(session, scoped_organization_id, selected, *, public_base_url):
+        calls.append((session, scoped_organization_id, selected, public_base_url))
+        return {"type": "text", "text": "confirmation"}
+
+    monkeypatch.setattr(line_webhook, "_selection_service", lambda *_args: Selection())
+    monkeypatch.setattr(line_webhook, "_walk_confirmation_bubble", confirmation)
+    line = MockLineAdapter()
+
+    await line_webhook._handle_postback(
+        "session",
+        line,
+        _postback_event(f"action=select_animal&animal_id={animal.id}"),
+        user_id=uuid4(),
+        organization_id=organization_id,
+        membership_id=uuid4(),
+        public_base_url="https://strayhub.example",
+    )
+
+    assert calls == [("session", organization_id, candidate, "https://strayhub.example")]
+    assert line.replies[0][1] == [{"type": "text", "text": "confirmation"}]
+
+
+def test_all_walk_confirmation_entry_paths_pass_public_base_url() -> None:
+    source = inspect.getsource(line_webhook)
+    assert source.count("_walk_confirmation_bubble(") == 4  # definition + three entry paths
+    assert source.count("public_base_url=public_base_url") >= 7
+    walk_builder = inspect.getsource(line_webhook._walk_confirmation_bubble)
+    assert "ExternalAnimalPhotoService" in walk_builder
+    assert ".signed_url(" not in walk_builder
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action", sorted(MENU_PLACEHOLDER_ACTIONS))
 async def test_every_menu_action_gets_its_placeholder_reply(action: str) -> None:
     """選單項目全部要有回應；漏接的會掉進照護回報流程回「缺少回報草稿識別」。"""
