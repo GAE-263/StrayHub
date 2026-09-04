@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from services.api.app.application.effective_observation_service import EffectiveOption
+from services.api.app.application.media_access import public_https_url_or_none
 
 # Presentation tokens only. Business vocabulary — option codes, category names,
 # answer labels — must always arrive from the CRM, never from this module.
@@ -38,6 +39,11 @@ _ROUND = "24px"
 _ROUND_SM = "16px"
 _BORDER = "3px"
 _BORDER_THICK = "4px"
+
+
+def line_image_url_or_none(photo_url: str | None) -> str | None:
+    """Validate optional external media at the final LINE presentation boundary."""
+    return public_https_url_or_none(photo_url)
 
 
 def _answer_action(option: EffectiveOption, *, draft_token: str, step: str) -> dict:
@@ -355,10 +361,11 @@ def animal_confirmation_bubble(
         _header(f"是 {animal_name} 嗎？", "散步回報 · 請確認動物", glyph="🐶", tone=BUTTER),
         _body_box(body_rows),
     )
-    if photo_url:
+    safe_photo_url = line_image_url_or_none(photo_url)
+    if safe_photo_url:
         bubble["hero"] = {
             "type": "image",
-            "url": photo_url,
+            "url": safe_photo_url,
             "size": "full",
             "aspectRatio": "20:13",
             "aspectMode": "cover",

@@ -37,6 +37,9 @@ from services.api.app.api.qr_codes import router as qr_codes_router
 from services.api.app.api.report_inbox import router as report_inbox_router
 from services.api.app.api.reportable_scope import router as reportable_scope_router
 from services.api.app.api.volunteer_access import router as volunteer_access_router
+from services.api.app.observability.logging import configure_access_log_redaction
+
+configure_access_log_redaction()
 
 
 @asynccontextmanager

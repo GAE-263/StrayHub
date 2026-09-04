@@ -84,6 +84,8 @@ from services.api.app.application.line_rich_menu_routing import (
 )
 from services.api.app.application.line_webhook_session import LineWebhookSessionService
 from services.api.app.application.media_access import (
+    VOLUNTEER_WALK_PHOTO,
+    ExternalAnimalPhotoService,
     MediaAccessService,
     issue_adoption_photo_token,
 )
@@ -2002,15 +2004,22 @@ def _selection_service(session, organization_id: UUID) -> AnimalSelectionService
     )
 
 
-async def _walk_confirmation_bubble(session, organization_id: UUID, candidate) -> dict:
+async def _walk_confirmation_bubble(
+    session,
+    organization_id: UUID,
+    candidate,
+    *,
+    public_base_url: str | None,
+) -> dict:
     organization = await AuthenticationRepository(session).get_organization(organization_id)
     photo_url = None
     if candidate.animal.current_photo_key:
         try:
-            photo_url = await MediaAccessService(MinioStorageAdapter(), organization_id).signed_url(
-                media_organization_id=organization_id,
-                object_key=candidate.animal.current_photo_key,
-                expires_seconds=300,
+            photo_url = await ExternalAnimalPhotoService(session).issue_url(
+                public_base_url=public_base_url,
+                organization_id=organization_id,
+                animal=candidate.animal,
+                purpose=VOLUNTEER_WALK_PHOTO,
             )
         except Exception:
             logger.warning("animal confirmation photo unavailable", exc_info=True)
@@ -2032,6 +2041,7 @@ async def _search_result_bubble(
     membership_id: UUID,
     query: str,
     page: int,
+    public_base_url: str | None,
 ) -> dict:
     query = query.strip()
     if not query or len(query) > 80:
@@ -2055,7 +2065,12 @@ async def _search_result_bubble(
             choices=[],
         )
     if result.total == 1:
-        return await _walk_confirmation_bubble(session, organization_id, result.items[0])
+        return await _walk_confirmation_bubble(
+            session,
+            organization_id,
+            result.items[0],
+            public_base_url=public_base_url,
+        )
     choices = [
         (
             f"{item.animal.name}／{item.animal.shelter_number or '無編號'}",
@@ -2587,6 +2602,7 @@ async def _handle_postback(
     user_id: UUID,
     organization_id: UUID,
     membership_id: UUID,
+    public_base_url: str | None,
 ) -> UUID | None:
     values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
     action = values.get("action", [""])[0]
@@ -2656,6 +2672,7 @@ async def _handle_postback(
                     membership_id=membership_id,
                     query=query,
                     page=page,
+                    public_base_url=public_base_url,
                 )
             ],
         )
@@ -2710,7 +2727,12 @@ async def _handle_postback(
             role="VOLUNTEER",
         )
         animal = candidate.animal
-        bubble = await _walk_confirmation_bubble(session, organization_id, candidate)
+        bubble = await _walk_confirmation_bubble(
+            session,
+            organization_id,
+            candidate,
+            public_base_url=public_base_url,
+        )
         if token:
             bubble["contents"]["body"]["contents"][-2]["action"]["data"] = urlencode(
                 {
@@ -3185,6 +3207,7 @@ async def webhook(
                             user_id=user_id,
                             organization_id=organization_id,
                             membership_id=membership_id,
+                            public_base_url=public_base_url,
                         )
                     elif (
                         event.get("type") == "message"
@@ -3232,6 +3255,7 @@ async def webhook(
                                         membership_id=membership_id,
                                         query=text_value,
                                         page=1,
+                                        public_base_url=public_base_url,
                                     )
                                 ],
                             )
@@ -3259,7 +3283,10 @@ async def webhook(
                                 event,
                                 [
                                     await _walk_confirmation_bubble(
-                                        session, organization_id, candidate
+                                        session,
+                                        organization_id,
+                                        candidate,
+                                        public_base_url=public_base_url,
                                     )
                                 ],
                             )

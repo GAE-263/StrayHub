@@ -81,6 +81,41 @@ def test_forwarded_headers_and_bounded_body_policy_are_configured() -> None:
     assert "client_max_body_size 1m;" in config
 
 
+def test_capability_routes_use_query_free_access_logging() -> None:
+    config = _nginx()
+    capability_format = re.search(
+        r"log_format\s+strayhub_capability(?P<body>.*?);",
+        config,
+        flags=re.DOTALL,
+    )
+
+    assert capability_format
+    assert "~^/v1/public/(adoption/)?animals/[^/]+/photo/?$ 1;" in config
+    assert "$request_method $uri $server_protocol" in capability_format.group("body")
+    assert "$args" not in capability_format.group("body")
+    assert "$request_uri" not in capability_format.group("body")
+    assert '"$request"' not in capability_format.group("body")
+    assert "$http_referer" not in capability_format.group("body")
+    assert config.count(
+        "access_log /var/log/nginx/access.log strayhub_capability "
+        "if=$strayhub_capability_access;"
+    ) == 2
+
+
+def test_ordinary_queries_retain_standard_access_logging() -> None:
+    config = _nginx()
+    standard_format = re.search(
+        r"log_format\s+strayhub_standard(?P<body>.*?);",
+        config,
+        flags=re.DOTALL,
+    )
+
+    assert standard_format
+    assert '"$request"' in standard_format.group("body")
+    assert "default 0;" in config
+    assert "0 1;" in config
+
+
 def test_production_config_has_no_hmr_or_dev_proxy_behavior() -> None:
     normalized = _nginx().lower()
 

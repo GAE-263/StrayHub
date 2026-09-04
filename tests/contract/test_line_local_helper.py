@@ -71,6 +71,21 @@ def test_local_nginx_configures_forwarded_and_websocket_headers() -> None:
     assert "Upgrade $http_upgrade" in next_location
 
 
+def test_local_nginx_redacts_only_capability_route_queries() -> None:
+    source = NGINX_TEMPLATE.read_text(encoding="utf-8")
+    capability_format = source.split("log_format strayhub_capability", 1)[1].split(";", 1)[0]
+    standard_format = source.split("log_format strayhub_standard", 1)[1].split(";", 1)[0]
+
+    assert "~^/v1/public/(adoption/)?animals/[^/]+/photo/?$ 1;" in source
+    assert "$request_method $uri $server_protocol" in capability_format
+    assert "$args" not in capability_format
+    assert "$request_uri" not in capability_format
+    assert '"$request"' not in capability_format
+    assert '"$request"' in standard_format
+    assert "access_log logs/access.log strayhub_capability " in source
+    assert "if=$strayhub_capability_access;" in source
+
+
 def test_line_local_helper_owns_one_named_tunnel_without_weakening_security() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
