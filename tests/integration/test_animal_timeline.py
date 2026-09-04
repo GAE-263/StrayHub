@@ -115,6 +115,7 @@ def test_serialize_day_includes_analysis_or_explicit_null() -> None:
         id=uuid4(),
         submitted_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
         volunteer_user_id=uuid4(),
+        membership_id=uuid4(),
         animal_name_snapshot="阿福",
         shelter_number_snapshot=None,
         note=None,
@@ -143,10 +144,16 @@ def test_serialize_day_includes_analysis_or_explicit_null() -> None:
         "human_reviewed": True,
     }
 
-    payload = _serialize_day(day, stool_by_report={report.id: analysis})
+    payload = _serialize_day(
+        day,
+        stool_by_report={report.id: analysis},
+        volunteer_labels={report.membership_id: ("黃", "V024")},
+    )
     assert payload["reports"][0]["stool_analysis"] == analysis
+    assert payload["reports"][0]["volunteer_label"] == "黃・V024"
     TimelineDayResponse.model_validate(payload)
 
     payload = _serialize_day(day)
     assert payload["reports"][0]["stool_analysis"] is None
+    assert payload["reports"][0]["volunteer_label"] == "志工"
     TimelineDayResponse.model_validate(payload)

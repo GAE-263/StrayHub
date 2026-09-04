@@ -4,6 +4,7 @@ from typing import TypeVar
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,10 @@ from services.api.app.persistence.models.identity import (
 from services.api.app.persistence.models.volunteer_access import (
     VolunteerAccessGrant,
     VolunteerApplication,
+)
+from services.api.app.persistence.models.volunteer_management import (
+    OrganizationVolunteerNumberCounter,
+    VolunteerProfile,
 )
 
 T = TypeVar("T")
@@ -118,6 +123,34 @@ class AuthenticationRepository:
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def upsert_volunteer_profile(
+        self, user_id: UUID, *, surname: str | None
+    ) -> VolunteerProfile:
+        profile = await self.session.get(VolunteerProfile, user_id)
+        if profile is None:
+            profile = VolunteerProfile(user_id=user_id, surname=surname)
+            self.session.add(profile)
+            await self.session.flush()
+        elif surname:
+            profile.surname = surname
+        return profile
+
+    async def get_volunteer_profile(self, user_id: UUID) -> VolunteerProfile | None:
+        return await self.session.get(VolunteerProfile, user_id)
+
+    async def allocate_volunteer_no(self, organization_id: UUID) -> str:
+        statement = (
+            pg_insert(OrganizationVolunteerNumberCounter)
+            .values(organization_id=organization_id, next_value=2)
+            .on_conflict_do_update(
+                index_elements=[OrganizationVolunteerNumberCounter.organization_id],
+                set_={"next_value": OrganizationVolunteerNumberCounter.next_value + 1},
+            )
+            .returning(OrganizationVolunteerNumberCounter.next_value - 1)
+        )
+        value = (await self.session.execute(statement)).scalar_one()
+        return f"V{value:03d}"
 
     async def get_effective_membership(
         self, user_id: UUID, organization_id: UUID

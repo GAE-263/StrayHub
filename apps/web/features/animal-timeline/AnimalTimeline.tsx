@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useState } from "react";
 import { statusSummary } from "../../components/management/ui-status";
 import {
@@ -34,6 +35,7 @@ export type TimelineDay = {
     id: string;
     submittedAt?: string;
     volunteerUserId?: string;
+    volunteerLabel?: string | null;
     note?: string | null;
     observations?: Record<string, string>;
     observationSnapshots?: Record<string, ObservationSnapshot>;
@@ -162,9 +164,17 @@ export function AnimalTimeline({ days, loading = false, error }: Props) {
               >
                 <p>
                   回報時間：{report.submittedAt ?? "未提供"}
-                  {report.volunteerUserId
-                    ? `；回報者：${report.volunteerUserId}`
-                    : ""}
+                  {report.volunteerUserId ? (
+                    <>
+                      ；回報者：
+                      <Link
+                        className="timeline-report-author"
+                        href={`/volunteers/access?user_id=${report.volunteerUserId}`}
+                      >
+                        {report.volunteerLabel ?? "志工"}
+                      </Link>
+                    </>
+                  ) : null}
                 </p>
                 <p>心得：{report.note ?? "沒有心得"}</p>
                 <p>結構化觀察：{entries.length} 項</p>

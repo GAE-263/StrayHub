@@ -53,6 +53,7 @@ def test_timeline_daily_summary_no_report_and_report_details_are_declared() -> N
         "id",
         "submitted_at",
         "volunteer_user_id",
+        "volunteer_label",
         "animal_name_snapshot",
         "shelter_number_snapshot",
         "note",
@@ -63,6 +64,7 @@ def test_timeline_daily_summary_no_report_and_report_details_are_declared() -> N
         "media_ids",
         "stool_analysis",
     } <= set(report["properties"])
+    assert "volunteer_label" in report["required"]
     assert report["properties"]["stool_analysis"] == {
         "anyOf": [
             {"$ref": "#/components/schemas/StoolAnalysis"},

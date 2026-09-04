@@ -626,6 +626,26 @@ summary:focus-visible {
   margin-top: 14px;
   padding: 16px;
 }
+.timeline-report-author {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.timeline-report-author:hover {
+  color: var(--primary);
+}
+.volunteer-access-focus {
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+}
 .ui-table-head,
 .ui-table-cell {
   border-bottom: 1px solid var(--border);

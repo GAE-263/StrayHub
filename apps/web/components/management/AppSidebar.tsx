@@ -82,6 +82,12 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
         roles: ["PLATFORM_ADMIN"],
         icon: "settings",
       },
+      {
+        href: "/platform-volunteer-restrictions",
+        label: "志工平台限制",
+        roles: ["PLATFORM_ADMIN"],
+        icon: "audit",
+      },
     ],
   },
 ];

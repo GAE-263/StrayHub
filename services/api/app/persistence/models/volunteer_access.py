@@ -143,6 +143,9 @@ class VolunteerApplication(IdentityMixin, AuditMixin, Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     source_channel: Mapped[str] = mapped_column(String(30), default="liff")
+    # Captured from the plaintext name at submit; the full name is only ever
+    # stored encrypted on VolunteerApplicationProfile.
+    applicant_surname: Mapped[str | None] = mapped_column(String(20), nullable=True)
     client_request_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     previous_application_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("volunteer_applications.id"), nullable=True

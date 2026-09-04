@@ -54,6 +54,7 @@ class TimelineReportResponse(BaseModel):
     id: UUID
     submitted_at: datetime
     volunteer_user_id: UUID
+    volunteer_label: str
     animal_name_snapshot: str
     shelter_number_snapshot: str | None = None
     note: str | None = None
@@ -86,8 +87,18 @@ class TimelineResponse(BaseModel):
     open_reminders: list[TimelineEventResponse]
 
 
+def _volunteer_label(membership_id, labels: dict) -> str:
+    surname, volunteer_no = labels.get(membership_id, (None, None))
+    identity = surname or "志工"
+    return f"{identity}・{volunteer_no}" if volunteer_no else identity
+
+
 def _serialize_day(
-    day, *, media_by_report: dict | None = None, stool_by_report: dict | None = None
+    day,
+    *,
+    media_by_report: dict | None = None,
+    stool_by_report: dict | None = None,
+    volunteer_labels: dict | None = None,
 ) -> dict:
     return {
         "date": day.date.isoformat(),
@@ -99,6 +110,9 @@ def _serialize_day(
                 "id": str(report.id),
                 "submitted_at": report.submitted_at.isoformat(),
                 "volunteer_user_id": str(report.volunteer_user_id),
+                "volunteer_label": _volunteer_label(
+                    getattr(report, "membership_id", None), volunteer_labels or {}
+                ),
                 "animal_name_snapshot": report.animal_name_snapshot,
                 "shelter_number_snapshot": report.shelter_number_snapshot,
                 "note": report.note,
@@ -273,9 +287,17 @@ async def animal_timeline(
     report_ids = [report.id for day in days for report in day.reports]
     media_by_report = await repository.media_for_reports(report_ids)
     stool_by_report = await repository.stool_analyses_for_reports(report_ids)
+    volunteer_labels = await repository.volunteer_labels(
+        [report.membership_id for day in days for report in day.reports]
+    )
     return {
         "days": [
-            _serialize_day(day, media_by_report=media_by_report, stool_by_report=stool_by_report)
+            _serialize_day(
+                day,
+                media_by_report=media_by_report,
+                stool_by_report=stool_by_report,
+                volunteer_labels=volunteer_labels,
+            )
             for day in days
         ],
         "animal_id": str(animalId),

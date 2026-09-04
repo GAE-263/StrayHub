@@ -57,7 +57,8 @@ describe("AnimalTimeline", () => {
             {
               id: "report-1",
               submittedAt: "2026-08-07T09:00:00+08:00",
-              volunteerUserId: "staff-1",
+              volunteerUserId: "11111111-1111-4111-8111-111111111111",
+              volunteerLabel: "黃・V024",
               note: "原始心得",
               observations: {
                 urination: "urination.not_observed",
@@ -97,6 +98,11 @@ describe("AnimalTimeline", () => {
     expect(container?.textContent).toContain("照片：2 張");
     expect(container?.textContent).toContain("AI 處理：等待處理（pending）");
     expect(container?.textContent).toContain("人工資料狀態：已保存（saved）");
+    const author = container?.querySelector(".timeline-report-author");
+    expect(author?.textContent).toBe("黃・V024");
+    expect(author?.getAttribute("href")).toBe(
+      "/volunteers/access?user_id=11111111-1111-4111-8111-111111111111",
+    );
   });
 
   it("keeps loading, empty and error states distinguishable", async () => {

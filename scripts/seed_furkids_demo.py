@@ -38,6 +38,7 @@ from services.api.app.persistence.models.volunteer_access import (
     VolunteerAccessGrant,
     VolunteerApplication,
 )
+from services.api.app.persistence.models.volunteer_management import VolunteerProfile
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -466,12 +467,20 @@ async def _seed_identity(
             status="active",
             valid_from=datetime(2020, 1, 1, tzinfo=timezone.utc),
             expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+            volunteer_no="V001",
         ),
     )
     membership.role = "VOLUNTEER"
     membership.status = "active"
     membership.valid_from = datetime(2020, 1, 1, tzinfo=timezone.utc)
     membership.expires_at = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    membership.volunteer_no = "V001"
+    profile = await _one_or_create(
+        session,
+        select(VolunteerProfile).where(VolunteerProfile.user_id == volunteer.id),
+        lambda: VolunteerProfile(user_id=volunteer.id, surname="陳"),
+    )
+    profile.surname = "陳"
     policy = await _one_or_create(
         session,
         select(OrganizationVolunteerAccessPolicy).where(

@@ -10,12 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AIObservation
 from services.api.app.persistence.models.care_report import CareReport, CareReportMedia, MediaAsset
+from services.api.app.persistence.models.identity import OrganizationMembership
 from services.api.app.persistence.models.medical_care import (
     CareReminderAction,
     CareReminderOccurrence,
     CareReminderSeries,
     MedicalRecord,
 )
+from services.api.app.persistence.models.volunteer_management import VolunteerProfile
 
 
 class TimelineRepository:
@@ -45,6 +47,32 @@ class TimelineRepository:
             .order_by(CareReport.submitted_at, CareReport.id)
         )
         return list(result.scalars())
+
+    async def volunteer_labels(
+        self, membership_ids: list[UUID]
+    ) -> dict[UUID, tuple[str | None, str | None]]:
+        """Resolve canonical surname and shelter number for scoped memberships."""
+        if not membership_ids:
+            return {}
+        result = await self.session.execute(
+            select(
+                OrganizationMembership.id,
+                VolunteerProfile.surname,
+                OrganizationMembership.volunteer_no,
+            )
+            .outerjoin(
+                VolunteerProfile,
+                VolunteerProfile.user_id == OrganizationMembership.user_id,
+            )
+            .where(
+                OrganizationMembership.id.in_(set(membership_ids)),
+                OrganizationMembership.organization_id == self.organization_id,
+            )
+        )
+        return {
+            membership_id: (surname, volunteer_no)
+            for membership_id, surname, volunteer_no in result.all()
+        }
 
     async def media_for_reports(self, report_ids: list[UUID]) -> dict[UUID, list[MediaAsset]]:
         if not report_ids:

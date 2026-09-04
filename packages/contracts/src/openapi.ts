@@ -1342,6 +1342,154 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getVolunteerProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVolunteerNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}/assist-flag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateVolunteerAssistFlag"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVolunteerIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-incidents/{incidentId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decideVolunteerIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-incidents/{incidentId}/restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVolunteerRestriction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/volunteer-restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformVolunteerRestrictions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/volunteer-restrictions/{restrictionId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                restrictionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decidePlatformVolunteerRestriction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/{organizationId}/volunteer-decision-batches": {
         parameters: {
             query?: never;
@@ -2781,6 +2929,7 @@ export interface components {
             submitted_at: string;
             /** Format: uuid */
             volunteer_user_id: string;
+            volunteer_label: string;
             animal_name_snapshot: string;
             shelter_number_snapshot?: string | null;
             note?: string | null;
@@ -3164,21 +3313,118 @@ export interface components {
             service_date: string;
             pending_count: number;
         };
-        VolunteerServiceSummaryItemResponse: {
-            /** Format: uuid */
-            organization_id: string;
-            organization_name: string;
-            /** Format: date */
-            service_date: string;
-            /** @enum {string} */
-            service_status: "recorded" | "archived";
-            record_count: number;
-            /** @enum {string} */
-            source: "care_report";
-        };
         VolunteerServiceSummaryResponse: {
-            items: components["schemas"]["VolunteerServiceSummaryItemResponse"][];
-            next_cursor: string | null;
+            current_shelter_visits: number;
+            total_strayhub_visits: number;
+            visits_last_180_days: number;
+            visits_last_90_days: number;
+            visits_last_30_days: number;
+            /** Format: date-time */
+            last_visit_at: string | null;
+            active_months_last_6_months: number;
+            /** @enum {string} */
+            recent_status: "new" | "consistently_active" | "recently_active" | "less_recently_active" | "active";
+            has_active_platform_restriction: boolean;
+            approval_blocked: boolean;
+        };
+        VolunteerStatisticsResponse: {
+            current_shelter_visits: number;
+            total_strayhub_visits: number;
+            visits_last_180_days: number;
+            visits_last_90_days: number;
+            visits_last_30_days: number;
+            /** Format: date-time */
+            last_visit_at: string | null;
+            active_months_last_6_months: number;
+            /** @enum {string} */
+            recent_status: "new" | "consistently_active" | "recently_active" | "less_recently_active" | "active";
+        };
+        VolunteerNoteResponse: {
+            /** Format: uuid */
+            id: string;
+            content: string;
+            author_display_name: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        VolunteerIncidentResponse: {
+            /** Format: uuid */
+            id: string;
+            incident_type: string;
+            /** @enum {string} */
+            severity: "low" | "medium" | "high" | "critical";
+            factual_summary: string;
+            /** Format: date-time */
+            occurred_at: string;
+            /** @enum {string} */
+            status: "reported" | "under_review" | "confirmed" | "dismissed";
+        };
+        VolunteerRestrictionResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            scope: "SHELTER" | "PLATFORM";
+            reason_category: string;
+            /** @enum {string} */
+            status: "pending_review" | "active" | "rejected" | "expired" | "revoked";
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string | null;
+            /** Format: date-time */
+            reviewed_at: string | null;
+        };
+        VolunteerProfileResponse: {
+            /** Format: uuid */
+            membership_id: string;
+            volunteer_no: string;
+            label: string;
+            surname: string | null;
+            membership_status: string;
+            can_assist_new_volunteers: boolean;
+            statistics: components["schemas"]["VolunteerStatisticsResponse"];
+            notes: components["schemas"]["VolunteerNoteResponse"][];
+            incidents: components["schemas"]["VolunteerIncidentResponse"][];
+            restrictions: components["schemas"]["VolunteerRestrictionResponse"][];
+        };
+        VolunteerNoteCreateRequest: {
+            content: string;
+        };
+        VolunteerAssistFlagRequest: {
+            can_assist_new_volunteers: boolean;
+        };
+        VolunteerIncidentCreateRequest: {
+            incident_type: string;
+            /** @enum {string} */
+            severity: "low" | "medium" | "high" | "critical";
+            factual_summary: string;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        VolunteerIncidentDecisionRequest: {
+            /** @enum {string} */
+            decision: "confirm" | "dismiss";
+        };
+        VolunteerRestrictionCreateRequest: {
+            /** @enum {string} */
+            scope: "SHELTER" | "PLATFORM";
+            reason_category: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+        };
+        PlatformRestrictionDecisionRequest: {
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            reason?: string | null;
+        };
+        PlatformRestrictionReviewItemResponse: {
+            restriction: components["schemas"]["VolunteerRestrictionResponse"];
+            incident: components["schemas"]["VolunteerIncidentResponse"];
+            /** Format: uuid */
+            originating_organization_id: string;
+            originating_organization_name: string;
         };
         VolunteerAccessPolicy: {
             /** Format: uuid */
@@ -3332,6 +3578,7 @@ export interface components {
             user_id: string;
             /** Format: uuid */
             membership_id: string;
+            volunteer_no?: string | null;
             /** Format: uuid */
             application_id: string;
             display_name: string;
@@ -6307,8 +6554,6 @@ export interface operations {
         parameters: {
             query: {
                 purpose_code: "volunteer_service_history_review";
-                cursor?: string;
-                limit?: number;
             };
             header?: {
                 /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
@@ -6372,6 +6617,227 @@ export interface operations {
             410: components["responses"]["PiiLifecycleExpired"];
             422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getVolunteerProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本所志工資料與不揭露其他收容所明細的服務統計 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerProfileResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerNoteCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立本所選填備註 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerNoteResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    updateVolunteerAssistFlag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerAssistFlagRequest"];
+            };
+        };
+        responses: {
+            /** @description 已更新選填協助新人標記 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerAssistFlagRequest"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerIncidentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立本所正式事件 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerIncidentResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    decideVolunteerIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerIncidentDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 已完成本所事件審查 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerIncidentResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerRestrictionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立本所限制或送出平台限制審查 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerRestrictionResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPlatformVolunteerRestrictions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 平台管理員可見的待審查限制與必要事件資料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformRestrictionReviewItemResponse"][];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+        };
+    };
+    decidePlatformVolunteerRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                restrictionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformRestrictionDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 平台管理員已完成平台限制審查 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerRestrictionResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     createVolunteerDecisionBatch: {
@@ -6485,6 +6951,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["GrantStatus"];
+                /** @description 限定查詢目前 organization 內指定志工的授權週期。 */
+                user_id?: string;
                 cursor?: string;
                 limit?: number;
             };

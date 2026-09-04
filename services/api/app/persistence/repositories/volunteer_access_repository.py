@@ -532,6 +532,7 @@ class VolunteerAccessRepository:
         self,
         *,
         status: str | None = None,
+        user_id: UUID | None = None,
         cursor: tuple[datetime, UUID] | None = None,
         limit: int = 100,
     ) -> list[VolunteerAccessGrant]:
@@ -542,6 +543,8 @@ class VolunteerAccessRepository:
             if status not in {"active", "expired", "revoked"}:
                 raise DomainError("invalid_grant_status", "授權狀態篩選無效", 422)
             statement = statement.where(VolunteerAccessGrant.status == status)
+        if user_id is not None:
+            statement = statement.where(VolunteerAccessGrant.user_id == user_id)
         if cursor is not None:
             approved_at, grant_id = cursor
             statement = statement.where(
