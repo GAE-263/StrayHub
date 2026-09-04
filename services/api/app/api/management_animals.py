@@ -4,7 +4,7 @@ import json
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from services.api.app.api.dependencies import (
     RequestContext,
@@ -27,6 +27,31 @@ router = APIRouter(prefix="/v1/management/animals", tags=["Management Animals"])
 logger = logging.getLogger(__name__)
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
+MANAGEMENT_PHOTO_CACHE_CONTROL = "private, max-age=300, must-revalidate"
+MANAGEMENT_PHOTO_VARY = "Authorization, X-Session-ID"
+
+
+def _photo_headers(checksum: str) -> dict[str, str]:
+    return {
+        "Cache-Control": MANAGEMENT_PHOTO_CACHE_CONTROL,
+        "ETag": f'"{checksum}"',
+        "Vary": MANAGEMENT_PHOTO_VARY,
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+    if if_none_match is None:
+        return False
+    for candidate in if_none_match.split(","):
+        candidate = candidate.strip()
+        if candidate == "*":
+            return True
+        if candidate.startswith("W/"):
+            candidate = candidate[2:].strip()
+        if candidate == etag:
+            return True
+    return False
 
 
 def _parse_payload(payload: str) -> dict:
@@ -162,7 +187,16 @@ async def get_management_animal(
         200: {
             "description": "Authenticated current animal photo scoped to the active shelter",
             "headers": {
-                "Cache-Control": {"schema": {"type": "string", "const": "private, no-store"}},
+                "Cache-Control": {
+                    "schema": {
+                        "type": "string",
+                        "const": MANAGEMENT_PHOTO_CACHE_CONTROL,
+                    }
+                },
+                "ETag": {"schema": {"type": "string"}},
+                "Vary": {
+                    "schema": {"type": "string", "const": MANAGEMENT_PHOTO_VARY}
+                },
                 "X-Content-Type-Options": {"schema": {"type": "string", "const": "nosniff"}},
             },
             "content": {
@@ -170,15 +204,37 @@ async def get_management_animal(
                 for media_type in ("image/jpeg", "image/png", "image/webp")
             },
         },
+        304: {
+            "description": "Current authenticated photo has not changed",
+            "headers": {
+                "Cache-Control": {
+                    "schema": {
+                        "type": "string",
+                        "const": MANAGEMENT_PHOTO_CACHE_CONTROL,
+                    }
+                },
+                "ETag": {"schema": {"type": "string"}},
+                "Vary": {
+                    "schema": {"type": "string", "const": MANAGEMENT_PHOTO_VARY}
+                },
+            },
+        },
     },
 )
 async def get_management_animal_photo(
     animal_id: UUID,
+    version: str | None = Query(default=None, alias="v"),  # noqa: B008
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),  # noqa: B008
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> Response:
+    # `v` changes the browser cache key only. The tenant-scoped current asset remains authoritative.
+    _ = version
     organization_id = require_staff_or_admin(context)
     photo = await ManagementAnimalService(session, organization_id).photo(animal_id)
+    headers = _photo_headers(photo.checksum)
+    if _etag_matches(if_none_match, headers["ETag"]):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
     try:
         content = await MinioStorageAdapter().get(
             scope=ObjectScope(organization_id),
@@ -190,10 +246,7 @@ async def get_management_animal_photo(
     return Response(
         content=content,
         media_type=photo.content_type,
-        headers={
-            "Cache-Control": "private, no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
+        headers=headers,
     )
 
 

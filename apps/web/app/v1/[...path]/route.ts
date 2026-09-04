@@ -152,7 +152,11 @@ async function proxy(
       signal: controller.signal,
     });
 
-    if (upstream.status >= 300 && upstream.status < 400) {
+    if (
+      upstream.status >= 300 &&
+      upstream.status < 400 &&
+      upstream.status !== 304
+    ) {
       return errorResponse(502, "Upstream API redirect rejected");
     }
 

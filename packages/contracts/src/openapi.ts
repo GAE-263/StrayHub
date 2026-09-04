@@ -5848,8 +5848,14 @@ export interface operations {
     };
     getManagementAnimalPhoto: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description 目前圖片 checksum；只作為 browser cache key，不選擇 storage object。 */
+                v?: string;
+            };
+            header?: {
+                /** @description 先前收到的目前圖片 ETag；完成驗證與 tenant 檢查後可回 304。 */
+                "If-None-Match"?: string;
+            };
             path: {
                 animalId: components["parameters"]["AnimalId"];
             };
@@ -5860,7 +5866,9 @@ export interface operations {
             /** @description 已驗證、已清除 EXIF 的目前毛孩圖片 */
             200: {
                 headers: {
-                    "Cache-Control"?: "private, no-store";
+                    "Cache-Control"?: "private, max-age=300, must-revalidate";
+                    ETag?: string;
+                    Vary?: "Authorization, X-Session-ID";
                     "X-Content-Type-Options"?: "nosniff";
                     [name: string]: unknown;
                 };
@@ -5869,6 +5877,16 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                 };
+            };
+            /** @description 驗證、角色與 tenant 檢查皆通過，且目前圖片 ETag 未改變。 */
+            304: {
+                headers: {
+                    "Cache-Control"?: "private, max-age=300, must-revalidate";
+                    ETag?: string;
+                    Vary?: "Authorization, X-Session-ID";
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

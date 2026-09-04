@@ -689,6 +689,39 @@ Development tunnels may expose query strings in their own inspection console; do
 - A real loopback Uvicorn process emitted both capability routes with `token=[REDACTED]`, retained `page=2` for an ordinary query, and produced no formatter error.
 - The repository's local nginx helper passed syntax validation and API/Web routing checks with the updated template.
 
+## Management Photo Performance V1 — 2026-09-04
+
+The authenticated `/animals` management list now versions each valid current photo URL with the
+tenant-scoped `MediaAsset.checksum`. The photo endpoint returns
+`Cache-Control: private, max-age=300, must-revalidate`, a quoted checksum `ETag`, and
+`Vary: Authorization, X-Session-ID`. It completes authentication, role, tenant, current-media, and
+media-safety validation before evaluating `If-None-Match`; a match returns 304 before object
+storage is read. The `v` query remains a cache hint and never selects an object.
+
+`AnimalPhoto` still uses authenticated fetch, Blob URLs, abort, and revoke. An
+`IntersectionObserver` with a `200px` root margin now defers the authenticated fetch itself;
+runtimes without the observer fetch immediately. The generic Next `/v1` proxy needed one narrow
+compatibility change because it previously rejected 304 as though it were a redirect. It now
+preserves 304 while continuing to reject actual upstream redirects.
+
+Runtime validation used the isolated loopback demo on the MOA-SHELTER-51 synthetic data:
+
+| Measurement | Before | V1 result |
+|---|---:|---:|
+| Initial requests for 20 rows | 20 photo GETs | 11 photo GETs; 9 offscreen photos deferred |
+| Initial image bytes for those rows | 2,886,261 bytes | 1,475,761 bytes for the 11 prefetched photos |
+| Immediate browser refresh | 20 full photo bodies | 0 FastAPI photo GETs and 0 image body bytes |
+| Browser refresh after more than 300 seconds | 20 full photo bodies | 11 authenticated 304s, 0 image body bytes |
+| Conditional request through Next | unsupported (502) | 304 with ETag and cache headers preserved |
+
+The storage-skip regression test fails if a matching ETag invokes `storage.get()`. Replacement was
+also exercised against one local synthetic animal: switching to another valid same-shelter current
+photo changed the list URL/checksum, the old URL and old ETag returned the new current image as 200,
+and the exact original fixture was restored and verified in `finally`.
+
+Deferred cold-path work remains unchanged: reuse the MinIO/boto3 client and move synchronous object
+reads off the event loop. Thumbnail derivatives and CDN evaluation remain V2 work.
+
 ## 13. Risks
 
 | Risk | Impact | Mitigation |
@@ -715,7 +748,9 @@ These issues are known but are not blockers for the walk fix:
 3. **Staff signed-download API — intentional exception review.** `/v1/media/{mediaId}/download-url` intentionally returns a storage signed URL to authorized staff. Document the boundary and retain it unless private MinIO reachability makes the API unusable in deployed browsers.
 4. **Adoption LINE image formats.** Review existing WebP/other media and decide whether to normalize, derive JPEG/PNG, or omit unsupported heroes.
 5. **Capability TTL evidence.** Controlled LINE Desktop reopening produced a cache hit after expiry, but another old Flex was re-requested and received 404 after expiry. Treat 300 seconds as a documented runtime risk; collect GCP and mobile-client evidence before changing the lifetime.
-6. **Browser caching.** Review management `private, no-store`, blob URL lifecycle, LIFF signed-URL churn, and conditional caching separately.
+6. **Browser caching — management V1 complete.** Management animal photos now use private
+   checksum-versioned caching, authenticated ETag revalidation, and lazy authenticated fetch.
+   LIFF signed-URL churn remains a separate evaluation.
 7. **CDN and immutable assets.** Consider only after privacy, capability, and invalidation semantics are approved.
 8. **Broader LINE media validator adoption.** Apply the reusable presentation helper to adoption and growth-diary builders after walk behavior is stable.
 9. **Logging coverage beyond animal-photo capabilities.** The Uvicorn filter naturally masks token-like query values, but nginx route-specific protection currently covers only the two animal-photo capability paths. Separately review LIFF `qr_token`, shelter entry-reference query values, and any future public capabilities before declaring a broader query-credential logging policy.
