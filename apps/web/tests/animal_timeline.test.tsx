@@ -56,7 +56,7 @@ describe("AnimalTimeline", () => {
           reports: [
             {
               id: "report-1",
-              submittedAt: "2026-08-07T09:00:00+08:00",
+              submittedAt: "2026-08-07T01:00:00Z",
               volunteerUserId: "11111111-1111-4111-8111-111111111111",
               volunteerLabel: "黃・V024",
               note: "原始心得",
@@ -77,6 +77,17 @@ describe("AnimalTimeline", () => {
               mediaIds: ["media-1", "media-2"],
               aiJobStatus: "pending",
               status: "saved",
+              stoolAnalysis: {
+                recognized: true,
+                score: 4,
+                scoreLabel: "正常",
+                hasAbnormalities: false,
+                abnormalityDetails: null,
+                assessment: "狀態正常",
+                recommendation: "持續觀察",
+                reviewStatus: "confirmed",
+                humanReviewed: true,
+              },
             },
           ],
         },
@@ -95,14 +106,26 @@ describe("AnimalTimeline", () => {
     expect(container?.textContent).toContain("未觀察");
     expect(container?.textContent).toContain("情緒");
     expect(container?.textContent).toContain("無法判斷");
-    expect(container?.textContent).toContain("照片：2 張");
-    expect(container?.textContent).toContain("AI 處理：等待處理（pending）");
-    expect(container?.textContent).toContain("人工資料狀態：已保存（saved）");
+    const fields =
+      container?.querySelector(".timeline-report .timeline-field-grid")
+        ?.textContent ?? "";
+    expect(fields).toContain("照片");
+    expect(fields).toContain("2 張");
+    expect(fields).toContain("AI 處理");
+    expect(fields).toContain("等待處理（pending）");
+    expect(fields).toContain("人工資料狀態");
+    expect(fields).toContain("已保存（saved）");
     const author = container?.querySelector(".timeline-report-author");
-    expect(author?.textContent).toBe("黃・V024");
+    expect(author?.textContent).toContain("黃・V024");
     expect(author?.getAttribute("href")).toBe(
       "/volunteers/access?user_id=11111111-1111-4111-8111-111111111111",
     );
+    expect(
+      container?.querySelector(".timeline-report-time")?.textContent,
+    ).toContain("2026/8/7");
+    expect(
+      container?.querySelector('[aria-label="AI 便便判讀"]')?.textContent,
+    ).toContain("4/7 正常");
   });
 
   it("keeps loading, empty and error states distinguishable", async () => {
