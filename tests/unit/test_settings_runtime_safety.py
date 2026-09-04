@@ -22,6 +22,7 @@ def safe_non_local_settings(**overrides) -> Settings:
         "auth_jwt_active_public_key_reference": "active-public-v1",
         "auth_jwt_active_private_key": "synthetic-private-key-material",
         "auth_jwt_active_public_key": "synthetic-public-key-material",
+        "login_abuse_hmac_secret": "synthetic-login-abuse-hmac-secret-material",
         "pii_encryption_provider": "gcp-kms",
         "pii_allow_local_provider": False,
         "pii_kms_key_name": (
@@ -126,6 +127,12 @@ def test_non_api_process_rejects_unsafe_database(process: str) -> None:
         ({"database_url": ""}, "DATABASE_URL"),
         ({"auth_jwt_active_private_key": None}, "AUTH_JWT_ACTIVE_PRIVATE_KEY"),
         ({"auth_jwt_active_public_key": "fake-jwt-key"}, "AUTH_JWT_ACTIVE_PUBLIC_KEY"),
+        (
+            {"login_abuse_hmac_secret": "local-only-login-abuse-hmac-secret-material"},
+            "LOGIN_ABUSE_HMAC_SECRET",
+        ),
+        ({"login_abuse_hmac_secret": "short-secret"}, "LOGIN_ABUSE_HMAC_SECRET"),
+        ({"login_abuse_hmac_secret": ""}, "LOGIN_ABUSE_HMAC_SECRET"),
         ({"pii_kms_key_name": None}, "PII_KMS_KEY_NAME"),
         (
             {"pii_kms_key_name": "projects/synthetic/locations/global/keyRings/pii"},

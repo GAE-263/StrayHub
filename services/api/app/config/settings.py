@@ -110,6 +110,8 @@ class Settings(BaseSettings):
     pii_kms_key_name: str | None = None
     session_access_token_ttl_seconds: int = Field(default=900, ge=1)
     session_refresh_token_ttl_seconds: int = Field(default=604800, ge=1)
+    login_abuse_hmac_secret: SecretStr = SecretStr("local-only-login-abuse-hmac-secret-material")
+    login_trusted_proxy_enabled: bool = False
     draft_ttl_seconds: int = Field(default=86400, ge=1)
     ai_provider: str = "mock"
     ai_model_name: str = "mock-observation-model"
@@ -265,6 +267,10 @@ class Settings(BaseSettings):
         )
         placeholder("AUTH_JWT_ACTIVE_PRIVATE_KEY", self.auth_jwt_active_private_key)
         placeholder("AUTH_JWT_ACTIVE_PUBLIC_KEY", self.auth_jwt_active_public_key)
+        login_abuse_secret = self.login_abuse_hmac_secret.get_secret_value()
+        placeholder("LOGIN_ABUSE_HMAC_SECRET", login_abuse_secret)
+        if len(login_abuse_secret.encode()) < 24:
+            problems.append("LOGIN_ABUSE_HMAC_SECRET is too short")
         if self.auth_jwt_previous_public_key:
             placeholder(
                 "AUTH_JWT_PREVIOUS_PUBLIC_KEY_REFERENCE",

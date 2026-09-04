@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from services.api.app.api.dependencies import (
     RequestContext,
@@ -13,8 +13,10 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.errors import DomainError
+from services.api.app.api.management_access import resolve_trusted_client_ip
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.authentication.context_service import ActiveShelterContextService
+from services.api.app.application.authentication.login_abuse import LoginAbuseKeys
 from services.api.app.application.authentication.session_service import SessionService
 from services.api.app.application.line_rich_menu_routing import (
     RichMenuRoutingService,
@@ -210,16 +212,35 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
         rich_menu_router=rich_menu_router,
         refresh_ttl_seconds=settings.session_refresh_token_ttl_seconds,
         access_ttl_seconds=settings.session_access_token_ttl_seconds,
+        abuse_keys=LoginAbuseKeys(settings.login_abuse_hmac_secret),
     )
 
 
 @router.post("/login", status_code=status.HTTP_200_OK, openapi_extra={"security": []})
 async def login(
+    request: Request,
     payload: LoginRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:  # noqa: B008
-    result = await service.login(username=payload.username, password=payload.password)
+    settings = get_settings()
+    try:
+        client_ip = resolve_trusted_client_ip(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+            allow_local_test_peer=settings.app_env.strip().lower() in {"local", "test", "testing"},
+        )
+    except ValueError as exc:
+        raise DomainError("login_source_unavailable", "登入暫時無法處理", 503) from exc
+    try:
+        result = await service.login(
+            username=payload.username,
+            password=payload.password,
+            client_ip=client_ip,
+        )
+    except DomainError:
+        await session.commit()
+        raise
     await session.commit()
     return result
 

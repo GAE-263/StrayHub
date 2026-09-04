@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -98,6 +99,31 @@ class RefreshTokenRecord(IdentityMixin, AuditMixin, Base):
     family_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), index=True)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class LoginAccountAbuseState(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "login_account_abuse_states"
+    __table_args__ = (
+        CheckConstraint(
+            "consecutive_failures >= 0 AND consecutive_failures <= 5",
+            name="ck_login_account_abuse_failure_range",
+        ),
+    )
+
+    subject_digest: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LoginIpAttempt(IdentityMixin, Base):
+    __tablename__ = "login_ip_attempts"
+    __table_args__ = (Index("ix_login_ip_attempt_source_time", "source_digest", "attempted_at"),)
+
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class LineUserBinding(IdentityMixin, AuditMixin, Base):

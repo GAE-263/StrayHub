@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import math
+from datetime import datetime, timedelta
 from typing import TypeVar
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.application.authentication.login_abuse import (
+    ACCOUNT_FAILURE_LIMIT,
+    ACCOUNT_LOCK_SECONDS,
+    IP_ATTEMPT_LIMIT,
+    IP_WINDOW_SECONDS,
+    LoginLimitDecision,
+)
 from services.api.app.persistence.database.scope import (
     set_authentication_user_organization_scope,
     set_authentication_user_scope,
@@ -18,6 +27,8 @@ from services.api.app.persistence.database.scope import (
 )
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
+    LoginAccountAbuseState,
+    LoginIpAttempt,
     Organization,
     OrganizationMembership,
     RefreshTokenRecord,
@@ -44,6 +55,119 @@ class AuthenticationRepository:
     async def find_user_by_username(self, username: str) -> User | None:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
+
+    @staticmethod
+    def _advisory_key(digest: str) -> int:
+        return int.from_bytes(bytes.fromhex(digest[:16]), byteorder="big", signed=True)
+
+    async def _lock_login_digest(self, digest: str) -> None:
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": self._advisory_key(digest)},
+        )
+
+    async def consume_login_ip_attempt(
+        self,
+        source_digest: str,
+        *,
+        now: datetime,
+        window_seconds: int = IP_WINDOW_SECONDS,
+        limit: int = IP_ATTEMPT_LIMIT,
+    ) -> LoginLimitDecision:
+        await self._lock_login_digest(source_digest)
+        cutoff = now - timedelta(seconds=window_seconds)
+        await self.session.execute(
+            delete(LoginIpAttempt).where(
+                LoginIpAttempt.source_digest == source_digest,
+                LoginIpAttempt.attempted_at <= cutoff,
+            )
+        )
+        attempts = list(
+            (
+                await self.session.execute(
+                    select(LoginIpAttempt.attempted_at)
+                    .where(
+                        LoginIpAttempt.source_digest == source_digest,
+                        LoginIpAttempt.attempted_at > cutoff,
+                    )
+                    .order_by(LoginIpAttempt.attempted_at, LoginIpAttempt.id)
+                    .limit(limit)
+                )
+            ).scalars()
+        )
+        if len(attempts) >= limit:
+            retry_after = max(
+                1,
+                math.ceil((attempts[0] + timedelta(seconds=window_seconds) - now).total_seconds()),
+            )
+            return LoginLimitDecision(False, retry_after)
+        self.session.add(LoginIpAttempt(source_digest=source_digest, attempted_at=now))
+        await self.session.flush()
+        await self._cleanup_expired_ip_attempts(cutoff=cutoff)
+        return LoginLimitDecision(True)
+
+    async def _cleanup_expired_ip_attempts(
+        self, *, cutoff: datetime, batch_size: int = 100
+    ) -> None:
+        stale_ids = (
+            select(LoginIpAttempt.id)
+            .where(LoginIpAttempt.attempted_at <= cutoff)
+            .order_by(LoginIpAttempt.attempted_at, LoginIpAttempt.id)
+            .limit(batch_size)
+        )
+        await self.session.execute(delete(LoginIpAttempt).where(LoginIpAttempt.id.in_(stale_ids)))
+
+    async def lock_login_account_state(
+        self, subject_digest: str, *, now: datetime
+    ) -> LoginAccountAbuseState | None:
+        await self._lock_login_digest(subject_digest)
+        state = (
+            await self.session.execute(
+                select(LoginAccountAbuseState)
+                .where(LoginAccountAbuseState.subject_digest == subject_digest)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if state is not None and state.locked_until is not None and state.locked_until <= now:
+            await self.session.delete(state)
+            await self.session.flush()
+            return None
+        return state
+
+    @staticmethod
+    def account_retry_after(state: LoginAccountAbuseState | None, *, now: datetime) -> int | None:
+        if state is None or state.locked_until is None or state.locked_until <= now:
+            return None
+        return max(1, math.ceil((state.locked_until - now).total_seconds()))
+
+    async def record_login_failure(
+        self,
+        subject_digest: str,
+        *,
+        state: LoginAccountAbuseState | None,
+        now: datetime,
+    ) -> int | None:
+        if state is None:
+            state = LoginAccountAbuseState(
+                subject_digest=subject_digest,
+                consecutive_failures=1,
+                last_failed_at=now,
+            )
+            self.session.add(state)
+        else:
+            state.consecutive_failures = min(ACCOUNT_FAILURE_LIMIT, state.consecutive_failures + 1)
+            state.last_failed_at = now
+        if state.consecutive_failures >= ACCOUNT_FAILURE_LIMIT:
+            state.locked_until = now + timedelta(seconds=ACCOUNT_LOCK_SECONDS)
+        await self.session.flush()
+        return self.account_retry_after(state, now=now)
+
+    async def clear_login_account_state(self, subject_digest: str) -> None:
+        await self.session.execute(
+            delete(LoginAccountAbuseState).where(
+                LoginAccountAbuseState.subject_digest == subject_digest
+            )
+        )
 
     async def set_authentication_user_scope(self, user_id: UUID) -> None:
         await set_authentication_user_scope(self.session, user_id)

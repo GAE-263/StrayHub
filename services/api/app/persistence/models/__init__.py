@@ -19,6 +19,8 @@ from services.api.app.persistence.models.care_report_handoff import CareReportHa
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     LineWebhookEvent,
+    LoginAccountAbuseState,
+    LoginIpAttempt,
     Organization,
     OrganizationMembership,
     RefreshTokenRecord,
@@ -79,6 +81,8 @@ __all__ = [
     "MediaAsset",
     "LineUserBinding",
     "LineWebhookEvent",
+    "LoginAccountAbuseState",
+    "LoginIpAttempt",
     "ObservationCategory",
     "ObservationOption",
     "ObservationOptionUsage",

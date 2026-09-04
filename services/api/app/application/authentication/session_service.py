@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.authentication.login_abuse import LoginAbuseKeys
 from services.api.app.application.line_rich_menu_routing import RichMenuRoutingService
 from services.api.app.application.ports.authentication import (
     AccessTokenPort,
@@ -26,6 +28,11 @@ from services.api.app.persistence.repositories.authentication_repository import 
 
 logger = get_logger(__name__)
 
+_DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=19456,t=2,p=1$WA91Jkye+IIpn+07soNWRg$"
+    "C2cae1Wk/9IAl1MSZSdA02XcCY2habmqSjKQJ+5zZ8s"
+)
+
 
 def _refresh_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -43,6 +50,8 @@ class SessionService:
         rich_menu_router: RichMenuRoutingService | None = None,
         refresh_ttl_seconds: int = 604800,
         access_ttl_seconds: int = 900,
+        abuse_keys: LoginAbuseKeys | None = None,
+        now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.repository = repository
         self.password_hasher = password_hasher
@@ -52,18 +61,63 @@ class SessionService:
         self.rich_menu_router = rich_menu_router
         self.refresh_ttl_seconds = refresh_ttl_seconds
         self.access_ttl_seconds = access_ttl_seconds
+        self.abuse_keys = abuse_keys
+        self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
-    async def login(self, *, username: str, password: str) -> dict:
+    @staticmethod
+    def _rate_limited(retry_after: int) -> DomainError:
+        return DomainError(
+            "login_rate_limited",
+            "登入暫時無法處理，請稍後再試",
+            429,
+            headers={"Retry-After": str(max(1, retry_after))},
+        )
+
+    async def login(self, *, username: str, password: str, client_ip: str | None = None) -> dict:
+        now = self.now_provider()
+        subject_digest: str | None = None
+        account_state = None
+        if self.abuse_keys is not None:
+            if client_ip is None:
+                raise DomainError("login_source_unavailable", "登入暫時無法處理", 503)
+            ip_decision = await self.repository.consume_login_ip_attempt(
+                self.abuse_keys.ip_digest(client_ip), now=now
+            )
+            subject_digest = self.abuse_keys.account_digest(username)
+            account_state = await self.repository.lock_login_account_state(subject_digest, now=now)
+            account_retry_after = self.repository.account_retry_after(account_state, now=now)
+            if not ip_decision.allowed or account_retry_after is not None:
+                raise self._rate_limited(
+                    max(ip_decision.retry_after or 0, account_retry_after or 0, 1)
+                )
+
         user = await self.repository.find_user_by_username(username)
-        if user is None or user.status != "active" or not user.password_hash:
-            raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
-        if not self.password_hasher.verify(password, user.password_hash):
+        usable_user = user is not None and user.status == "active" and bool(user.password_hash)
+        encoded_hash = (
+            user.password_hash if usable_user and user is not None else _DUMMY_PASSWORD_HASH
+        )
+        password_valid = self.password_hasher.verify(password, encoded_hash or _DUMMY_PASSWORD_HASH)
+        if not usable_user or not password_valid or user is None:
+            if subject_digest is not None:
+                retry_after = await self.repository.record_login_failure(
+                    subject_digest, state=account_state, now=now
+                )
+                if retry_after is not None:
+                    raise self._rate_limited(retry_after)
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
         await self.repository.set_authentication_user_scope(user.id)
         if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
             user.id
         ):
+            if subject_digest is not None:
+                retry_after = await self.repository.record_login_failure(
+                    subject_digest, state=account_state, now=now
+                )
+                if retry_after is not None:
+                    raise self._rate_limited(retry_after)
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
+        if subject_digest is not None:
+            await self.repository.clear_login_account_state(subject_digest)
         if self.password_hasher.needs_rehash(user.password_hash):
             user.password_hash = self.password_hasher.hash(password)
         session = SessionRecord(

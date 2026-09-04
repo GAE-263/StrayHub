@@ -1,10 +1,42 @@
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Iterable
 from uuid import UUID
 
+from fastapi import Request
 from services.api.app.api.dependencies import RequestContext
 from services.api.app.api.errors import DomainError
+
+_LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1"})
+_TRUSTED_CLIENT_IP_HEADER = "x-strayhub-trusted-client-ip"
+
+
+def resolve_trusted_client_ip(
+    request: Request,
+    *,
+    trusted_proxy_enabled: bool,
+    allow_local_test_peer: bool = False,
+) -> str:
+    """Resolve the login identity without trusting ordinary forwarding headers."""
+
+    peer = request.client.host if request.client is not None else None
+    try:
+        if not trusted_proxy_enabled:
+            if peer is None:
+                raise ValueError
+            if allow_local_test_peer and peer in {"testclient", "localhost"}:
+                return "127.0.0.1"
+            return str(ipaddress.ip_address(peer))
+        if peer not in _LOOPBACK_PEERS:
+            raise ValueError
+        values = request.headers.getlist(_TRUSTED_CLIENT_IP_HEADER)
+        if len(values) != 1 or "," in values[0]:
+            raise ValueError
+        return str(ipaddress.ip_address(values[0].strip()))
+    except ValueError:
+        raise ValueError("trusted client IP unavailable") from None
+
 
 MANAGEMENT_ROLES = {"PLATFORM_ADMIN", "SHELTER_ADMIN", "STAFF"}
 ADMIN_ROLES = {"PLATFORM_ADMIN", "SHELTER_ADMIN"}
