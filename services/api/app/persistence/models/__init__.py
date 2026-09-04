@@ -51,6 +51,13 @@ from services.api.app.persistence.models.volunteer_access import (
     VolunteerNotificationRetryBatch,
     VolunteerNotificationRetryBatchItem,
 )
+from services.api.app.persistence.models.volunteer_management import (
+    OrganizationVolunteerNumberCounter,
+    VolunteerIncident,
+    VolunteerNote,
+    VolunteerProfile,
+    VolunteerRestriction,
+)
 
 __all__ = [
     "AdoptionDraft",
@@ -94,6 +101,11 @@ __all__ = [
     "VolunteerNotificationDelivery",
     "VolunteerNotificationRetryBatch",
     "VolunteerNotificationRetryBatchItem",
+    "VolunteerProfile",
+    "OrganizationVolunteerNumberCounter",
+    "VolunteerNote",
+    "VolunteerIncident",
+    "VolunteerRestriction",
     "MedicalRecord",
     "MedicalRecordMedia",
     "CareReminderSeries",

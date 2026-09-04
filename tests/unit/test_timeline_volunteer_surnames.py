@@ -5,15 +5,15 @@ from services.api.app.persistence.repositories.timeline_repository import Timeli
 
 
 class _Result:
-    def __init__(self, rows: list[tuple[UUID, str]]) -> None:
+    def __init__(self, rows: list[tuple[UUID, str | None, str | None]]) -> None:
         self.rows = rows
 
-    def all(self) -> list[tuple[UUID, str]]:
+    def all(self) -> list[tuple[UUID, str | None, str | None]]:
         return self.rows
 
 
 class _Session:
-    def __init__(self, rows: list[tuple[UUID, str]]) -> None:
+    def __init__(self, rows: list[tuple[UUID, str | None, str | None]]) -> None:
         self.rows = rows
         self.statements: list[object] = []
 
@@ -23,26 +23,27 @@ class _Session:
 
 
 @pytest.mark.asyncio
-async def test_volunteer_surname_lookup_is_tenant_and_user_scoped() -> None:
+async def test_volunteer_label_lookup_is_tenant_and_membership_scoped() -> None:
     organization_id = uuid4()
-    user_id = uuid4()
-    session = _Session([(user_id, "黃")])
+    membership_id = uuid4()
+    session = _Session([(membership_id, "黃", "V024")])
 
-    result = await TimelineRepository(session, organization_id).volunteer_surnames([user_id])
+    result = await TimelineRepository(session, organization_id).volunteer_labels([membership_id])
 
-    assert result == {user_id: "黃"}
+    assert result == {membership_id: ("黃", "V024")}
     statement = session.statements[0]
     sql = str(statement)
     assert "organization_memberships.organization_id" in sql
-    assert "organization_memberships.user_id IN" in sql
+    assert "organization_memberships.id IN" in sql
+    assert "volunteer_profiles" in sql
     values = list(statement.compile().params.values())
     assert organization_id in values
-    assert [user_id] in values
+    assert [membership_id] in values
 
 
 @pytest.mark.asyncio
-async def test_empty_volunteer_surname_lookup_does_not_query() -> None:
+async def test_empty_volunteer_label_lookup_does_not_query() -> None:
     session = _Session([])
 
-    assert await TimelineRepository(session, uuid4()).volunteer_surnames([]) == {}
+    assert await TimelineRepository(session, uuid4()).volunteer_labels([]) == {}
     assert session.statements == []

@@ -181,8 +181,7 @@ export function AnimalTimeline({
                       href={`/volunteers/access?user_id=${report.volunteerUserId}`}
                     >
                       回報者：
-                      {report.volunteerLabel ??
-                        `志工 #${report.volunteerUserId.slice(0, 8)}`}
+                      {report.volunteerLabel ?? "志工"}
                     </Link>
                   ) : null}
                 </header>

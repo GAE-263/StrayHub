@@ -1,7 +1,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Uuid, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin, utc_now
@@ -40,6 +50,7 @@ class User(IdentityMixin, AuditMixin, Base):
 class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     __tablename__ = "organization_memberships"
     __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_organization_memberships_org_id"),
         CheckConstraint(
             "role <> 'VOLUNTEER' OR "
             "(valid_from IS NOT NULL AND expires_at IS NOT NULL AND expires_at > valid_from)",
@@ -51,9 +62,10 @@ class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
-    # Surname only, copied from the application at approval so staff can tell
-    # volunteers apart without revealing the encrypted full name.
-    volunteer_surname: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    volunteer_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    can_assist_new_volunteers: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     archived_from_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

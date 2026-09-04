@@ -37,6 +37,7 @@ from services.api.app.api.qr_codes import router as qr_codes_router
 from services.api.app.api.report_inbox import router as report_inbox_router
 from services.api.app.api.reportable_scope import router as reportable_scope_router
 from services.api.app.api.volunteer_access import router as volunteer_access_router
+from services.api.app.api.volunteer_management import router as volunteer_management_router
 from services.api.app.observability.logging import configure_access_log_redaction
 
 configure_access_log_redaction()
@@ -112,6 +113,7 @@ app.include_router(line_binding_router)
 app.include_router(growth_diary_router)
 app.include_router(line_drafts_router)
 app.include_router(volunteer_access_router)
+app.include_router(volunteer_management_router)
 app.include_router(medical_records_router)
 app.include_router(care_reminders_router)
 app.include_router(assigned_care_router)

@@ -1761,19 +1761,6 @@ paths:
           schema:
             type: string
             enum: [volunteer_service_history_review]
-        - name: cursor
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
       responses:
         '200':
           description: 僅回傳跨收容所服務證據摘要，不包含個資或照護回報內容
@@ -1827,6 +1814,176 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /v1/organizations/{organizationId}/volunteers/{membershipId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - name: membershipId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [Volunteer Management]
+      operationId: getVolunteerProfile
+      responses:
+        '200':
+          description: 本所志工資料與不揭露其他收容所明細的服務統計
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerProfileResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+  /v1/organizations/{organizationId}/volunteers/{membershipId}/notes:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - name: membershipId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [Volunteer Management]
+      operationId: createVolunteerNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VolunteerNoteCreateRequest'}
+      responses:
+        '201':
+          description: 已建立本所選填備註
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerNoteResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+  /v1/organizations/{organizationId}/volunteers/{membershipId}/assist-flag:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - name: membershipId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    patch:
+      tags: [Volunteer Management]
+      operationId: updateVolunteerAssistFlag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VolunteerAssistFlagRequest'}
+      responses:
+        '200':
+          description: 已更新選填協助新人標記
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerAssistFlagRequest'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+  /v1/organizations/{organizationId}/volunteers/{membershipId}/incidents:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - name: membershipId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [Volunteer Management]
+      operationId: createVolunteerIncident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VolunteerIncidentCreateRequest'}
+      responses:
+        '201':
+          description: 已建立本所正式事件
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerIncidentResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+  /v1/organizations/{organizationId}/volunteer-incidents/{incidentId}/decision:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - name: incidentId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [Volunteer Management]
+      operationId: decideVolunteerIncident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VolunteerIncidentDecisionRequest'}
+      responses:
+        '200':
+          description: 已完成本所事件審查
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerIncidentResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+  /v1/organizations/{organizationId}/volunteer-incidents/{incidentId}/restrictions:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - name: incidentId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [Volunteer Management]
+      operationId: createVolunteerRestriction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VolunteerRestrictionCreateRequest'}
+      responses:
+        '201':
+          description: 已建立本所限制或送出平台限制審查
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerRestrictionResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/platform/volunteer-restrictions:
+    get:
+      tags: [Volunteer Management]
+      operationId: listPlatformVolunteerRestrictions
+      responses:
+        '200':
+          description: 平台管理員可見的待審查限制與必要事件資料
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PlatformRestrictionReviewItemResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+  /v1/platform/volunteer-restrictions/{restrictionId}/decision:
+    parameters:
+      - name: restrictionId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [Volunteer Management]
+      operationId: decidePlatformVolunteerRestriction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlatformRestrictionDecisionRequest'}
+      responses:
+        '200':
+          description: 平台管理員已完成平台限制審查
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VolunteerRestrictionResponse'}
+        '403': {$ref: '#/components/responses/ManagementDenied'}
+        '404': {$ref: '#/components/responses/ScopedNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /v1/organizations/{organizationId}/volunteer-decision-batches:
     parameters:
       - $ref: '#/components/parameters/OrganizationId'
@@ -4444,39 +4601,170 @@ components:
         pending_count:
           type: integer
           minimum: 1
-    VolunteerServiceSummaryItemResponse:
-      type: object
-      required: [organization_id, organization_name, service_date, service_status, record_count, source]
-      additionalProperties: false
-      properties:
-        organization_id:
-          type: string
-          format: uuid
-        organization_name:
-          type: string
-        service_date:
-          type: string
-          format: date
-        service_status:
-          type: string
-          enum: [recorded, archived]
-        record_count:
-          type: integer
-          minimum: 1
-        source:
-          type: string
-          enum: [care_report]
     VolunteerServiceSummaryResponse:
       type: object
-      required: [items, next_cursor]
+      required:
+        - current_shelter_visits
+        - total_strayhub_visits
+        - visits_last_180_days
+        - visits_last_90_days
+        - visits_last_30_days
+        - last_visit_at
+        - active_months_last_6_months
+        - recent_status
+        - has_active_platform_restriction
+        - approval_blocked
       additionalProperties: false
       properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/VolunteerServiceSummaryItemResponse'
-        next_cursor:
+        current_shelter_visits:
+          type: integer
+          minimum: 0
+        total_strayhub_visits:
+          type: integer
+          minimum: 0
+        visits_last_180_days:
+          type: integer
+          minimum: 0
+        visits_last_90_days:
+          type: integer
+          minimum: 0
+        visits_last_30_days:
+          type: integer
+          minimum: 0
+        last_visit_at:
           type: [string, 'null']
+          format: date-time
+        active_months_last_6_months:
+          type: integer
+          minimum: 0
+          maximum: 6
+        recent_status:
+          type: string
+          enum: [new, consistently_active, recently_active, less_recently_active, active]
+        has_active_platform_restriction:
+          type: boolean
+        approval_blocked:
+          type: boolean
+    VolunteerStatisticsResponse:
+      type: object
+      additionalProperties: false
+      required: [current_shelter_visits, total_strayhub_visits, visits_last_180_days, visits_last_90_days, visits_last_30_days, last_visit_at, active_months_last_6_months, recent_status]
+      properties:
+        current_shelter_visits: {type: integer, minimum: 0}
+        total_strayhub_visits: {type: integer, minimum: 0}
+        visits_last_180_days: {type: integer, minimum: 0}
+        visits_last_90_days: {type: integer, minimum: 0}
+        visits_last_30_days: {type: integer, minimum: 0}
+        last_visit_at: {type: [string, 'null'], format: date-time}
+        active_months_last_6_months: {type: integer, minimum: 0, maximum: 6}
+        recent_status:
+          type: string
+          enum: [new, consistently_active, recently_active, less_recently_active, active]
+    VolunteerNoteResponse:
+      type: object
+      additionalProperties: false
+      required: [id, content, author_display_name, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        content: {type: string}
+        author_display_name: {type: string}
+        created_at: {type: string, format: date-time}
+    VolunteerIncidentResponse:
+      type: object
+      additionalProperties: false
+      required: [id, incident_type, severity, factual_summary, occurred_at, status]
+      properties:
+        id: {type: string, format: uuid}
+        incident_type: {type: string}
+        severity: {type: string, enum: [low, medium, high, critical]}
+        factual_summary: {type: string}
+        occurred_at: {type: string, format: date-time}
+        status: {type: string, enum: [reported, under_review, confirmed, dismissed]}
+    VolunteerRestrictionResponse:
+      type: object
+      additionalProperties: false
+      required: [id, scope, reason_category, status, starts_at, ends_at, reviewed_at]
+      properties:
+        id: {type: string, format: uuid}
+        scope: {type: string, enum: [SHELTER, PLATFORM]}
+        reason_category: {type: string}
+        status: {type: string, enum: [pending_review, active, rejected, expired, revoked]}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: [string, 'null'], format: date-time}
+        reviewed_at: {type: [string, 'null'], format: date-time}
+    VolunteerProfileResponse:
+      type: object
+      additionalProperties: false
+      required: [membership_id, volunteer_no, label, surname, membership_status, can_assist_new_volunteers, statistics, notes, incidents, restrictions]
+      properties:
+        membership_id: {type: string, format: uuid}
+        volunteer_no: {type: string}
+        label: {type: string}
+        surname: {type: [string, 'null']}
+        membership_status: {type: string}
+        can_assist_new_volunteers: {type: boolean}
+        statistics: {$ref: '#/components/schemas/VolunteerStatisticsResponse'}
+        notes:
+          type: array
+          items: {$ref: '#/components/schemas/VolunteerNoteResponse'}
+        incidents:
+          type: array
+          items: {$ref: '#/components/schemas/VolunteerIncidentResponse'}
+        restrictions:
+          type: array
+          items: {$ref: '#/components/schemas/VolunteerRestrictionResponse'}
+    VolunteerNoteCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content: {type: string, minLength: 1, maxLength: 2000}
+    VolunteerAssistFlagRequest:
+      type: object
+      additionalProperties: false
+      required: [can_assist_new_volunteers]
+      properties:
+        can_assist_new_volunteers: {type: boolean}
+    VolunteerIncidentCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [incident_type, severity, factual_summary, occurred_at]
+      properties:
+        incident_type: {type: string, minLength: 1, maxLength: 80}
+        severity: {type: string, enum: [low, medium, high, critical]}
+        factual_summary: {type: string, minLength: 1, maxLength: 2000}
+        occurred_at: {type: string, format: date-time}
+    VolunteerIncidentDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: {type: string, enum: [confirm, dismiss]}
+    VolunteerRestrictionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [scope, reason_category, starts_at]
+      properties:
+        scope: {type: string, enum: [SHELTER, PLATFORM]}
+        reason_category: {type: string, minLength: 1, maxLength: 80}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: [string, 'null'], format: date-time}
+    PlatformRestrictionDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: {type: string, enum: [approve, reject]}
+        reason: {type: [string, 'null'], maxLength: 500}
+    PlatformRestrictionReviewItemResponse:
+      type: object
+      additionalProperties: false
+      required: [restriction, incident, originating_organization_id, originating_organization_name]
+      properties:
+        restriction: {$ref: '#/components/schemas/VolunteerRestrictionResponse'}
+        incident: {$ref: '#/components/schemas/VolunteerIncidentResponse'}
+        originating_organization_id: {type: string, format: uuid}
+        originating_organization_name: {type: string}
     VolunteerAccessPolicy:
       type: object
       required: [organization_id, applications_enabled, default_grant_duration_hours, daily_application_limit, version]
@@ -4759,6 +5047,8 @@ components:
             membership_id:
               type: string
               format: uuid
+            volunteer_no:
+              type: [string, 'null']
             application_id:
               type: string
               format: uuid

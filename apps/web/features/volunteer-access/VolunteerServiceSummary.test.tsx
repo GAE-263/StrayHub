@@ -2,7 +2,7 @@
 
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { VolunteerServiceSummary } from "./VolunteerServiceSummary";
 
@@ -27,82 +27,59 @@ function render(props: React.ComponentProps<typeof VolunteerServiceSummary>) {
   act(() => root?.render(<VolunteerServiceSummary {...props} />));
 }
 
-const item = {
-  organization_id: "org-b",
-  organization_name: "收容所 B",
-  service_date: "2026-05-20",
-  service_status: "recorded" as const,
-  record_count: 2,
-  source: "care_report" as const,
+const summary = {
+  current_shelter_visits: 4,
+  total_strayhub_visits: 26,
+  visits_last_180_days: 11,
+  visits_last_90_days: 6,
+  visits_last_30_days: 2,
+  last_visit_at: "2026-08-29T08:00:00Z",
+  active_months_last_6_months: 5,
+  recent_status: "consistently_active" as const,
+  has_active_platform_restriction: false,
+  approval_blocked: false,
 };
 
 describe("VolunteerServiceSummary", () => {
-  it("keeps the summary secondary and renders safe provenance fields", () => {
-    const onLoad = vi.fn();
-    render({
-      loaded: false,
-      items: [],
-      nextCursor: null,
-      loading: false,
-      error: "",
-      onLoad,
-      onLoadMore: vi.fn(),
-    });
+  it("renders aggregate experience without other shelter details", () => {
+    render({ summary, loading: false, error: "" });
+
+    expect(container?.textContent).toContain("累積服務26 次");
+    expect(container?.textContent).toContain("最近半年11 次");
+    expect(container?.textContent).toContain("最近三個月6 次");
+    expect(container?.textContent).toContain("持續參與");
+    expect(container?.textContent).toContain("沒有需要注意");
     expect(container?.textContent).not.toContain("收容所 B");
-
-    act(() => {
-      container?.querySelector("button")?.click();
-    });
-    expect(onLoad).toHaveBeenCalledOnce();
-
-    act(() => {
-      root?.render(
-        <VolunteerServiceSummary
-          loaded
-          items={[item]}
-          nextCursor="cursor"
-          loading={false}
-          error=""
-          onLoad={onLoad}
-          onLoadMore={vi.fn()}
-        />,
-      );
-    });
-    expect(container?.textContent).toContain("收容所 B");
-    expect(container?.textContent).toContain("2026-05-20");
-    expect(container?.textContent).toContain("2 筆紀錄");
-    expect(container?.textContent).toContain("來源：照護回報");
-    expect(container?.textContent).not.toContain("姓名");
-    expect(container?.textContent).not.toContain("電話");
+    expect(container?.textContent).not.toContain("UUID");
   });
 
-  it("distinguishes empty, loading, and error states", () => {
+  it("renders a blocking platform restriction without incident details", () => {
     render({
-      loaded: true,
-      items: [],
-      nextCursor: null,
+      summary: {
+        ...summary,
+        has_active_platform_restriction: true,
+        approval_blocked: true,
+      },
       loading: false,
       error: "",
-      onLoad: vi.fn(),
-      onLoadMore: vi.fn(),
     });
-    expect(container?.textContent).toContain("目前沒有可顯示");
 
+    expect(container?.textContent).toContain("目前不可直接核准");
+    expect(container?.textContent).not.toContain("事件內容");
+  });
+
+  it("distinguishes loading and error states", () => {
+    render({ summary: null, loading: true, error: "" });
+    expect(container?.textContent).toContain("正在計算服務經驗");
     act(() => {
       root?.render(
         <VolunteerServiceSummary
-          loaded
-          items={[]}
-          nextCursor={null}
+          summary={null}
           loading={false}
           error="服務紀錄失敗"
-          onLoad={vi.fn()}
-          onLoadMore={vi.fn()}
         />,
       );
     });
     expect(container?.textContent).toContain("服務紀錄失敗");
-    expect(container?.textContent).not.toContain("目前沒有可顯示");
-    expect(container?.textContent).toContain("重試服務紀錄");
   });
 });

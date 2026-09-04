@@ -1,98 +1,60 @@
-"""Narrow cross-organization read model for volunteer service evidence."""
+"""Allowlisted cross-organization projection for volunteer visit statistics."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
 from uuid import UUID
 
-from sqlalchemy import Date, Select, and_, case, cast, func, or_, select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.domain.volunteer_experience import VolunteerVisitRecord
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.models.identity import Organization
-
-
-@dataclass(frozen=True)
-class VolunteerServiceSummaryRecord:
-    organization_id: UUID
-    organization_name: str
-    service_date: date
-    service_status: str
-    record_count: int
-    source: str = "care_report"
+from services.api.app.persistence.models.volunteer_management import VolunteerRestriction
 
 
 class VolunteerServiceSummaryRepository:
-    """Dedicated allowlisted cross-organization service-history read boundary."""
+    """Returns only inputs needed for aggregates; callers never expose rows."""
 
     def __init__(self, session: AsyncSession, current_organization_id: UUID) -> None:
         self.session = session
         self.current_organization_id = current_organization_id
 
-    async def list_for_subject(
-        self,
-        subject_user_id: UUID,
-        *,
-        cursor: tuple[date, UUID] | None = None,
-        limit: int = 50,
-    ) -> list[VolunteerServiceSummaryRecord]:
-        service_date = cast(CareReport.submitted_at, Date).label("service_date")
-        service_status = case(
-            (CareReport.status == "archived", "archived"),
-            else_="recorded",
-        ).label("service_status")
-        statement: Select = (
-            select(
-                Organization.id,
-                Organization.name,
-                service_date,
-                service_status,
-                func.count(CareReport.id),
-            )
+    async def list_visit_records(self, subject_user_id: UUID) -> list[VolunteerVisitRecord]:
+        service_date = cast(
+            func.timezone(Organization.timezone, CareReport.submitted_at), Date
+        ).label("service_date")
+        statement = (
+            select(CareReport.organization_id, service_date, func.max(CareReport.submitted_at))
             .join(Organization, Organization.id == CareReport.organization_id)
-            .where(
-                CareReport.volunteer_user_id == subject_user_id,
-                CareReport.submitted_at.is_not(None),
-            )
-            .group_by(Organization.id, Organization.name, service_date, service_status)
+            .where(CareReport.volunteer_user_id == subject_user_id)
+            .group_by(CareReport.organization_id, service_date)
         )
-        if cursor is not None:
-            cursor_date, cursor_organization_id = cursor
-            statement = statement.where(
-                or_(
-                    service_date < cursor_date,
-                    and_(
-                        service_date == cursor_date,
-                        Organization.id > cursor_organization_id,
-                    ),
-                )
-            )
-        statement = statement.order_by(service_date.desc(), Organization.id).limit(
-            min(max(limit, 1), 101)
-        )
-
         await set_platform_scope(self.session)
         try:
-            result = await self.session.execute(statement)
-            rows = result.all()
+            rows = (await self.session.execute(statement)).all()
         finally:
             await set_organization_scope(self.session, self.current_organization_id)
-
         return [
-            VolunteerServiceSummaryRecord(
+            VolunteerVisitRecord(
                 organization_id=organization_id,
-                organization_name=organization_name,
                 service_date=service_date_value,
-                service_status=service_status_value,
-                record_count=int(record_count),
+                last_activity_at=last_activity_at,
             )
-            for (
-                organization_id,
-                organization_name,
-                service_date_value,
-                service_status_value,
-                record_count,
-            ) in rows
+            for organization_id, service_date_value, last_activity_at in rows
         ]
+
+    async def has_active_platform_restriction(self, subject_user_id: UUID) -> bool:
+        statement = select(VolunteerRestriction.id).where(
+            VolunteerRestriction.volunteer_user_id == subject_user_id,
+            VolunteerRestriction.scope == "PLATFORM",
+            VolunteerRestriction.status == "active",
+            VolunteerRestriction.starts_at <= func.now(),
+            VolunteerRestriction.ends_at.is_(None) | (VolunteerRestriction.ends_at > func.now()),
+        )
+        await set_platform_scope(self.session)
+        try:
+            return (await self.session.execute(statement.limit(1))).scalar_one_or_none() is not None
+        finally:
+            await set_organization_scope(self.session, self.current_organization_id)

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { formatTaiwanDateTime } from "./volunteerAccess";
@@ -16,6 +17,8 @@ import { Toast } from "../../components/ui/toast";
 export type AccessGrant = {
   id: string;
   user_id?: string;
+  membership_id?: string;
+  volunteer_no?: string | null;
   display_name: string;
   status: string;
   valid_from: string;
@@ -178,7 +181,15 @@ export function AccessGrantTable({
             const values = draft(grant);
             return (
               <tr key={grant.id}>
-                <td className="ui-table-cell">{grant.display_name}</td>
+                <td className="ui-table-cell">
+                  {grant.membership_id ? (
+                    <Link href={`/volunteers/${grant.membership_id}`}>
+                      {grant.display_name}
+                    </Link>
+                  ) : (
+                    grant.display_name
+                  )}
+                </td>
                 <td className="ui-table-cell">
                   {grant.status}／{grant.source_type}
                   {grant.revocation_reason ? (

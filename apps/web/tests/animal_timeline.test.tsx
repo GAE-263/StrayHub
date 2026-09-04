@@ -58,7 +58,7 @@ describe("AnimalTimeline", () => {
               id: "report-1",
               submittedAt: "2026-08-07T01:00:00Z",
               volunteerUserId: "11111111-1111-4111-8111-111111111111",
-              volunteerLabel: "黃 #11111111",
+              volunteerLabel: "黃・V024",
               note: "原始心得",
               observations: {
                 urination: "urination.not_observed",
@@ -116,7 +116,7 @@ describe("AnimalTimeline", () => {
     expect(fields).toContain("人工資料狀態");
     expect(fields).toContain("已保存（saved）");
     const author = container?.querySelector(".timeline-report-author");
-    expect(author?.textContent).toContain("黃 #11111111");
+    expect(author?.textContent).toContain("黃・V024");
     expect(author?.getAttribute("href")).toBe(
       "/volunteers/access?user_id=11111111-1111-4111-8111-111111111111",
     );

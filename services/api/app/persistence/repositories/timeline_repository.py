@@ -17,6 +17,7 @@ from services.api.app.persistence.models.medical_care import (
     CareReminderSeries,
     MedicalRecord,
 )
+from services.api.app.persistence.models.volunteer_management import VolunteerProfile
 
 
 class TimelineRepository:
@@ -47,23 +48,31 @@ class TimelineRepository:
         )
         return list(result.scalars())
 
-    async def volunteer_surnames(self, user_ids: list[UUID]) -> dict[UUID, str]:
-        """Surnames only; the full name never leaves the encrypted PII store."""
-        if not user_ids:
+    async def volunteer_labels(
+        self, membership_ids: list[UUID]
+    ) -> dict[UUID, tuple[str | None, str | None]]:
+        """Resolve canonical surname and shelter number for scoped memberships."""
+        if not membership_ids:
             return {}
-        # Scoping to this organization's memberships keeps a surname from
-        # crossing into another shelter's history.
         result = await self.session.execute(
             select(
-                OrganizationMembership.user_id,
-                OrganizationMembership.volunteer_surname,
-            ).where(
-                OrganizationMembership.user_id.in_(set(user_ids)),
+                OrganizationMembership.id,
+                VolunteerProfile.surname,
+                OrganizationMembership.volunteer_no,
+            )
+            .outerjoin(
+                VolunteerProfile,
+                VolunteerProfile.user_id == OrganizationMembership.user_id,
+            )
+            .where(
+                OrganizationMembership.id.in_(set(membership_ids)),
                 OrganizationMembership.organization_id == self.organization_id,
-                OrganizationMembership.volunteer_surname.is_not(None),
             )
         )
-        return {user_id: surname for user_id, surname in result.all()}
+        return {
+            membership_id: (surname, volunteer_no)
+            for membership_id, surname, volunteer_no in result.all()
+        }
 
     async def media_for_reports(self, report_ids: list[UUID]) -> dict[UUID, list[MediaAsset]]:
         if not report_ids:

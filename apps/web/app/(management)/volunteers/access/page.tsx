@@ -75,8 +75,7 @@ export default function VolunteerAccessPage() {
       {error ? <p role="alert">{error}</p> : null}
       {focusUserId ? (
         <p className="volunteer-access-focus">
-          只顯示志工 #{focusUserId.slice(0, 8)} 的授權紀錄（
-          {visibleGrants.length} 筆）
+          只顯示指定志工的授權紀錄（{visibleGrants.length} 筆）
           <Link href="/volunteers/access">顯示全部</Link>
         </p>
       ) : null}

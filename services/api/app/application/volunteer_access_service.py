@@ -44,6 +44,9 @@ from services.api.app.persistence.repositories.authentication_repository import 
 from services.api.app.persistence.repositories.volunteer_access_repository import (
     VolunteerAccessRepository,
 )
+from services.api.app.persistence.repositories.volunteer_service_summary_repository import (
+    VolunteerServiceSummaryRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,7 @@ class VolunteerAccessService:
         notifications: VolunteerNotificationService | None = None,
         pii_service: VolunteerPiiService | None = None,
         rich_menu_router: RichMenuRoutingService | None = None,
+        summary_repository: VolunteerServiceSummaryRepository | None = None,
     ) -> None:
         self.repository = repository
         self.identities = identities
@@ -132,6 +136,7 @@ class VolunteerAccessService:
         self.notifications = notifications
         self.pii_service = pii_service
         self.rich_menu_router = rich_menu_router
+        self.summary_repository = summary_repository
 
     async def application_detail(
         self,
@@ -484,6 +489,7 @@ class VolunteerAccessService:
         transition_application(application.status, "withdraw")
         application.status = "withdrawn"
         application.withdrawn_at = now or datetime.now(timezone.utc)
+        application.applicant_surname = None
         application.version += 1
         if self.audit is not None:
             await self.audit.record(
@@ -635,6 +641,8 @@ class VolunteerAccessService:
                 application.decided_at = clock
                 application.decided_by_user_id = actor_user_id
                 application.version += 1
+                if application.status != "pending":
+                    application.applicant_surname = None
                 membership = await self.identities.get_membership(
                     application.user_id, self.repository.organization_id
                 )
@@ -648,6 +656,14 @@ class VolunteerAccessService:
             application.status = "rejected"
             application.decision_reason = decision_reason
         elif decision == "approve":
+            if self.summary_repository is not None and (
+                await self.summary_repository.has_active_platform_restriction(application.user_id)
+            ):
+                raise DomainError(
+                    "active_platform_restriction",
+                    "此志工目前有有效的平台服務限制，無法直接核准",
+                    409,
+                )
             transition_application(application.status, "approve")
             policy = await self.repository.policy()
             effective_duration_hours = effective_grant_duration_hours(policy)
@@ -682,6 +698,12 @@ class VolunteerAccessService:
             if membership is not None and membership.role != "VOLUNTEER":
                 raise DomainError("role_conflict", "既有管理角色不可轉為志工", 409)
             if membership is None:
+                number_allocator = getattr(self.identities, "allocate_volunteer_no", None)
+                volunteer_no = (
+                    await number_allocator(self.repository.organization_id)
+                    if number_allocator is not None
+                    else None
+                )
                 membership = await self.identities.add(
                     OrganizationMembership(
                         organization_id=self.repository.organization_id,
@@ -691,7 +713,7 @@ class VolunteerAccessService:
                         valid_from=start,
                         expires_at=end,
                         access_version=1,
-                        volunteer_surname=application.applicant_surname,
+                        volunteer_no=volunteer_no,
                     )
                 )
             else:
@@ -699,8 +721,12 @@ class VolunteerAccessService:
                 membership.valid_from = start
                 membership.expires_at = end
                 membership.access_version += 1
-                if application.applicant_surname:
-                    membership.volunteer_surname = application.applicant_surname
+            profile_upserter = getattr(self.identities, "upsert_volunteer_profile", None)
+            if profile_upserter is not None:
+                await profile_upserter(
+                    application.user_id,
+                    surname=application.applicant_surname,
+                )
             grant = await self.repository.add(
                 VolunteerAccessGrant(
                     organization_id=self.repository.organization_id,
@@ -730,6 +756,8 @@ class VolunteerAccessService:
             service_date_item.version += 1
             if await self.repository.pending_service_date_count(application.id):
                 application.status = "pending"
+        if application.status != "pending":
+            application.applicant_surname = None
         if self.audit is not None:
             await self.audit.record(
                 organization_id=self.repository.organization_id,

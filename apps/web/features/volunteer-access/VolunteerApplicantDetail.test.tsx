@@ -18,6 +18,22 @@ function response(body: unknown, status = 200): Response {
   } as Response;
 }
 
+function summaryResponse(overrides: Record<string, unknown> = {}) {
+  return response({
+    current_shelter_visits: 2,
+    total_strayhub_visits: 6,
+    visits_last_180_days: 5,
+    visits_last_90_days: 3,
+    visits_last_30_days: 1,
+    last_visit_at: "2026-08-20T00:00:00Z",
+    active_months_last_6_months: 3,
+    recent_status: "recently_active",
+    has_active_platform_restriction: false,
+    approval_blocked: false,
+    ...overrides,
+  });
+}
+
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -62,6 +78,7 @@ describe("VolunteerApplicantDetail", () => {
     };
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("service-summary")) return summaryResponse();
         if (String(input).endsWith("/pii-reveal")) {
           expect(init?.method).toBe("POST");
           expect(JSON.parse(String(init?.body))).toEqual({
@@ -92,7 +109,7 @@ describe("VolunteerApplicantDetail", () => {
     await renderDetail();
     await act(async () => flush());
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const revealCall = fetchMock.mock.calls.find(([input]) =>
       String(input).endsWith("/pii-reveal"),
     );
@@ -125,19 +142,21 @@ describe("VolunteerApplicantDetail", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) =>
-        String(input).endsWith("/pii-reveal")
-          ? response({ code: "pii_audit_unavailable" }, 503)
-          : response({
-              id: "application-a",
-              organization_id: "org-a",
-              display_name: "LINE 志工",
-              status: "pending",
-              submitted_at: "2026-08-24T00:00:00Z",
-              decided_at: null,
-              decision_reason: null,
-              version: 1,
-              service_dates: [],
-            }),
+        String(input).includes("service-summary")
+          ? summaryResponse()
+          : String(input).endsWith("/pii-reveal")
+            ? response({ code: "pii_audit_unavailable" }, 503)
+            : response({
+                id: "application-a",
+                organization_id: "org-a",
+                display_name: "LINE 志工",
+                status: "pending",
+                submitted_at: "2026-08-24T00:00:00Z",
+                decided_at: null,
+                decision_reason: null,
+                version: 1,
+                service_dates: [],
+              }),
       ),
     );
 
@@ -163,23 +182,25 @@ describe("VolunteerApplicantDetail", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) =>
-        String(input).endsWith("/pii-reveal")
-          ? response({
-              applicant_name: "核准顯示名",
-              phone_number: "0900000000",
-              basic_profile: null,
-            })
-          : response({
-              id: "application-a",
-              organization_id: "org-a",
-              display_name: "LINE 志工",
-              status: "pending",
-              submitted_at: "2026-08-24T00:00:00Z",
-              decided_at: null,
-              decision_reason: null,
-              version: 1,
-              service_dates: [],
-            }),
+        String(input).includes("service-summary")
+          ? summaryResponse()
+          : String(input).endsWith("/pii-reveal")
+            ? response({
+                applicant_name: "核准顯示名",
+                phone_number: "0900000000",
+                basic_profile: null,
+              })
+            : response({
+                id: "application-a",
+                organization_id: "org-a",
+                display_name: "LINE 志工",
+                status: "pending",
+                submitted_at: "2026-08-24T00:00:00Z",
+                decided_at: null,
+                decision_reason: null,
+                version: 1,
+                service_dates: [],
+              }),
       ),
     );
 
@@ -214,6 +235,7 @@ describe("VolunteerApplicantDetail", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url.includes("service-summary")) return summaryResponse();
         if (url.endsWith("application-a/pii-reveal")) return delayedAReveal;
         if (url.endsWith("application-b/pii-reveal")) {
           return response({
@@ -265,7 +287,7 @@ describe("VolunteerApplicantDetail", () => {
     expect(container?.textContent).not.toContain("0911111111");
   });
 
-  it("loads summary separately from PII reveal and clears it on close", async () => {
+  it("automatically loads aggregate summary and clears it on close", async () => {
     HTMLDialogElement.prototype.showModal = function showModal() {
       this.open = true;
     };
@@ -277,19 +299,7 @@ describe("VolunteerApplicantDetail", () => {
       const url = String(input);
       if (url.includes("service-summary")) {
         expect(url).toContain("purpose_code=volunteer_service_history_review");
-        return response({
-          items: [
-            {
-              organization_id: "org-b",
-              organization_name: "收容所 B",
-              service_date: "2026-05-20",
-              service_status: "recorded",
-              record_count: 2,
-              source: "care_report",
-            },
-          ],
-          next_cursor: null,
-        });
+        return summaryResponse({ total_strayhub_visits: 12 });
       }
       return response({
         id: "application-a",
@@ -307,16 +317,9 @@ describe("VolunteerApplicantDetail", () => {
 
     await renderDetail(onClose);
     await act(async () => flush());
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(container?.textContent).not.toContain("收容所 B");
-
-    await act(async () => {
-      Array.from(container?.querySelectorAll("button") ?? [])
-        .find((button) => button.textContent?.includes("載入服務紀錄"))
-        ?.click();
-      await flush();
-    });
-    expect(container?.textContent).toContain("收容所 B");
+    expect(container?.textContent).toContain("累積服務12 次");
 
     await act(async () => {
       container
@@ -326,7 +329,7 @@ describe("VolunteerApplicantDetail", () => {
         ?.click();
     });
     expect(onClose).toHaveBeenCalledOnce();
-    expect(container?.textContent).not.toContain("收容所 B");
+    expect(container?.textContent).not.toContain("累積服務12 次");
   });
 
   it("rejects a stale summary response after switching applicants", async () => {
@@ -341,7 +344,9 @@ describe("VolunteerApplicantDetail", () => {
       resolveSummary = resolve;
     });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input).includes("service-summary")) return delayedSummary;
+      if (String(input).includes("application-a/service-summary"))
+        return delayedSummary;
+      if (String(input).includes("service-summary")) return summaryResponse();
       return response({
         id: String(input).includes("application-b")
           ? "application-b"
@@ -359,11 +364,6 @@ describe("VolunteerApplicantDetail", () => {
     vi.stubGlobal("fetch", fetchMock);
     await renderDetail();
     await act(async () => flush());
-    await act(async () => {
-      Array.from(container?.querySelectorAll("button") ?? [])
-        .find((button) => button.textContent?.includes("載入服務紀錄"))
-        ?.click();
-    });
 
     await act(async () => {
       root?.render(
@@ -376,22 +376,8 @@ describe("VolunteerApplicantDetail", () => {
       );
       await flush();
     });
-    resolveSummary?.(
-      response({
-        items: [
-          {
-            organization_id: "org-old",
-            organization_name: "舊申請收容所",
-            service_date: "2026-05-20",
-            service_status: "recorded",
-            record_count: 1,
-            source: "care_report",
-          },
-        ],
-        next_cursor: null,
-      }),
-    );
+    resolveSummary?.(summaryResponse({ total_strayhub_visits: 99 }));
     await act(async () => flush());
-    expect(container?.textContent).not.toContain("舊申請收容所");
+    expect(container?.textContent).not.toContain("累積服務99 次");
   });
 });

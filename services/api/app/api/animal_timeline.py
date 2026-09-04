@@ -87,12 +87,10 @@ class TimelineResponse(BaseModel):
     open_reminders: list[TimelineEventResponse]
 
 
-def _volunteer_label(user_id, surnames: dict) -> str:
-    """Surname plus a stable short code: enough to tell volunteers apart and
-    follow one through the history, without revealing the full name."""
-    short_code = str(user_id)[:8]
-    surname = surnames.get(user_id)
-    return f"{surname} #{short_code}" if surname else f"志工 #{short_code}"
+def _volunteer_label(membership_id, labels: dict) -> str:
+    surname, volunteer_no = labels.get(membership_id, (None, None))
+    identity = surname or "志工"
+    return f"{identity}・{volunteer_no}" if volunteer_no else identity
 
 
 def _serialize_day(
@@ -100,7 +98,7 @@ def _serialize_day(
     *,
     media_by_report: dict | None = None,
     stool_by_report: dict | None = None,
-    volunteer_surnames: dict | None = None,
+    volunteer_labels: dict | None = None,
 ) -> dict:
     return {
         "date": day.date.isoformat(),
@@ -113,7 +111,7 @@ def _serialize_day(
                 "submitted_at": report.submitted_at.isoformat(),
                 "volunteer_user_id": str(report.volunteer_user_id),
                 "volunteer_label": _volunteer_label(
-                    report.volunteer_user_id, volunteer_surnames or {}
+                    getattr(report, "membership_id", None), volunteer_labels or {}
                 ),
                 "animal_name_snapshot": report.animal_name_snapshot,
                 "shelter_number_snapshot": report.shelter_number_snapshot,
@@ -289,8 +287,8 @@ async def animal_timeline(
     report_ids = [report.id for day in days for report in day.reports]
     media_by_report = await repository.media_for_reports(report_ids)
     stool_by_report = await repository.stool_analyses_for_reports(report_ids)
-    volunteer_surnames = await repository.volunteer_surnames(
-        [report.volunteer_user_id for day in days for report in day.reports]
+    volunteer_labels = await repository.volunteer_labels(
+        [report.membership_id for day in days for report in day.reports]
     )
     return {
         "days": [
@@ -298,7 +296,7 @@ async def animal_timeline(
                 day,
                 media_by_report=media_by_report,
                 stool_by_report=stool_by_report,
-                volunteer_surnames=volunteer_surnames,
+                volunteer_labels=volunteer_labels,
             )
             for day in days
         ],
