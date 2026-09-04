@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
@@ -27,6 +28,7 @@ ALLOWED_MANAGEMENT_PHOTO_TYPES = frozenset({"image/jpeg", "image/png", "image/we
 class ManagementAnimalPhoto:
     object_key: str
     content_type: str
+    checksum: str
 
 
 class ManagementAnimalService:
@@ -56,7 +58,23 @@ class ManagementAnimalService:
             "adoption_notes": animal.adoption_notes,
         }
 
-    async def _read_payload(self, animal: Animal, area: ShelterArea | None) -> dict:
+    @staticmethod
+    def _valid_photo_media(animal: Animal, media: MediaAsset | None) -> bool:
+        return bool(
+            animal.current_photo_key
+            and media is not None
+            and media.status == "processed"
+            and media.exif_removed
+            and media.content_type in ALLOWED_MANAGEMENT_PHOTO_TYPES
+            and media.checksum
+        )
+
+    async def _read_payload(
+        self,
+        animal: Animal,
+        area: ShelterArea | None,
+        media: MediaAsset | None,
+    ) -> dict:
         payload = self.payload(animal, area)
         payload["photo_url"] = None
         payload["area_path"] = area.name if area else None
@@ -69,8 +87,10 @@ class ManagementAnimalService:
             )
             if parent_name:
                 payload["area_path"] = f"{parent_name} / {area.name}"
-        if animal.current_photo_key:
-            payload["photo_url"] = f"/v1/management/animals/{animal.id}/photo"
+        if media is not None and self._valid_photo_media(animal, media):
+            payload["photo_url"] = (
+                f"/v1/management/animals/{animal.id}/photo?v={media.checksum}"
+            )
         return payload
 
     async def photo(self, animal_id: UUID) -> ManagementAnimalPhoto:
@@ -92,15 +112,14 @@ class ManagementAnimalService:
         if pair is None:
             raise DomainError("animal_photo_not_found", "照片不存在或無法存取", 404)
         animal, media = pair
-        if (
-            not animal.current_photo_key
-            or media is None
-            or media.status != "processed"
-            or not media.exif_removed
-            or media.content_type not in ALLOWED_MANAGEMENT_PHOTO_TYPES
-        ):
+        if not self._valid_photo_media(animal, media):
             raise DomainError("animal_photo_not_found", "照片不存在或無法存取", 404)
-        return ManagementAnimalPhoto(animal.current_photo_key, media.content_type)
+        assert animal.current_photo_key is not None and media is not None
+        return ManagementAnimalPhoto(
+            object_key=animal.current_photo_key,
+            content_type=media.content_type,
+            checksum=media.checksum,
+        )
 
     async def list(
         self,
@@ -121,12 +140,19 @@ class ManagementAnimalService:
             filters.append(or_(Animal.name.ilike(pattern), Animal.shelter_number.ilike(pattern)))
         total = await self.session.scalar(select(func.count(Animal.id)).where(*filters))
         rows = await self.session.execute(
-            select(Animal, ShelterArea)
+            select(Animal, ShelterArea, MediaAsset)
             .outerjoin(
                 ShelterArea,
                 and_(
                     ShelterArea.id == Animal.area_id,
                     ShelterArea.organization_id == self.organization_id,
+                ),
+            )
+            .outerjoin(
+                MediaAsset,
+                and_(
+                    MediaAsset.organization_id == self.organization_id,
+                    MediaAsset.object_key == Animal.current_photo_key,
                 ),
             )
             .where(*filters)
@@ -135,7 +161,10 @@ class ManagementAnimalService:
             .limit(page_size)
         )
         return {
-            "items": [await self._read_payload(animal, area) for animal, area in rows.all()],
+            "items": [
+                await self._read_payload(animal, area, media)
+                for animal, area, media in rows.all()
+            ],
             "page": page,
             "page_size": page_size,
             "total": int(total or 0),
@@ -143,7 +172,7 @@ class ManagementAnimalService:
 
     async def get(self, animal_id: UUID) -> dict:
         row = await self.session.execute(
-            select(Animal, ShelterArea)
+            select(Animal, ShelterArea, MediaAsset)
             .outerjoin(
                 ShelterArea,
                 and_(
@@ -151,13 +180,20 @@ class ManagementAnimalService:
                     ShelterArea.organization_id == self.organization_id,
                 ),
             )
+            .outerjoin(
+                MediaAsset,
+                and_(
+                    MediaAsset.organization_id == self.organization_id,
+                    MediaAsset.object_key == Animal.current_photo_key,
+                ),
+            )
             .where(Animal.id == animal_id, Animal.organization_id == self.organization_id)
         )
         pair = row.one_or_none()
         if pair is None:
             raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-        animal, area = pair
-        return {"animal": await self._read_payload(animal, area)}
+        animal, area, media = pair
+        return {"animal": await self._read_payload(animal, area, media)}
 
     async def update_profile(
         self, animal_id: UUID, *, changes: AnimalProfileUpdate, actor_user_id: UUID
@@ -273,7 +309,7 @@ class ManagementAnimalService:
         breed: str | None,
         size: str | None,
         energy: str | None,
-        temperament: list[str],
+        temperament: builtins.list[str],
         is_adoptable: bool,
         adoption_notes: str | None,
         actor_user_id: UUID,

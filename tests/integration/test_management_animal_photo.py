@@ -43,6 +43,7 @@ def _row(organization_id, animal_id, **media_overrides):
         "status": "processed",
         "exif_removed": True,
         "content_type": "image/jpeg",
+        "checksum": "a" * 64,
     }
     media_values.update(media_overrides)
     media = SimpleNamespace(
@@ -68,7 +69,10 @@ def _clear_overrides():
 
 
 def test_management_photo_requires_bearer_authentication():
-    response = TestClient(app).get(f"/v1/management/animals/{uuid4()}/photo")
+    response = TestClient(app).get(
+        f"/v1/management/animals/{uuid4()}/photo",
+        headers={"If-None-Match": f'"{"a" * 64}"'},
+    )
 
     assert response.status_code == 401
 
@@ -93,8 +97,91 @@ def test_management_photo_allows_management_roles_and_returns_private_binary(mon
     assert response.status_code == 200
     assert response.content == b"safe-jpeg"
     assert response.headers["content-type"] == "image/jpeg"
-    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["cache-control"] == "private, max-age=300, must-revalidate"
+    assert response.headers["etag"] == f'"{"a" * 64}"'
+    assert response.headers["vary"] == "Authorization, X-Session-ID"
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_management_photo_matching_etag_returns_304_without_storage_read(monkeypatch):
+    organization_id, animal_id = uuid4(), uuid4()
+    session = _Session(_row(organization_id, animal_id))
+
+    class Storage:
+        async def get(self, *, scope, key):
+            raise AssertionError("storage must not be read for a matching ETag")
+
+    monkeypatch.setattr(api, "MinioStorageAdapter", Storage)
+    app.dependency_overrides[current_request_context] = lambda: _context(
+        "STAFF", organization_id
+    )
+    app.dependency_overrides[request_session] = lambda: session
+
+    response = TestClient(app).get(
+        f"/v1/management/animals/{animal_id}/photo?v={'a' * 64}",
+        headers={"If-None-Match": f'"{"a" * 64}"'},
+    )
+
+    assert response.status_code == 304
+    assert response.content == b""
+    assert response.headers["etag"] == f'"{"a" * 64}"'
+    assert response.headers["cache-control"] == "private, max-age=300, must-revalidate"
+
+
+@pytest.mark.parametrize("if_none_match", [None, '"different"'])
+def test_management_photo_missing_or_wrong_etag_returns_body(monkeypatch, if_none_match):
+    organization_id, animal_id = uuid4(), uuid4()
+    session = _Session(_row(organization_id, animal_id))
+    reads = []
+
+    class Storage:
+        async def get(self, *, scope, key):
+            reads.append((scope.organization_id, key))
+            return b"safe-jpeg"
+
+    monkeypatch.setattr(api, "MinioStorageAdapter", Storage)
+    app.dependency_overrides[current_request_context] = lambda: _context(
+        "STAFF", organization_id
+    )
+    app.dependency_overrides[request_session] = lambda: session
+    headers = {"If-None-Match": if_none_match} if if_none_match else {}
+
+    response = TestClient(app).get(
+        f"/v1/management/animals/{animal_id}/photo",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"safe-jpeg"
+    assert reads == [(organization_id, "animals/a/primary.jpg")]
+
+
+def test_management_photo_old_version_and_etag_return_current_photo(monkeypatch):
+    organization_id, animal_id = uuid4(), uuid4()
+    current_checksum = "b" * 64
+    session = _Session(_row(organization_id, animal_id, checksum=current_checksum))
+    reads = []
+
+    class Storage:
+        async def get(self, *, scope, key):
+            reads.append((scope.organization_id, key))
+            return b"new-photo"
+
+    monkeypatch.setattr(api, "MinioStorageAdapter", Storage)
+    app.dependency_overrides[current_request_context] = lambda: _context(
+        "STAFF", organization_id
+    )
+    app.dependency_overrides[request_session] = lambda: session
+
+    response = TestClient(app).get(
+        f"/v1/management/animals/{animal_id}/photo?v={'a' * 64}",
+        headers={"If-None-Match": f'"{"a" * 64}"'},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"new-photo"
+    assert response.headers["etag"] == f'"{current_checksum}"'
+    assert reads == [(organization_id, "animals/a/primary.jpg")]
 
 
 @pytest.mark.parametrize(
@@ -108,7 +195,10 @@ def test_management_photo_enforces_role_and_active_shelter(context, expected):
     app.dependency_overrides[current_request_context] = lambda: context
     app.dependency_overrides[request_session] = lambda: _Session(None)
 
-    response = TestClient(app).get(f"/v1/management/animals/{uuid4()}/photo")
+    response = TestClient(app).get(
+        f"/v1/management/animals/{uuid4()}/photo",
+        headers={"If-None-Match": f'"{"a" * 64}"'},
+    )
 
     assert response.status_code == expected
 
@@ -121,6 +211,7 @@ async def test_management_photo_lookup_is_explicitly_tenant_scoped():
     photo = await ManagementAnimalService(session, organization_id).photo(animal_id)
 
     assert photo.object_key == "animals/a/primary.jpg"
+    assert photo.checksum == "a" * 64
     sql = " ".join(str(session.statements[0]).lower().split())
     assert "animals.organization_id" in sql
     assert "media_assets.organization_id" in sql
@@ -142,7 +233,10 @@ def test_management_photo_hides_missing_cross_tenant_or_missing_photo(row):
     app.dependency_overrides[current_request_context] = lambda: _context("STAFF", organization_id)
     app.dependency_overrides[request_session] = lambda: _Session(row)
 
-    response = TestClient(app).get(f"/v1/management/animals/{uuid4()}/photo")
+    response = TestClient(app).get(
+        f"/v1/management/animals/{uuid4()}/photo",
+        headers={"If-None-Match": f'"{"a" * 64}"'},
+    )
 
     assert response.status_code == 404
 
@@ -162,7 +256,10 @@ def test_management_photo_rejects_untrusted_media(overrides):
         _row(organization_id, animal_id, **overrides)
     )
 
-    response = TestClient(app).get(f"/v1/management/animals/{animal_id}/photo")
+    response = TestClient(app).get(
+        f"/v1/management/animals/{animal_id}/photo",
+        headers={"If-None-Match": f'"{"a" * 64}"'},
+    )
 
     assert response.status_code == 404
 
