@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+const demoPassword = process.env.STRAYHUB_DEMO_PASSWORD ?? "";
+
 // Opt-in local Demo verification: saves existing profile values, never new fixtures.
 test.skip(
-  process.env.FURKIDS_PROFILE_REAL !== "1",
-  "Requires migrated and seeded local FurKids DB/MinIO",
+  process.env.FURKIDS_PROFILE_REAL !== "1" || !demoPassword,
+  "Requires migrated local FurKids DB/MinIO and STRAYHUB_DEMO_PASSWORD",
 );
 test.use({ trace: "off" });
 const animals = [
@@ -27,7 +29,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/login");
     await page.getByLabel("帳號", { exact: true }).fill("demo-furkids-admin");
-    await page.getByLabel("密碼", { exact: true }).fill("local-only-password");
+    await page.getByLabel("密碼", { exact: true }).fill(demoPassword);
     await page.getByRole("button", { name: "登入", exact: true }).click();
     await page
       .getByLabel("目前收容所", { exact: true })
@@ -125,9 +127,7 @@ for (const viewport of [
     await volunteer
       .getByLabel("帳號", { exact: true })
       .fill("demo-furkids-volunteer");
-    await volunteer
-      .getByLabel("密碼", { exact: true })
-      .fill("local-only-password");
+    await volunteer.getByLabel("密碼", { exact: true }).fill(demoPassword);
     await volunteer.getByRole("button", { name: "登入", exact: true }).click();
     await expect(volunteer).toHaveURL(/\/$/);
     for (const [index, [name, number, _sex, breed, age]] of animals.entries()) {

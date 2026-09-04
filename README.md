@@ -36,7 +36,9 @@ npm ci --prefix apps/web
 - 平台治理：`demo-platform-admin`（無 Shelter Membership）。
 - 單一收容所志工：`demo-furkids-volunteer`、`demo-xindian-volunteer`、
   `demo-wugu-volunteer`；各自只有所屬收容所 membership/grant。
-- 上述帳號密碼皆為 `local-only-password`；僅供本機，無真實個資。
+- 互動式 `demo.sh` 每次產生新的高熵密碼並只顯示一次；非互動執行必須透過
+  `STRAYHUB_DEMO_PASSWORD` 安全提供。Bootstrap 會輪替上述 synthetic account 並使既有
+  session 失效。密碼不得放入 URL、版本庫或 shell argument。
 
 已知既有限制：純平台帳號在 `strayhub_runtime` 連線下的登入組織清單為空，
 尚待獨立授權修正；三收容所展示請使用 membership-based `demo-furkids-admin`。

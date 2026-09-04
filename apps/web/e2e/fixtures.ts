@@ -1,4 +1,4 @@
-import type { Page, Route } from "@playwright/test";
+import type { Page, Request, Route } from "@playwright/test";
 import type { components } from "../../../packages/contracts/src/openapi";
 
 const organization = {
@@ -894,6 +894,7 @@ type LoginFixtureOptions = {
   loginStatus?: FixtureStatus;
   contextSwitchStatus?: FixtureStatus;
   platformRole?: "PLATFORM_ADMIN" | null;
+  onLoginRequest?: (request: Request) => void;
 };
 
 export async function mockLoginApi(
@@ -951,6 +952,7 @@ export async function mockLoginApi(
     });
   });
   await page.route("**/v1/auth/login", async (route) => {
+    options.onLoginRequest?.(route.request());
     await respond(
       route,
       {

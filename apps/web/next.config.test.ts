@@ -38,3 +38,18 @@ describe("Next.js visual runtime", () => {
     );
   });
 });
+
+describe("login response headers", () => {
+  it("prevents login URLs from entering caches or referrer propagation", async () => {
+    expect(typeof nextConfig.headers).toBe("function");
+    const rules = await nextConfig.headers!();
+    const login = rules.find((rule) => rule.source === "/login");
+
+    expect(login?.headers).toEqual(
+      expect.arrayContaining([
+        { key: "Cache-Control", value: "no-store" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ]),
+    );
+  });
+});

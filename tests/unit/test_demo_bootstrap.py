@@ -44,6 +44,34 @@ def test_demo_cli_keeps_default_check_and_refresh_semantics() -> None:
     assert "scripts.bootstrap_demo --refresh" in script
 
 
+def test_demo_password_must_be_explicit_or_generated_and_rejects_exposed_value(
+    monkeypatch,
+) -> None:
+    from scripts.demo_credentials import require_demo_password
+
+    monkeypatch.delenv("STRAYHUB_DEMO_PASSWORD", raising=False)
+    with pytest.raises(ValueError, match="STRAYHUB_DEMO_PASSWORD"):
+        require_demo_password()
+    with pytest.raises(ValueError, match="exposed"):
+        require_demo_password("local-only-password")
+    with pytest.raises(ValueError, match="at least 16"):
+        require_demo_password("too-short")
+    assert require_demo_password("unique-synthetic-password") == "unique-synthetic-password"
+
+
+def test_demo_runtime_paths_do_not_restore_the_exposed_password() -> None:
+    for path in (
+        "scripts/demo.sh",
+        "scripts/seed_furkids_demo.py",
+        "scripts/seed_demo_accounts.py",
+    ):
+        assert "local-only-password" not in Path(path).read_text()
+
+    script = Path("scripts/demo.sh").read_text()
+    assert "STRAYHUB_DEMO_PASSWORD" in script
+    assert "openssl rand" in script
+
+
 def test_three_shelter_demo_exposes_only_dynamic_new_taipei_region() -> None:
     accounts = Path("scripts/seed_demo_accounts.py").read_text()
     furkids = Path("scripts/seed_furkids_demo.py").read_text()

@@ -8,6 +8,14 @@ const viewports = [
   { width: 1440, height: 900 },
 ];
 
+const loginUsername = "synthetic-login-user";
+const loginPassword = "synthetic-login-password";
+
+async function fillLogin(page: import("@playwright/test").Page) {
+  await page.getByLabel("帳號").fill(loginUsername);
+  await page.getByLabel("密碼").fill(loginPassword);
+}
+
 for (const viewport of viewports) {
   test(`/login 在 ${viewport.width}x${viewport.height} 可完成登入`, async ({
     page,
@@ -18,7 +26,9 @@ for (const viewport of viewports) {
     await expect(
       page.getByRole("heading", { name: "浪浪森友會管理入口" }),
     ).toBeVisible();
-    await expect(page.getByLabel("帳號")).toHaveValue("demo-furkids-admin");
+    await expect(page.getByLabel("帳號")).toHaveValue("");
+    await expect(page.getByLabel("密碼")).toHaveValue("");
+    await fillLogin(page);
     await page.getByRole("button", { name: "登入" }).click();
     await expect(page).toHaveURL(/\/$/);
   });
@@ -64,6 +74,7 @@ test("登入後可選擇多收容所 Active Shelter Context", async ({ page }) =
     },
   ]);
   await page.goto("/login");
+  await fillLogin(page);
   await page.getByRole("button", { name: "登入" }).click();
   await expect(
     page.getByRole("heading", { name: "確認目前收容所" }),
@@ -79,6 +90,7 @@ test("tenantless PLATFORM_ADMIN 可登入平台治理", async ({ page }) => {
     platformRole: "PLATFORM_ADMIN",
   });
   await page.goto("/login");
+  await fillLogin(page);
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page).toHaveURL(/\/platform-admins$/);
 });

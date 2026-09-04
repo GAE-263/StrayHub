@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 
+from scripts.demo_credentials import require_demo_password
 from scripts.import_moa_shelter_animals import run as import_moa
 from scripts.local_demo import DEMO_SHELTERS, guard
 from scripts.seed_demo_accounts import seed as seed_accounts
@@ -92,10 +93,11 @@ async def import_or_reuse(
 
 async def bootstrap(*, refresh=False):
     guard(storage=True)
+    demo_password = require_demo_password()
     print(
         "[Demo] FurKids: seed 5 animals and approved photos (reuse valid local bytes)", flush=True
     )
-    await seed_furkids()
+    await seed_furkids(password=demo_password)
     sync = {}
     for code in ("MOA-SHELTER-51", "MOA-SHELTER-58"):
         sync[code] = await import_or_reuse(code, refresh=refresh)
@@ -103,7 +105,7 @@ async def bootstrap(*, refresh=False):
         "[Demo] Shared vocabulary, minimum demo accounts, and three volunteer policies",
         flush=True,
     )
-    await seed_accounts()
+    await seed_accounts(password=demo_password)
     return {"sync": sync, "verified": await verify(photos=True)}
 
 

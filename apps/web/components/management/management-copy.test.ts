@@ -76,7 +76,7 @@ const copyContracts = [
     added: [/<strong>\s*近期歷程\s*<\/strong>/],
   },
   {
-    file: "app/login/page.tsx",
+    file: "app/login/LoginClient.tsx",
     removed: [/Active Shelter Context/, /Membership/],
     added: [/目前收容所/, /成員資格/],
   },

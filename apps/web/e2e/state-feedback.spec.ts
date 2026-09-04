@@ -209,18 +209,24 @@ test("login state contract covers credentials, authorization and context failure
   await mockManagementApi(page);
   await mockLoginApi(page, { loginStatus: 401 });
   await page.goto("/login");
+  await page.getByLabel("帳號").fill("synthetic-login-user");
+  await page.getByLabel("密碼").fill("synthetic-login-password");
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.locator("#login-error")).toContainText("登入失敗");
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockLoginApi(page, { organizations: [] });
   await page.reload();
+  await page.getByLabel("帳號").fill("synthetic-login-user");
+  await page.getByLabel("密碼").fill("synthetic-login-password");
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.locator("#login-error")).toContainText("沒有收容所授權");
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockLoginApi(page, { contextSwitchStatus: 500 });
   await page.reload();
+  await page.getByLabel("帳號").fill("synthetic-login-user");
+  await page.getByLabel("密碼").fill("synthetic-login-password");
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.locator("#login-error")).toContainText("HTTP 500");
 });

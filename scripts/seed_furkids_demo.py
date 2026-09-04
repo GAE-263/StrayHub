@@ -9,10 +9,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
 from io import BytesIO
+from typing import cast
 from uuid import UUID, uuid5
 
 import httpx
 from PIL import Image, UnidentifiedImageError
+from scripts.demo_credentials import require_demo_password
 from services.api.app.application.animal_selection import AnimalSelectionService
 from services.api.app.application.media_sanitization import MAX_IMAGE_BYTES
 from services.api.app.application.media_service import MediaProcessingService
@@ -404,7 +406,7 @@ async def _one_or_create(session: AsyncSession, statement, factory):
 
 
 async def _seed_identity(
-    session: AsyncSession, organization: Organization
+    session: AsyncSession, organization: Organization, password: str
 ) -> tuple[User, User, OrganizationMembership]:
     hasher = Argon2PasswordHasher()
     admin = await _one_or_create(
@@ -414,7 +416,7 @@ async def _seed_identity(
             id=stable_id("user", "admin"),
             username="demo-furkids-admin",
             display_name="FurKids 示範管理員",
-            password_hash=hasher.hash("local-only-password"),
+            password_hash=hasher.hash(password),
             status="active",
         ),
     )
@@ -425,7 +427,7 @@ async def _seed_identity(
             id=stable_id("user", "volunteer"),
             username="demo-furkids-volunteer",
             display_name="FurKids 示範志工",
-            password_hash=hasher.hash("local-only-password"),
+            password_hash=hasher.hash(password),
             status="active",
         ),
     )
@@ -435,8 +437,7 @@ async def _seed_identity(
     ):
         user.display_name = display_name
         user.status = "active"
-        if user.password_hash is None:
-            user.password_hash = hasher.hash("local-only-password")
+        user.password_hash = hasher.hash(password)
     admin_membership = await _one_or_create(
         session,
         select(OrganizationMembership).where(
@@ -626,9 +627,11 @@ def _answer_snapshots() -> dict[str, dict[str, str]]:
 async def seed(
     session: AsyncSession | None = None,
     *,
+    password: str | None = None,
     storage: ObjectStoragePort | None = None,
     download: PhotoDownloader = download_approved_photo,
 ) -> dict[str, object]:
+    password = require_demo_password(password)
     owns_session = session is None
     if session is None:
         session = session_factory()
@@ -656,7 +659,7 @@ async def seed(
             organization.region = "north"
             if not organization.address:
                 organization.address = "新北市（示範資料）"
-            admin, volunteer, membership = await _seed_identity(session, organization)
+            admin, volunteer, membership = await _seed_identity(session, organization, password)
             areas = await _seed_areas(session, organization)
             animals: dict[str, Animal] = {}
             photos_downloaded = 0
@@ -798,11 +801,12 @@ async def seed(
                         for key, value in values.items():
                             setattr(report, key, value)
             await session.flush()
+            synthetic_counts = cast(dict[str, int], build_seed_plan()["synthetic_counts"])
             return {
                 "organization": ORGANIZATION_CODE,
                 "animals": len(ANIMAL_SPECS),
                 "active_qr_codes": len(ANIMAL_SPECS),
-                **build_seed_plan()["synthetic_counts"],
+                **synthetic_counts,
                 "photos_ingested": len(ANIMAL_SPECS),
                 "photos_downloaded": photos_downloaded,
                 "photos_reused": photos_reused,
