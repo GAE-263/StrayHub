@@ -98,18 +98,40 @@ def preflight(env: dict[str, str], *, line: bool, ports: bool = True) -> list[st
         if subprocess.run(["ngrok", "config", "check"], capture_output=True, timeout=15).returncode:
             problems.append("ngrok 尚未完成本機帳號授權。")
     names = ["API_PORT", "WEB_PORT"] + (["NGINX_PORT"] if line else [])
+    valid_ports: dict[str, int] = {}
     for name in names if ports else []:
         try:
             port = int(env[name])
             if not 1 <= port <= 65535:
                 raise ValueError
-            with socket.socket() as probe:
-                probe.bind(("127.0.0.1", port))
-        except (OSError, ValueError):
-            problems.append(f"{name} 無效或已被使用，請先停止舊服務或修改 .env。")
+            valid_ports[name] = port
+        except ValueError:
+            problems.append(f"{name} 必須是 1–65535 的有效連接埠。")
+    for name, port in wait_for_ports(valid_ports).items():
+        problems.append(
+            f"{name} {port} 已被使用；可執行 lsof -nP -iTCP:{port} -sTCP:LISTEN 查看占用程序。"
+        )
     if ports and len({env[name] for name in names}) != len(names):
         problems.append("API、Web 與 gateway 必須使用不同連接埠。")
     return problems
+
+
+def wait_for_ports(ports: dict[str, int], *, attempts: int = 13, interval: float = 0.25):
+    """Allow recently stopped dev servers a short period to release their listeners."""
+    busy = dict(ports)
+    for attempt in range(attempts):
+        still_busy = {}
+        for name, port in busy.items():
+            try:
+                with socket.socket() as probe:
+                    probe.bind(("127.0.0.1", port))
+            except OSError:
+                still_busy[name] = port
+        busy = still_busy
+        if not busy or attempt == attempts - 1:
+            return busy
+        time.sleep(interval)
+    return busy
 
 
 def save_private(path: Path, payload: dict) -> None:

@@ -148,3 +148,29 @@ def test_line_developer_mode_cannot_select_shared_profile():
     )
     assert result.returncode == 2
     assert "line-only" in result.stderr
+
+
+def test_port_check_retries_transient_shutdown(monkeypatch):
+    attempts = {3001: 0, 8001: 0}
+
+    class Probe:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def bind(self, address):
+            port = address[1]
+            attempts[port] += 1
+            if port == 3001 and attempts[port] < 3:
+                raise OSError("still stopping")
+            if port == 8001:
+                raise OSError("owned by another service")
+
+    monkeypatch.setattr(dev.socket, "socket", Probe)
+    monkeypatch.setattr(dev.time, "sleep", lambda _seconds: None)
+
+    assert dev.wait_for_ports({"WEB_PORT": 3001, "API_PORT": 8001}) == {"API_PORT": 8001}
+    assert attempts[3001] == 3
+    assert attempts[8001] == 13
