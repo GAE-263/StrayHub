@@ -13,12 +13,24 @@ import { Badge } from "../../../../components/ui/badge";
 import { Button } from "../../../../components/ui/button";
 import { Card } from "../../../../components/ui/card";
 import { Field } from "../../../../components/ui/field";
+import { Input } from "../../../../components/ui/input";
+import { Select } from "../../../../components/ui/select";
 import { Textarea } from "../../../../components/ui/textarea";
 import { AlertDialog } from "../../../../components/ui/alert-dialog";
 import {
   canMutateReport,
   reportAIStatusSummary,
 } from "../../report-detail-state";
+import {
+  EMPTY_VOCABULARY,
+  buildVocabulary,
+  correctionOptions,
+  describeAnswers,
+  type AnswerSnapshot,
+  type ObservationCategoryItem,
+  type ObservationOptionItem,
+  type Vocabulary,
+} from "../../report-answers";
 import { usePublicManagementProfile } from "../../../../components/management/ManagementLayout";
 
 type Props = { params: Promise<{ reportId: string }> };
@@ -38,6 +50,7 @@ type Report = {
   status: string;
   submitted_at: string;
   answers: Record<string, unknown>;
+  answer_snapshots?: Record<string, AnswerSnapshot> | null;
   note: string | null;
   media_ids: string[];
   ai_observations: Observation[];
@@ -48,7 +61,8 @@ export default function ReportDetailPage({ params }: Props) {
   const router = useRouter();
   const publicManagementProfile = usePublicManagementProfile();
   const [report, setReport] = useState<Report | null>(null);
-  const [correction, setCorrection] = useState("");
+  const [vocabulary, setVocabulary] = useState<Vocabulary>(EMPTY_VOCABULARY);
+  const [correction, setCorrection] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -62,7 +76,14 @@ export default function ReportDetailPage({ params }: Props) {
           throw new Error(`回報詳情載入失敗（HTTP ${response.status}）`);
         const data = (await response.json()) as { report: Report };
         setReport(data.report);
-        setCorrection(JSON.stringify(data.report.answers, null, 2));
+        setCorrection(
+          Object.fromEntries(
+            Object.entries(data.report.answers ?? {}).map(([key, value]) => [
+              key,
+              typeof value === "string" ? value : String(value ?? ""),
+            ]),
+          ),
+        );
       })
       .catch((requestError: unknown) =>
         setError(
@@ -74,6 +95,31 @@ export default function ReportDetailPage({ params }: Props) {
   };
 
   useEffect(load, [reportId]);
+
+  useEffect(() => {
+    // Labels degrade to snapshots and readable codes, so a vocabulary that
+    // fails to load must not block the report itself.
+    let active = true;
+    void Promise.all([
+      authFetch("/v1/observation-categories"),
+      authFetch("/v1/observation-options"),
+    ])
+      .then(async ([categoryResponse, optionResponse]) => {
+        if (!categoryResponse.ok || !optionResponse.ok) return;
+        const categories = (await categoryResponse.json()) as {
+          items: ObservationCategoryItem[];
+        };
+        const options = (await optionResponse.json()) as {
+          items: ObservationOptionItem[];
+        };
+        if (!active) return;
+        setVocabulary(buildVocabulary(categories.items, options.items));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const mutate = async (path: string, body: Record<string, unknown>) => {
     setBusy(true);
@@ -113,6 +159,12 @@ export default function ReportDetailPage({ params }: Props) {
       </div>
     );
 
+  const describedAnswers = describeAnswers(
+    report.answers,
+    report.answer_snapshots,
+    vocabulary,
+  );
+
   return (
     <section aria-labelledby="report-detail-title">
       <Breadcrumbs
@@ -144,9 +196,23 @@ export default function ReportDetailPage({ params }: Props) {
       <div className="content-grid">
         <Card className="ui-card-padded">
           <h2>原始回報</h2>
-          <pre className="json-view">
-            {JSON.stringify(report.answers, null, 2)}
-          </pre>
+          {describedAnswers.length ? (
+            <dl className="detail-list">
+              {describedAnswers.map((answer) => (
+                <div key={answer.key}>
+                  <dt>{answer.categoryLabel}</dt>
+                  <dd>
+                    {answer.valueLabel}
+                    {answer.resolved ? null : (
+                      <span className="muted answer-code"> {answer.code}</span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="muted">此回報沒有觀察項目。</p>
+          )}
           <h3>志工心得</h3>
           <p className="preserved-note">{report.note || "未填寫心得"}</p>
           <h3>照片</h3>
@@ -200,14 +266,51 @@ export default function ReportDetailPage({ params }: Props) {
           <p className="muted">
             修正會建立修正紀錄與稽核紀錄；封存只改變狀態，不會永久刪除。
           </p>
-          <Field>
-            <label htmlFor="correction-answers">修正後內容（JSON）</label>
-            <Textarea
-              id="correction-answers"
-              value={correction}
-              onChange={(event) => setCorrection(event.target.value)}
-            />
-          </Field>
+          {describedAnswers.length ? (
+            describedAnswers.map((answer) => {
+              const fieldId = `correction-${answer.key}`;
+              const choices = correctionOptions(answer, vocabulary);
+              const listed =
+                (vocabulary.optionsByCategory[answer.key] ?? []).length > 0;
+              const value = correction[answer.key] ?? answer.code;
+              const update = (next: string) =>
+                setCorrection((current) => ({
+                  ...current,
+                  [answer.key]: next,
+                }));
+              return (
+                <Field key={answer.key}>
+                  <label htmlFor={fieldId}>{answer.categoryLabel}</label>
+                  {listed ? (
+                    <Select
+                      id={fieldId}
+                      value={value}
+                      onChange={(event) => update(event.target.value)}
+                    >
+                      {choices.map((choice) => (
+                        <option key={choice.code} value={choice.code}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <>
+                      <Input
+                        id={fieldId}
+                        value={value}
+                        onChange={(event) => update(event.target.value)}
+                      />
+                      <p className="muted">
+                        此項目未在觀察選項設定中，僅能直接編輯代碼。
+                      </p>
+                    </>
+                  )}
+                </Field>
+              );
+            })
+          ) : (
+            <p className="muted">此回報沒有可修正的觀察項目。</p>
+          )}
           <Field>
             <label htmlFor="correction-reason">原因</label>
             <Textarea
@@ -221,16 +324,9 @@ export default function ReportDetailPage({ params }: Props) {
             <Button
               type="button"
               disabled={busy || !reason.trim()}
-              onClick={() => {
-                try {
-                  void mutate("correction", {
-                    reason,
-                    observations: JSON.parse(correction),
-                  });
-                } catch {
-                  setError("修正內容不是有效 JSON");
-                }
-              }}
+              onClick={() =>
+                void mutate("correction", { reason, observations: correction })
+              }
             >
               保存修正
             </Button>
