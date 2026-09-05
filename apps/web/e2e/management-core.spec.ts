@@ -98,10 +98,11 @@ test("Report Inbox 可用日期與狀態篩選，並通往 detail 與 animal pro
   await page.goto("/reports");
   await page.getByLabel("開始日期").fill("2026-08-01");
   await page.getByLabel("結束日期").fill("2026-08-14");
-  await page.getByLabel("狀態").selectOption("saved");
+  await page.getByLabel("資料狀態", { exact: true }).selectOption("saved");
   await expect(page.getByText("小森")).toBeVisible();
-  await expect(page.getByRole("link", { name: "查看詳情 →" })).toBeVisible();
-  await page.getByRole("link", { name: "小森" }).click();
+  await page.getByRole("link", { name: /小森/ }).click();
+  await expect(page).toHaveURL(/\/reports\/report-a$/);
+  await page.getByRole("link", { name: "查看動物檔案" }).click();
   await expect(page).toHaveURL(/\/animals\/animal-a$/);
   await expect(page.getByRole("heading", { name: "小森" })).toBeVisible();
   await page.getByRole("link", { name: "查看近期歷程" }).click();
@@ -219,8 +220,8 @@ test("較慢的舊查詢不得覆蓋最新回報篩選結果", async ({ page }) 
     reportDelay: (params) => (params.get("status") === "saved" ? 250 : 0),
   });
   await page.goto("/reports");
-  await page.getByLabel("狀態").selectOption("saved");
-  await page.getByLabel("狀態").selectOption("amended");
+  await page.getByLabel("資料狀態", { exact: true }).selectOption("saved");
+  await page.getByLabel("資料狀態", { exact: true }).selectOption("amended");
   await expect(page.getByText("最新條件結果")).toBeVisible();
   await page.waitForTimeout(350);
   await expect(page.getByText("最新條件結果")).toBeVisible();

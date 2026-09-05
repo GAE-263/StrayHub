@@ -189,7 +189,9 @@ export default function AiReviewPage() {
                 {items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      {item.source_type}{" "}
+                      {item.source_type === "care_report_summary"
+                        ? "照護回報摘要"
+                        : item.source_type}{" "}
                       {item.source_id ? (
                         <Link
                           className="text-link"
@@ -206,19 +208,35 @@ export default function AiReviewPage() {
                     </TableCell>
                     <TableCell>{item.failure_reason ?? "—"}</TableCell>
                     <TableCell>
-                      <details>
-                        <summary>查看</summary>
-                        <pre className="json-view">
-                          {JSON.stringify(
-                            {
-                              raw: item.raw_ai_output,
-                              validated: item.validated_ai_observation,
-                            },
-                            null,
-                            2,
-                          )}
-                        </pre>
-                      </details>
+                      {item.source_type === "care_report_summary" ? (
+                        <p>
+                          {typeof (
+                            item.validated_ai_observation as {
+                              summary?: unknown;
+                            }
+                          )?.summary === "string"
+                            ? (
+                                item.validated_ai_observation as {
+                                  summary: string;
+                                }
+                              ).summary
+                            : "摘要尚未完成，請查看來源回報。"}
+                        </p>
+                      ) : (
+                        <details>
+                          <summary>查看</summary>
+                          <pre className="json-view">
+                            {JSON.stringify(
+                              {
+                                raw: item.raw_ai_output,
+                                validated: item.validated_ai_observation,
+                              },
+                              null,
+                              2,
+                            )}
+                          </pre>
+                        </details>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button

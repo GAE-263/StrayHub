@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api.app.api.errors import DomainError
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.ai_job import AIProcessingJob
+from services.api.app.persistence.models.care_report import CareReport
 
 CLAIMABLE_STATUSES = ("pending", "pending_enqueue", "enqueue_failed", "retry_wait")
 
@@ -73,6 +74,15 @@ class WorkerJobRepository:
             job.claim_token = None
             job.claimed_at = None
             job.claimed_by = None
+            if job.job_type == "care_report_summary":
+                report = await self.session.scalar(
+                    select(CareReport).where(
+                        CareReport.id == job.target_id,
+                        CareReport.organization_id == self.organization_id,
+                    )
+                )
+                if report is not None:
+                    report.summary_status = "failed" if terminal else "pending"
         await self.session.flush()
         return len(jobs)
 

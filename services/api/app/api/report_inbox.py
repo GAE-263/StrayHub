@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -33,6 +34,33 @@ class ArchiveRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class ProcessReportRequest(BaseModel):
+    status: Literal["acknowledged", "follow_up", "resolved"]
+    note: str = Field(default="", max_length=2000)
+    expected_version: int = Field(ge=0)
+
+
+@router.post("/{report_id}/processing")
+async def process_report(
+    report_id: UUID,
+    payload: ProcessReportRequest,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> dict:
+    organization_id = require_staff_or_admin(context)
+    if context.user_id is None or context.public_exposure_profile:
+        raise DomainError("report_processing_denied", "目前帳號無法更新處理紀錄", 403)
+    report = await ReportInboxService(session, organization_id).process(
+        report_id,
+        actor_user_id=context.user_id,
+        status=payload.status,
+        note=payload.note,
+        expected_version=payload.expected_version,
+    )
+    await session.commit()
+    return {"report": report}
+
+
 @router.get("")
 async def list_report_inbox(
     from_date: date | None = Query(default=None),  # noqa: B008
@@ -41,6 +69,9 @@ async def list_report_inbox(
     report_status: str | None = Query(default=None, alias="status"),  # noqa: B008
     page: int = Query(default=1, ge=1),  # noqa: B008
     page_size: int = Query(default=20, ge=1, le=100),  # noqa: B008
+    review_status: Literal["pending", "acknowledged", "follow_up", "resolved"] | None = None,
+    attention_level: Literal["normal", "review", "urgent"] | None = None,
+    query: str | None = Query(default=None, max_length=120),
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
@@ -52,6 +83,9 @@ async def list_report_inbox(
         report_status=report_status,
         page=page,
         page_size=page_size,
+        review_status=review_status,
+        attention_level=attention_level,
+        query=query,
     )
 
 
@@ -62,7 +96,11 @@ async def get_report_detail(
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
     organization_id = require_staff_or_admin(context)
-    return {"report": await ReportInboxService(session, organization_id).detail(report_id)}
+    report = await ReportInboxService(session, organization_id).detail(report_id)
+    report["can_archive"] = (
+        context.role in {"SHELTER_ADMIN", "PLATFORM_ADMIN"} and not context.public_exposure_profile
+    )
+    return {"report": report}
 
 
 @router.post("/{report_id}/correction")

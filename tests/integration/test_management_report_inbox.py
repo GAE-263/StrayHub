@@ -19,6 +19,8 @@ class _Session:
         return 1
 
     async def execute(self, _query):
+        if "volunteer_profiles" in str(_query):
+            return _Result([])
         report = SimpleNamespace(
             id=uuid4(),
             organization_id=uuid4(),

@@ -47,6 +47,8 @@ class ReportCorrectionService:
         report = await self.reports.get(report_id)
         if report is None:
             raise DomainError("report_not_found", "照護回報不存在或無法存取", 404)
+        if getattr(self.reports, "session", None) is not None:
+            await self.reports.session.refresh(report, with_for_update=True)
         if not reason.strip():
             raise DomainError("correction_reason_required", "修正原因不可為空", 422)
         now = datetime.now(timezone.utc)
@@ -83,6 +85,25 @@ class ReportCorrectionService:
         if note is not None:
             report.note = note
         report.status = "amended"
+        # The prior model result refers to different input; never display it as current.
+        if hasattr(report, "summary_status"):
+            from services.api.app.domain.report_summary import rule_summary
+
+            report.summary_data = None
+            report.summary_fingerprint = None
+            report.summary_status = "stale"
+            report.attention_level = rule_summary(report)["attention_level"]
+            report.review_status = "pending"
+            report.review_version = (report.review_version or 0) + 1
+            report.review_history = [
+                *(report.review_history or []),
+                {
+                    "status": "pending",
+                    "actor_user_id": str(actor_user_id),
+                    "at": now.isoformat(),
+                    "note": f"原文更正，重新確認：{reason}",
+                },
+            ]
         after = {
             "answers": dict(report.answers),
             "note": report.note,

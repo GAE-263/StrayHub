@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.api.app.config.settings import get_worker_settings
+from services.api.app.domain.report_summary import build_prompt, fingerprint, validate_summary
+from services.api.app.infrastructure.ai.gemini_client import GeminiClient
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.infrastructure.storage.ports import ObjectScope, ObjectStoragePort
 from services.api.app.persistence.database.scope import set_organization_scope
@@ -125,6 +127,10 @@ class AIJobRunner:
                 job = await self._load_job(session, organization_id, job_id)
                 if job is None:
                     return
+                if job.job_type == "care_report_summary":
+                    await self._summarize(session, organization_id, job, claim_token)
+                    await session.commit()
+                    return
                 context = await self._load_context(session, organization_id, job)
                 if context is None:
                     await self._finish(
@@ -168,6 +174,71 @@ class AIJobRunner:
             raise
         except Exception as error:
             await self._release_after_error(organization_id, job_id, claim_token, error)
+
+    @staticmethod
+    async def _summarize(session, organization_id, job, claim_token):
+        # Lock job ownership for the complete bounded call; stale reclaim cannot
+        # publish an obsolete response over a new owner.
+        await session.refresh(job, with_for_update=True)
+        if job.claim_token != claim_token or job.status != "running":
+            return
+        report = await session.scalar(
+            select(CareReport)
+            .where(
+                CareReport.id == job.target_id,
+                CareReport.organization_id == organization_id,
+            )
+            .with_for_update()
+        )
+        if report is None:
+            job.status = "failed"
+            job.failure_reason = "ai_target_unavailable"
+        else:
+            settings = get_worker_settings()
+            raw = None
+            if settings.gemini_api_key or settings.gemini_service_account_path:
+                client = GeminiClient(
+                    model_name=job.model_name,
+                    api_key=settings.gemini_api_key,
+                    service_account_path=settings.gemini_service_account_path,
+                    location=settings.gemini_vertex_location,
+                )
+                try:
+                    raw = await client.generate_report_summary(build_prompt(report))
+                finally:
+                    await client.aclose()
+            job.raw_ai_output = raw
+            try:
+                if raw is None:
+                    raise ValueError("model_unavailable")
+                result = validate_summary(raw, report)
+            except ValueError:
+                job.retry_count = (job.retry_count or 0) + 1
+                job.status = "retry_wait" if job.retry_count < AI_MAX_RETRY else "failed"
+                job.failure_reason = "summary_unavailable_or_invalid"
+                job.available_at = (
+                    _retry_available_at(job.retry_count) if job.status == "retry_wait" else None
+                )
+                report.summary_status = "pending" if job.status == "retry_wait" else "failed"
+            else:
+                observation = await AIJobRunner._observation_for(session, organization_id, job)
+                observation.source_type = "care_report_summary"
+                observation.raw_ai_output = raw
+                observation.validated_ai_observation = result
+                observation.status = "succeeded"
+                job.status = "succeeded"
+                job.failure_reason = None
+                job.validation_result = {"status": "valid", "fingerprint": fingerprint(report)}
+                report.summary_data = result
+                report.summary_fingerprint = fingerprint(report)
+                report.summary_status = "succeeded"
+                report.attention_level = result["attention_level"]
+        job.completed_at = (
+            datetime.now(timezone.utc) if job.status in {"failed", "succeeded"} else None
+        )
+        job.claim_token = None
+        job.claimed_at = None
+        job.claimed_by = None
 
     @staticmethod
     async def _load_job(
@@ -296,6 +367,13 @@ class AIJobRunner:
                 status = "retry_wait" if retry_count < AI_MAX_RETRY else "failed"
                 if job is not None:
                     job.retry_count = retry_count
+                    if job.job_type == "care_report_summary":
+                        report = await session.scalar(select(CareReport).where(
+                            CareReport.id == job.target_id,
+                            CareReport.organization_id == organization_id,
+                        ))
+                        if report is not None:
+                            report.summary_status = "failed" if status == "failed" else "pending"
                 await self._finish(
                     session,
                     organization_id,

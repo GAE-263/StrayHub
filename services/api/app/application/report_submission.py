@@ -6,6 +6,7 @@ from uuid import UUID
 
 from services.api.app.api.errors import DomainError
 from services.api.app.domain.line_care_report_state import UNOBSERVED, CareReportAnswers
+from services.api.app.domain.report_summary import rule_summary
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.care_report_draft_repository import (
@@ -108,6 +109,24 @@ class ReportSubmissionService:
             report_id=report.id,
             media_asset_ids=media_asset_ids or await self.drafts.media_ids(draft.id),
         )
+        # Durable work in the same transaction as the report; no model call in LINE.
+        # Lightweight test repositories without a SQLAlchemy session remain supported.
+        if getattr(self.reports, "session", None) is not None:
+            from services.api.app.application.ai_job_dispatch import create_ai_job
+            from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
+
+            report.attention_level = rule_summary(report)["attention_level"]
+            report.summary_status = "pending"
+            try:
+                async with self.reports.session.begin_nested():
+                    await create_ai_job(
+                        AIJobRepository(self.reports.session, report.organization_id),
+                        target_type="care_report",
+                        target_id=report.id,
+                        job_type="care_report_summary",
+                    )
+            except Exception:
+                report.summary_status = "failed"
         if self.usage_service is not None:
             try:
                 await self.usage_service.index_report(report, snapshots=report.answer_snapshots)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin, utc_now
@@ -39,6 +39,19 @@ class CareReport(IdentityMixin, AuditMixin, Base):
     shelter_number_snapshot: Mapped[str | None] = mapped_column(String(120), nullable=True)
     note: Mapped[str | None] = mapped_column(String(5000), nullable=True)
     story: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    summary_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    summary_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    summary_status: Mapped[str] = mapped_column(
+        String(30), default="not_requested", server_default="not_requested"
+    )
+    attention_level: Mapped[str] = mapped_column(
+        String(20), default="normal", server_default="normal"
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(30), default="pending", server_default="pending"
+    )
+    review_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    review_history: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     status: Mapped[str] = mapped_column(String(30), default="saved", index=True)
     ai_job_status: Mapped[str] = mapped_column(String(30), default="pending_enqueue")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

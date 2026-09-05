@@ -1,7 +1,5 @@
 """Thin client for Google Gemini's `generateContent` REST endpoint — used
-only by the adoption suitability-analysis feature (see line_adoption_flex.py
-/ adoption_matching.py docstrings for why this is a separate integration
-from the unrelated `services/worker` AI job pipeline).
+by adoption matching, growth diaries, and background care-report summaries.
 
 Two auth modes, picked automatically by what's configured:
 
@@ -201,6 +199,17 @@ class GeminiClient:
             logger.exception("gemini_suitability_analysis_failed")
             return None
         return GeminiSuitabilityResult(score=max(0, min(100, score)), explanation=explanation)
+
+    async def generate_report_summary(self, prompt: str) -> str | None:
+        """Return raw output for domain validation; never log private report text."""
+        try:
+            return await self._generate_content(prompt)
+        except Exception:
+            logger.warning("gemini_report_summary_unavailable")
+            return None
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def recommend_alternatives(
         self, prompt: str, *, valid_animal_ids: set[str]

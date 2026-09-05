@@ -40,6 +40,16 @@ async def create_ai_job(
     job_type: str = "care_observation",
 ) -> AIProcessingJob:
     version = configured_ai_version()
+    if job_type == "care_report_summary":
+        settings = get_settings()
+        version = AIJobVersion(
+            provider="gemini",
+            model_name=settings.gemini_model_name,
+            model_version=settings.gemini_model_name,
+            prompt_template_id="care-report-summary",
+            prompt_version="2",
+            output_schema_version="1",
+        )
     return await repository.create(
         AIProcessingJob(
             organization_id=repository.organization_id,
