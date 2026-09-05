@@ -155,6 +155,9 @@ def render_traffic_policy(profile: CompiledProfile) -> str:
     added = {
         "x-strayhub-trusted-client-ip": "${conn.client_ip}",
         "x-forwarded-proto": "https",
+        # Free ngrok domains serve an abuse interstitial to browser-like agents,
+        # which replaces the LIFF page inside the LINE in-app browser.
+        "ngrok-skip-browser-warning": "true",
     }
     if profile.public_management:
         added["x-strayhub-public-profile"] = profile.name

@@ -33,6 +33,7 @@ def test_shared_policy_removes_then_sets_trusted_metadata(tmp_path: Path) -> Non
                 "x-strayhub-trusted-client-ip": "${conn.client_ip}",
                 "x-strayhub-public-profile": "shared-demo-dev",
                 "x-forwarded-proto": "https",
+                "ngrok-skip-browser-warning": "true",
             }
         },
     }
