@@ -104,6 +104,9 @@ def preflight(env: dict[str, str], *, line: bool, ports: bool = True) -> list[st
             if not 1 <= port <= 65535:
                 raise ValueError
             with socket.socket() as probe:
+                # Without SO_REUSEADDR a bare bind fails on lingering TIME_WAIT
+                # sockets, so a restart right after Ctrl-C looks like a busy port.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind(("127.0.0.1", port))
         except (OSError, ValueError):
             problems.append(f"{name} 無效或已被使用，請先停止舊服務或修改 .env。")

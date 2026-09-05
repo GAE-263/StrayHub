@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 from uuid import uuid4
@@ -148,3 +149,54 @@ def test_line_developer_mode_cannot_select_shared_profile():
     )
     assert result.returncode == 2
     assert "line-only" in result.stderr
+
+
+def _preflight_env(web_port: int, api_port: int, gateway_port: int) -> dict[str, str]:
+    return {
+        "APP_ENV": "local",
+        "DATABASE_URL": "postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub",
+        "MINIO_ENDPOINT": "http://127.0.0.1:9000",
+        "API_PORT": str(api_port),
+        "WEB_PORT": str(web_port),
+        "NGINX_PORT": str(gateway_port),
+    }
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def test_preflight_accepts_port_left_in_time_wait_by_a_previous_run():
+    """Restarting right after Ctrl-C must not look like a busy port."""
+    listener = socket.socket()
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.listen(5)
+    client = socket.create_connection(("127.0.0.1", port))
+    served, _ = listener.accept()
+    # Closing from the server side leaves TIME_WAIT on the listening port.
+    served.close()
+    client.close()
+    listener.close()
+
+    problems = dev.preflight(_preflight_env(port, _free_port(), _free_port()), line=False)
+
+    assert not any("WEB_PORT" in problem for problem in problems)
+
+
+def test_preflight_still_rejects_a_port_with_a_live_listener():
+    listener = socket.socket()
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.listen(5)
+    try:
+        problems = dev.preflight(_preflight_env(port, _free_port(), _free_port()), line=False)
+    finally:
+        listener.close()
+
+    assert any("WEB_PORT" in problem for problem in problems)
