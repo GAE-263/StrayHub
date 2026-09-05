@@ -1,5 +1,10 @@
 # Remote Management Demo 操作手冊
 
+開發者日常驗證功能請使用 `./scripts/dev.sh`；需要真實 LINE 時使用
+`./scripts/dev.sh --line`。這兩種模式沿用開發資料與密碼，不要求操作者代號或 ACTIVATE。
+本文件的 shared management 流程用於對外分享受限工作台，僅開放五個核心選單，
+不允許平台管理員登入。詳見 [開發者測試流程](developer-test-workflow.md)。
+
 Shared management profile 是本機展示能力。Phase D 只加入 rollback 基礎，不代表已授權公開啟用。
 啟動真實 public tunnel 前，仍必須完成 012 T008 事件處置與 Phase E activation gate。
 

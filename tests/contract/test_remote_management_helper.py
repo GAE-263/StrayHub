@@ -23,24 +23,30 @@ def test_line_helper_defaults_to_line_only_and_shared_is_explicit() -> None:
 
 def test_shared_gateway_readiness_probe_uses_the_reserved_host() -> None:
     source = Path("scripts/demo-line.sh").read_text()
+    assert "gateway_health_probe()" in source
+    assert 'curl -H "Host: ${NGROK_URL#https://}"' in source
+    assert "if gateway_health_probe 1" in source
+    assert "gateway_health_probe 5" in source
 
-    assert 'gateway_health_curl_args=(-H "Host: ${NGROK_URL#https://}")' in source
-    assert source.count('curl "${gateway_health_curl_args[@]}"') == 2
-    assert '--max-time 1 -fsS \\\n    "http://127.0.0.1:${NGINX_PORT}/volunteer-entry"' in source
-    assert '--max-time 5 -fsS \\\n  "http://127.0.0.1:${NGINX_PORT}/volunteer-entry"' in source
+
+def test_line_only_optional_arguments_work_with_macos_bash_and_nounset() -> None:
+    source = Path("scripts/demo-line.sh").read_text()
+    assert "gateway_health_curl_args" not in source
+    assert "tunnel_inspection_args" not in source
+    assert "api_reload_args" not in source
 
 
 def test_shared_production_tunnel_disables_ngrok_http_inspection() -> None:
     source = Path("scripts/demo-line.sh").read_text()
-
-    assert 'if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]' in source
-    assert "tunnel_inspection_args=(--inspect=false)" in source
-    assert '"${tunnel_inspection_args[@]}"' in source
+    assert (
+        'if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" '
+        '|| "$developer_mode" == "1" ]]' in source
+    )
+    assert "--inspect=false" in source
 
 
 def test_one_command_shared_demo_keeps_explicit_operator_authorization() -> None:
     source = Path("scripts/demo-shared-management.sh").read_text()
-
     assert '"$ROOT_DIR/scripts/demo.sh" check' in source
     assert '"$confirmation" == "ACTIVATE"' in source
     assert '"evidence_kind": "manual_external"' in source

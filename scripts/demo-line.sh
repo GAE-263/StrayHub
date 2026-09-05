@@ -5,10 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 reveal_entry_reference=0
+developer_mode=0
 PUBLIC_TUNNEL_PROFILE="line-only"
 ACTIVATION_EVIDENCE_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --developer) developer_mode=1 ;;
     --reveal-entry-reference) reveal_entry_reference=1 ;;
     --with-management) PUBLIC_TUNNEL_PROFILE="shared-demo-production" ;;
     --profile)
@@ -37,6 +39,10 @@ case "$PUBLIC_TUNNEL_PROFILE" in
   line-only|shared-demo-production|shared-demo-dev) ;;
   *) echo "未知 public tunnel profile" >&2; exit 2 ;;
 esac
+if [[ "$developer_mode" == "1" && "$PUBLIC_TUNNEL_PROFILE" != "line-only" ]]; then
+  echo "--developer 只支援 line-only；公開分享請使用 demo-management.sh。" >&2
+  exit 2
+fi
 
 read_dotenv_value() {
   local name="$1"
@@ -131,6 +137,7 @@ wait_for_tunnel_http() {
   local public_ip=""
   host="${host%%/*}"
   for _ in $(seq 1 90); do
+    check_children
     if curl --max-time 5 -fsS "${url}${path}" >/dev/null 2>&1; then
       return 0
     fi
@@ -152,18 +159,22 @@ start_tunnel() {
   local label="$1"
   local port="$2"
   local log_file="$3"
-  local tunnel_inspection_args=()
-  if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]; then
-    tunnel_inspection_args=(--inspect=false)
+  if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" || "$developer_mode" == "1" ]]; then
+    ngrok http "$port" --url "$NGROK_URL" \
+      --inspect=false \
+      --traffic-policy-file "$TRAFFIC_POLICY_FILE" \
+      --log=stdout --log-format=logfmt \
+      >"$log_file" 2>&1 &
+  else
+    ngrok http "$port" --url "$NGROK_URL" \
+      --traffic-policy-file "$TRAFFIC_POLICY_FILE" \
+      --log=stdout --log-format=logfmt \
+      >"$log_file" 2>&1 &
   fi
-  ngrok http "$port" --url "$NGROK_URL" \
-    "${tunnel_inspection_args[@]}" \
-    --traffic-policy-file "$TRAFFIC_POLICY_FILE" \
-    --log=stdout --log-format=logfmt \
-    >"$log_file" 2>&1 &
   pids+=("$!")
   local url=""
   for _ in $(seq 1 30); do
+    check_children
     url="$(extract_tunnel_url "$log_file" || true)"
     [[ -n "$url" ]] && break
     sleep 1
@@ -181,7 +192,9 @@ start_tunnel() {
 }
 
 require_value LIFF_ID
-require_value SHELTER_ENTRY_REFERENCE
+if [[ "$developer_mode" != "1" ]]; then
+  require_value SHELTER_ENTRY_REFERENCE
+fi
 require_value NGROK_URL
 entry_reference_reveal_confirmed=0
 if [[ "$reveal_entry_reference" == "1" ]]; then
@@ -267,7 +280,19 @@ cleanup() {
   done
   rm -rf "$log_dir"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+check_children() {
+  local pid
+  for pid in "${pids[@]}"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "LINE demo 子程序已停止，正在清理本次服務。" >&2
+      exit 1
+    fi
+  done
+}
 
 # Validate every shared-runtime input before any application process starts.
 API_BASE_URL="http://${API_HOST}:${API_PORT}"
@@ -297,11 +322,17 @@ uv run python scripts/generate_public_tunnel_config.py "${generator_args[@]}" >/
 "$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -t
 
 echo "[Line Demo] Starting FastAPI on ${API_HOST}:${API_PORT}"
-uv run python -m uvicorn services.api.app.main:app \
-  --host "$API_HOST" --port "$API_PORT" &
+if [[ "$developer_mode" == "1" ]]; then
+  uv run python -m uvicorn services.api.app.main:app \
+    --host "$API_HOST" --port "$API_PORT" --reload --reload-dir services/api &
+else
+  uv run python -m uvicorn services.api.app.main:app \
+    --host "$API_HOST" --port "$API_PORT" &
+fi
 pids+=("$!")
 
 for _ in $(seq 1 120); do
+  check_children
   if curl --max-time 1 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null 2>&1; then
     break
   fi
@@ -325,6 +356,7 @@ fi
 pids+=("$!")
 
 for _ in $(seq 1 240); do
+  check_children
   if curl --max-time 1 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/null 2>&1; then
     break
   fi
@@ -338,19 +370,24 @@ curl --max-time 5 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/nu
 echo "[Line Demo] Starting default-deny gateway (${PUBLIC_TUNNEL_PROFILE})"
 "$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -g "daemon off;" &
 pids+=("$!")
-gateway_health_curl_args=()
-if [[ "$PUBLIC_TUNNEL_PROFILE" != "line-only" ]]; then
-  gateway_health_curl_args=(-H "Host: ${NGROK_URL#https://}")
-fi
+gateway_health_probe() {
+  local timeout="$1"
+  if [[ "$PUBLIC_TUNNEL_PROFILE" == "line-only" ]]; then
+    curl --max-time "$timeout" -fsS \
+      "http://127.0.0.1:${NGINX_PORT}/volunteer-entry"
+  else
+    curl -H "Host: ${NGROK_URL#https://}" --max-time "$timeout" -fsS \
+      "http://127.0.0.1:${NGINX_PORT}/volunteer-entry"
+  fi
+}
 for _ in $(seq 1 30); do
-  if curl "${gateway_health_curl_args[@]}" --max-time 1 -fsS \
-    "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null 2>&1; then
+  check_children
+  if gateway_health_probe 1 >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-curl "${gateway_health_curl_args[@]}" --max-time 5 -fsS \
-  "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null || {
+gateway_health_probe 5 >/dev/null || {
   echo "Default-deny gateway health check failed" >&2
   exit 1
 }
@@ -387,14 +424,23 @@ echo
 echo "[Line Demo] PASS"
 echo "Local API:        ${API_BASE_URL}"
 echo "Web tunnel:       ${WEB_TUNNEL_URL}"
-if [[ "$entry_reference_reveal_confirmed" == "1" ]]; then
+if [[ "$developer_mode" == "1" ]]; then
+  echo "本機完整管理介面：http://${WEB_HOST}:${WEB_PORT}/login"
+  echo "Webhook：${WEB_TUNNEL_URL}/v1/line/webhook"
+  echo "公開志工報名 LIFF Endpoint：${WEB_TUNNEL_URL}/volunteer-application"
+elif [[ "$entry_reference_reveal_confirmed" == "1" ]]; then
   echo "LIFF Endpoint (shown once): ${LIFF_ENDPOINT_URL}"
 else
   echo "LIFF Endpoint:    ${WEB_TUNNEL_URL}/volunteer-entry?entry=[REDACTED]"
 fi
 echo "手機 LINE 入口:   ${LIFF_URL}"
 echo
-echo "請在 LINE Developers Console 設定完整 LIFF Endpoint URL；需要顯示一次時以 --reveal-entry-reference 互動執行。"
+if [[ "$developer_mode" != "1" ]]; then
+  echo "請在 LINE Developers Console 設定完整 LIFF Endpoint URL；需要顯示一次時以 --reveal-entry-reference 互動執行。"
+fi
 echo "按 Ctrl-C 會停止本腳本啟動的 API、Web、tunnel 與 worker。"
 
-wait "${pids[0]}"
+while true; do
+  check_children
+  sleep 1
+done
