@@ -228,7 +228,7 @@ identified Phase A/C verification debt and committed-file format drift.
 
 **Date**: 2026-09-05
 **Automated implementation status**: PASS — T045–T054 and T058–T060 complete
-**Public activation status**: BLOCKED — 012 T008 MANUAL ACTION REQUIRED
+**Public activation status**: NOT READY — T055 complete; T056 public smoke and T057 external rollback remain pending
 
 ### Controlled runtime acceptance
 
@@ -284,6 +284,29 @@ identified Phase A/C verification debt and committed-file format drift.
   fixture seed grants synthetic STAFF the existing medical-care permission required by the Core
   care-calendar journey; no production authorization rule changed.
 
+### Manual T008 / T055 incident evidence
+
+- Authorized operator `JS-LOCAL-01` completed the synthetic demo credential rotation at
+  `2026-09-05T07:23:29Z`. The old password returned 401; the rotated password returned 200 through
+  query-free JSON `POST /v1/auth/login`.
+- Active session and active refresh/session counts were both zero after rotation. Browser local
+  history, autofill and Back navigation were reviewed successfully; browser history sync was not
+  enabled. The credential owner attested that the exposed value was not reused elsewhere.
+- The helper-owned tunnel was stopped and its old endpoint was unreachable. Fixed-string local
+  artifact scanning returned no findings, and the static/runtime sensitive-transport checks passed
+  with zero raw sentinel occurrences on controllable local surfaces.
+- The original ngrok agent/Inspector session was unavailable when checked at
+  `2026-09-05T08:01:46Z`; historical request capture and third-party retention are therefore
+  `UNVERIFIABLE`, not PASS. This residual risk is recorded without claiming complete third-party
+  deletion.
+- Full incident evidence is recorded in
+  [`runtime-incident-result.md`](../012-sensitive-data-transport-hardening/runtime-incident-result.md).
+  The operator-held evidence manifest digest is
+  `ec8202b66617c11260d238a9e22665a355ce4f54729f7f25457970ebd790ac79`; it contains no raw
+  credential, token, or complete sensitive URL.
+- T055 is complete. This evidence does not satisfy the remaining exact reserved-host route matrix
+  or real external rollback checks, so T056 and T057 remain unchecked.
+
 ### Automated rollback evidence
 
 - The first controlled drill exposed an nginx reload readiness race: management was already denied,
@@ -316,10 +339,9 @@ identified Phase A/C verification debt and committed-file format drift.
 ### Scope and activation boundary
 
 - No MFA, OAuth, SSO, WAF, VPN, Zero Trust, cookie migration, Redis, CDN/CSP redesign, remote
-  PLATFORM_ADMIN flow, PII reveal, or broader governance surface was added. No real ngrok hostname,
-  public tunnel activation, external credential rotation, browser-history cleanup, inspector review,
-  or remote-log deletion was performed.
-- T055, T056, and T057 remain unchecked and are explicitly `BLOCKED BY 012 T008 — MANUAL
-  ACTIVATION GATE`. Required evidence is: old exposed password rejected, rotated password accepted,
-  old sessions/tokens revoked, browser/ngrok/log artifacts reviewed and cleaned as authorized, then
-  reserved-host public smoke and external rollback timing.
+  PLATFORM_ADMIN flow, PII reveal, or broader governance surface was added. T055 incident
+  containment is complete, but no real public tunnel activation, reserved-host smoke, or external
+  rollback drill has been performed.
+- T056 and T057 remain unchecked. Public activation readiness requires the reserved-host public
+  route/role/tenant/LINE/log matrix followed by the external rollback timing; neither is inferred
+  from T055 or the automated loopback evidence.

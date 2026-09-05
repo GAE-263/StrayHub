@@ -320,7 +320,7 @@ unknown routes全部拒絕；LINE happy paths 100%；sentinel不進任何log/art
   - **Notes/Test/AC**: SC-001～SC-010 automated evidence完整，實際host/secret去敏；若012 T008 pending明列`CODE COMPLETE / ACTIVATION BLOCKED`。
   - **Risk/Parallel/Commit**: 不以local loopback冒充public runtime；不可平行；文件可獨立commit。
 
-- [ ] T055 [US4] MANUAL ACTION REQUIRED：完成012 T008外部事件處置並保存去敏證據於 `docs/security/credential-url-incident-runbook.md`、`specs/013-remote-management-public-access/validation-result.md`
+- [X] T055 [US4] 完成012 T008外部事件處置並保存去敏證據於 `docs/security/credential-url-incident-runbook.md`、`specs/012-sensitive-data-transport-hardening/runtime-incident-result.md`、`specs/013-remote-management-public-access/validation-result.md`（2026-09-05；ngrok historical capture/retention 保留為 `UNVERIFIABLE` residual risk）
   - **Phase/Goal/Files/Deps**: E；授權人員證明old demo password rejected、new accepted、old sessions revoked及外部log/history檢查；依賴 T053。
   - **Notes/Test/AC**: 依runbook操作ngrok/browser/remote環境，保存操作者與UTC evidence reference但無credential；未授權或未完成時保持unchecked。
   - **Risk/Parallel/Commit**: 此為activation blocker而非coding blocker；不可由測試fixture取代；完成證據可獨立commit。

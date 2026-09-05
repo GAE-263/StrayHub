@@ -1,10 +1,13 @@
 # Runtime Incident Result — Phase A
 
-Recorded at: `2026-09-04T08:17:07Z`
+Recorded at: `2026-09-05T08:19:06Z`
 
-Overall status: **MANUAL ACTION REQUIRED**
+Overall status: **COMPLETE WITH DOCUMENTED RESIDUAL RISK**
 
-本文件不保存原始 credential、token 或完整敏感 URL。Repository 內可自動完成的 source containment 與 local demo provisioning guard 已實作；外部狀態尚未獲授權執行，因此 T008 不得標示 fully complete。
+本文件不保存原始 credential、token 或完整敏感 URL。授權操作者 `JS-LOCAL-01` 已對 loopback
+synthetic demo 環境完成 credential rotation、session invalidation、登入驗證、瀏覽器與可控本機
+artifact 清查。原 ngrok agent/Inspector session 已不存在，因此 historical request capture 與第三方
+retention 無法回溯證明，明確保留為 `UNVERIFIABLE`，不宣稱所有遠端副本均已刪除。
 
 ## Automated evidence
 
@@ -19,19 +22,37 @@ Overall status: **MANUAL ACTION REQUIRED**
 | Session invalidation           | PASS (code)     | Demo bootstrap 更新 password hash 時，同 transaction 將所有 demo user active sessions 設為 expired                                                                    |
 | Initial legacy request logging | RISK / DEFERRED | Runtime smoke 觀察到 Next dev 仍會先收到並記錄直接貼入的 legacy request target；依本輪 scope 不實作 T009+ logging hardening，須依 runbook 清理本次 synthetic artifact |
 
-## MANUAL ACTION REQUIRED
+## Manual runtime evidence
 
-| Action                                   | How to execute                                                                                            | Verification                                         | Evidence to retain                          |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- |
-| Stop exposed tunnel                      | 依 runbook 停止精確 helper-owned process，並在 ngrok dashboard 確認 endpoint 不可達                       | 外部 probe 失敗且 agent 無 active endpoint           | UTC、tunnel identifier digest、probe status |
-| Rotate the actually exposed demo account | 在確認為 loopback synthetic DB 後，以受控環境變數執行 demo bootstrap；不要把新值放進 command URL/argument | 舊 password `401`，新 password 可透過 JSON POST 登入 | account digest、UTC、status only            |
-| Verify access/refresh revocation         | 使用事件前測試 session 呼叫受保護 API 與 refresh endpoint                                                 | 兩者均拒絕                                           | status codes、session count，不保存 token   |
-| Review ngrok inspector/retention         | 在 account dashboard 檢查 capture、retention 與 deletion control                                          | 可控 capture 已刪；不可驗證副本標為 `UNVERIFIABLE`   | 去識別 screenshot/digest、UTC               |
-| Clear browser/history sync               | 刪除該筆 local history/autofill，並處理已啟用的 history sync                                              | Back/history search 找不到事件 URL                   | browser profile label、UTC、result          |
-| Clear controlled local artifacts         | 盤點 nginx/Next logs、HAR、trace、screenshots、shell history、clipboard history                           | synthetic sentinel scan 為 0                         | surface list、digest、cleaned flag          |
-| Check credential reuse                   | 由 credential owner 查核其他環境/account/service                                                          | 無重用，或所有重用位置均已輪替                       | owner attestation、UTC、scope               |
-| Restart only necessary tunnel            | 以新 process/session 重啟必要 LINE surface                                                                | 新 tunnel 不公開 management login，smoke pass        | tunnel digest、route probe matrix           |
+| Action / surface | Result | Evidence |
+| --- | --- | --- |
+| Synthetic account scope | PASS | Five known `demo-*` identities rotated together; sorted account-scope digest `f634556b65719b4f877dbdf63c5c65504de20e4f658787cbbc81e4173318cc52` |
+| Rotation | PASS | Completed `2026-09-05T07:23:29Z`; local database/storage guard and demo bootstrap passed |
+| Login transport | PASS | Old password `401`; rotated password `200`; JSON `POST`; empty login query string |
+| Session invalidation | PASS | Active sessions `0`; active refresh/session records `0` after rotation |
+| Browser cleanup | PASS | Local history, autofill and Back navigation checked; sensitive URL absent; history sync not enabled |
+| Old tunnel exposure | PASS | Helper-owned tunnel stopped and old endpoint confirmed unreachable |
+| ngrok local Inspector | UNVERIFIABLE | Checked `2026-09-05T08:01:46Z`; tunnel and request APIs both returned connection status `000`; historical session cannot be recovered locally |
+| ngrok remote retention | UNVERIFIABLE | Historical third-party retention cannot be proven after the original session ended |
+| Controlled local artifacts | PASS | Fixed-string repository scan returned zero findings; empty-findings digest `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| Logging defenses | PASS | Static policy check passed; runtime sentinel reported zero raw occurrences on all controllable local surfaces |
+| Credential reuse | PASS | Credential owner attested `NOT_REUSED`; the value copied into chat is treated as unrecoverable and was superseded by rotation |
+
+Operator-held evidence manifest SHA-256:
+`ec8202b66617c11260d238a9e22665a355ce4f54729f7f25457970ebd790ac79`.
+The manifest references local, secret-free evidence files; raw credentials and complete sensitive URLs are not
+part of the evidence package or repository.
+
+## Residual risk
+
+- The original ngrok Inspector session was unavailable at review time, so request-capture absence cannot be
+  proven retrospectively.
+- Third-party retention and inaccessible copies remain `UNVERIFIABLE`.
+- These limitations do not restore validity to the exposed credential: it was rotated, old sessions were
+  invalidated, and the old password is rejected.
 
 ## Current conclusion
 
-Code-level containment is ready for validation. The exposed runtime credential and externally retained copies are **not yet proven rotated, revoked, or removed**. T008 remains blocked on authorized manual environment operations.
+T008 operational containment is complete with the residual risks above. This closes the credential/session
+incident action but does not constitute 013 public activation, public-host smoke evidence, or an external
+rollback drill.

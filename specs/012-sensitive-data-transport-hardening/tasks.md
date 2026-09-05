@@ -133,7 +133,7 @@ address bar、history、network target及login response均無credential；正常
   - **Parallel**: 可與T001-T006及T009平行。
   - **Independent commit**: 是，documentation-only commit。
 
-- [ ] T008 [US1] 依 `docs/security/credential-url-incident-runbook.md` 對已曝光synthetic demo credential執行受控人工處置，並將去識別結果記於 `specs/012-sensitive-data-transport-hardening/runtime-incident-result.md`（程式化 provisioning/session containment 已完成；外部環境操作仍為 **MANUAL ACTION REQUIRED**）
+- [x] T008 [US1] 依 `docs/security/credential-url-incident-runbook.md` 對已曝光synthetic demo credential執行受控人工處置，並將去識別結果記於 `specs/012-sensitive-data-transport-hardening/runtime-incident-result.md`（2026-09-05 完成 rotation、session invalidation、browser/local artifact review；ngrok historical capture/retention 如實保留為 `UNVERIFIABLE` residual risk）
   - **Goal**: 讓已曝光credential與active sessions實際失效，而非只修UI。
   - **Files**: 新增`specs/012-sensitive-data-transport-hardening/runtime-incident-result.md`；runtime database/tunnel/log是人工外部狀態，不得把新secret寫入repo。
   - **Dependencies**: T002、T004、T007已ready/deployed至該demo環境後執行。

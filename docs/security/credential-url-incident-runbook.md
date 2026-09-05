@@ -79,3 +79,10 @@ uv run pytest tests/e2e/test_local_line_tunnel_boundary.py
 nginx sensitive format 與 tunnel catch-all。第二個命令只輸出 synthetic sentinel digest；外部
 ngrok inspector、瀏覽器同步 history 與 remote retention 仍必須保留為人工 evidence，不能用本機
 PASS 取代。
+
+## Completed incident record
+
+2026-09-05 的 synthetic demo credential 事件已依本 runbook 完成受控 rotation、session
+invalidation、browser/local artifact review 與登入驗證。去敏結果與不可回溯的 ngrok residual
+risk 記錄於 [`runtime-incident-result.md`](../../specs/012-sensitive-data-transport-hardening/runtime-incident-result.md)。
+該紀錄只關閉 012 T008；不代表 013 public-host smoke 或 rollback drill 已完成。
