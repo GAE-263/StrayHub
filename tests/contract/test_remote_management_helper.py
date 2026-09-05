@@ -38,6 +38,18 @@ def test_shared_production_tunnel_disables_ngrok_http_inspection() -> None:
     assert '"${tunnel_inspection_args[@]}"' in source
 
 
+def test_one_command_shared_demo_keeps_explicit_operator_authorization() -> None:
+    source = Path("scripts/demo-shared-management.sh").read_text()
+
+    assert '"$ROOT_DIR/scripts/demo.sh" check' in source
+    assert '"$confirmation" == "ACTIVATE"' in source
+    assert '"evidence_kind": "manual_external"' in source
+    assert '"$ROOT_DIR/scripts/demo-management.sh"' in source
+    assert "--profile shared-demo-production" in source
+    assert 'rm -f "$EVIDENCE_FILE"' in source
+    assert "password=" not in source.lower()
+
+
 def test_management_wrapper_requires_explicit_profile() -> None:
     source = Path("scripts/demo-management.sh").read_text()
     assert "--profile shared-demo-production" in source

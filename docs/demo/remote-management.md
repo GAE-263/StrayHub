@@ -3,6 +3,29 @@
 Shared management profile 是本機展示能力。Phase D 只加入 rollback 基礎，不代表已授權公開啟用。
 啟動真實 public tunnel 前，仍必須完成 012 T008 事件處置與 Phase E activation gate。
 
+## 一鍵啟動本機 demo 與 ngrok
+
+先在 `.env` 設定 `NGROK_URL`、`LIFF_ID` 與 `SHELTER_ENTRY_REFERENCE`，再執行：
+
+```bash
+./scripts/demo-shared-management.sh
+```
+
+腳本會互動式讀取新的 demo 密碼、執行 `./scripts/demo.sh check` 建立／驗證 synthetic demo
+資料，要求授權操作者輸入代號與 `ACTIVATE`，再從已提交的 T055～T057 去敏驗收紀錄建立當次
+暫存 activation evidence 並啟動 `shared-demo-production`。暫存 evidence 會在結束時刪除；密碼只
+存在當次 process environment，不會寫入 URL、檔案或輸出。外部測試者應使用
+`demo-furkids-admin`，並透過安全管道另外取得密碼。
+
+若環境 owner 已另外提供有效 evidence，仍可明確指定：
+
+```bash
+./scripts/demo-shared-management.sh --activation-evidence /secure/path/activation-evidence.json
+```
+
+測試完成後按 `Ctrl-C`，helper 會停止 FastAPI、Next.js、nginx、worker 與 ngrok。不要同時先執行
+`./scripts/demo.sh serve`，否則會佔用相同的 API/Web ports。
+
 ## 依序 rollback
 
 在 repository root 對 helper 擁有的 runtime directory 執行：
