@@ -85,7 +85,7 @@ http {
         }
 
         # allowlist: next_static_assets
-        location ~ "^/_next/static/[A-Za-z0-9_./-]+$" {
+        location ~ "^/_next/static/[A-Za-z0-9_./()-]+$" {
             if ($request_method !~ ^(GET|HEAD)$) { return 404; }
             proxy_pass http://strayhub_web;
         }

@@ -50,7 +50,7 @@ def test_local_nginx_routes_only_allowlisted_api_and_web_paths() -> None:
     assert "location = /healthz" not in source
     assert "location ^~ /v1/" not in source
     assert "location = /volunteer-application" in source
-    assert 'location ~ "^/_next/static/[A-Za-z0-9_./-]+$"' in source
+    assert 'location ~ "^/_next/static/[A-Za-z0-9_./()-]+$"' in source
     assert "location = /_next/webpack-hmr" in source
     assert "location ^~ /_next/ {" not in source
     assert "location /" in source
@@ -114,7 +114,7 @@ def test_local_nginx_configures_forwarded_and_websocket_headers() -> None:
     assert "strayhub_api" in api_location
     assert "strayhub_web" not in api_location
     next_location = source.split("# allowlist: next_static_assets", 1)[1].split("\n        }", 1)[0]
-    assert "^/_next/static/[A-Za-z0-9_./-]+$" in next_location
+    assert "^/_next/static/[A-Za-z0-9_./()-]+$" in next_location
     assert "strayhub_web" in next_location
     assert "strayhub_api" not in next_location
 

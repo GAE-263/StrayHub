@@ -309,7 +309,7 @@ def _route_sample(route: EffectiveRoute) -> str:
     sample = route.path_pattern[1:-1]
     sample = sample.replace(UUID_PATTERN, "00000000-0000-4000-8000-000000000000")
     sample = sample.replace("(?:/timeline)?", "/timeline")
-    sample = sample.replace("[A-Za-z0-9_./-]+", "chunks/example.js")
+    sample = sample.replace("[A-Za-z0-9_./()-]+", "chunks/example.js")
     return sample
 
 

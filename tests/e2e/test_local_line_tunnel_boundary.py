@@ -89,7 +89,9 @@ def _sample_path(route: dict) -> str:
     if "path" in route:
         return route["path"]
     return {
-        "next_static_assets": "/_next/static/chunks/app.js",
+        "next_static_assets": (
+            "/_next/static/chunks/app/(volunteer-onboarding)/volunteer-application/page.js"
+        ),
         "volunteer_application_withdraw": f"/v1/volunteer-applications/{UUID}/withdraw",
         "animal_confirm": f"/v1/animals/{UUID}/confirm",
         "update_care_report_draft": f"/v1/care-report-drafts/{UUID}",
@@ -180,6 +182,7 @@ def test_public_gateway_runtime_allow_deny_and_query_preservation(tmp_path: Path
             "/openapi.json",
             "/_next/image?url=deny-boundary-sentinel",
             "/_next/server-internal",
+            "/_next/static/chunks/app/%2e%2e/%2e%2e/%2e%2e/login",
             "/volunteer-entry%2F..%2Flogin",
         )
         api_before = len(_ApiHandler.records)

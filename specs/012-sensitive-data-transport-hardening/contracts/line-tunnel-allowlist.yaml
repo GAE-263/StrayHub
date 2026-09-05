@@ -80,7 +80,7 @@ routes:
       [apps/web/e2e/state-feedback.spec.ts, apps/web/e2e/volunteer-core.spec.ts]
   - id: next_static_assets
     methods: [GET, HEAD]
-    path_pattern: ^/_next/static/[A-Za-z0-9_./-]+$
+    path_pattern: ^/_next/static/[A-Za-z0-9_./()-]+$
     upstream: web
     owner: apps/web
     reason: JavaScript chunks and CSS required to hydrate allowlisted LIFF pages.

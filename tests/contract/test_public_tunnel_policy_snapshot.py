@@ -29,16 +29,16 @@ def _route_digest(profile_name: str, *, production: bool = False) -> tuple[int, 
 
 def test_phase_b_policy_snapshot_is_deterministic() -> None:
     assert sha256(LINE_REGISTRY.read_bytes()).hexdigest() == (
-        "4c9d7c9de0ce6379ae29a11244dbba23d2395635d6dcc77a96b14090cc4899da"
+        "0bbc0da82b31f19a02ff4786f7d744f9cdc856d84620b081529ba725918eec03"
     )
     assert _route_digest("line-only") == (
         25,
-        "2f73f7d603697c85cda7abba9a53d5c20a196a1f8ed691c58a313e2b3839f71a",
+        "e319597ed710012f9215d986b47c1974981e895df2f3a5fc1add97cbb3ce48e0",
         0,
     )
     assert _route_digest("shared-demo-dev") == (
         48,
-        "9ab82dfe6079289fa3c3271507c66653e27254333313fda9d6a9f927366f4929",
+        "1763d51d2bb91c08f3660238d8e5541f91f2002d19a5e8f80285dd4ac5c7cec6",
         0,
     )
     assert _route_digest("shared-demo-production", production=True) == (
