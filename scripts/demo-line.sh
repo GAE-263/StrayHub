@@ -152,7 +152,12 @@ start_tunnel() {
   local label="$1"
   local port="$2"
   local log_file="$3"
+  local tunnel_inspection_args=()
+  if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]; then
+    tunnel_inspection_args=(--inspect=false)
+  fi
   ngrok http "$port" --url "$NGROK_URL" \
+    "${tunnel_inspection_args[@]}" \
     --traffic-policy-file "$TRAFFIC_POLICY_FILE" \
     --log=stdout --log-format=logfmt \
     >"$log_file" 2>&1 &
@@ -333,13 +338,19 @@ curl --max-time 5 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/nu
 echo "[Line Demo] Starting default-deny gateway (${PUBLIC_TUNNEL_PROFILE})"
 "$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -g "daemon off;" &
 pids+=("$!")
+gateway_health_curl_args=()
+if [[ "$PUBLIC_TUNNEL_PROFILE" != "line-only" ]]; then
+  gateway_health_curl_args=(-H "Host: ${NGROK_URL#https://}")
+fi
 for _ in $(seq 1 30); do
-  if curl --max-time 1 -fsS "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null 2>&1; then
+  if curl "${gateway_health_curl_args[@]}" --max-time 1 -fsS \
+    "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-curl --max-time 5 -fsS "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null || {
+curl "${gateway_health_curl_args[@]}" --max-time 5 -fsS \
+  "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/null || {
   echo "Default-deny gateway health check failed" >&2
   exit 1
 }

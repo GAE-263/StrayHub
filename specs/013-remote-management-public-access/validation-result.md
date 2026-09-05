@@ -228,7 +228,8 @@ identified Phase A/C verification debt and committed-file format drift.
 
 **Date**: 2026-09-05
 **Automated implementation status**: PASS — T045–T054 and T058–T060 complete
-**Public activation status**: NOT READY — T055 complete; T056 public smoke and T057 external rollback remain pending
+**Feature status**: `READY_FOR_CONTROLLED_ACTIVATION`
+**Public activation status**: Not running — T055–T057 complete; drill tunnel stopped after validation
 
 ### Controlled runtime acceptance
 
@@ -304,8 +305,47 @@ identified Phase A/C verification debt and committed-file format drift.
   The operator-held evidence manifest digest is
   `ec8202b66617c11260d238a9e22665a355ce4f54729f7f25457970ebd790ac79`; it contains no raw
   credential, token, or complete sensitive URL.
-- T055 is complete. This evidence does not satisfy the remaining exact reserved-host route matrix
-  or real external rollback checks, so T056 and T057 remain unchecked.
+- T055 is complete. T056 subsequently supplied the exact reserved-host route/role/tenant/LINE/log
+  matrix, and the T057 section below records the completed real external rollback drill.
+
+### Real reserved-host public smoke (T056)
+
+- Authorized operator `JS-LOCAL-01` launched the real reserved HTTPS host with the
+  `shared-demo-production` profile, a fresh Next production build, the generated default-deny
+  nginx gateway, synthetic `strayhub_test` data, and activation evidence digest
+  `0d400f32712034d8636323c8cf7c0c762d33ee3e5d78806002b8aa387cc8a0e0`. The complete hostname
+  and all credentials/tokens remain omitted; the normalized host digest is
+  `f4c4a3b9b9d377e8`.
+- The initial public run exposed a real acceptance defect: ngrok's local HTTP Inspector retained
+  request bodies and Authorization headers. A redacted scan counted 21 password-body occurrences
+  and 367 Authorization-header occurrences, with zero password query and zero query-bearing
+  Referer occurrences. This run was rejected as evidence; its synthetic password was immediately
+  rotated and 24 synthetic sessions plus 26 synthetic refresh records were revoked.
+- The production helper now passes ngrok `--inspect=false` for
+  `shared-demo-production`. A contract test covers this requirement. After a fresh restart and
+  credential rotation, the Inspector API remained available for health diagnostics but retained
+  zero requests throughout the repeated smoke. Runtime artifact scans found zero raw password,
+  Authorization, password-query, or Referer files.
+- STAFF and SHELTER_ADMIN each completed five public Core journeys through HTTPS → ngrok → nginx →
+  Next/FastAPI: 10/10 passed in 36.8 seconds, with individual journeys between 2.4 and 4.8 seconds.
+  Login remained query-free JSON `POST /v1/auth/login`; animal/report detail, authenticated photo,
+  refresh, and logout remained successful.
+- PLATFORM_ADMIN and VOLUNTEER public login were each denied by the server-side remote role policy.
+  The route matrix returned 404 for platform/settings/PII/docs/debug/internal, arbitrary UI/API,
+  broad management API, production HMR, unknown Next internals, malformed UUID, wrong-method, and
+  login-with-query probes. No broad `/v1/**`, `/v1/management/**`, or `/_next/**` route became
+  reachable.
+- A real public STAFF session switched active shelter only through the authorized context endpoint.
+  Same-tenant identity returned 200; another shelter's animal, timeline, and report each returned
+  404 without exposing identifiers or data.
+- Public LINE/LIFF entry pages returned 200. An unsigned webhook reached FastAPI and returned the
+  expected 401 signature rejection, confirming fail-closed webhook verification without changing
+  the committed LINE registry.
+- Supporting regression after the public run: helper/gateway/LINE/tenant/log tests `35 passed`;
+  TypeScript, Prettier on the public Playwright specs, Ruff on the helper contract test, shell
+  syntax, static sensitive-transport policy, production build, nginx syntax, and `git diff --check`
+  passed. T056 is complete. This is smoke evidence only and does not satisfy T057's real rollback
+  ordering, selective revocation, or five-minute SLA.
 
 ### Automated rollback evidence
 
@@ -321,11 +361,47 @@ identified Phase A/C verification debt and committed-file format drift.
 - This is automated local timing only. It is not the real external/ngrok five-minute SLA evidence
   required by T057.
 
+### Real external rollback drill (T057)
+
+- Authorized operator `JS-LOCAL-01` restarted the inspection-disabled reserved-host tunnel with
+  `shared-demo-production`, synthetic `strayhub_test` data, and the same redacted activation gate
+  evidence class used by T056. Before rollback, public STAFF and SHELTER_ADMIN login, authorized
+  shelter context switch, and management dashboard each returned 200. Inspector retained zero
+  requests.
+- The controlled baseline contained two active `remote_management_demo` sessions and two active
+  refresh records. Preservation controls contained one active session each for `legacy`,
+  `local_web`, and `liff`, plus one active refresh record each for `local_web` and `liff`.
+- The first CLI invocation switched and verified the gateway as `line-only`, but reported zero DB
+  revocations because the process preferred a separately configured migration URL over the
+  explicitly supplied runtime DB URL. This was rejected as incomplete evidence: public management
+  was already denied, while both remote sessions remained active. A test-first fix now makes the
+  rollback command always revoke from application `DATABASE_URL`; migration credentials cannot
+  redirect session cleanup to another database.
+- With the runtime DB explicitly selected, the ordered rollback revalidated management deny and
+  LINE availability before revoking two remote sessions and two refresh records. From the first
+  gateway deny at `2026-09-05T09:08:52.546962Z` to completed revocation at
+  `2026-09-05T09:09:30.687514Z` elapsed `38.141` seconds, below the 300-second objective.
+- Through the still-running public tunnel after rollback, `/login`, the management home, animals,
+  reports, care calendar, login API, and dashboard API all returned 404: management public success
+  was 0/7. LINE/LIFF entry pages returned 200 and an unsigned webhook returned the expected 401:
+  the bounded LINE availability matrix was 4/4, or 100%.
+- Both pre-rollback access tokens and both refresh tokens returned 401. Database verification found
+  zero active remote sessions and zero active remote refresh records. The `legacy`, `local_web`,
+  and `liff` preservation counts were unchanged. A post-fix runtime probe using only
+  `DATABASE_URL` revoked an additional synthetic remote fixture (one session and one refresh),
+  proving the migration URL no longer controls the target.
+- Runtime artifacts and the ngrok Inspector each retained zero raw password, Authorization,
+  password-query, or Referer occurrences. The helper-owned line-only tunnel was stopped after
+  evidence collection; this was a bounded drill, not a request for sustained public exposure.
+- T057 is complete. T055 incident containment, T056 reserved-host smoke, and T057 external rollback
+  now satisfy the feature's controlled-activation prerequisites. A future activation must still use
+  the documented explicit profile/evidence gate and normal operator authorization.
+
 ### Final quality gates
 
-- Full Pytest: 1704 passed, 2 explained opt-in skips. Phase E/auth/session/gateway targeted matrix:
-  86 passed. Ruff check and Ruff format: PASS (841 files). Mypy: PASS (25 source files). Alembic:
-  one head (`0046_remote_session_origin`).
+- Full Pytest after T057: 1707 passed, 2 explained opt-in skips. Phase
+  E/auth/session/gateway targeted matrix: 86 passed. Ruff check and Ruff format: PASS (841 files).
+  Mypy: PASS (25 source files). Alembic: one head (`0046_remote_session_origin`).
 - Frontend Vitest: 91 files / 467 tests PASS. TypeScript typecheck and Prettier check: PASS. Fresh
   Next production build: PASS (25 pages). The new production-gateway STAFF and admin core journeys
   passed five repetitions each; the expanded STAFF run also returned 200 for animal detail,
@@ -340,8 +416,8 @@ identified Phase A/C verification debt and committed-file format drift.
 
 - No MFA, OAuth, SSO, WAF, VPN, Zero Trust, cookie migration, Redis, CDN/CSP redesign, remote
   PLATFORM_ADMIN flow, PII reveal, or broader governance surface was added. T055 incident
-  containment is complete, but no real public tunnel activation, reserved-host smoke, or external
-  rollback drill has been performed.
-- T056 and T057 remain unchecked. Public activation readiness requires the reserved-host public
-  route/role/tenant/LINE/log matrix followed by the external rollback timing; neither is inferred
-  from T055 or the automated loopback evidence.
+  containment, the bounded T056 reserved-host smoke, and the T057 external rollback drill are
+  complete. The drill tunnel was stopped; no sustained public activation is running.
+- T056 and T057 are complete, and the helper-owned tunnel was stopped after the bounded drill.
+  Public activation is not currently running; the feature is ready only for a separately authorized,
+  controlled activation through the existing explicit profile and evidence gate.

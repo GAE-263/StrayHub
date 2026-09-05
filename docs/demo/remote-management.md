@@ -12,6 +12,10 @@ uv run python scripts/rollback_remote_management.py \
   --runtime-dir /absolute/path/to/current/public-tunnel-runtime
 ```
 
+Session revocation 永遠使用 application runtime 的 `DATABASE_URL`。即使環境另有供 migration
+使用的 `DATABASE_MIGRATION_URL`，rollback 也不會改用該連線，以免 gateway 與 session revoke
+指向不同資料庫。
+
 指令固定依照下列 fail-closed 順序執行：
 
 1. 產生並語法檢查 `line-only` gateway config。

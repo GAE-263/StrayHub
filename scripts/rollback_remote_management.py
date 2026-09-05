@@ -161,10 +161,14 @@ def _probe_status(port: int, path: str, *, method: str) -> int:
         raise RuntimeError("local rollback gateway is unavailable") from exc
 
 
+def _rollback_database_url() -> str:
+    # Sessions belong to the application runtime database. A separately configured
+    # migration connection may point at a different database or privileged role.
+    return get_settings().database_url
+
+
 async def _revoke_database_sessions() -> RemoteSessionRollbackResult:
-    settings = get_settings()
-    database_url = settings.database_migration_url or settings.database_url
-    engine = create_async_engine(database_url)
+    engine = create_async_engine(_rollback_database_url())
     maker = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with maker() as session, session.begin():

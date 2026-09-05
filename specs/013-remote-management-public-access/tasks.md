@@ -325,12 +325,12 @@ unknown routes全部拒絕；LINE happy paths 100%；sentinel不進任何log/art
   - **Notes/Test/AC**: 依runbook操作ngrok/browser/remote環境，保存操作者與UTC evidence reference但無credential；未授權或未完成時保持unchecked。
   - **Risk/Parallel/Commit**: 此為activation blocker而非coding blocker；不可由測試fixture取代；完成證據可獨立commit。
 
-- [ ] T056 [US4] 執行真實 `shared-demo-production` public smoke 於 `specs/013-remote-management-public-access/validation-result.md`
+- [X] T056 [US4] 執行真實 `shared-demo-production` public smoke 於 `specs/013-remote-management-public-access/validation-result.md`（2026-09-05；reserved host、角色、tenant、LINE、deny matrix 與 inspection-disabled log scan PASS）
   - **Phase/Goal/Files/Deps**: E；在reserved HTTPS host驗證public login、核心journeys、deny與log；依賴 T054、T055。
   - **Notes/Test/AC**: production build唯一主要evidence，10次journey至少9次<3分鐘，所有deny不達upstream；不記完整host credential/query。
   - **Risk/Parallel/Commit**: 012 T008未完成不得執行或宣告ready；不可平行；evidence可獨立commit。
 
-- [ ] T057 [US4] 執行真實 rollback drill 並記錄 5-minute evidence 於 `specs/013-remote-management-public-access/validation-result.md`
+- [X] T057 [US4] 執行真實 rollback drill 並記錄 5-minute evidence 於 `specs/013-remote-management-public-access/validation-result.md`（2026-09-05；management success 0%、LINE 100%、remote session/refresh 歸零，總耗時 38.141 秒）
   - **Phase/Goal/Files/Deps**: E；先management public success=0，再remote sessions revoke，LINE success=100%；依賴 T056。
   - **Notes/Test/AC**: <300秒，舊access/refresh失效，local/LIFF sessions保留，log sentinel仍0；PASS才可標activation-ready。
   - **Risk/Parallel/Commit**: route deny失敗時不得先撤session並宣告rollback成功；不可平行；evidence可獨立commit。
@@ -384,7 +384,7 @@ Phase E: T045→T046; T047–T052 parallel after code foundations
 T027/T028→T035→T036；T037→T038→T039/T040→T041/T042→T043→T044→T045/T046→T053→T055→
 T056→T057→T060。
 
-**Activation blocker**: 只有 T055 的真實 012 T008 evidence 阻擋 T056/T057 與 activation-ready；T001–T054、
+**Activation prerequisite**: T055 的真實 012 T008 evidence、T056/T057 runtime acceptance 均已完成；public activation 仍須依既有 operator authorization、有效 evidence、synthetic/demo guard 與 explicit profile 控制。T001–T054、
 T058、T059 的 coding/automated validation 不受阻擋。
 
 ## Parallel Execution Examples

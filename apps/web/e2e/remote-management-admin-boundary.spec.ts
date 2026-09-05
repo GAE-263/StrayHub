@@ -6,7 +6,10 @@ test.skip(
   process.env.STRAYHUB_PHASE_E_GATEWAY !== "1" || !password,
   "Requires the controlled shared-demo-production gateway and synthetic fixture DB",
 );
-test.use({ trace: "off" });
+test.use({
+  extraHTTPHeaders: { "ngrok-skip-browser-warning": "1" },
+  trace: "off",
+});
 
 async function login(page: import("@playwright/test").Page, username: string) {
   await page.goto("/login");

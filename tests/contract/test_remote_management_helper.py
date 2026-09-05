@@ -21,6 +21,23 @@ def test_line_helper_defaults_to_line_only_and_shared_is_explicit() -> None:
     )
 
 
+def test_shared_gateway_readiness_probe_uses_the_reserved_host() -> None:
+    source = Path("scripts/demo-line.sh").read_text()
+
+    assert 'gateway_health_curl_args=(-H "Host: ${NGROK_URL#https://}")' in source
+    assert source.count('curl "${gateway_health_curl_args[@]}"') == 2
+    assert '--max-time 1 -fsS \\\n    "http://127.0.0.1:${NGINX_PORT}/volunteer-entry"' in source
+    assert '--max-time 5 -fsS \\\n  "http://127.0.0.1:${NGINX_PORT}/volunteer-entry"' in source
+
+
+def test_shared_production_tunnel_disables_ngrok_http_inspection() -> None:
+    source = Path("scripts/demo-line.sh").read_text()
+
+    assert 'if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]' in source
+    assert "tunnel_inspection_args=(--inspect=false)" in source
+    assert '"${tunnel_inspection_args[@]}"' in source
+
+
 def test_management_wrapper_requires_explicit_profile() -> None:
     source = Path("scripts/demo-management.sh").read_text()
     assert "--profile shared-demo-production" in source

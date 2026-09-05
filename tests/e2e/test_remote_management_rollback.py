@@ -2,6 +2,7 @@ from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from subprocess import CompletedProcess
+from types import SimpleNamespace
 
 import pytest
 from scripts import rollback_remote_management as rollback
@@ -9,6 +10,18 @@ from scripts.rollback_remote_management import (
     execute_ordered_rollback,
     switch_gateway_to_line_only,
 )
+
+
+def test_rollback_revokes_sessions_from_the_runtime_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = SimpleNamespace(
+        database_url="postgresql+asyncpg://runtime/session-database",
+        database_migration_url="postgresql+asyncpg://migration/admin-database",
+    )
+    monkeypatch.setattr(rollback, "get_settings", lambda: settings)
+
+    assert rollback._rollback_database_url() == settings.database_url
 
 
 def test_gateway_switch_generates_line_only_then_validates_and_reloads(

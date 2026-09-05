@@ -6,7 +6,10 @@ test.skip(
   process.env.STRAYHUB_PHASE_E_GATEWAY !== "1" || !password,
   "Requires the controlled shared-demo-production gateway and synthetic fixture DB",
 );
-test.use({ trace: "off" });
+test.use({
+  extraHTTPHeaders: { "ngrok-skip-browser-warning": "1" },
+  trace: "off",
+});
 
 test("STAFF completes the Core Remote Management journey through the gateway", async ({
   page,
