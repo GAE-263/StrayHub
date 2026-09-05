@@ -39,4 +39,3 @@ def test_shared_policy_removes_then_sets_trusted_metadata(tmp_path: Path) -> Non
     serialized = result.traffic_policy_path.read_text().lower()
     assert "authorization" not in serialized
     assert "password" not in serialized
-

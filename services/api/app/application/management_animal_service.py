@@ -88,9 +88,7 @@ class ManagementAnimalService:
             if parent_name:
                 payload["area_path"] = f"{parent_name} / {area.name}"
         if media is not None and self._valid_photo_media(animal, media):
-            payload["photo_url"] = (
-                f"/v1/management/animals/{animal.id}/photo?v={media.checksum}"
-            )
+            payload["photo_url"] = f"/v1/management/animals/{animal.id}/photo?v={media.checksum}"
         return payload
 
     async def photo(self, animal_id: UUID) -> ManagementAnimalPhoto:
@@ -162,8 +160,7 @@ class ManagementAnimalService:
         )
         return {
             "items": [
-                await self._read_payload(animal, area, media)
-                for animal, area, media in rows.all()
+                await self._read_payload(animal, area, media) for animal, area, media in rows.all()
             ],
             "page": page,
             "page_size": page_size,

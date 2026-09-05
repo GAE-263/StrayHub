@@ -85,6 +85,9 @@ def test_phase_b1_uses_internal_database_and_minio_dns_with_persistence() -> Non
             "protocol": "tcp",
         }
     ]
+    assert services["api"]["environment"]["LOGIN_ABUSE_HMAC_SECRET"] == (
+        "${LOGIN_ABUSE_HMAC_SECRET:?LOGIN_ABUSE_HMAC_SECRET is required}"
+    )
     assert "postgres_data:/var/lib/postgresql/data" in services["postgres"]["volumes"]
     assert services["minio"]["volumes"] == ["minio_data:/data"]
     assert {"postgres_data", "minio_data"} == compose["volumes"].keys()

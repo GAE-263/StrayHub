@@ -29,6 +29,7 @@ without introducing a service-account JSON or application-side GCS dependency.
 | `LINE_CHANNEL_ACCESS_TOKEN` | API | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `LIFF_ID` | API, Web | Non-secret | Synthetic verification env | Compose non-secret env/config |
 | `ANIMAL_CONFIRMATION_SECRET` | API | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
+| `LOGIN_ABUSE_HMAC_SECRET` | API | Secret | Synthetic verification env | Secret Manager → staged `runtime.env` |
 | `AUTH_JWT_ISSUER` | API | Non-secret | Verification env | Compose non-secret env/config |
 | `AUTH_JWT_AUDIENCE` | API | Non-secret | Verification env | Compose non-secret env/config |
 | `AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE` | API | Non-secret | Verification env identifier | Compose non-secret env/config |

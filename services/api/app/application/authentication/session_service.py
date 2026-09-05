@@ -118,19 +118,15 @@ class SessionService:
             if user.platform_role == "PLATFORM_ADMIN"
             else await self.repository.effective_organization_access(user.id)
         )
-        public_role_allowed = (
-            public_exposure_profile is None
-            or (
-                user.platform_role != "PLATFORM_ADMIN"
-                and any(
-                    membership.role in {"STAFF", "SHELTER_ADMIN"}
-                    for membership, _organization in available_access
-                )
+        public_role_allowed = public_exposure_profile is None or (
+            user.platform_role != "PLATFORM_ADMIN"
+            and any(
+                membership.role in {"STAFF", "SHELTER_ADMIN"}
+                for membership, _organization in available_access
             )
         )
-        if (
-            not public_role_allowed
-            or (user.platform_role != "PLATFORM_ADMIN" and not available_access)
+        if not public_role_allowed or (
+            user.platform_role != "PLATFORM_ADMIN" and not available_access
         ):
             if subject_digest is not None:
                 retry_after = await self.repository.record_login_failure(
@@ -189,19 +185,15 @@ class SessionService:
             if user.platform_role == "PLATFORM_ADMIN"
             else await self.repository.effective_organization_access(user.id)
         )
-        public_role_allowed = (
-            public_exposure_profile is None
-            or (
-                user.platform_role != "PLATFORM_ADMIN"
-                and any(
-                    membership.role in {"STAFF", "SHELTER_ADMIN"}
-                    for membership, _organization in available_access
-                )
+        public_role_allowed = public_exposure_profile is None or (
+            user.platform_role != "PLATFORM_ADMIN"
+            and any(
+                membership.role in {"STAFF", "SHELTER_ADMIN"}
+                for membership, _organization in available_access
             )
         )
-        if (
-            not public_role_allowed
-            or (user.platform_role != "PLATFORM_ADMIN" and not available_access)
+        if not public_role_allowed or (
+            user.platform_role != "PLATFORM_ADMIN" and not available_access
         ):
             raise DomainError("invalid_session", "Session 無效", 401)
         record.status = "rotated"

@@ -21,7 +21,7 @@ def test_management_wrapper_requires_explicit_profile() -> None:
     source = Path("scripts/demo-management.sh").read_text()
     assert "--profile shared-demo-production" in source
     assert "--profile shared-demo-dev" in source
-    assert "exec \"$ROOT_DIR/scripts/demo-line.sh\"" in source
+    assert 'exec "$ROOT_DIR/scripts/demo-line.sh"' in source
 
 
 def test_local_line_helper_keeps_line_only_default() -> None:

@@ -121,9 +121,7 @@ def test_confirmation_omits_unsafe_photo_but_keeps_identity_and_actions(
 
     assert "hero" not in bubble["contents"]
     texts = _texts(bubble)
-    assert {"A-001", "北區 A3", "浪浪森友會 A", "確認是這隻", "重新選擇"} <= set(
-        texts
-    )
+    assert {"A-001", "北區 A3", "浪浪森友會 A", "確認是這隻", "重新選擇"} <= set(texts)
     assert any("小森" in text for text in texts)
 
 

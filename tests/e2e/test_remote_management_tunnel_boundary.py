@@ -169,9 +169,7 @@ def test_line_only_keeps_management_closed_and_line_semantics(tmp_path: Path) ->
         assert request(port, "GET", "/_next/webpack-hmr") == 200
 
 
-@pytest.mark.parametrize(
-    "profile", ["line-only", "shared-demo-production", "shared-demo-dev"]
-)
+@pytest.mark.parametrize("profile", ["line-only", "shared-demo-production", "shared-demo-dev"])
 def test_line_workflow_routes_survive_every_profile(profile: str, tmp_path: Path) -> None:
     animal_id = "00000000-0000-4000-8000-000000000000"
     with gateway(profile, tmp_path) as port:

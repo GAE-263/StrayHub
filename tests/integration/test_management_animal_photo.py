@@ -112,9 +112,7 @@ def test_management_photo_matching_etag_returns_304_without_storage_read(monkeyp
             raise AssertionError("storage must not be read for a matching ETag")
 
     monkeypatch.setattr(api, "MinioStorageAdapter", Storage)
-    app.dependency_overrides[current_request_context] = lambda: _context(
-        "STAFF", organization_id
-    )
+    app.dependency_overrides[current_request_context] = lambda: _context("STAFF", organization_id)
     app.dependency_overrides[request_session] = lambda: session
 
     response = TestClient(app).get(
@@ -140,9 +138,7 @@ def test_management_photo_missing_or_wrong_etag_returns_body(monkeypatch, if_non
             return b"safe-jpeg"
 
     monkeypatch.setattr(api, "MinioStorageAdapter", Storage)
-    app.dependency_overrides[current_request_context] = lambda: _context(
-        "STAFF", organization_id
-    )
+    app.dependency_overrides[current_request_context] = lambda: _context("STAFF", organization_id)
     app.dependency_overrides[request_session] = lambda: session
     headers = {"If-None-Match": if_none_match} if if_none_match else {}
 
@@ -168,9 +164,7 @@ def test_management_photo_old_version_and_etag_return_current_photo(monkeypatch)
             return b"new-photo"
 
     monkeypatch.setattr(api, "MinioStorageAdapter", Storage)
-    app.dependency_overrides[current_request_context] = lambda: _context(
-        "STAFF", organization_id
-    )
+    app.dependency_overrides[current_request_context] = lambda: _context("STAFF", organization_id)
     app.dependency_overrides[request_session] = lambda: session
 
     response = TestClient(app).get(

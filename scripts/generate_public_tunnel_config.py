@@ -32,6 +32,7 @@ except ModuleNotFoundError:  # Direct executable invocation puts scripts/ on sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
 @dataclass(frozen=True)
 class GeneratedRuntimeConfigs:
     profile: str
@@ -53,7 +54,7 @@ def _nginx_location(route: EffectiveRoute) -> str:
     else:
         location = f'location ~ "{route.path_pattern}"'
     query_guard = (
-        "\n            if ($is_args != \"\") { return 404; }"
+        '\n            if ($is_args != "") { return 404; }'
         if route.query_policy == "reject_nonempty"
         else ""
     )
@@ -95,9 +96,7 @@ def render_nginx(
             authority_pattern = re.escape(origin.hostname) + r"(?::443)?"
         else:
             authority_pattern = re.escape(origin.host)
-        host_guard = (
-            f"        if ($http_host !~* ^{authority_pattern}$) {{ return 404; }}\n"
-        )
+        host_guard = f"        if ($http_host !~* ^{authority_pattern}$) {{ return 404; }}\n"
         profile_header = profile.name
     return f'''pid nginx.pid;
 error_log logs/error.log notice;
@@ -241,9 +240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "profile": result.profile,
                 "nginx_config": str(result.nginx_path),
                 "traffic_policy": str(result.traffic_policy_path),
-                "runtime_origin": asdict(result.runtime_origin)
-                if result.runtime_origin
-                else None,
+                "runtime_origin": asdict(result.runtime_origin) if result.runtime_origin else None,
             },
             sort_keys=True,
         )
