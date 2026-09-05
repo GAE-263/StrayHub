@@ -98,3 +98,69 @@ remain unchanged; those begin in Phase C.
   Management patterns require canonical UUID bounds. Tightening LINE patterns is outside Phase B.
 - No current registry/profile discrepancy prevented compilation. Runtime deny/allow behavior is
   not claimed here because nginx generation and integration tests belong to Phase C.
+
+## Phase C — Gateway and Helper Integration
+
+**Date**: 2026-09-05
+**Status**: PASS — T023–T036 implemented and locally validated
+**Activation status**: Not activated. No real public tunnel or remote browser smoke was run; those
+remain Phase E and are blocked until the outstanding 012 T008 manual incident actions are complete.
+
+### Gateway and helper result
+
+- `generate_public_tunnel_config.py` consumes the committed 012 LINE registry plus the 013
+  management registry/profile compiler and writes nginx and ngrok Traffic Policy only to an
+  external runtime temporary directory. The generated nginx config uses exact or anchored bounded
+  locations, method and query guards, separate API/web upstreams, exact Host authority for shared
+  profiles, suspicious raw-path rejection, and a final 404 with no broad management/API fallback.
+- The public nginx log format contains method, normalized path, status, response size, latency and
+  request ID only. It excludes query strings, referrer, authorization and body data.
+- The ngrok policy removes client-supplied trusted IP/profile/forwarding headers before setting the
+  connection-derived client IP, HTTPS scheme and selected shared profile. The installed ngrok
+  3.39.9 CLI exposes `--traffic-policy-file`; the policy structure is checked deterministically.
+  It was not attached to a live endpoint in this phase.
+- `demo-line.sh` and `test_line_local.sh` remain `line-only` by default. Shared access requires
+  `--profile shared-demo-production`, `--profile shared-demo-dev`, or the explicit management
+  wrapper. Production mode builds and starts Next production before deriving exact static assets;
+  dev mode alone retains HMR. Helpers validate origin, compiler output, ngrok config and nginx
+  syntax before public startup, and keep generated files under helper-owned temporary directories.
+
+### Backend and frontend result
+
+- FastAPI accepts `X-StrayHub-Public-Profile` only from the configured loopback gateway and only for
+  the two known shared profiles. Client body/query values cannot select the profile. Existing bearer
+  sessions and refresh requests are rechecked against server-side identity and effective access.
+- Shared management permits active `STAFF` and `SHELTER_ADMIN` only. `PLATFORM_ADMIN`, `VOLUNTEER`
+  and expired/disabled access are rejected without changing their existing local/private behavior.
+  No session-origin field, migration or rollback lifecycle from Phase D was added.
+- `/v1/auth/me` returns a nullable server-derived `public_exposure_profile`. The frontend does not
+  read URL or storage to infer it. Shared profiles show only dashboard, animals, reports, care
+  calendar and AI review navigation, and hide report correction/archive plus care mutation controls.
+  Management children are not rendered until `/me` has loaded, preventing a pre-hydration flash of
+  those controls.
+
+### Verification evidence
+
+- Pre-commit regression repair: three Phase A API tests initially failed because their injected
+  login service doubles had not adopted the Phase C `public_exposure_profile` keyword. The doubles
+  now accept and explicitly assert the local/private `None` value; no production code or auth
+  behavior changed. The original file passes 3/3, the Phase A auth suite passes 34/34, and the
+  Phase B/C gateway, role, Host and LINE matrix passes 116/116.
+- Phase B/C contract, auth, role, gateway, LINE and regression matrix: PASS.
+- Real local nginx upstream-probe matrix: shared production/dev reviewed paths reach the correct
+  upstream; unknown API/UI, platform paths, wrong methods, query-reject routes, duplicate/encoded
+  path forms and arbitrary RSC paths return 404 without reaching an upstream.
+- `line-only`: `/login` and management login API return 404; LINE webhook and development HMR retain
+  their existing method/path behavior. The pinned 012 LINE registry digest remains unchanged.
+- Shared production: manifest-proven JS/CSS assets pass; unlisted chunks and HMR return 404.
+- Frontend Vitest: 91 files / 467 tests PASS; TypeScript typecheck PASS; real Next production build
+  PASS (25 pages). The real `.next` manifests compile into exact runtime asset locations.
+- Targeted sensitive transport/log/audit regressions: 23 PASS. Ruff and targeted Mypy: PASS.
+- Generated fixture and real-build configs: `nginx -t` PASS. Shell syntax checks: PASS.
+
+### Deferred boundaries
+
+- 012 T008 remains `MANUAL ACTION REQUIRED`; this phase did not rotate external credentials, clear
+  remote logs/history, inspect ngrok externally, or claim activation readiness.
+- Phase D T037–T044 and Phase E T045–T056 remain unchecked. No session-origin schema, selective
+  revocation, rollback command, activation gate, public smoke, or remote browser journey was added.

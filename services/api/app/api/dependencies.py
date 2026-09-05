@@ -32,6 +32,7 @@ class RequestContext:
     role: str
     platform_scope: bool = False
     session_id: UUID | None = None
+    public_exposure_profile: str | None = None
 
 
 @dataclass
@@ -126,6 +127,7 @@ async def current_request_context(
     if not isinstance(context, RequestContext):
         context = await _load_request_context(
             session,
+            request=request,
             authorization=authorization,
             session_id=x_session_id,
             require_organization=True,
@@ -146,6 +148,7 @@ async def authenticated_request_context(
     if not isinstance(context, RequestContext):
         context = await _load_request_context(
             session,
+            request=request,
             authorization=authorization,
             session_id=x_session_id,
             require_organization=False,
@@ -157,15 +160,25 @@ async def authenticated_request_context(
 async def _load_request_context(
     session: AsyncSession,
     *,
+    request: Request,
     authorization: str | None,
     session_id: UUID | None,
     require_organization: bool = True,
 ) -> RequestContext:
+    from services.api.app.api.management_access import resolve_public_exposure_profile
+
+    settings = get_settings()
+    try:
+        public_exposure_profile = resolve_public_exposure_profile(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+        )
+    except ValueError as exc:
+        raise DomainError("public_exposure_invalid", "公開存取來源無效", 403) from exc
     if authorization:
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise DomainError("authentication_required", "請先完成身分驗證", 401)
-        settings = get_settings()
         if not settings.auth_jwt_active_public_key:
             raise DomainError("authentication_not_configured", "Authentication 金鑰尚未設定", 503)
         public_keys = {
@@ -243,6 +256,7 @@ async def _load_request_context(
         role=role,
         platform_scope=platform_scope,
         session_id=session_record.id,
+        public_exposure_profile=public_exposure_profile,
     )
 
 

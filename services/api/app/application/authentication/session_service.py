@@ -73,7 +73,14 @@ class SessionService:
             headers={"Retry-After": str(max(1, retry_after))},
         )
 
-    async def login(self, *, username: str, password: str, client_ip: str | None = None) -> dict:
+    async def login(
+        self,
+        *,
+        username: str,
+        password: str,
+        client_ip: str | None = None,
+        public_exposure_profile: str | None = None,
+    ) -> dict:
         now = self.now_provider()
         subject_digest: str | None = None
         account_state = None
@@ -106,8 +113,24 @@ class SessionService:
                     raise self._rate_limited(retry_after)
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
         await self.repository.set_authentication_user_scope(user.id)
-        if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
-            user.id
+        available_access = (
+            []
+            if user.platform_role == "PLATFORM_ADMIN"
+            else await self.repository.effective_organization_access(user.id)
+        )
+        public_role_allowed = (
+            public_exposure_profile is None
+            or (
+                user.platform_role != "PLATFORM_ADMIN"
+                and any(
+                    membership.role in {"STAFF", "SHELTER_ADMIN"}
+                    for membership, _organization in available_access
+                )
+            )
+        )
+        if (
+            not public_role_allowed
+            or (user.platform_role != "PLATFORM_ADMIN" and not available_access)
         ):
             if subject_digest is not None:
                 retry_after = await self.repository.record_login_failure(
@@ -133,12 +156,23 @@ class SessionService:
             # into platform RLS scope before listing organizations; auth-user
             # discovery scope intentionally cannot see tenantless admin data.
             await self.repository.set_platform_scope()
-        result["organizations"] = await self._available_organizations(
+        organizations = await self._available_organizations(
             user.id, platform_scope=user.platform_role == "PLATFORM_ADMIN"
+        )
+        result["organizations"] = (
+            [
+                organization
+                for organization in organizations
+                if organization["role"] in {"STAFF", "SHELTER_ADMIN"}
+            ]
+            if public_exposure_profile is not None
+            else organizations
         )
         return result
 
-    async def refresh(self, *, refresh_token: str) -> dict:
+    async def refresh(
+        self, *, refresh_token: str, public_exposure_profile: str | None = None
+    ) -> dict:
         record = await self.repository.get_refresh_token(_refresh_digest(refresh_token))
         now = datetime.now(timezone.utc)
         if record is None or record.status != "active" or record.expires_at <= now:
@@ -150,8 +184,24 @@ class SessionService:
         if session is None or user is None or session.status != "active" or user.status != "active":
             raise DomainError("invalid_session", "Session 無效", 401)
         await self.repository.set_authentication_user_scope(user.id)
-        if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
-            user.id
+        available_access = (
+            []
+            if user.platform_role == "PLATFORM_ADMIN"
+            else await self.repository.effective_organization_access(user.id)
+        )
+        public_role_allowed = (
+            public_exposure_profile is None
+            or (
+                user.platform_role != "PLATFORM_ADMIN"
+                and any(
+                    membership.role in {"STAFF", "SHELTER_ADMIN"}
+                    for membership, _organization in available_access
+                )
+            )
+        )
+        if (
+            not public_role_allowed
+            or (user.platform_role != "PLATFORM_ADMIN" and not available_access)
         ):
             raise DomainError("invalid_session", "Session 無效", 401)
         record.status = "rotated"
@@ -198,7 +248,9 @@ class SessionService:
             for record in records:
                 record.status = "revoked"
 
-    async def current_user(self, *, session_id: UUID) -> dict:
+    async def current_user(
+        self, *, session_id: UUID, public_exposure_profile: str | None = None
+    ) -> dict:
         session = await self.repository.get_session(session_id)
         if (
             session is None
@@ -262,6 +314,7 @@ class SessionService:
                 "status": user.status,
             },
             "memberships": [serialize_membership(membership) for membership in memberships],
+            "public_exposure_profile": public_exposure_profile,
         }
 
     async def bind_line_identity(

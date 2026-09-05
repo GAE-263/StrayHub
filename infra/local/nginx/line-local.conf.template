@@ -1,3 +1,7 @@
+# Compatibility template for the committed 012 line-only boundary. The 013
+# shared profiles are rendered from both registries into a runtime temporary
+# directory by scripts/generate_public_tunnel_config.py; never add management
+# locations to this static template.
 pid nginx.pid;
 error_log logs/error.log notice;
 

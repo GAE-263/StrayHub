@@ -10,8 +10,9 @@ NGROK_CONFIG_FILE="$RUNTIME_DIR/ngrok.yml"
 NGROK_LOG_FILE="$RUNTIME_DIR/ngrok.log"
 NGINX_PREFIX="$RUNTIME_DIR/nginx"
 NGINX_PID_FILE="$NGINX_PREFIX/nginx.pid"
-NGINX_CONFIG_FILE="$NGINX_PREFIX/line-local.conf"
+NGINX_CONFIG_FILE="$NGINX_PREFIX/public-tunnel.nginx.conf"
 NGINX_TEMPLATE="infra/local/nginx/line-local.conf.template"
+PUBLIC_TUNNEL_PROFILE="line-only"
 INSPECTION_URL="http://127.0.0.1:4040/api/tunnels"
 MODE="${1:-run}"
 NGROK_PID=""
@@ -187,7 +188,8 @@ stop_owned_nginx() {
 
 remove_runtime_files() {
   rm -f "$NGROK_PID_FILE" "$NGROK_CONFIG_FILE" "$NGROK_LOG_FILE"
-  rm -f "$NGINX_CONFIG_FILE" "$NGINX_PREFIX/logs/access.log" "$NGINX_PREFIX/logs/error.log"
+  rm -f "$NGINX_CONFIG_FILE" "$NGINX_PREFIX/public-tunnel.traffic-policy.yaml"
+  rm -f "$NGINX_PREFIX/logs/access.log" "$NGINX_PREFIX/logs/error.log"
   rmdir "$NGINX_PREFIX/logs" 2>/dev/null || true
   rmdir "$NGINX_PREFIX" 2>/dev/null || true
   rmdir "$RUNTIME_DIR" 2>/dev/null || true
@@ -220,6 +222,7 @@ if [[ "$MODE" != "run" && "$MODE" != "--no-tunnel" && "$MODE" != "--print-env" ]
 fi
 
 require_command python3
+require_command uv
 
 if [[ -n "${API_PORT:-}" ]]; then
   API_LOCAL_PORT="$API_PORT"
@@ -335,24 +338,12 @@ fi
 
 require_command "$NGINX_BIN"
 mkdir -p "$NGINX_PREFIX/logs"
-python3 - "$NGINX_TEMPLATE" "$NGINX_CONFIG_FILE" \
-  "$API_LOCAL_PORT" "$WEB_LOCAL_PORT" "$NGINX_LOCAL_PORT" <<'PY'
-from pathlib import Path
-import sys
-
-template_path, output_path, api_port, web_port, nginx_port = sys.argv[1:]
-text = Path(template_path).read_text(encoding="utf-8")
-replacements = {
-    "__API_PORT__": api_port,
-    "__WEB_PORT__": web_port,
-    "__NGINX_PORT__": nginx_port,
-}
-for key, value in replacements.items():
-    text = text.replace(key, value)
-if "__" in text:
-    raise SystemExit("unresolved nginx template placeholder")
-Path(output_path).write_text(text, encoding="utf-8")
-PY
+uv run python scripts/generate_public_tunnel_config.py \
+  --profile "$PUBLIC_TUNNEL_PROFILE" \
+  --output-dir "$NGINX_PREFIX" \
+  --api-port "$API_LOCAL_PORT" \
+  --web-port "$WEB_LOCAL_PORT" \
+  --gateway-port "$NGINX_LOCAL_PORT" >/dev/null
 
 trap cleanup EXIT INT TERM
 "$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -t

@@ -12,6 +12,7 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.errors import DomainError
+from services.api.app.api.management_access import enforce_public_management_role
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.organization_management import OrganizationManagementService
 from services.api.app.domain.organization_timezone import validate_timezone
@@ -356,6 +357,7 @@ async def list_organizations(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
+    enforce_public_management_role(context)
     repository = OrganizationRepository(session)
     if context.role == "PLATFORM_ADMIN" or context.platform_scope:
         organizations = await repository.list()
@@ -364,7 +366,12 @@ async def list_organizations(
             access = await AuthenticationRepository(session).effective_organization_access(
                 context.user_id
             )
-            organizations = [organization for _, organization in access]
+            organizations = [
+                organization
+                for membership, organization in access
+                if context.public_exposure_profile is None
+                or membership.role in {"STAFF", "SHELTER_ADMIN"}
+            ]
         finally:
             await set_organization_scope(session, context.organization_id)
     else:

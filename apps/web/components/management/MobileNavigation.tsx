@@ -9,9 +9,11 @@ import { Sheet } from "../ui/sheet";
 
 export function MobileNavigation({
   role,
+  publicManagement = false,
   onLogout,
 }: {
   role: string;
+  publicManagement?: boolean;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -34,7 +36,11 @@ export function MobileNavigation({
         <Menu size={20} aria-hidden="true" />
       </button>
       <Sheet open={open} title="管理工作台導覽" onClose={close}>
-        <NavigationLinks role={role} onNavigate={close} />
+        <NavigationLinks
+          role={role}
+          publicManagement={publicManagement}
+          onNavigate={close}
+        />
         <div className="mobile-navigation-footer">
           <Button
             className="mobile-navigation-logout"

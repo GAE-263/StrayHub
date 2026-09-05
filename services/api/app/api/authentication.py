@@ -13,7 +13,10 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.errors import DomainError
-from services.api.app.api.management_access import resolve_trusted_client_ip
+from services.api.app.api.management_access import (
+    resolve_public_exposure_profile,
+    resolve_trusted_client_ip,
+)
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.authentication.context_service import ActiveShelterContextService
 from services.api.app.application.authentication.login_abuse import LoginAbuseKeys
@@ -40,11 +43,15 @@ router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str
     password: str
 
 
 class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     refresh_token: str
 
 
@@ -165,6 +172,7 @@ class CurrentUserResponse(BaseModel):
 
     user: CurrentUserProfile
     memberships: list[CurrentUserMembership]
+    public_exposure_profile: Literal["shared-demo-production", "shared-demo-dev"] | None = None
 
 
 def get_session_service(_session: AsyncSession = Depends(request_session)) -> SessionService:  # noqa: B008
@@ -230,6 +238,10 @@ async def login(
             trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
             allow_local_test_peer=settings.app_env.strip().lower() in {"local", "test", "testing"},
         )
+        public_exposure_profile = resolve_public_exposure_profile(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+        )
     except ValueError as exc:
         raise DomainError("login_source_unavailable", "登入暫時無法處理", 503) from exc
     try:
@@ -237,6 +249,7 @@ async def login(
             username=payload.username,
             password=payload.password,
             client_ip=client_ip,
+            public_exposure_profile=public_exposure_profile,
         )
     except DomainError:
         await session.commit()
@@ -247,11 +260,23 @@ async def login(
 
 @router.post("/refresh", status_code=status.HTTP_200_OK, openapi_extra={"security": []})
 async def refresh(
+    request: Request,
     payload: RefreshRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:  # noqa: B008
-    result = await service.refresh(refresh_token=payload.refresh_token)
+    settings = get_settings()
+    try:
+        public_exposure_profile = resolve_public_exposure_profile(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+        )
+    except ValueError as exc:
+        raise DomainError("public_exposure_invalid", "公開存取來源無效", 403) from exc
+    result = await service.refresh(
+        refresh_token=payload.refresh_token,
+        public_exposure_profile=public_exposure_profile,
+    )
     await session.commit()
     return result
 
@@ -302,7 +327,10 @@ async def current_user(
     if context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
     return CurrentUserResponse.model_validate(
-        await service.current_user(session_id=context.session_id)
+        await service.current_user(
+            session_id=context.session_id,
+            public_exposure_profile=context.public_exposure_profile,
+        )
     )
 
 

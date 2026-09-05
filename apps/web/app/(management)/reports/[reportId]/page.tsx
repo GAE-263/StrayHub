@@ -15,7 +15,11 @@ import { Card } from "../../../../components/ui/card";
 import { Field } from "../../../../components/ui/field";
 import { Textarea } from "../../../../components/ui/textarea";
 import { AlertDialog } from "../../../../components/ui/alert-dialog";
-import { reportAIStatusSummary } from "../../report-detail-state";
+import {
+  canMutateReport,
+  reportAIStatusSummary,
+} from "../../report-detail-state";
+import { usePublicManagementProfile } from "../../../../components/management/ManagementLayout";
 
 type Props = { params: Promise<{ reportId: string }> };
 type Observation = {
@@ -42,6 +46,7 @@ type Report = {
 export default function ReportDetailPage({ params }: Props) {
   const { reportId } = use(params);
   const router = useRouter();
+  const publicManagementProfile = usePublicManagementProfile();
   const [report, setReport] = useState<Report | null>(null);
   const [correction, setCorrection] = useState("");
   const [reason, setReason] = useState("");
@@ -189,88 +194,94 @@ export default function ReportDetailPage({ params }: Props) {
           )}
         </Card>
       </div>
-      <Card className="panel mutation-panel">
-        <h2>修正／封存</h2>
-        <p className="muted">
-          修正會建立修正紀錄與稽核紀錄；封存只改變狀態，不會永久刪除。
-        </p>
-        <Field>
-          <label htmlFor="correction-answers">修正後內容（JSON）</label>
-          <Textarea
-            id="correction-answers"
-            value={correction}
-            onChange={(event) => setCorrection(event.target.value)}
-          />
-        </Field>
-        <Field>
-          <label htmlFor="correction-reason">原因</label>
-          <Textarea
-            id="correction-reason"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="請說明此次修正或封存原因"
-          />
-        </Field>
-        <div className="toolbar">
-          <Button
-            type="button"
-            disabled={busy || !reason.trim()}
-            onClick={() => {
-              try {
-                void mutate("correction", {
-                  reason,
-                  observations: JSON.parse(correction),
-                });
-              } catch {
-                setError("修正內容不是有效 JSON");
+      {canMutateReport(publicManagementProfile) ? (
+        <Card className="panel mutation-panel">
+          <h2>修正／封存</h2>
+          <p className="muted">
+            修正會建立修正紀錄與稽核紀錄；封存只改變狀態，不會永久刪除。
+          </p>
+          <Field>
+            <label htmlFor="correction-answers">修正後內容（JSON）</label>
+            <Textarea
+              id="correction-answers"
+              value={correction}
+              onChange={(event) => setCorrection(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <label htmlFor="correction-reason">原因</label>
+            <Textarea
+              id="correction-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="請說明此次修正或封存原因"
+            />
+          </Field>
+          <div className="toolbar">
+            <Button
+              type="button"
+              disabled={busy || !reason.trim()}
+              onClick={() => {
+                try {
+                  void mutate("correction", {
+                    reason,
+                    observations: JSON.parse(correction),
+                  });
+                } catch {
+                  setError("修正內容不是有效 JSON");
+                }
+              }}
+            >
+              保存修正
+            </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              disabled={busy || !reason.trim()}
+              onClick={() => setArchiveOpen(true)}
+            >
+              封存
+            </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() =>
+                router.push(`/animals/${report.animal_id}/timeline`)
               }
-            }}
-          >
-            保存修正
-          </Button>
-          <Button
-            variant="secondary"
-            type="button"
-            disabled={busy || !reason.trim()}
-            onClick={() => setArchiveOpen(true)}
-          >
-            封存
-          </Button>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => router.push(`/animals/${report.animal_id}/timeline`)}
-          >
-            回到近期歷程
-          </Button>
-        </div>
-      </Card>
-      <AlertDialog
-        open={archiveOpen}
-        title="確認封存回報"
-        onClose={() => setArchiveOpen(false)}
-      >
-        <p>封存只會改變回報狀態，不會刪除原始回報、照片或稽核紀錄。</p>
-        <div className="toolbar">
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => setArchiveOpen(false)}
-          >
-            取消
-          </Button>
-          <Button
-            variant="destructive"
-            type="button"
-            onClick={() => {
-              setArchiveOpen(false);
-              void mutate("archive", { reason });
-            }}
-          >
-            確認封存
-          </Button>
-        </div>
-      </AlertDialog>
+            >
+              回到近期歷程
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+      {canMutateReport(publicManagementProfile) ? (
+        <AlertDialog
+          open={archiveOpen}
+          title="確認封存回報"
+          onClose={() => setArchiveOpen(false)}
+        >
+          <p>封存只會改變回報狀態，不會刪除原始回報、照片或稽核紀錄。</p>
+          <div className="toolbar">
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => setArchiveOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              type="button"
+              onClick={() => {
+                setArchiveOpen(false);
+                void mutate("archive", { reason });
+              }}
+            >
+              確認封存
+            </Button>
+          </div>
+        </AlertDialog>
+      ) : null}
     </section>
   );
 }

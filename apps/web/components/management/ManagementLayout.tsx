@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
@@ -23,6 +31,21 @@ import {
 
 type Props = { children: React.ReactNode };
 type OrganizationSummary = { id: string; code: string; name: string };
+export type PublicManagementProfile =
+  "shared-demo-production" | "shared-demo-dev";
+const PublicManagementContext = createContext<PublicManagementProfile | null>(
+  null,
+);
+
+export function isPublicManagementProfile(
+  value: string | null | undefined,
+): value is PublicManagementProfile {
+  return value === "shared-demo-production" || value === "shared-demo-dev";
+}
+
+export function usePublicManagementProfile(): PublicManagementProfile | null {
+  return useContext(PublicManagementContext);
+}
 
 export function resolveOrganizationLabel(
   organizations: OrganizationSummary[],
@@ -267,6 +290,11 @@ export function ManagementLayout({ children }: Props) {
   }
 
   const role = profile.user.platform_role ?? activeMembership?.role ?? "STAFF";
+  const publicManagementProfile = isPublicManagementProfile(
+    profile.public_exposure_profile,
+  )
+    ? profile.public_exposure_profile
+    : null;
   const volunteerManagementPath =
     pathname.startsWith("/volunteers/") ||
     pathname === "/settings/volunteer-access";
@@ -298,16 +326,25 @@ export function ManagementLayout({ children }: Props) {
         }
         onLogout={() => void logout()}
         mobileNavigation={
-          <MobileNavigation role={role} onLogout={() => void logout()} />
+          <MobileNavigation
+            role={role}
+            publicManagement={publicManagementProfile !== null}
+            onLogout={() => void logout()}
+          />
         }
       />
       <div className="app-body">
-        <AppSidebar role={role} />
+        <AppSidebar
+          role={role}
+          publicManagement={publicManagementProfile !== null}
+        />
         <main className="app-main" key={`${contextKey}:${pathname}`}>
           {contextSwitchError ? (
             <StatusBanner kind="warning">{contextSwitchError}</StatusBanner>
           ) : null}
-          {children}
+          <PublicManagementContext.Provider value={publicManagementProfile}>
+            {children}
+          </PublicManagementContext.Provider>
         </main>
       </div>
     </div>

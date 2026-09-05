@@ -144,72 +144,72 @@ request 證明第 1–4 次 401、第 5 次與鎖定期間 429、15 分鐘後恢
 **Independent test**: local loopback harness 分別啟動 line-only/shared dev/shared production，逐一驗證
 Host、method、path、upstream、RSC/static/HMR、header spoofing、角色與 deny matrix。
 
-- [ ] T023 [US4] 先建立 generated nginx route/logging tests 於 `tests/contract/test_remote_management_nginx.py`
+- [X] T023 [US4] 先建立 generated nginx route/logging tests 於 `tests/contract/test_remote_management_nginx.py`
   - **Phase/Goal/Files/Deps**: C；定義exact/bounded locations、wrong method/catch-all 404與sensitive path-only log；依賴 T022。
   - **Notes/Test/AC**: `$request/$request_uri/$args/$http_referer`不得進sensitive format，一般local observability保留；先失敗。
   - **Risk/Parallel/Commit**: nginx location precedence不可讓regex越過exact deny；可與T025/T027/T029/T033平行；不獨立commit，與T024同一commit。
 
-- [ ] T024 [US4] 實作 shared-demo nginx renderer 於 `scripts/generate_public_tunnel_config.py`、`infra/local/nginx/line-local.conf.template`
+- [X] T024 [US4] 實作 shared-demo nginx renderer 於 `scripts/generate_public_tunnel_config.py`、`infra/local/nginx/line-local.conf.template`
   - **Phase/Goal/Files/Deps**: C；只輸出runtime temp config並維持default deny；依賴 T023、T017、T019、T021。
   - **Notes/Test/AC**: exact Host guard、API/web upstream分離、query policies、production exact assets；T023與`nginx -t` fixture PASS。
   - **Risk/Parallel/Commit**: 不直接覆寫committed template或產生broad location；不可平行；可獨立commit（含T023）。
 
-- [ ] T025 [P] [US3] 先建立 ngrok trusted-metadata policy tests 於 `tests/contract/test_ngrok_shared_policy.py`
+- [X] T025 [P] [US3] 先建立 ngrok trusted-metadata policy tests 於 `tests/contract/test_ngrok_shared_policy.py`
   - **Phase/Goal/Files/Deps**: C；定義remove-then-set client IP/profile/scheme及無秘密輸出；依賴 T017。
   - **Notes/Test/AC**: forged dedicated header/XFF/XFP不得成authority，缺`conn.client_ip` fail；先失敗。
   - **Risk/Parallel/Commit**: 測試需依目前agent支援語法驗證，不臆測cloud行為；可與T023/T027平行；不獨立commit，與T026同一commit。
 
-- [ ] T026 [US3] 產生並驗證 ngrok Traffic Policy 於 `scripts/generate_public_tunnel_config.py`
+- [X] T026 [US3] 產生並驗證 ngrok Traffic Policy 於 `scripts/generate_public_tunnel_config.py`
   - **Phase/Goal/Files/Deps**: C；以connection metadata建立可信headers；依賴 T025、T021。
   - **Notes/Test/AC**: policy輸出temp、header先remove再set、CLI config check PASS；T025與T008 trusted-IP tests PASS。
   - **Risk/Parallel/Commit**: 不允許client同名headerappend成多值；不可平行；可獨立commit（含T025）。
 
-- [ ] T027 [P] [US4] 先建立 helper opt-in/process-mode tests 於 `tests/contract/test_remote_management_helper.py`
+- [X] T027 [P] [US4] 先建立 helper opt-in/process-mode tests 於 `tests/contract/test_remote_management_helper.py`
   - **Phase/Goal/Files/Deps**: C；鎖定未帶flag=line-only、明確production/dev選擇、production先build後start；依賴 T022。
   - **Notes/Test/AC**: `--with-management`或等價明確flag，012 T008只在public activation檢查；unknown/missing host non-zero；先失敗。
   - **Risk/Parallel/Commit**: 不改`demo-line.sh`預設成shared；可與T023/T025/T029/T033平行；不獨立commit，與T028同一commit。
 
-- [ ] T028 [US4] 整合 shared profile helper 於 `scripts/demo-management.sh`、`scripts/demo-line.sh`、`scripts/test_line_local.sh`
+- [X] T028 [US4] 整合 shared profile helper 於 `scripts/demo-management.sh`、`scripts/demo-line.sh`、`scripts/test_line_local.sh`
   - **Phase/Goal/Files/Deps**: C；提供explicit opt-in並正確啟動Next production/dev、nginx、ngrok；依賴 T024、T026、T027。
   - **Notes/Test/AC**: production不啟HMR/dev overlay，line helpers無flag仍line-only；shell使用LF、cleanup child processes；T027 PASS。
   - **Risk/Parallel/Commit**: 避免將host/password/token印到terminal；不可平行；可獨立commit（含T027）。
 
-- [ ] T029 [P] [US2] 先建立 public exposure-context API tests 於 `tests/security/test_remote_management_access.py`
+- [X] T029 [P] [US2] 先建立 public exposure-context API tests 於 `tests/security/test_remote_management_access.py`
   - **Phase/Goal/Files/Deps**: C；定義STAFF/admin allow、volunteer/platform/expired deny與既有token deny；依賴 T009。
   - **Notes/Test/AC**: 兩層驗證platform route gateway deny及platform token呼叫management API deny；client不能提交profile；先失敗。
   - **Risk/Parallel/Commit**: 不改private/local PLATFORM_ADMIN能力；可與T023/T025/T027/T033平行；不獨立commit，與T030/T032同一commit。
 
-- [ ] T030 [US2] 將 server-derived exposure context 接入 auth/management dependencies 於 `services/api/app/api/management_access.py`、`services/api/app/api/authentication.py`
+- [X] T030 [US2] 將 server-derived exposure context 接入 auth/management dependencies 於 `services/api/app/api/management_access.py`、`services/api/app/api/authentication.py`
   - **Phase/Goal/Files/Deps**: C；shared request只允許active STAFF/SHELTER_ADMIN且不信frontend；依賴 T029、T009。
   - **Notes/Test/AC**: login與既有token都受限，active shelter/membership/RLS照舊，deny不揭露membership；T029 PASS。
   - **Risk/Parallel/Commit**: 不能用gateway role metadata取代DB identity；不可平行；與T032一起commit。
 
-- [ ] T031 [US1] 增加 `/v1/auth/me` exposure hint contract tests 於 `tests/contract/test_authentication_contract.py`、`tests/integration/test_authentication_session.py`
+- [X] T031 [US1] 增加 `/v1/auth/me` exposure hint contract tests 於 `tests/contract/test_authentication_contract.py`、`tests/integration/test_authentication_session.py`
   - **Phase/Goal/Files/Deps**: C；固定nullable `public_exposure_profile` response，client不可控制；依賴 T030。
   - **Notes/Test/AC**: shared prod/dev回各自值，private/line-only固定null；refresh不接受body override；先失敗。
   - **Risk/Parallel/Commit**: additive response需同步TypeScript types；可與T033撰寫平行；不獨立commit，與T032同一commit。
 
-- [ ] T032 [US2] 實作 exposure hint 與 public role policy 於 `services/api/app/application/authentication/session_service.py`、`services/api/app/api/authentication.py`
+- [X] T032 [US2] 實作 exposure hint 與 public role policy 於 `services/api/app/application/authentication/session_service.py`、`services/api/app/api/authentication.py`
   - **Phase/Goal/Files/Deps**: C；完成後端角色縮限與穩定response shape；依賴 T030、T031。
   - **Notes/Test/AC**: STAFF/SHELTER_ADMIN成功，PLATFORM_ADMIN/VOLUNTEER/expired拒絕；local contract不變；T029/T031 PASS。
   - **Risk/Parallel/Commit**: hint不是access-token claim或authorization來源；不可平行；可獨立commit（含T029–T031）。
 
-- [ ] T033 [P] [US1] 先建立 core-only UI tests 於 `apps/web/components/management/ManagementLayout.test.tsx`、`apps/web/app/(management)/reports/[reportId]/page.test.tsx`、`apps/web/features/medical-care/CareAgenda.test.tsx`
+- [X] T033 [P] [US1] 先建立 core-only UI tests 於 `apps/web/components/management/ManagementLayout.test.tsx`、`apps/web/app/(management)/reports/[reportId]/page.test.tsx`、`apps/web/features/medical-care/CareAgenda.test.tsx`
   - **Phase/Goal/Files/Deps**: C；shared profile隱藏out-of-scope navigation、report correction/archive與care mutation controls；依賴 T022。
   - **Notes/Test/AC**: direct API deny仍由後端測，private/local UI維持既有功能；先失敗。
   - **Risk/Parallel/Commit**: 不能把menu hidden當security assertion；可與T023/T025/T027/T029平行；不獨立commit，與T034同一commit。
 
-- [ ] T034 [US1] 實作 scope-safe frontend 於 `apps/web/components/management/ManagementLayout.tsx`、`apps/web/components/management/AppSidebar.tsx`、`apps/web/app/(management)/reports/[reportId]/page.tsx`、`apps/web/features/medical-care/CareAgenda.tsx`
+- [X] T034 [US1] 實作 scope-safe frontend 於 `apps/web/components/management/ManagementLayout.tsx`、`apps/web/components/management/AppSidebar.tsx`、`apps/web/app/(management)/reports/[reportId]/page.tsx`、`apps/web/features/medical-care/CareAgenda.tsx`
   - **Phase/Goal/Files/Deps**: C；使用`/me` nullable hint提供core-only/read-only UX；依賴 T032、T033。
   - **Notes/Test/AC**: 更新TypeScript type，不從URL/localStorage決定profile；T033 PASS且local UI regression PASS。
   - **Risk/Parallel/Commit**: hydration前不得短暫顯示高風險controls；不可平行；可獨立commit（含T033）。
 
-- [ ] T035 [US4] 建立 local gateway allow/deny integration matrix 於 `tests/e2e/test_remote_management_tunnel_boundary.py`
+- [X] T035 [US4] 建立 local gateway allow/deny integration matrix 於 `tests/e2e/test_remote_management_tunnel_boundary.py`
   - **Phase/Goal/Files/Deps**: C；實際nginx驗證login/core/RSC/prefetch/static、wrong Host/method/path與所有explicit deny；依賴 T024、T028。
   - **Notes/Test/AC**: arbitrary `/v1/**`、unknown UI、platform/docs/debug/internal、PII/mutations不達upstream；production HMR 404，dev HMR allow；全部PASS。
   - **Risk/Parallel/Commit**: 使用upstream probe counter證明「未到達」而非只看404；可與T034後半平行；可獨立commit。
 
-- [ ] T036 [US5] 驗證 line-only registry semantic regression 於 `tests/e2e/test_local_line_tunnel_boundary.py`、`tests/contract/test_line_local_helper.py`
+- [X] T036 [US5] 驗證 line-only registry semantic regression 於 `tests/e2e/test_local_line_tunnel_boundary.py`、`tests/contract/test_line_local_helper.py`
   - **Phase/Goal/Files/Deps**: C；證明無management opt-in時login/core拒絕且25筆LINE route owner/method/query/logging不變；依賴 T028、T035。
   - **Notes/Test/AC**: 比對012 registry digest/effective matrix，不要求修改LINE registry；tests PASS。
   - **Risk/Parallel/Commit**: 避免snapshot吸收未審核變動；不可平行於C尾端；可獨立commit。

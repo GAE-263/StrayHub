@@ -307,6 +307,82 @@ async def test_platform_admin_login_lists_active_organizations_without_membershi
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["STAFF", "SHELTER_ADMIN"])
+async def test_shared_public_login_allows_only_active_management_roles(role: str) -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="remote-staff",
+        display_name="Remote Staff",
+        password_hash=hasher.hash("password"),
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    repository.membership.role = role
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+
+    result = await service.login(
+        username=user.username,
+        password="password",
+        public_exposure_profile="shared-demo-production",
+    )
+    assert result["organizations"][0]["role"] == role
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["VOLUNTEER", "expired", "PLATFORM_ADMIN"])
+async def test_shared_public_login_rejects_out_of_scope_identity(role: str) -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="remote-denied",
+        display_name="Remote Denied",
+        password_hash=hasher.hash("password"),
+        platform_role="PLATFORM_ADMIN" if role == "PLATFORM_ADMIN" else None,
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    if role == "expired":
+        repository.membership.role = "STAFF"
+        repository.membership.status = "expired"
+    elif role != "PLATFORM_ADMIN":
+        repository.membership.role = role
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+
+    with pytest.raises(DomainError) as caught:
+        await service.login(
+            username=user.username,
+            password="password",
+            public_exposure_profile="shared-demo-dev",
+        )
+    assert (caught.value.status_code, caught.value.code) == (401, "invalid_credentials")
+
+
+@pytest.mark.asyncio
+async def test_shared_refresh_rechecks_current_management_role() -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="remote-refresh",
+        display_name="Remote Refresh",
+        password_hash=hasher.hash("password"),
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    repository.membership.role = "STAFF"
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+    issued = await service.login(username=user.username, password="password")
+    repository.membership.role = "VOLUNTEER"
+
+    with pytest.raises(DomainError) as caught:
+        await service.refresh(
+            refresh_token=issued["refresh_token"],
+            public_exposure_profile="shared-demo-production",
+        )
+    assert (caught.value.status_code, caught.value.code) == (401, "invalid_session")
+
+
+@pytest.mark.asyncio
 async def test_logout_revokes_session_refresh_tokens() -> None:
     hasher = Argon2PasswordHasher()
     user = User(

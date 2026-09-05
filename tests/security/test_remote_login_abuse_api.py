@@ -18,10 +18,18 @@ class RecordingSession:
 
 
 class RateLimitedLoginService:
-    async def login(self, *, username: str, password: str, client_ip: str) -> dict:
+    async def login(
+        self,
+        *,
+        username: str,
+        password: str,
+        client_ip: str,
+        public_exposure_profile: str | None,
+    ) -> dict:
         assert username == "synthetic-admin"
         assert password == "wrong-password"
         assert client_ip == "127.0.0.1"
+        assert public_exposure_profile is None
         raise DomainError(
             "login_rate_limited",
             "登入暫時無法處理，請稍後再試",
@@ -68,9 +76,18 @@ async def test_login_api_commits_abuse_state_and_returns_retry_after() -> None:
 class SuccessfulLoginService:
     def __init__(self) -> None:
         self.client_ip: str | None = None
+        self.public_exposure_profile: str | None = "not-called"
 
-    async def login(self, *, username: str, password: str, client_ip: str) -> dict:
+    async def login(
+        self,
+        *,
+        username: str,
+        password: str,
+        client_ip: str,
+        public_exposure_profile: str | None,
+    ) -> dict:
         self.client_ip = client_ip
+        self.public_exposure_profile = public_exposure_profile
         return {"access_token": "synthetic-access-token"}
 
 
@@ -104,11 +121,20 @@ async def test_login_api_remains_json_post_and_ignores_forwarded_for() -> None:
     assert response.status_code == 200
     assert response.json() == {"access_token": "synthetic-access-token"}
     assert service.client_ip == "127.0.0.1"
+    assert service.public_exposure_profile is None
     assert session.commits == 1
 
 
 class UnavailableLoginService:
-    async def login(self, *, username: str, password: str, client_ip: str) -> dict:
+    async def login(
+        self,
+        *,
+        username: str,
+        password: str,
+        client_ip: str,
+        public_exposure_profile: str | None,
+    ) -> dict:
+        assert public_exposure_profile is None
         raise OperationalError("synthetic statement", {}, Exception("database unavailable"))
 
 

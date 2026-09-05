@@ -5,20 +5,32 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 reveal_entry_reference=0
-for argument in "$@"; do
-  case "$argument" in
+PUBLIC_TUNNEL_PROFILE="line-only"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --reveal-entry-reference) reveal_entry_reference=1 ;;
+    --with-management) PUBLIC_TUNNEL_PROFILE="shared-demo-production" ;;
+    --profile)
+      [[ $# -ge 2 ]] || { echo "--profile 需要值" >&2; exit 2; }
+      PUBLIC_TUNNEL_PROFILE="$2"
+      shift
+      ;;
     --help|-h)
-      echo "用法：$0 [--reveal-entry-reference]"
+      echo "用法：$0 [--reveal-entry-reference] [--profile line-only|shared-demo-production|shared-demo-dev]"
       echo "預設隱藏 LIFF entry reference；互動確認後可顯示一次完整 Endpoint。"
       exit 0
       ;;
     *)
-      echo "用法：$0 [--reveal-entry-reference]" >&2
+      echo "用法：$0 [--reveal-entry-reference] [--profile line-only|shared-demo-production|shared-demo-dev]" >&2
       exit 2
       ;;
   esac
+  shift
 done
+case "$PUBLIC_TUNNEL_PROFILE" in
+  line-only|shared-demo-production|shared-demo-dev) ;;
+  *) echo "未知 public tunnel profile" >&2; exit 2 ;;
+esac
 
 read_dotenv_value() {
   local name="$1"
@@ -134,7 +146,9 @@ start_tunnel() {
   local label="$1"
   local port="$2"
   local log_file="$3"
-  ngrok http "$port" --url "$NGROK_URL" --log=stdout --log-format=logfmt \
+  ngrok http "$port" --url "$NGROK_URL" \
+    --traffic-policy-file "$TRAFFIC_POLICY_FILE" \
+    --log=stdout --log-format=logfmt \
     >"$log_file" 2>&1 &
   pids+=("$!")
   local url=""
@@ -177,6 +191,13 @@ fi
 # LINE fetches Flex Message images server-side, so its URL must use the public
 # tunnel origin rather than the local FastAPI address inferred behind Next.js.
 export WEB_PUBLIC_BASE_URL="$NGROK_URL"
+if [[ "$PUBLIC_TUNNEL_PROFILE" != "line-only" ]]; then
+  export PUBLIC_TUNNEL_RESERVED_ORIGIN="$NGROK_URL"
+  export LOGIN_TRUSTED_PROXY_ENABLED=true
+  echo "[Management Demo] WARNING: shared management exposure enabled (${PUBLIC_TUNNEL_PROFILE})"
+else
+  echo "[Line Demo] Profile: line-only"
+fi
 require_command uv
 require_command npm
 require_command curl
@@ -190,6 +211,10 @@ fi
 export LINE_LOGIN_CHANNEL_ID
 require_command ngrok
 require_command "$NGINX_BIN"
+if ! ngrok config check >/dev/null 2>&1; then
+  echo "ngrok configuration is not valid" >&2
+  exit 2
+fi
 require_port_available "API" "$API_PORT"
 require_port_available "Web" "$WEB_PORT"
 require_port_available "Gateway" "$NGINX_PORT"
@@ -223,6 +248,33 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Validate every shared-runtime input before any application process starts.
+API_BASE_URL="http://${API_HOST}:${API_PORT}"
+if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]; then
+  echo "[Management Demo] Building reviewed Next production assets"
+  API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
+    LINE_DEMO_WEB_ORIGIN_HOST="${NGROK_URL#https://}" \
+    npm --prefix apps/web run build
+fi
+NGINX_PREFIX="$log_dir/nginx"
+NGINX_CONFIG_FILE="$NGINX_PREFIX/public-tunnel.nginx.conf"
+TRAFFIC_POLICY_FILE="$NGINX_PREFIX/public-tunnel.traffic-policy.yaml"
+mkdir -p "$NGINX_PREFIX/logs"
+generator_args=(
+  --profile "$PUBLIC_TUNNEL_PROFILE"
+  --output-dir "$NGINX_PREFIX"
+  --api-port "$API_PORT"
+  --web-port "$WEB_PORT"
+  --gateway-port "$NGINX_PORT"
+)
+if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]; then
+  generator_args+=(--build-dir apps/web/.next --runtime-origin "$NGROK_URL")
+elif [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-dev" ]]; then
+  generator_args+=(--runtime-origin "$NGROK_URL")
+fi
+uv run python scripts/generate_public_tunnel_config.py "${generator_args[@]}" >/dev/null
+"$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -t
+
 echo "[Line Demo] Starting FastAPI on ${API_HOST}:${API_PORT}"
 uv run python -m uvicorn services.api.app.main:app \
   --host "$API_HOST" --port "$API_PORT" &
@@ -240,11 +292,15 @@ curl --max-time 5 -fsS "http://${API_HOST}:${API_PORT}/healthz" >/dev/null || {
 }
 
 # FastAPI and Next.js remain private upstreams behind the allowlisted gateway.
-API_BASE_URL="http://${API_HOST}:${API_PORT}"
-echo "[Line Demo] Starting Next.js with local API proxy"
-API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
-  LINE_DEMO_WEB_ORIGIN_HOST="${NGROK_URL#https://}" \
-  npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
+echo "[Line Demo] Starting Next.js with local API proxy (${PUBLIC_TUNNEL_PROFILE})"
+if [[ "$PUBLIC_TUNNEL_PROFILE" == "shared-demo-production" ]]; then
+  API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
+    npm --prefix apps/web run start -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
+else
+  API_BASE_URL="$API_BASE_URL" LIFF_ID="$LIFF_ID" \
+    LINE_DEMO_WEB_ORIGIN_HOST="${NGROK_URL#https://}" \
+    npm --prefix apps/web run dev -- --hostname "$WEB_HOST" --port "$WEB_PORT" &
+fi
 pids+=("$!")
 
 for _ in $(seq 1 240); do
@@ -258,28 +314,7 @@ curl --max-time 5 -fsS "http://${WEB_HOST}:${WEB_PORT}/volunteer-entry" >/dev/nu
   exit 1
 }
 
-NGINX_PREFIX="$log_dir/nginx"
-NGINX_CONFIG_FILE="$NGINX_PREFIX/line-local.conf"
-mkdir -p "$NGINX_PREFIX/logs"
-python3 - "$NGINX_TEMPLATE" "$NGINX_CONFIG_FILE" \
-  "$API_PORT" "$WEB_PORT" "$NGINX_PORT" <<'PY'
-from pathlib import Path
-import sys
-
-template_path, output_path, api_port, web_port, nginx_port = sys.argv[1:]
-text = Path(template_path).read_text(encoding="utf-8")
-for key, value in {
-    "__API_PORT__": api_port,
-    "__WEB_PORT__": web_port,
-    "__NGINX_PORT__": nginx_port,
-}.items():
-    text = text.replace(key, value)
-if "__" in text:
-    raise SystemExit("unresolved nginx template placeholder")
-Path(output_path).write_text(text, encoding="utf-8")
-PY
-"$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -t
-echo "[Line Demo] Starting default-deny LINE gateway"
+echo "[Line Demo] Starting default-deny gateway (${PUBLIC_TUNNEL_PROFILE})"
 "$NGINX_BIN" -p "$NGINX_PREFIX/" -c "$NGINX_CONFIG_FILE" -g "daemon off;" &
 pids+=("$!")
 for _ in $(seq 1 30); do
@@ -292,7 +327,11 @@ curl --max-time 5 -fsS "http://127.0.0.1:${NGINX_PORT}/volunteer-entry" >/dev/nu
   echo "Default-deny gateway health check failed" >&2
   exit 1
 }
-for denied_path in /login /v1/management/dashboard /v1/not-allowlisted; do
+denied_paths=(/v1/not-allowlisted /v1/platform/admins /settings)
+if [[ "$PUBLIC_TUNNEL_PROFILE" == "line-only" ]]; then
+  denied_paths+=(/login /v1/management/dashboard)
+fi
+for denied_path in "${denied_paths[@]}"; do
   denied_status="$(curl --max-time 3 -sS -o /dev/null -w '%{http_code}' \
     "http://127.0.0.1:${NGINX_PORT}${denied_path}")"
   if [[ "$denied_status" != "404" ]]; then

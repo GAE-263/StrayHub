@@ -9,6 +9,7 @@ import type {
   AgendaBucket,
   CareAgenda as CareAgendaData,
 } from "../../../features/medical-care/types";
+import { usePublicManagementProfile } from "../../../components/management/ManagementLayout";
 
 function todayString() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(
@@ -17,6 +18,7 @@ function todayString() {
 }
 
 export default function CareCalendarPage() {
+  const publicManagementProfile = usePublicManagementProfile();
   const [date, setDate] = useState(todayString);
   const [data, setData] = useState<CareAgendaData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -124,6 +126,7 @@ export default function CareCalendarPage() {
         onToday={() => setDate(todayString())}
       />
       <CareAgenda
+        readOnly={publicManagementProfile !== null}
         data={data}
         loading={loading}
         error={error}
