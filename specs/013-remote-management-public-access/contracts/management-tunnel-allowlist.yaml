@@ -15,29 +15,41 @@ policy:
 # query_policy、logging_policy 仍由個別 route 覆寫或補充。
 route_templates:
   anonymous_page: &anonymous_page
+    category: management_page
+    demo_required: true
     caller: browser
     authentication: none
     sensitivity: class_a_entry_surface
     rate_limit_expectation: gateway_baseline_only
     evidence: [tests/e2e/test_remote_management_public_boundary.py]
+    tests: [tests/e2e/test_remote_management_public_boundary.py]
   authenticated_page: &authenticated_page
+    category: management_page
+    demo_required: true
     caller: authenticated_browser
     authentication: bearer_session_and_public_profile
     sensitivity: internal_management
     rate_limit_expectation: authenticated_baseline_only
     evidence: [tests/e2e/test_remote_management_public_boundary.py]
+    tests: [tests/e2e/test_remote_management_public_boundary.py]
   anonymous_login_api: &anonymous_login_api
+    category: authentication_api
+    demo_required: true
     caller: login_page
     authentication: username_password_json_body
     sensitivity: class_a_credential_transport
     rate_limit_expectation: account_5_failures_15m_and_ip_20_attempts_15m
     evidence: [tests/security/test_remote_login_abuse_control.py]
+    tests: [tests/security/test_remote_login_abuse_control.py]
   authenticated_api: &authenticated_api
+    category: management_api
+    demo_required: true
     caller: authenticated_management_web
     authentication: bearer_session_public_profile_role_and_tenant
     sensitivity: internal_management
     rate_limit_expectation: authenticated_baseline_only
     evidence: [tests/security/test_remote_management_access.py]
+    tests: [tests/security/test_remote_management_access.py]
 
 routes:
   - id: management_login_page

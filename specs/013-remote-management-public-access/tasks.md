@@ -91,47 +91,47 @@ request 證明第 1–4 次 401、第 5 次與鎖定期間 429、15 分鐘後恢
 **Independent test**: 純 contract tests 對 23 筆 management routes、25 筆 LINE compatibility metadata、
 三個 profiles、Host inputs、衝突與 Next manifests 產生固定結果；任何 broad/unknown/missing input fail。
 
-- [ ] T014 [P] [US4] 先建立 management registry schema tests 於 `tests/contract/test_management_tunnel_registry.py`
+- [X] T014 [P] [US4] 先建立 management registry schema tests 於 `tests/contract/test_management_tunnel_registry.py`
   - **Phase/Goal/Files/Deps**: B；驗證23 routes逐筆具 FR-004 欄位與 `demo_required`、strict UUID/method/upstream/query/log/rate/auth/role/evidence；無依賴。
   - **Notes/Test/AC**: 明確拒絕 `/v1/**`、`/v1/management/**`、catch-all UI及未 anchored pattern；目前缺 `demo_required` 時先失敗。
   - **Risk/Parallel/Commit**: 不把 explicit deny notation 當 allow pattern；可與 T016/T018/T020 平行；不獨立 commit，與 T015 同一 commit。
 
-- [ ] T015 [US4] 補齊 registry demo-required metadata 於 `specs/013-remote-management-public-access/contracts/management-tunnel-allowlist.yaml`
+- [X] T015 [US4] 補齊 registry demo-required metadata 於 `specs/013-remote-management-public-access/contracts/management-tunnel-allowlist.yaml`
   - **Phase/Goal/Files/Deps**: B；使每筆 route 可由 compiler 完整驗證；依賴 T014。
   - **Notes/Test/AC**: 只補 contract metadata，不擴張 path/method/role、不修改012 LINE registry；T014 PASS且仍為23筆。
   - **Risk/Parallel/Commit**: metadata default 不可掩蓋個別 route 缺欄；不可平行；可獨立 commit（含 T014）。
 
-- [ ] T016 [P] [US4] 先建立 profile composition/conflict tests 於 `tests/contract/test_public_tunnel_profiles.py`
+- [X] T016 [P] [US4] 先建立 profile composition/conflict tests 於 `tests/contract/test_public_tunnel_profiles.py`
   - **Phase/Goal/Files/Deps**: B；定義 line-only預設、shared explicit opt-in、include/exclude、duplicate及policy conflict fail closed；無依賴。
   - **Notes/Test/AC**: 每個LINE id恰一次、unknown registry/exclusion失敗、production排除HMR/static pattern；先失敗。
   - **Risk/Parallel/Commit**: 同 method/path但不同 upstream/query/log/security 必須拒絕而非 last-write-wins；可與 T014/T018/T020 平行；不獨立 commit，與 T017 同一 commit。
 
-- [ ] T017 [US4] 實作 registry/profile compiler 於 `scripts/public_tunnel_policy.py`
+- [X] T017 [US4] 實作 registry/profile compiler 於 `scripts/public_tunnel_policy.py`
   - **Phase/Goal/Files/Deps**: B；解析兩份 registry及compatibility metadata為 immutable effective routes；依賴 T015、T016。
   - **Notes/Test/AC**: deterministic sort、schema errors具route id但無秘密、default profile line-only；T016 PASS，不寫回LINE registry。
   - **Risk/Parallel/Commit**: YAML merge/default 不得讓缺欄通過；不可平行；可獨立 commit（含 T016）。
 
-- [ ] T018 [P] [US4] 先建立 Next build-manifest parser tests 於 `tests/contract/test_next_public_asset_manifest.py`、`tests/security/fixtures/next-manifests/`
+- [X] T018 [P] [US4] 先建立 Next build-manifest parser tests 於 `tests/contract/test_next_public_asset_manifest.py`、`tests/security/fixtures/next-manifests/`
   - **Phase/Goal/Files/Deps**: B；以 fixture 定義allowed pages的exact shared/page CSS/JS assets；無依賴。
   - **Notes/Test/AC**: deterministic去重排序、missing/empty/unresolved route失敗，`.map`、`/_next/image`、font/favicon及unproven chunk拒絕；先失敗。
   - **Risk/Parallel/Commit**: fixture須模擬Next 15 manifest結構但不hard-code真實ephemeral hash；可與 T014/T016/T020平行；不獨立 commit，與 T019同一commit。
 
-- [ ] T019 [US4] 實作 production exact-asset extraction 於 `scripts/public_tunnel_policy.py`
+- [X] T019 [US4] 實作 production exact-asset extraction 於 `scripts/public_tunnel_policy.py`
   - **Phase/Goal/Files/Deps**: B；從實際 `.next` manifests解出profile頁面依賴；依賴 T017、T018。
   - **Notes/Test/AC**: production取代`next_static_assets`，dev維持bounded pattern/HMR；T018 PASS，輸出不含source map或未證實資源。
   - **Risk/Parallel/Commit**: Next manifest版本差異須fail closed並提供非敏感診斷；不可平行；可獨立commit（含T018）。
 
-- [ ] T020 [P] [US4] 先建立 reserved-origin/Host normalization tests 於 `tests/unit/test_public_tunnel_host_policy.py`
+- [X] T020 [P] [US4] 先建立 reserved-origin/Host normalization tests 於 `tests/unit/test_public_tunnel_host_policy.py`
   - **Phase/Goal/Files/Deps**: B；驗證HTTPS exact reserved host、case/IDNA/port及loopback test exception；無依賴。
   - **Notes/Test/AC**: userinfo/path/query/fragment/wildcard/http/missing/unknown host失敗，不從request Host生成可信origin；先失敗。
   - **Risk/Parallel/Commit**: port normalization不可誤接受不同authority；可與 T014/T016/T018平行；不獨立commit，與T021同一commit。
 
-- [ ] T021 [US4] 實作 runtime origin/Host policy 於 `scripts/public_tunnel_policy.py`、`services/api/app/config/settings.py`
+- [X] T021 [US4] 實作 runtime origin/Host policy 於 `scripts/public_tunnel_policy.py`、`services/api/app/config/settings.py`
   - **Phase/Goal/Files/Deps**: B；將合法runtime origin轉為generated config input；依賴 T020、T004。
   - **Notes/Test/AC**: repository無實際ngrok hostname，loopback僅explicit local validation；T020 PASS，缺值時shared profile non-zero exit。
   - **Risk/Parallel/Commit**: hostname canonicalization須與nginx Host比較一致；不可平行；可獨立commit（含T020）。
 
-- [ ] T022 [US5] 完成 Phase B deterministic contract acceptance 於 `tests/contract/test_public_tunnel_policy_snapshot.py`、`specs/013-remote-management-public-access/validation-result.md`
+- [X] T022 [US5] 完成 Phase B deterministic contract acceptance 於 `tests/contract/test_public_tunnel_policy_snapshot.py`、`specs/013-remote-management-public-access/validation-result.md`
   - **Phase/Goal/Files/Deps**: B；固定三profile route/asset摘要與LINE registry digest；依賴 T017、T019、T021。
   - **Notes/Test/AC**: 相同input byte-stable，line-only route語意/digest不變，production無HMR；所有B tests PASS。
   - **Risk/Parallel/Commit**: snapshot只存結構不存host/secret/chunk環境值；不可平行；可獨立commit。

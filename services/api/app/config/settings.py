@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # 對外可達的 HTTPS origin（例如 production 網址或保留的 ngrok 網址），用於
     # LINE 入口與短效簽章的公開領養照片。local webhook 未設定時可由反向代理取得 origin。
     web_public_base_url: str = ""
+    # Required only when an explicit shared management tunnel profile is compiled.
+    # The concrete reserved origin remains runtime-only and is never committed.
+    public_tunnel_reserved_origin: str = ""
     # 依角色 Rich Menu 的 richMenuId（由 scripts/sync_line_role_menus.py --apply 產生後填入）。
     # 任一有值時，綁定成功會依角色 link 對應選單；全空則此功能為 no-op。
     line_rich_menu_default_id: str = ""

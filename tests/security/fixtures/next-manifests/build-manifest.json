@@ -1,0 +1,5 @@
+{
+  "polyfillFiles": ["static/chunks/polyfills-fixture.js"],
+  "rootMainFiles": ["static/chunks/runtime-fixture.js"],
+  "pages": {"/_app": ["static/chunks/pages-app-fixture.js"]}
+}
