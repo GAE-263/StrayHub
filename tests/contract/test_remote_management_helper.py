@@ -15,12 +15,17 @@ def test_line_helper_defaults_to_line_only_and_shared_is_explicit() -> None:
     assert source.index("generate_public_tunnel_config.py") < source.index(
         "uv run python -m uvicorn"
     )
+    assert "--activation-evidence" in source
+    assert source.index("verify_sensitive_transport_runtime.py") < source.index(
+        "npm --prefix apps/web run build"
+    )
 
 
 def test_management_wrapper_requires_explicit_profile() -> None:
     source = Path("scripts/demo-management.sh").read_text()
     assert "--profile shared-demo-production" in source
     assert "--profile shared-demo-dev" in source
+    assert "--activation-evidence" in source
     assert 'exec "$ROOT_DIR/scripts/demo-line.sh"' in source
 
 

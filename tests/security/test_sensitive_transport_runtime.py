@@ -22,7 +22,7 @@ def test_safe_runtime_report_contains_only_digests_and_cleans_artifacts(tmp_path
         "class_b_query_forwarded": True,
         "ordinary_query_observable": True,
     }
-    assert "STRAYHUB_PHASE_C_SENTINEL_" not in rendered
+    assert "STRAYHUB_PHASE_E_SENTINEL_" not in rendered
     assert list(tmp_path.iterdir()) == []
 
 
@@ -33,7 +33,7 @@ def test_injected_leak_fails_without_echoing_the_sentinel(tmp_path: Path) -> Non
     assert report["result"] == "FAIL"
     application = next(item for item in report["surfaces"] if item["name"] == "application")
     assert application["raw_occurrences"] == 1
-    assert "STRAYHUB_PHASE_C_SENTINEL_" not in rendered
+    assert "STRAYHUB_PHASE_E_SENTINEL_" not in rendered
     assert list(tmp_path.iterdir()) == []
 
 
@@ -46,6 +46,6 @@ def test_runtime_cli_output_never_contains_raw_sentinel() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "STRAYHUB_PHASE_C_SENTINEL_" not in result.stdout
+    assert "STRAYHUB_PHASE_E_SENTINEL_" not in result.stdout
     report = json.loads(result.stdout)
     assert report["cleanup_status"] == "cleaned"

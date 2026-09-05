@@ -270,52 +270,52 @@ activation gate與rollback evidence。012 T008 未完成時，code/tests可完�
 **Independent test**: synthetic STAFF與SHELTER_ADMIN各完成核心journey；platform/volunteer/cross-tenant/
 unknown routes全部拒絕；LINE happy paths 100%；sentinel不進任何log/artifact；rollback<5分鐘。
 
-- [ ] T045 [US4] 先建立 activation-gate tests 於 `tests/security/test_remote_management_activation_gate.py`
+- [X] T045 [US4] 先建立 activation-gate tests 於 `tests/security/test_remote_management_activation_gate.py`
   - **Phase/Goal/Files/Deps**: E；要求exact host、synthetic data、old password reject/new accept/old sessions revoke、route matrix及log sentinel evidence；依賴 T028、T044。
   - **Notes/Test/AC**: 缺任一evidence shared activation失敗但line-only/coding不受阻；不接受boolean口頭替代；先失敗。
   - **Risk/Parallel/Commit**: fixture evidence不可被誤當真實T008；可與T047–T051測試準備平行；不獨立commit，與T046同一commit。
 
-- [ ] T046 [US4] 將 activation gate 接入 `scripts/demo-management.sh`、`scripts/verify_sensitive_transport_runtime.py`
+- [X] T046 [US4] 將 activation gate 接入 `scripts/demo-management.sh`、`scripts/verify_sensitive_transport_runtime.py`
   - **Phase/Goal/Files/Deps**: E；public shared啟動前驗證machine-readable evidence且輸出去敏；依賴 T045。
   - **Notes/Test/AC**: 012 T008 pending時shared public non-zero exit，line-only仍啟動；T045 PASS，不自動執行外部rotation/清log。
   - **Risk/Parallel/Commit**: 不得以環境boolean繞過evidence；不可平行；可獨立commit（含T045）。
 
-- [ ] T047 [P] [US1] 建立 STAFF production-browser journey 於 `apps/web/e2e/remote-management-staff.spec.ts`
+- [X] T047 [P] [US1] 建立 STAFF production-browser journey 於 `apps/web/e2e/remote-management-staff.spec.ts`
   - **Phase/Goal/Files/Deps**: E；login/context/dashboard/animals/photo/timeline/reports/AI review/care calendar完整流程；依賴 T034、T035、T040。
   - **Notes/Test/AC**: actual Next production build、5 runs納入SC-001，URL無credential，out-of-scope controls不可見/direct API deny；PASS。
   - **Risk/Parallel/Commit**: 不mock gateway/auth/tenant boundary；可與T048–T052平行；可獨立commit。
 
-- [ ] T048 [P] [US2] 建立 SHELTER_ADMIN與PLATFORM_ADMIN/VOLUNTEER deny journey 於 `apps/web/e2e/remote-management-admin-boundary.spec.ts`
+- [X] T048 [P] [US2] 建立 SHELTER_ADMIN與PLATFORM_ADMIN/VOLUNTEER deny journey 於 `apps/web/e2e/remote-management-admin-boundary.spec.ts`
   - **Phase/Goal/Files/Deps**: E；admin完成core但治理/PII/platform拒絕，既有platform token呼叫core亦拒絕；依賴 T032、T035、T040。
   - **Notes/Test/AC**: gateway platform route未達upstream，backend second layer deny；5 runs納入SC-001；PASS。
   - **Risk/Parallel/Commit**: 不能只assert menu hidden；可與T047/T049–T052平行；可獨立commit。
 
-- [ ] T049 [P] [US1] 擴充跨收容所負向矩陣於 `tests/security/test_remote_management_tenant_isolation.py`
+- [X] T049 [P] [US1] 擴充跨收容所負向矩陣於 `tests/security/test_remote_management_tenant_isolation.py`
   - **Phase/Goal/Files/Deps**: E；STAFF/admin對B shelter animal/photo/timeline/report/attention/calendar全數403/404且non-enumerating；依賴 T032。
   - **Notes/Test/AC**: client organization/resource ID不改server scope，RLS/repository predicate均覆蓋；100% PASS。
   - **Risk/Parallel/Commit**: 每個resource family需真實B tenant fixture；可與T047/T048/T050–T052平行；可獨立commit。
 
-- [ ] T050 [P] [US4] 完成 production/dev route及framework matrix 於 `tests/e2e/test_remote_management_tunnel_boundary.py`
+- [X] T050 [P] [US4] 完成 production/dev route及framework matrix 於 `tests/e2e/test_remote_management_tunnel_boundary.py`
   - **Phase/Goal/Files/Deps**: E；用actual build assets驗證HTML/CSS/JS/RSC/prefetch，production HMR/source map/image/unproven asset deny；依賴 T035。
   - **Notes/Test/AC**: unexpected Host、ports、encoded slash/dot/semicolon/duplicate slash/suffix/wrong method不達upstream；PASS。
   - **Risk/Parallel/Commit**: production acceptance不得改跑next dev；可與T047–T049/T051/T052平行；可獨立commit。
 
-- [ ] T051 [P] [US5] 執行兩profile LINE regression 於 `tests/e2e/test_remote_management_line_regression.py`
+- [X] T051 [P] [US5] 執行兩profile LINE regression 於 `tests/e2e/test_remote_management_line_regression.py`
   - **Phase/Goal/Files/Deps**: E；覆蓋webhook簽章、LIFF exchange、QR、animal confirm、photo capability、care-report；依賴 T036、T044。
   - **Notes/Test/AC**: line-only/shared各100%，capability TTL/query/logging與LINE registry語意不變；PASS。
   - **Risk/Parallel/Commit**: 不為通過測試擴大route或降低signature/tenant policy；可與T047–T050/T052平行；可獨立commit。
 
-- [ ] T052 [P] [US3] 建立 cross-log synthetic sentinel acceptance 於 `tests/security/test_remote_management_log_sentinel.py`
+- [X] T052 [P] [US3] 建立 cross-log synthetic sentinel acceptance 於 `tests/security/test_remote_management_log_sentinel.py`
   - **Phase/Goal/Files/Deps**: E；跑login success/fail/lock/refresh/logout/core requests後掃nginx/app/audit/helper artifacts；依賴 T011、T024、T040、T046。
   - **Notes/Test/AC**: encoded/nested/duplicate/casing/exception sentinel raw值0次，ordinary diagnostics保留；PASS。
   - **Risk/Parallel/Commit**: scanner不可把fixture source本身當runtime leak；可與T047–T051平行；可獨立commit。
 
-- [ ] T053 [US4] 驗證 synthetic-data與credential evidence helper 於 `scripts/verify_demo_data.py`、`tests/security/test_remote_management_activation_gate.py`
+- [X] T053 [US4] 驗證 synthetic-data與credential evidence helper 於 `scripts/verify_demo_data.py`、`tests/security/test_remote_management_activation_gate.py`
   - **Phase/Goal/Files/Deps**: E；確認只用demo資料/credential且evidence不含secret；依賴 T046、T049、T052。
   - **Notes/Test/AC**: production-like/未知資料來源、共用credential或缺evidence fail closed；測試synthetic evidence PASS但不標012 T008完成。
   - **Risk/Parallel/Commit**: 不任意修改production-like資料；不可平行於其依賴；可獨立commit。
 
-- [ ] T054 [US1] 執行 production profile automated acceptance 並更新 `specs/013-remote-management-public-access/validation-result.md`
+- [X] T054 [US1] 執行 production profile automated acceptance 並更新 `specs/013-remote-management-public-access/validation-result.md`
   - **Phase/Goal/Files/Deps**: E；彙整STAFF/admin、tenant、route、Next、auth concurrency、LINE與sentinel結果；依賴 T047–T053。
   - **Notes/Test/AC**: SC-001～SC-010 automated evidence完整，實際host/secret去敏；若012 T008 pending明列`CODE COMPLETE / ACTIVATION BLOCKED`。
   - **Risk/Parallel/Commit**: 不以local loopback冒充public runtime；不可平行；文件可獨立commit。
@@ -337,17 +337,17 @@ unknown routes全部拒絕；LINE happy paths 100%；sentinel不進任何log/art
 
 ## Final Phase — Polish, Quality Gates, and Scope Review
 
-- [ ] T058 [P] 執行完整 Python quality gates 並記錄於 `specs/013-remote-management-public-access/validation-result.md`
+- [X] T058 [P] 執行完整 Python quality gates 並記錄於 `specs/013-remote-management-public-access/validation-result.md`
   - **Phase/Goal/Files/Deps**: Final；執行`ruff check .`、`ruff format --check .`、`pytest`、適用mypy與Alembic single-head；依賴 T054（runtime manual不必先完成）。
   - **Notes/Test/AC**: 全部PASS，不skip/放寬；失敗保留command與摘要；符合Constitution X。
   - **Risk/Parallel/Commit**: 可與T059平行；只更新evidence，不獨立production commit。
 
-- [ ] T059 [P] 執行完整 frontend/gateway quality gates 並記錄於 `specs/013-remote-management-public-access/validation-result.md`
+- [X] T059 [P] 執行完整 frontend/gateway quality gates 並記錄於 `specs/013-remote-management-public-access/validation-result.md`
   - **Phase/Goal/Files/Deps**: Final；執行Vitest、typecheck、lint/format、Next production build、Playwright、`nginx -t`、shell checks；依賴 T054。
   - **Notes/Test/AC**: production manifest來自本次build，line-only/shared matrices PASS；不使用dev結果替代。
   - **Risk/Parallel/Commit**: 可與T058平行；只更新evidence，不獨立production commit。
 
-- [ ] T060 完成 final scope/self-review 於 `specs/013-remote-management-public-access/validation-result.md`、`specs/013-remote-management-public-access/tasks.md`
+- [X] T060 完成 final scope/self-review 於 `specs/013-remote-management-public-access/validation-result.md`、`specs/013-remote-management-public-access/tasks.md`
   - **Phase/Goal/Files/Deps**: Final；逐項確認無broad wildcard、remote platform/PII、Redis/MFA/OAuth/SSO/cookie/WAF/VPN/CDN/CSP scope creep；依賴 T058、T059，activation-ready另依T055–T057。
   - **Notes/Test/AC**: `git diff --check` PASS，列出status，LINE registry語意未變，012 T008 pending時final status明列BLOCKED而非ready。
   - **Risk/Parallel/Commit**: 不順手修Deferred；不可平行於final review；文件commit是否建立由使用者另行授權。

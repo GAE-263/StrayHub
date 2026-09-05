@@ -224,7 +224,7 @@ routes:
     upstream: api
     owner: services/api/app/api/management_animals.py
     purpose: Authenticated current photo proxy for authorized animal.
-    query_policy: reject_nonempty
+    query_policy: preserve
     logging_policy: sensitive_path_only
     roles: [STAFF, SHELTER_ADMIN]
 

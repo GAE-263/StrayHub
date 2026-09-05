@@ -38,12 +38,12 @@ def test_phase_b_policy_snapshot_is_deterministic() -> None:
     )
     assert _route_digest("shared-demo-dev") == (
         48,
-        "3e5032349adbedf528c11c2cdcc4c69df1ecdc1f6e32f84d24f7092324fd27aa",
+        "9ab82dfe6079289fa3c3271507c66653e27254333313fda9d6a9f927366f4929",
         0,
     )
     assert _route_digest("shared-demo-production", production=True) == (
         46,
-        "bc4fcade4f4e10e24ae137cebf118fd5305d7da3150c2616ca846e2eb87bc9e0",
+        "fc5a0cffac3032e0c33987f96159962b25b03fb418e8a619e0bac74f8a7dc7d4",
         20,
     )
 
@@ -58,6 +58,18 @@ def test_rsc_uses_allowlisted_page_path_and_ordinary_query_policy() -> None:
     assert page_routes
     assert all(route.query_policy == "preserve" for route in page_routes)
     assert not any("_rsc" in (route.path or route.path_pattern or "") for route in profile.routes)
+
+
+def test_authenticated_photo_preserves_the_application_version_query() -> None:
+    profile, _ = compile_profile(
+        "shared-demo-production",
+        build_dir=FIXTURES,
+        runtime_origin="https://reserved.example.ngrok.app",
+    )
+    route = next(item for item in profile.routes if item.id == "management_animal_photo_api")
+
+    assert route.query_policy == "preserve"
+    assert route.logging_policy == "sensitive_path_only"
 
 
 def test_same_inputs_produce_byte_stable_profile_output() -> None:

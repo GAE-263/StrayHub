@@ -151,6 +151,13 @@ def test_shared_profiles_allow_only_reviewed_management_surface(
         assert sum(ProbeHandler.counts.values()) == count
         assert request(port, "GET", "/v1/management/reports?status=new") == 200
         assert request(port, "GET", "/animals?_rsc=approved-page") == 200
+        animal_photo = (
+            "/v1/management/animals/00000000-0000-4000-8000-000000000000/photo?v=" + "a" * 64
+        )
+        assert request(port, "GET", animal_photo) == 200
+        count = sum(ProbeHandler.counts.values())
+        assert request(port, "POST", "/v1/auth/login?username=forbidden") == 404
+        assert sum(ProbeHandler.counts.values()) == count
         review_path = (
             "/v1/management/ai-observations/"
             "00000000-0000-4000-8000-000000000000/review?unexpected=1"
@@ -186,10 +193,43 @@ def test_production_has_exact_assets_without_hmr(tmp_path: Path) -> None:
     with gateway("shared-demo-production", tmp_path) as port:
         assert request(port, "GET", "/_next/static/chunks/runtime-fixture.js") == 200
         assert request(port, "GET", "/_next/static/chunks/unlisted-fixture.js") == 404
+        assert request(port, "GET", "/_next/static/chunks/runtime-fixture.js.map") == 404
+        assert request(port, "GET", "/_next/image?url=%2Fphoto.jpg&w=640&q=75") == 404
         assert request(port, "GET", "/_next/webpack-hmr") == 404
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/arbitrary-ui"),
+        ("GET", "/v1/foo"),
+        ("GET", "/v1/management/not-registered"),
+        ("GET", "/v1/platform/users"),
+        ("GET", "/platform-admins"),
+        ("GET", "/docs"),
+        ("GET", "/redoc"),
+        ("GET", "/openapi.json"),
+        ("GET", "/debug/status"),
+        ("GET", "/internal/status"),
+        ("GET", "/pii-reveal"),
+        ("GET", "/settings"),
+        ("GET", "/animals/not-a-uuid"),
+        ("GET", "/animals/00000000-0000-4000-8000-000000000000;edit"),
+        ("POST", "/v1/management/dashboard"),
+        ("GET", "/_next/server/app-paths-manifest.json"),
+    ],
+)
+def test_shared_production_complete_deny_matrix_never_reaches_upstream(
+    method: str, path: str, tmp_path: Path
+) -> None:
+    with gateway("shared-demo-production", tmp_path) as port:
+        before = sum(ProbeHandler.counts.values())
+        assert request(port, method, path) == 404
+        assert sum(ProbeHandler.counts.values()) == before
 
 
 def test_shared_host_must_match_exact_runtime_authority(tmp_path: Path) -> None:
     with gateway("shared-demo-dev", tmp_path) as port:
         assert request(port, "GET", "/login", host="attacker.example") == 404
+        assert request(port, "GET", "/login", host="127.0.0.1:443") == 404
         assert request(port, "GET", "/login", host=f"127.0.0.1:{port}") == 200

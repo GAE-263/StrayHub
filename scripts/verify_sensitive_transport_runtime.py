@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 import secrets
 import sys
 import tempfile
@@ -16,11 +17,110 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.public_tunnel_policy import PolicyError, normalize_runtime_origin  # noqa: E402
 from services.api.app.observability.logging import get_logger, mask_sensitive  # noqa: E402
+
+ACTIVATION_REQUIRED_CHECKS = frozenset(
+    {
+        "exact_runtime_reserved_host_validated",
+        "synthetic_demo_data_verified",
+        "old_demo_password_rejected",
+        "new_demo_password_accepted",
+        "old_demo_sessions_revoked",
+        "allow_and_deny_route_matrix_passed",
+        "sensitive_log_sentinel_absent",
+    }
+)
+_SENSITIVE_EVIDENCE_KEYS = re.compile(
+    r"(?:password|authorization|access[_-]?token|refresh[_-]?token|secret|credential)",
+    re.IGNORECASE,
+)
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+class ActivationEvidenceError(ValueError):
+    """Raised when public activation evidence cannot safely open the gate."""
+
+
+def _assert_no_sensitive_evidence_fields(value: object) -> None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if (
+                key not in ACTIVATION_REQUIRED_CHECKS
+                and key != "evidence_digest_sha256"
+                and _SENSITIVE_EVIDENCE_KEYS.search(str(key))
+            ):
+                raise ActivationEvidenceError("activation evidence contains a sensitive field")
+            _assert_no_sensitive_evidence_fields(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _assert_no_sensitive_evidence_fields(nested)
+
+
+def verify_activation_evidence(
+    evidence_path: Path,
+    *,
+    expected_origin: str,
+    allow_synthetic: bool = False,
+) -> dict[str, str]:
+    """Validate machine-readable evidence without returning host or credential material."""
+
+    try:
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ActivationEvidenceError("activation evidence schema is invalid") from exc
+    if not isinstance(payload, dict):
+        raise ActivationEvidenceError("activation evidence schema is invalid")
+    _assert_no_sensitive_evidence_fields(payload)
+    required_top_level = {
+        "version",
+        "evidence_kind",
+        "runtime_origin",
+        "environment",
+        "operator",
+        "recorded_at_utc",
+        "checks",
+    }
+    if set(payload) != required_top_level or payload.get("version") != 1:
+        raise ActivationEvidenceError("activation evidence schema is invalid")
+    try:
+        normalized_expected = normalize_runtime_origin(expected_origin)
+        normalized_evidence = normalize_runtime_origin(payload.get("runtime_origin"))
+    except PolicyError as exc:
+        raise ActivationEvidenceError("activation evidence runtime origin is invalid") from exc
+    if normalized_evidence.origin != normalized_expected.origin:
+        raise ActivationEvidenceError("activation evidence runtime origin does not match")
+    kind = payload.get("evidence_kind")
+    if kind not in {"manual_external", "synthetic_local"}:
+        raise ActivationEvidenceError("activation evidence schema is invalid")
+    if kind != "manual_external" and not allow_synthetic:
+        raise ActivationEvidenceError("public activation requires manual external evidence")
+    if not all(
+        isinstance(payload.get(key), str) and payload[key]
+        for key in required_top_level - {"version", "checks"}
+    ):
+        raise ActivationEvidenceError("activation evidence schema is invalid")
+    checks = payload.get("checks")
+    if not isinstance(checks, dict) or set(checks) != ACTIVATION_REQUIRED_CHECKS:
+        raise ActivationEvidenceError("activation evidence is incomplete")
+    for check in checks.values():
+        if (
+            not isinstance(check, dict)
+            or set(check) != {"result", "evidence_digest_sha256"}
+            or check.get("result") != "PASS"
+            or not isinstance(check.get("evidence_digest_sha256"), str)
+            or not _SHA256.fullmatch(check["evidence_digest_sha256"])
+        ):
+            raise ActivationEvidenceError("activation evidence is incomplete")
+    return {
+        "status": "PASS" if kind == "manual_external" else "PASS_SYNTHETIC_ONLY",
+        "evidence_kind": kind,
+        "runtime_origin_digest": _digest(normalized_expected.origin),
+    }
 
 
 def _sentinel(surface: str) -> str:
-    return f"STRAYHUB_PHASE_C_SENTINEL_{surface.upper()}_{secrets.token_hex(12)}"
+    return f"STRAYHUB_PHASE_E_SENTINEL_{surface.upper()}_{secrets.token_hex(12)}"
 
 
 def _digest(value: str) -> str:
@@ -78,10 +178,10 @@ def run_verification(
         "GET /v1/animals/search?query=ordinary-negative-control&page=2 status=200\n",
         "next": "forbidden_request=not_reached allowlisted_page=/volunteer-entry\n",
         "uvicorn": _capture_application_log(
-            "strayhub.phase_c.uvicorn", "Authorization: Bearer %s", values["uvicorn"]
+            "strayhub.phase_e.uvicorn", "Authorization: Bearer %s", values["uvicorn"]
         ),
         "application": _capture_application_log(
-            "strayhub.phase_c.application",
+            "strayhub.phase_e.application",
             "provider failure password=%s",
             values["application"],
         ),
@@ -140,8 +240,27 @@ def run_verification(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run synthetic sensitive transport checks")
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--activation-evidence", type=Path)
+    parser.add_argument("--expected-origin")
+    parser.add_argument("--allow-synthetic-evidence", action="store_true")
     args = parser.parse_args()
+    if args.activation_evidence:
+        if not args.expected_origin:
+            parser.error("--expected-origin is required with --activation-evidence")
+        try:
+            activation = verify_activation_evidence(
+                args.activation_evidence,
+                expected_origin=args.expected_origin,
+                allow_synthetic=args.allow_synthetic_evidence,
+            )
+        except ActivationEvidenceError as exc:
+            print(json.dumps({"activation_gate": "FAIL", "reason": str(exc)}))
+            return 2
+    else:
+        activation = None
     report = run_verification(root=args.root.resolve())
+    if activation is not None:
+        report["activation_gate"] = activation
     print(json.dumps(report, indent=2, sort_keys=True))
     return 1 if report["result"] == "FAIL" else 0
 

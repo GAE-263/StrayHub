@@ -98,6 +98,11 @@ def render_nginx(
             authority_pattern = re.escape(origin.host)
         host_guard = f"        if ($http_host !~* ^{authority_pattern}$) {{ return 404; }}\n"
         profile_header = profile.name
+    trusted_client_ip = (
+        "$remote_addr"
+        if origin is not None and origin.hostname in {"127.0.0.1", "::1", "localhost"}
+        else "$http_x_strayhub_trusted_client_ip"
+    )
     return f'''pid nginx.pid;
 error_log logs/error.log notice;
 
@@ -127,7 +132,7 @@ http {{
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For "";
         proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-StrayHub-Trusted-Client-IP $http_x_strayhub_trusted_client_ip;
+        proxy_set_header X-StrayHub-Trusted-Client-IP {trusted_client_ip};
         proxy_set_header X-StrayHub-Public-Profile "{profile_header}";
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;

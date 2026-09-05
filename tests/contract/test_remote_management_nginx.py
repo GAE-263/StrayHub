@@ -54,3 +54,36 @@ def test_line_only_does_not_include_management_routes(tmp_path: Path) -> None:
     assert "location = /login" not in config
     assert "location = /v1/auth/login" not in config
     assert "location = /_next/webpack-hmr" in config
+
+
+def test_explicit_loopback_validation_derives_trusted_ip_at_gateway(tmp_path: Path) -> None:
+    result = generate_runtime_configs(
+        profile_name="shared-demo-production",
+        output_dir=tmp_path,
+        api_port=8001,
+        web_port=3001,
+        gateway_port=8082,
+        build_dir=FIXTURE_BUILD,
+        runtime_origin="http://127.0.0.1:8082",
+        allow_loopback_for_test=True,
+    )
+    config = result.nginx_path.read_text()
+
+    assert "proxy_set_header X-StrayHub-Trusted-Client-IP $remote_addr;" in config
+
+
+def test_public_gateway_only_accepts_edge_overwritten_trusted_ip(tmp_path: Path) -> None:
+    result = generate_runtime_configs(
+        profile_name="shared-demo-production",
+        output_dir=tmp_path,
+        api_port=8001,
+        web_port=3001,
+        gateway_port=8082,
+        build_dir=FIXTURE_BUILD,
+        runtime_origin="https://demo.example.test",
+    )
+    config = result.nginx_path.read_text()
+
+    assert (
+        "proxy_set_header X-StrayHub-Trusted-Client-IP $http_x_strayhub_trusted_client_ip;"
+    ) in config

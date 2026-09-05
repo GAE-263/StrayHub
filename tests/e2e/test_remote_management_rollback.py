@@ -123,6 +123,7 @@ async def test_line_server_error_never_reports_success_or_revokes_sessions(
     monkeypatch.setattr(rollback, "switch_gateway_to_line_only", switch_gateway)
     monkeypatch.setattr(rollback, "_probe_status", probe)
     monkeypatch.setattr(rollback, "_revoke_database_sessions", revoke)
+    monkeypatch.setattr(rollback, "GATEWAY_RELOAD_TIMEOUT_SECONDS", 0.0)
 
     with pytest.raises(RuntimeError, match="LINE webhook is unavailable"):
         await rollback._run(
@@ -172,3 +173,47 @@ async def test_unsigned_line_rejection_confirms_reachability_before_revocation(
     assert revoked is True
     assert evidence.line_available is True
     assert (evidence.sessions_revoked, evidence.refresh_records_revoked) == (1, 2)
+
+
+@pytest.mark.asyncio
+async def test_line_probe_waits_for_nginx_reload_before_revocation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    revoked = False
+    line_statuses = iter([404, 404, 401])
+
+    def switch_gateway(**_kwargs: object) -> None:
+        return None
+
+    def probe(_port: int, path: str, *, method: str) -> int:
+        assert method in {"GET", "POST"}
+        if path == "/v1/line/webhook":
+            return next(line_statuses)
+        return 404
+
+    async def no_wait(_seconds: float) -> None:
+        return None
+
+    async def revoke() -> rollback.RemoteSessionRollbackResult:
+        nonlocal revoked
+        revoked = True
+        return rollback.RemoteSessionRollbackResult(1, 1)
+
+    monkeypatch.setattr(rollback, "switch_gateway_to_line_only", switch_gateway)
+    monkeypatch.setattr(rollback, "_probe_status", probe)
+    monkeypatch.setattr(rollback, "_revoke_database_sessions", revoke)
+    monkeypatch.setattr(rollback.asyncio, "sleep", no_wait)
+
+    evidence = await rollback._run(
+        Namespace(
+            runtime_dir=tmp_path,
+            api_port=8001,
+            web_port=3001,
+            gateway_port=8082,
+            nginx_bin="nginx",
+        )
+    )
+
+    assert revoked is True
+    assert evidence.line_available is True

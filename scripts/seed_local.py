@@ -483,6 +483,7 @@ async def seed() -> dict[str, dict[str, str]]:
                     )
                     membership.role = role
                     membership.status = "active"
+                    membership.medical_care_access = role == "STAFF"
                     if role == "VOLUNTEER":
                         membership.valid_from = now - timedelta(hours=1)
                         membership.expires_at = now + timedelta(days=7)

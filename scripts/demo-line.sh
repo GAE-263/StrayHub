@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 reveal_entry_reference=0
 PUBLIC_TUNNEL_PROFILE="line-only"
+ACTIVATION_EVIDENCE_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --reveal-entry-reference) reveal_entry_reference=1 ;;
@@ -13,6 +14,11 @@ while [[ $# -gt 0 ]]; do
     --profile)
       [[ $# -ge 2 ]] || { echo "--profile 需要值" >&2; exit 2; }
       PUBLIC_TUNNEL_PROFILE="$2"
+      shift
+      ;;
+    --activation-evidence)
+      [[ $# -ge 2 ]] || { echo "--activation-evidence 需要值" >&2; exit 2; }
+      ACTIVATION_EVIDENCE_FILE="$2"
       shift
       ;;
     --help|-h)
@@ -192,6 +198,16 @@ fi
 # tunnel origin rather than the local FastAPI address inferred behind Next.js.
 export WEB_PUBLIC_BASE_URL="$NGROK_URL"
 if [[ "$PUBLIC_TUNNEL_PROFILE" != "line-only" ]]; then
+  if [[ -z "$ACTIVATION_EVIDENCE_FILE" ]]; then
+    echo "shared management profile requires --activation-evidence" >&2
+    exit 2
+  fi
+  uv run python scripts/verify_sensitive_transport_runtime.py \
+    --activation-evidence "$ACTIVATION_EVIDENCE_FILE" \
+    --expected-origin "$NGROK_URL" >/dev/null || {
+      echo "shared management activation gate failed" >&2
+      exit 2
+    }
   export PUBLIC_TUNNEL_RESERVED_ORIGIN="$NGROK_URL"
   export LOGIN_TRUSTED_PROXY_ENABLED=true
   echo "[Management Demo] WARNING: shared management exposure enabled (${PUBLIC_TUNNEL_PROFILE})"

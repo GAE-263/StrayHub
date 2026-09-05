@@ -39,6 +39,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 
 MAX_ROLLBACK_SECONDS = 300
 EXPECTED_UNSIGNED_LINE_WEBHOOK_STATUS = 401
+GATEWAY_RELOAD_TIMEOUT_SECONDS = 5.0
+GATEWAY_RELOAD_POLL_SECONDS = 0.05
 
 
 @dataclass(frozen=True)
@@ -194,9 +196,15 @@ async def _run(args: argparse.Namespace) -> RollbackEvidence:
             raise RuntimeError("management routes remain reachable after gateway rollback")
 
     async def verify_line_available() -> None:
-        status = _probe_status(args.gateway_port, "/v1/line/webhook", method="POST")
-        if status != EXPECTED_UNSIGNED_LINE_WEBHOOK_STATUS:
-            raise RuntimeError("LINE webhook is unavailable after gateway rollback")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + GATEWAY_RELOAD_TIMEOUT_SECONDS
+        while True:
+            status = _probe_status(args.gateway_port, "/v1/line/webhook", method="POST")
+            if status == EXPECTED_UNSIGNED_LINE_WEBHOOK_STATUS:
+                return
+            if loop.time() >= deadline:
+                raise RuntimeError("LINE webhook is unavailable after gateway rollback")
+            await asyncio.sleep(GATEWAY_RELOAD_POLL_SECONDS)
 
     return await execute_ordered_rollback(
         switch_gateway=switch_gateway,

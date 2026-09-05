@@ -218,7 +218,108 @@ identified Phase A/C verification debt and committed-file format drift.
 
 ### Deferred boundaries
 
-- Phase E T045–T056 remains unchecked. No activation gate, real ngrok smoke, external browser
-  journey, external LINE smoke, final sentinel scan, or real five-minute rollback drill was added.
+- At the Phase D checkpoint, Phase E T045–T056 remained unchecked. No activation gate, real ngrok
+  smoke, external browser journey, external LINE smoke, final sentinel scan, or real five-minute
+  rollback drill had been added.
 - 012 T008 remains `MANUAL ACTION REQUIRED`; no external credential, history, inspector or log
   action was performed.
+
+## Phase E — Automated Runtime Acceptance and Final Review
+
+**Date**: 2026-09-05
+**Automated implementation status**: PASS — T045–T054 and T058–T060 complete
+**Public activation status**: BLOCKED — 012 T008 MANUAL ACTION REQUIRED
+
+### Controlled runtime acceptance
+
+- A fresh Next production build and isolated loopback gateway (`8002` API, `3002` Next, `8083`
+  nginx) exercised the real nginx → Next/FastAPI path against synthetic `strayhub_test` data. It
+  did not use a public hostname and is not external activation evidence.
+- STAFF completed login, active shelter context, dashboard, animal list, reports, AI review, care
+  calendar, refresh, and logout in five repeated core-navigation journeys. A separate expanded
+  journey also covered animal detail, timeline, authenticated photo, and report detail. Login was a
+  query-free JSON `POST /v1/auth/login`; the browser did not send credentials in a URL.
+- SHELTER_ADMIN completed the Core scope five times. Platform/governance/settings/PII surfaces
+  remained 404. PLATFORM_ADMIN and VOLUNTEER remote login/API attempts were denied by backend
+  policy; existing local/private role semantics were unchanged.
+- DB-backed tenant tests deny STAFF and SHELTER_ADMIN access to another shelter's animal, timeline,
+  authenticated photo, report, and management resources without resource enumeration. Active
+  shelter switching remains server-authorized.
+- Production gateway and manifest tests deny arbitrary UI/API/management/platform/docs/debug/
+  internal/PII paths, malformed UUIDs, duplicate/encoded/semicolon paths, wrong methods, unknown
+  Next internals, HMR, source maps, and image optimization. Approved HTML, RSC/prefetch, and exact
+  manifest assets remain available; dev HMR is confined to the dev profile.
+- Host validation accepts only the configured normalized authority. Wrong port, userinfo, wildcard,
+  path/query/fragment and malformed authorities fail closed; loopback requires the explicit test
+  flag. In explicit loopback validation nginx derives trusted client IP from `$remote_addr`; public
+  generation continues to consume only edge-overwritten connection metadata.
+- The Phase A gateway integration returned 401 for failures 1–4 and 429 for failure 5; the correct
+  password remained rejected while locked with `Retry-After: 900`. Forged forwarding/trusted-IP
+  headers did not change the gateway-derived identity. Controlled-clock, 20/21 IP-window, expiry,
+  unknown-user dummy verification and PostgreSQL concurrency tests all passed.
+- Remote login persisted `remote_management_demo` with `shared-demo-production`; refresh retained
+  origin/profile. Client-supplied profile/origin data could not override trusted context. Profile
+  mismatch and remote requests through the wrong profile remain denied.
+- Both `line-only` and shared production LINE matrices passed for webhook, LIFF exchange, QR,
+  animal confirmation, photo capability, and care-report routes. `line-only` still denies login and
+  all management UI/API routes. The committed 012 LINE registry remains unchanged.
+- Runtime photo traversal found and corrected one 013 contract mismatch: FastAPI's authenticated
+  animal photo URL carries its existing `v=<checksum>` cache-version query, while the registry had
+  rejected every non-empty query. Only `management_animal_photo_api` now preserves that ordinary
+  version query; its log policy remains path-only and login/logout query rejection is unchanged.
+
+### Logging, activation gate, and helper evidence
+
+- A random synthetic secret passed through login JSON and a Class B capability request. Raw and
+  URL-encoded occurrences were zero in nginx/gateway, Uvicorn/application, generated runtime files,
+  test artifacts and audit records. The ordinary-query negative control remained observable, and
+  the Class B route still reached FastAPI (invalid synthetic capability returned application 404,
+  not a gateway expansion).
+- Activation evidence validation requires the exact seven check records, matching normalized
+  origin, SHA-256 evidence digests, and explicit `manual_external` classification for public use.
+  Synthetic evidence is accepted only behind the test-only flag and cannot satisfy public
+  activation. Shared helpers require explicit profile and evidence inputs; default behavior remains
+  `line-only`, and validation failure exits non-zero without widening exposure.
+- Synthetic demo-data evidence contains only classification, counts, validity, and a digest. The
+  fixture seed grants synthetic STAFF the existing medical-care permission required by the Core
+  care-calendar journey; no production authorization rule changed.
+
+### Automated rollback evidence
+
+- The first controlled drill exposed an nginx reload readiness race: management was already denied,
+  while the first LINE probe briefly observed the previous Host boundary's 404. The helper failed
+  closed and revoked zero sessions. A bounded five-second LINE readiness poll and regression test
+  now preserve the original order: reload → management deny → exact LINE 401 → selective revoke.
+- The repeated drill switched shared production to `line-only` in `0.141086` seconds. `/login`,
+  login API and management API returned 404; unsigned LINE webhook returned the expected 401.
+  Two newly created remote STAFF/SHELTER_ADMIN session families were revoked. Five pre-existing
+  legacy/local sessions remained active. Existing refresh-vs-rollback and logout-vs-rollback
+  PostgreSQL race tests remain green.
+- This is automated local timing only. It is not the real external/ngrok five-minute SLA evidence
+  required by T057.
+
+### Final quality gates
+
+- Full Pytest: 1704 passed, 2 explained opt-in skips. Phase E/auth/session/gateway targeted matrix:
+  86 passed. Ruff check and Ruff format: PASS (841 files). Mypy: PASS (25 source files). Alembic:
+  one head (`0046_remote_session_origin`).
+- Frontend Vitest: 91 files / 467 tests PASS. TypeScript typecheck and Prettier check: PASS. Fresh
+  Next production build: PASS (25 pages). The new production-gateway STAFF and admin core journeys
+  passed five repetitions each; the expanded STAFF run also returned 200 for animal detail,
+  timeline, authenticated photo, and report detail. Platform/volunteer deny journeys passed. An exploratory
+  broader browser matrix passed 109/112; three existing volunteer-onboarding expectations outside
+  this feature still fail against the current volunteer flow and were not modified or used as
+  Phase E evidence.
+- Shell syntax, touched Python compile, static sensitive-transport checker, production config
+  generation, and `nginx -t` for both profiles: PASS. `git diff --check`: PASS at final review.
+
+### Scope and activation boundary
+
+- No MFA, OAuth, SSO, WAF, VPN, Zero Trust, cookie migration, Redis, CDN/CSP redesign, remote
+  PLATFORM_ADMIN flow, PII reveal, or broader governance surface was added. No real ngrok hostname,
+  public tunnel activation, external credential rotation, browser-history cleanup, inspector review,
+  or remote-log deletion was performed.
+- T055, T056, and T057 remain unchecked and are explicitly `BLOCKED BY 012 T008 — MANUAL
+  ACTIVATION GATE`. Required evidence is: old exposed password rejected, rotated password accepted,
+  old sessions/tokens revoked, browser/ngrok/log artifacts reviewed and cleaned as authorized, then
+  reserved-host public smoke and external rollback timing.
