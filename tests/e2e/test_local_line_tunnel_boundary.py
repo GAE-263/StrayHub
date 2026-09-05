@@ -89,7 +89,8 @@ def _sample_path(route: dict) -> str:
     if "path" in route:
         return route["path"]
     return {
-        "next_static_assets": "/_next/static/chunks/app.js",
+        # Next.js route groups put parentheses in the chunk path.
+        "next_static_assets": "/_next/static/chunks/app/(volunteer-onboarding)/volunteer-application/page.js",
         "volunteer_application_withdraw": f"/v1/volunteer-applications/{UUID}/withdraw",
         "animal_confirm": f"/v1/animals/{UUID}/confirm",
         "update_care_report_draft": f"/v1/care-report-drafts/{UUID}",
