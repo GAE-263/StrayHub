@@ -273,10 +273,16 @@ async def refresh(
         )
     except ValueError as exc:
         raise DomainError("public_exposure_invalid", "公開存取來源無效", 403) from exc
-    result = await service.refresh(
-        refresh_token=payload.refresh_token,
-        public_exposure_profile=public_exposure_profile,
-    )
+    try:
+        result = await service.refresh(
+            refresh_token=payload.refresh_token,
+            public_exposure_profile=public_exposure_profile,
+        )
+    except DomainError:
+        # Invalid remote refresh may revoke the session and its family. Preserve
+        # that security state even though the HTTP request returns an error.
+        await session.commit()
+        raise
     await session.commit()
     return result
 

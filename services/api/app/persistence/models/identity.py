@@ -82,6 +82,20 @@ class OrganizationMembership(IdentityMixin, AuditMixin, Base):
 
 class SessionRecord(IdentityMixin, AuditMixin, Base):
     __tablename__ = "session_records"
+    __table_args__ = (
+        CheckConstraint(
+            "session_origin IN ('legacy', 'local_web', 'liff', 'remote_management_demo')",
+            name="ck_session_records_origin",
+        ),
+        CheckConstraint(
+            "(session_origin = 'remote_management_demo' AND "
+            "public_profile IN ('shared-demo-production', 'shared-demo-dev')) OR "
+            "(session_origin IN ('legacy', 'local_web', 'liff') AND "
+            "public_profile IS NULL)",
+            name="ck_session_records_origin_profile",
+        ),
+        Index("ix_session_records_origin_status", "session_origin", "status"),
+    )
 
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     active_organization_id: Mapped[UUID | None] = mapped_column(
@@ -89,6 +103,10 @@ class SessionRecord(IdentityMixin, AuditMixin, Base):
     )
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    session_origin: Mapped[str] = mapped_column(
+        String(40), default="legacy", server_default="legacy", nullable=False
+    )
+    public_profile: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class RefreshTokenRecord(IdentityMixin, AuditMixin, Base):

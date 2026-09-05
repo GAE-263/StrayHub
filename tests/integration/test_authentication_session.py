@@ -68,6 +68,9 @@ class FakeAuthRepository:
     async def get_session(self, session_id):
         return self.sessions.get(session_id)
 
+    async def lock_session(self, session_id):
+        return self.sessions.get(session_id)
+
     async def get_user(self, user_id):
         return self.user if user_id == self.user.id else None
 

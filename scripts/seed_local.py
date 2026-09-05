@@ -289,6 +289,8 @@ async def _seed_application_and_grant_state(
                 active_organization_id=organization.id,
                 status="active",
                 expires_at=now + timedelta(days=1),
+                session_origin="local_web",
+                public_profile=None,
             ),
         )
         await _get_or_create(
@@ -606,6 +608,8 @@ async def seed() -> dict[str, dict[str, str]]:
                         active_organization_id=organization.id,
                         status="active",
                         expires_at=now + timedelta(days=7),
+                        session_origin="local_web",
+                        public_profile=None,
                     ),
                 )
                 line_user_id = f"Ulocal-volunteer-{org_code[-1]}"
@@ -737,6 +741,8 @@ async def seed() -> dict[str, dict[str, str]]:
                     active_organization_id=disabled_organization.id,
                     status="active",
                     expires_at=now + timedelta(days=1),
+                    session_origin="local_web",
+                    public_profile=None,
                 ),
             )
             await _get_or_create(

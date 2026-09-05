@@ -162,5 +162,63 @@ remain Phase E and are blocked until the outstanding 012 T008 manual incident ac
 
 - 012 T008 remains `MANUAL ACTION REQUIRED`; this phase did not rotate external credentials, clear
   remote logs/history, inspect ngrok externally, or claim activation readiness.
-- Phase D T037–T044 and Phase E T045–T056 remain unchecked. No session-origin schema, selective
-  revocation, rollback command, activation gate, public smoke, or remote browser journey was added.
+- At the Phase C checkpoint, Phase D T037–T044 and Phase E T045–T056 were still unchecked; the
+  Phase D section below supersedes that historical status.
+
+## Phase D — Remote Session Origin and Rollback
+
+**Date**: 2026-09-05
+**Implementation status**: PASS — T037–T044 implemented and locally validated
+**Activation status**: Not activation-ready. Phase E and 012 T008 manual incident actions remain
+unstarted.
+**Repository quality gate**: PASS — full Pytest and Ruff gates pass after resolving the previously
+identified Phase A/C verification debt and committed-file format drift.
+
+### Session lifecycle and rollback result
+
+- `session_records` now stores a constrained, indexed `session_origin` plus nullable
+  `public_profile`. Migration 0046 backfills existing rows as `legacy`; password login writes
+  `local_web` or `remote_management_demo` from trusted request context, while LINE/LIFF session
+  creation writes `liff` explicitly. `line_identity_service.py` has no `SessionRecord` creation
+  point and therefore required no production change.
+- Refresh locks the existing session row, retains the same session/origin/profile, and rejects a
+  remote session outside its persisted trusted profile. Remote membership/role loss or profile
+  mismatch revokes the session and refresh family; the API commits that security state before
+  returning its generic error. Logout uses the same session lock and keeps existing semantics.
+- Protected-request context also binds remote sessions to their persisted shared profile. Public
+  profile metadata is still accepted only from the configured loopback gateway; origin does not
+  grant a role or tenant scope.
+- Selective rollback locks all remote-management sessions in stable order, then locks and revokes
+  their active refresh records in the same transaction. `local_web`, `liff`, and `legacy` sessions
+  are not selected. Aggregate logging contains the fixed `remote_management_rollback` reason and
+  counts only, without credential values.
+- `rollback_remote_management.py` generates and validates `line-only`, atomically installs and
+  reloads the helper-owned nginx config, checks management page/API deny and LINE reachability,
+  then invokes database revocation. Failure before those probes prevents revocation. Its JSON
+  evidence contains timestamps, duration, route outcomes and aggregate counts only; no public
+  tunnel is started. LINE reachability requires the exact expected unsigned-webhook 401 response;
+  upstream 500 or an unexpected success cannot be recorded as available and prevents revocation.
+
+### Verification evidence
+
+- Phase D schema/lifecycle/selective-revoke/race/rollback-order plus focused auth, request-context,
+  GCE verification and quality-registry suite: 68 PASS. Gateway/profile/nginx regression: 46 PASS.
+  LINE/LIFF regression: 22 PASS.
+- Full `ruff check .`: PASS. Full `ruff format --check .`: PASS (837 files). Mypy: PASS (25 source
+  files). `git diff --check`: PASS.
+- Alembic migration validation on local `strayhub_test`: 0045 → 0046 → 0045 → 0046 completed;
+  0046 is the single head. Five pre-existing session rows were verified as `legacy`, with zero null
+  origins after upgrade.
+- Full repository Pytest: 1666 PASS, 2 explained opt-in SKIP. All Phase D PostgreSQL tests passed,
+  including selective revocation, refresh-versus-rollback and logout-versus-rollback concurrency.
+  The Phase A GCE verification environment now supplies and transports the required synthetic
+  `LOGIN_ABUSE_HMAC_SECRET`; the Phase C nginx binary-dependent test is registered in the existing
+  explained-skip registry. Seven previously committed Ruff format findings were normalized without
+  changing runtime behavior.
+
+### Deferred boundaries
+
+- Phase E T045–T056 remains unchecked. No activation gate, real ngrok smoke, external browser
+  journey, external LINE smoke, final sentinel scan, or real five-minute rollback drill was added.
+- 012 T008 remains `MANUAL ACTION REQUIRED`; no external credential, history, inspector or log
+  action was performed.

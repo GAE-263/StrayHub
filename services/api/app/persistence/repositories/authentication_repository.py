@@ -406,6 +406,12 @@ class AuthenticationRepository:
     async def get_session(self, session_id: UUID) -> SessionRecord | None:
         return await self.session.get(SessionRecord, session_id)
 
+    async def lock_session(self, session_id: UUID) -> SessionRecord | None:
+        result = await self.session.execute(
+            select(SessionRecord).where(SessionRecord.id == session_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def get_refresh_token(self, digest: str) -> RefreshTokenRecord | None:
         result = await self.session.execute(
             select(RefreshTokenRecord).where(RefreshTokenRecord.token_digest == digest)
@@ -504,6 +510,41 @@ class AuthenticationRepository:
         )
         for record in result.scalars():
             record.status = "revoked"
+
+    async def revoke_remote_management_sessions(self) -> tuple[int, int]:
+        sessions = list(
+            (
+                await self.session.execute(
+                    select(SessionRecord)
+                    .where(SessionRecord.session_origin == "remote_management_demo")
+                    .order_by(SessionRecord.id)
+                    .with_for_update()
+                )
+            ).scalars()
+        )
+        session_ids = [record.id for record in sessions]
+        refresh_tokens = (
+            list(
+                (
+                    await self.session.execute(
+                        select(RefreshTokenRecord)
+                        .where(RefreshTokenRecord.session_id.in_(session_ids))
+                        .order_by(RefreshTokenRecord.id)
+                        .with_for_update()
+                    )
+                ).scalars()
+            )
+            if session_ids
+            else []
+        )
+        active_sessions = [record for record in sessions if record.status == "active"]
+        active_refresh_tokens = [record for record in refresh_tokens if record.status == "active"]
+        for record in active_sessions:
+            record.status = "revoked"
+        for record in active_refresh_tokens:
+            record.status = "revoked"
+        await self.session.flush()
+        return len(active_sessions), len(active_refresh_tokens)
 
     async def add(self, value: T) -> T:
         self.session.add(value)

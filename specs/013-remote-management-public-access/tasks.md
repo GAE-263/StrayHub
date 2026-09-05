@@ -222,42 +222,42 @@ session，且不影響local/LIFF session。
 **Independent test**: 建立remote、local、LIFF、legacy sessions後執行rollback，驗證management先404、
 remote access/refresh立即失效、其他session仍有效，synthetic clock總流程小於300秒。
 
-- [ ] T037 [P] [US4] 先建立 session-origin schema/migration tests 於 `tests/contract/test_remote_session_origin_schema.py`
+- [X] T037 [P] [US4] 先建立 session-origin schema/migration tests 於 `tests/contract/test_remote_session_origin_schema.py`
   - **Phase/Goal/Files/Deps**: D；定義`session_origin`、nullable profile、constraint、index與legacy backfill；依賴 T002。
   - **Notes/Test/AC**: remote只允許兩shared profile，其他origin profile須null；upgrade/downgrade及existing row測試先失敗。
   - **Risk/Parallel/Commit**: 不依時間猜session來源；可與T039/T041平行；不獨立commit，與T038同一commit。
 
-- [ ] T038 [US4] 擴充 session model/migration 於 `services/api/app/persistence/models/identity.py`、`services/api/migrations/versions/0046_remote_session_origin.py`
+- [X] T038 [US4] 擴充 session model/migration 於 `services/api/app/persistence/models/identity.py`、`services/api/migrations/versions/0046_remote_session_origin.py`
   - **Phase/Goal/Files/Deps**: D；persist server-derived origin/profile並建立rollback index；依賴 T037、T002 migration head。
   - **Notes/Test/AC**: existing rows backfill legacy後non-null，migration保持single head；T037 PASS。
   - **Risk/Parallel/Commit**: 若0045尚未落地不得產生branching head；不可平行；可獨立commit（含T037）。
 
-- [ ] T039 [P] [US4] 先建立 origin lifecycle tests 於 `tests/integration/test_remote_session_origin.py`
+- [X] T039 [P] [US4] 先建立 origin lifecycle tests 於 `tests/integration/test_remote_session_origin.py`
   - **Phase/Goal/Files/Deps**: D；login來源不可由body/header偽造，LIFF/local明確標記，refresh保留，logout撤銷；依賴 T032。
   - **Notes/Test/AC**: remote refresh重驗role/membership，platform/expired session撤銷；先失敗。
   - **Risk/Parallel/Commit**: 不重設refresh architecture或建立第二種token；可與T037/T041平行；不獨立commit，與T040同一commit。
 
-- [ ] T040 [US4] 實作 session-origin lifecycle 於 `services/api/app/application/authentication/session_service.py`、`services/api/app/application/authentication/line_identity_service.py`
+- [X] T040 [US4] 實作 session-origin lifecycle 於 `services/api/app/application/authentication/session_service.py`、`services/api/app/application/authentication/line_identity_service.py`
   - **Phase/Goal/Files/Deps**: D；所有session建立點明確寫server-derived origin，rotation沿用；依賴 T038、T039。
   - **Notes/Test/AC**: logout仍撤銷session/family，remote refresh不可升權；T039及既有LIFF/session tests PASS。
   - **Risk/Parallel/Commit**: 漏一個SessionRecord constructor會違反constraint；不可平行；可獨立commit（含T039）。
 
-- [ ] T041 [P] [US4] 先建立 selective revocation repository tests 於 `tests/integration/test_remote_session_rollback.py`
+- [X] T041 [P] [US4] 先建立 selective revocation repository tests 於 `tests/integration/test_remote_session_rollback.py`
   - **Phase/Goal/Files/Deps**: D；remote active sessions與所有refresh family同transaction撤銷；依賴 T038。
   - **Notes/Test/AC**: local/LIFF/legacy不受影響，重跑idempotent並回non-sensitive counts；先失敗。
   - **Risk/Parallel/Commit**: query必須以origin+status index且tenant無關；可與T039平行；不獨立commit，與T042同一commit。
 
-- [ ] T042 [US4] 實作 selective revocation 於 `services/api/app/persistence/repositories/authentication_repository.py`、`services/api/app/application/authentication/session_service.py`
+- [X] T042 [US4] 實作 selective revocation 於 `services/api/app/persistence/repositories/authentication_repository.py`、`services/api/app/application/authentication/session_service.py`
   - **Phase/Goal/Files/Deps**: D；提供rollback service operation；依賴 T040、T041。
   - **Notes/Test/AC**: access request查server session後立即失效，refresh records同transaction revoked；T041 PASS。
   - **Risk/Parallel/Commit**: 不輸出user/token/raw session id；不可平行；可獨立commit（含T041）。
 
-- [ ] T043 [US4] 先建立 ordered rollback/helper tests 於 `tests/e2e/test_remote_management_rollback.py`
+- [X] T043 [US4] 先建立 ordered rollback/helper tests 於 `tests/e2e/test_remote_management_rollback.py`
   - **Phase/Goal/Files/Deps**: D；驗證gateway deny成功後才允許DB revoke，deny失敗不得宣告完成；依賴 T036、T042。
   - **Notes/Test/AC**: injectable clock證明<300秒，保存profile/timestamp/matrix/count但無secret；先失敗。
   - **Risk/Parallel/Commit**: 不以sleep或token自然過期通過；不可平行；不獨立commit，與T044同一commit。
 
-- [ ] T044 [US4] 實作 rollback command/runbook 於 `scripts/rollback_remote_management.py`、`docs/demo/remote-management.md`
+- [X] T044 [US4] 實作 rollback command/runbook 於 `scripts/rollback_remote_management.py`、`docs/demo/remote-management.md`
   - **Phase/Goal/Files/Deps**: D；先切line-only/reload/probe，再呼叫selective revoke與LINE probe；依賴 T043。
   - **Notes/Test/AC**: idempotent、failure exit non-zero、5分鐘evidence完整且local/LIFF session保留；T043 PASS。
   - **Risk/Parallel/Commit**: 禁止顛倒步驟或印credential；不可平行；可獨立commit（含T043）。

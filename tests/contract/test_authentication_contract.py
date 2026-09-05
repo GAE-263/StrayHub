@@ -2,7 +2,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 from fastapi.routing import APIRoute
 from pydantic import TypeAdapter, ValidationError
 from services.api.app.api.authentication import (
@@ -10,9 +10,12 @@ from services.api.app.api.authentication import (
     LiffExchangeResponse,
     RefreshRequest,
     current_user,
+    refresh,
     router,
 )
 from services.api.app.api.dependencies import RequestContext
+from services.api.app.api.errors import DomainError
+from starlette.requests import Request
 
 
 def test_authentication_contract_exposes_required_operations() -> None:
@@ -53,6 +56,40 @@ def test_current_user_contract_has_server_derived_nullable_exposure_hint() -> No
                 "public_exposure_profile": "shared-demo-production",
             }
         )
+
+
+@pytest.mark.asyncio
+async def test_refresh_commits_security_revocation_before_returning_error() -> None:
+    class Service:
+        async def refresh(self, *, refresh_token, public_exposure_profile=None):
+            raise DomainError("invalid_session", "Session 無效", 401)
+
+    class Session:
+        commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/auth/refresh",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+    session = Session()
+    with pytest.raises(DomainError, match="Session 無效"):
+        await refresh(
+            request=request,
+            payload=RefreshRequest(refresh_token="a" * 64),
+            service=Service(),
+            session=session,
+        )
+    assert session.commits == 1
 
 
 @pytest.mark.asyncio

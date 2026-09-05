@@ -165,7 +165,10 @@ async def _load_request_context(
     session_id: UUID | None,
     require_organization: bool = True,
 ) -> RequestContext:
-    from services.api.app.api.management_access import resolve_public_exposure_profile
+    from services.api.app.api.management_access import (
+        enforce_session_exposure_profile,
+        resolve_public_exposure_profile,
+    )
 
     settings = get_settings()
     try:
@@ -215,6 +218,11 @@ async def _load_request_context(
         or session_record.expires_at <= datetime.now(timezone.utc)
     ):
         raise DomainError("invalid_session", "Session 無效", 401)
+    enforce_session_exposure_profile(
+        session_origin=session_record.session_origin,
+        persisted_profile=session_record.public_profile,
+        request_profile=public_exposure_profile,
+    )
     user = await repository.get_user(session_record.user_id)
     if user is None or user.status != "active":
         raise DomainError("invalid_session", "使用者無效", 401)

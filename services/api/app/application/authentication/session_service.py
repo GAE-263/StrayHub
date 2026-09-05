@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -28,6 +29,9 @@ from services.api.app.persistence.repositories.authentication_repository import 
 
 logger = get_logger(__name__)
 
+REMOTE_MANAGEMENT_SESSION_ORIGIN = "remote_management_demo"
+REMOTE_MANAGEMENT_ROLLBACK_REASON = "remote_management_rollback"
+
 _DUMMY_PASSWORD_HASH = (
     "$argon2id$v=19$m=19456,t=2,p=1$WA91Jkye+IIpn+07soNWRg$"
     "C2cae1Wk/9IAl1MSZSdA02XcCY2habmqSjKQJ+5zZ8s"
@@ -36,6 +40,36 @@ _DUMMY_PASSWORD_HASH = (
 
 def _refresh_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class RemoteSessionRollbackResult:
+    sessions_revoked: int
+    refresh_tokens_revoked: int
+    reason: str = REMOTE_MANAGEMENT_ROLLBACK_REASON
+
+
+class RemoteSessionRollbackService:
+    """Revoke only sessions issued through the shared remote-management profile."""
+
+    def __init__(self, repository: AuthenticationRepository) -> None:
+        self.repository = repository
+
+    async def revoke_remote_management_sessions(self) -> RemoteSessionRollbackResult:
+        (
+            sessions_revoked,
+            refresh_tokens_revoked,
+        ) = await self.repository.revoke_remote_management_sessions()
+        logger.info(
+            "remote management sessions revoked reason=%s sessions=%s refresh_tokens=%s",
+            REMOTE_MANAGEMENT_ROLLBACK_REASON,
+            sessions_revoked,
+            refresh_tokens_revoked,
+        )
+        return RemoteSessionRollbackResult(
+            sessions_revoked=sessions_revoked,
+            refresh_tokens_revoked=refresh_tokens_revoked,
+        )
 
 
 class SessionService:
@@ -143,6 +177,12 @@ class SessionService:
             user_id=user.id,
             status="active",
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            session_origin=(
+                REMOTE_MANAGEMENT_SESSION_ORIGIN
+                if public_exposure_profile is not None
+                else "local_web"
+            ),
+            public_profile=public_exposure_profile,
         )
         await self.repository.add(session)
         result = await self._issue_session(user.id, session)
@@ -175,9 +215,25 @@ class SessionService:
             if record is not None:
                 await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_refresh_token", "Refresh Token 無效", 401)
-        session = await self.repository.get_session(record.session_id)
+        session = await self.repository.lock_session(record.session_id)
         user = session and await self.repository.get_user(session.user_id)
-        if session is None or user is None or session.status != "active" or user.status != "active":
+        if (
+            session is None
+            or user is None
+            or session.status != "active"
+            or session.expires_at <= now
+            or user.status != "active"
+        ):
+            if session is not None and session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN:
+                session.status = "revoked"
+                await self.repository.revoke_refresh_family(record.family_id)
+            raise DomainError("invalid_session", "Session 無效", 401)
+        if (
+            session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN
+            and public_exposure_profile != session.public_profile
+        ):
+            session.status = "revoked"
+            await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_session", "Session 無效", 401)
         await self.repository.set_authentication_user_scope(user.id)
         available_access = (
@@ -195,6 +251,9 @@ class SessionService:
         if not public_role_allowed or (
             user.platform_role != "PLATFORM_ADMIN" and not available_access
         ):
+            if session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN:
+                session.status = "revoked"
+                await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_session", "Session 無效", 401)
         record.status = "rotated"
         return await self._issue_session(user.id, session, family_id=record.family_id)
@@ -230,7 +289,7 @@ class SessionService:
         return organizations
 
     async def logout(self, *, session_id: UUID) -> None:
-        session = await self.repository.get_session(session_id)
+        session = await self.repository.lock_session(session_id)
         if session:
             session.status = "revoked"
             # Revoking the server-side session must also invalidate every refresh
@@ -248,6 +307,11 @@ class SessionService:
             session is None
             or session.status != "active"
             or session.expires_at <= datetime.now(timezone.utc)
+        ):
+            raise DomainError("invalid_session", "Session 無效", 401)
+        if (
+            session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN
+            and public_exposure_profile != session.public_profile
         ):
             raise DomainError("invalid_session", "Session 無效", 401)
         user = await self.repository.get_user(session.user_id)
@@ -358,6 +422,8 @@ class SessionService:
             active_organization_id=organization.id,
             status="active",
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            session_origin="liff",
+            public_profile=None,
         )
         await self.repository.add(session)
         await self.repository.revoke_active_webhook_sessions(user.id)
@@ -474,6 +540,8 @@ class SessionService:
             active_organization_id=organization_id,
             status="active",
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            session_origin="liff",
+            public_profile=None,
         )
         await self.repository.add(session)
         issued = await self._issue_session(user.id, session)

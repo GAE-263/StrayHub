@@ -5,6 +5,7 @@ from services.api.app.api.dependencies import RequestContext
 from services.api.app.api.errors import DomainError
 from services.api.app.api.management_access import (
     enforce_public_management_role,
+    enforce_session_exposure_profile,
     require_management_context,
     resolve_public_exposure_profile,
 )
@@ -51,6 +52,30 @@ def test_public_profile_is_only_accepted_from_configured_loopback_gateway() -> N
     ):
         with pytest.raises(ValueError, match="public exposure profile unavailable"):
             resolve_public_exposure_profile(forged, trusted_proxy_enabled=True)
+
+
+def test_remote_session_cannot_be_replayed_outside_its_trusted_profile() -> None:
+    enforce_session_exposure_profile(
+        session_origin="remote_management_demo",
+        persisted_profile="shared-demo-production",
+        request_profile="shared-demo-production",
+    )
+    for request_profile in (None, "shared-demo-dev"):
+        with pytest.raises(DomainError) as caught:
+            enforce_session_exposure_profile(
+                session_origin="remote_management_demo",
+                persisted_profile="shared-demo-production",
+                request_profile=request_profile,
+            )
+        assert (caught.value.status_code, caught.value.code) == (401, "invalid_session")
+
+
+def test_local_session_is_not_reclassified_by_public_request_metadata() -> None:
+    enforce_session_exposure_profile(
+        session_origin="local_web",
+        persisted_profile=None,
+        request_profile="shared-demo-production",
+    )
 
 
 @pytest.mark.parametrize("role", ["PLATFORM_ADMIN", "VOLUNTEER", ""])

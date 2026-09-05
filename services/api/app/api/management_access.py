@@ -15,6 +15,7 @@ _LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1"})
 _TRUSTED_CLIENT_IP_HEADER = "x-strayhub-trusted-client-ip"
 _PUBLIC_PROFILE_HEADER = "x-strayhub-public-profile"
 PUBLIC_MANAGEMENT_PROFILES = frozenset({"shared-demo-production", "shared-demo-dev"})
+REMOTE_MANAGEMENT_SESSION_ORIGIN = "remote_management_demo"
 
 
 def resolve_trusted_client_ip(
@@ -63,6 +64,15 @@ def resolve_public_exposure_profile(
     ):
         raise ValueError("public exposure profile unavailable")
     return values[0].strip()
+
+
+def enforce_session_exposure_profile(
+    *, session_origin: str, persisted_profile: str | None, request_profile: str | None
+) -> None:
+    """Keep a remote session bound to the trusted profile that created it."""
+
+    if session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN and request_profile != persisted_profile:
+        raise DomainError("invalid_session", "Session 無效", 401)
 
 
 MANAGEMENT_ROLES = {"PLATFORM_ADMIN", "SHELTER_ADMIN", "STAFF"}
