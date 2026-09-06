@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -11,6 +14,71 @@ from services.api.app.application.line_draft_service import (
     DraftSelectionDecision,
 )
 from services.api.app.domain.line_care_report_state import DraftState
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", [DraftState.CONFIRMING_ANIMAL, DraftState.SELECTING_ANIMAL])
+async def test_resume_before_questions_sends_actionable_card_with_notice(monkeypatch, state):
+    user_id, organization_id, membership_id, animal_id = (uuid4() for _ in range(4))
+    draft = SimpleNamespace(
+        current_step=state.value,
+        animal_id=animal_id,
+        volunteer_user_id=user_id,
+        membership_id=membership_id,
+        modification_summary={},
+        id=uuid4(),
+        status="active",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        answers={"walk_completion": "walk_completion.completed"},
+        reconfirmation_keys=[],
+    )
+    repository = SimpleNamespace(
+        get_active_for_volunteer=AsyncMock(return_value=draft), get=AsyncMock(return_value=draft)
+    )
+    monkeypatch.setattr(line_webhook, "CareReportDraftRepository", lambda *_: repository)
+    candidate = SimpleNamespace(animal=SimpleNamespace(id=animal_id))
+    selection = SimpleNamespace(confirm=AsyncMock(return_value=candidate))
+    monkeypatch.setattr(line_webhook, "_selection_service", lambda *_: selection)
+    from services.api.app.application.effective_observation_service import EffectiveOption
+
+    monkeypatch.setattr(
+        line_webhook,
+        "_answer_options",
+        AsyncMock(return_value=[EffectiveOption("activity.normal", "精神正常")]),
+    )
+    monkeypatch.setattr(
+        line_webhook, "_category_titles", AsyncMock(return_value={"activity": "精神體力"})
+    )
+    reply = AsyncMock()
+    monkeypatch.setattr(line_webhook, "_reply", reply)
+    event = {"postback": {"data": "action=resume_draft"}}
+
+    await line_webhook._handle_postback(
+        object(),
+        object(),
+        event,
+        user_id=user_id,
+        organization_id=organization_id,
+        membership_id=membership_id,
+        public_base_url="https://example.test",
+    )
+
+    reply.assert_awaited_once()
+    messages = reply.call_args.args[2]
+    assert len(messages) == 2
+    assert messages[0]["type"] == "text"
+    assert messages[1]["type"] == "flex"
+    assert draft.current_step == DraftState.ANSWERING_ACTIVITY.value
+    assert draft.answers == {"walk_completion": "walk_completion.completed"}
+    assert "精神體力" in json.dumps(messages, ensure_ascii=False)
+    assert "要幫哪隻" not in json.dumps(messages, ensure_ascii=False)
+    selection.confirm.assert_awaited_once_with(
+        animal_id=animal_id,
+        user_id=user_id,
+        organization_id=organization_id,
+        membership_id=membership_id,
+        role="VOLUNTEER",
+    )
 
 
 class _Savepoint:

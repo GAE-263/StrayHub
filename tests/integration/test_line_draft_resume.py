@@ -36,6 +36,32 @@ class Repository:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state",
+    [
+        DraftState.AWAITING_STOOL_MEDIA,
+        DraftState.AWAITING_NOTE,
+        DraftState.AWAITING_STORY,
+        DraftState.REVIEWING,
+    ],
+)
+async def test_resume_preserves_existing_non_question_progress(state):
+    repository = Repository()
+    service = LineDraftService(repository)
+    user_id = uuid4()
+    draft, _ = await service.create(
+        volunteer_user_id=user_id, membership_id=uuid4(), animal_id=uuid4()
+    )
+    draft.current_step = state.value
+    draft.note = "今天走得很慢"
+    draft.story = "喜歡在樹下休息"
+    resumed = await service.resume(draft.id, volunteer_user_id=user_id)
+    assert resumed.current_step == state.value
+    assert resumed.note == "今天走得很慢"
+    assert resumed.story == "喜歡在樹下休息"
+
+
+@pytest.mark.asyncio
 async def test_resume_is_single_active_draft_and_cancel_allows_a_new_one() -> None:
     repository = Repository()
     service = LineDraftService(repository, ttl_seconds=60)
