@@ -939,6 +939,7 @@ async def _adoption_reply_for_state(
         order = _QUESTION_ORDER[draft.path]
         card = build_question_card(
             question_key=key,
+            interaction_version=draft.interaction_version,
             step=order.index(key) + 1,
             total=len(order),
             prompt=_ADOPTION_QUESTION_PROMPT[key],
@@ -1952,18 +1953,41 @@ async def _handle_adoption_postback(
         await set_authentication_user_scope(session, adopter_user_id)
 
     repository = AdoptionDraftRepository(session, draft.organization_id)
-    result = await LineAdoptionConversationService(
-        repository,
-        organization_validator=(lambda candidate_id: _true_async(candidate_id)),
-        answer_validator=_adoption_answer_validator,
-        match_top_n=5,
-    ).handle(
-        token=None,
-        adopter_user_id=adopter_user_id,
-        action=action,
-        value=value,
-        event_id=event.get("webhookEventId", ""),
-    )
+    raw_version = values.get("version", [None])[0]
+    try:
+        expected_version = int(raw_version) if raw_version is not None else None
+    except ValueError:
+        expected_version = -1
+    try:
+        result = await LineAdoptionConversationService(
+            repository,
+            organization_validator=(lambda candidate_id: _true_async(candidate_id)),
+            answer_validator=_adoption_answer_validator,
+            match_top_n=5,
+        ).handle(
+            token=None,
+            adopter_user_id=adopter_user_id,
+            action=action,
+            value=value,
+            event_id=event.get("webhookEventId", ""),
+            expected_question=values.get("question", [None])[0],
+            expected_version=expected_version,
+        )
+    except DomainError as error:
+        if error.code != "stale_adoption_action":
+            raise
+        await set_authentication_user_scope(session, adopter_user_id)
+        current = await AdoptionDraftRepository(session, None).get_active_for_adopter(
+            adopter_user_id
+        )
+        if current is None:
+            raise
+        if current.organization_id is not None:
+            await set_organization_scope(session, current.organization_id)
+        await _adoption_reply_for_state(
+            session, line, event, draft=current, public_base_url=public_base_url
+        )
+        return
     if result.inquiry_id is not None:
         await _reply(
             line,

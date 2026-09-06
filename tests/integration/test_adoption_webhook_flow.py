@@ -524,14 +524,13 @@ def test_adoption_browse_paginates_searches_and_revalidates_selection(monkeypatc
             await connection.close()
 
     client = TestClient(app)
-    transport = line_webhook.LineMessagingApiAdapter.reply
 
     def send(data=None, text=None):
         event = _event(line_user_id, data) if data else _text_event(line_user_id, text)
         event["replyToken"] = "test-reply"
         result = _post(client, [event]).json()["event_results"][0]
         assert result["status"] == "processed", result
-        return transport.call_args.kwargs["messages"]
+        return line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
 
     try:
         asyncio.run(add_animals())
@@ -586,6 +585,21 @@ def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
         event["replyToken"] = "test-reply"
         result = _post(client, [event]).json()["event_results"][0]
         assert result["status"] == "processed", result
+        return line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+
+    def find_action_data(value, question):
+        if isinstance(value, dict):
+            data = value.get("data")
+            if isinstance(data, str) and f"question={question}" in data:
+                return data
+            for child in value.values():
+                if found := find_action_data(child, question):
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                if found := find_action_data(child, question):
+                    return found
+        return None
 
     try:
         send("action=start_adoption_matching&flow=adoption")
@@ -600,10 +614,13 @@ def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
             ("household_members", "adults_only"),
             ("work_schedule", "work_from_home"),
         )
+        messages = None
         for question, value in answers:
-            send(f"action=answer&flow=adoption&question={question}&value={value}")
+            messages = send(f"action=answer&flow=adoption&question={question}&value={value}")
 
-        repeated = "action=answer&flow=adoption&question=parenting_style&value=structured"
+        assert messages is not None
+        repeated = find_action_data(messages, "parenting_style")
+        assert repeated is not None and "version=" in repeated
         send(repeated)
         send(repeated)
 

@@ -150,6 +150,7 @@ def test_target_animal_picker_caps_at_twelve_bubbles() -> None:
 def test_question_card_renders_progress_bar_and_pill_options() -> None:
     message = build_question_card(
         question_key="housing_type",
+        interaction_version=3,
         step=2,
         total=8,
         prompt="你家是什麼樣子呢？🏠",
@@ -168,6 +169,8 @@ def test_question_card_renders_progress_bar_and_pill_options() -> None:
     assert progress["contents"][1]["flex"] == 6
     option_row = _pill(bubble["body"]["contents"][0])
     assert "value=house" in option_row["action"]["data"]
+    assert "question=housing_type" in option_row["action"]["data"]
+    assert "version=3" in option_row["action"]["data"]
     # A back_action was supplied, so a footer nudge box must be appended.
     assert bubble["body"]["contents"][-1]["action"] == {
         "type": "postback",
@@ -179,6 +182,7 @@ def test_question_card_renders_progress_bar_and_pill_options() -> None:
 def test_question_card_omits_footer_without_back_action() -> None:
     message = build_question_card(
         question_key="housing_type",
+        interaction_version=3,
         step=1,
         total=8,
         prompt="你家是什麼樣子呢？🏠",

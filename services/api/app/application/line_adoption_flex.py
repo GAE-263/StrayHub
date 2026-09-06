@@ -377,6 +377,7 @@ class QuestionOption:
 def build_question_card(
     *,
     question_key: str,
+    interaction_version: int,
     step: int,
     total: int,
     prompt: str,
@@ -401,6 +402,7 @@ def build_question_card(
                         "action": "answer",
                         "flow": "adoption",
                         "question": question_key,
+                        "version": interaction_version,
                         "value": option.code,
                     }
                 ),

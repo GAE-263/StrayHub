@@ -44,6 +44,18 @@ class AdoptionDraftRepository:
         )
         return result.scalar_one_or_none()
 
+    async def lock_by_token(self, token: str) -> AdoptionDraft | None:
+        result = await self.session.execute(
+            select(AdoptionDraft)
+            .where(
+                AdoptionDraft.opaque_token_digest == adoption_draft_token_digest(token),
+                AdoptionDraft.organization_id == self.organization_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def get_active_for_adopter(self, adopter_user_id: UUID) -> AdoptionDraft | None:
         """Not scoped by organization_id — safe to call before a shelter is chosen."""
         result = await self.session.execute(
@@ -51,6 +63,19 @@ class AdoptionDraftRepository:
                 AdoptionDraft.adopter_user_id == adopter_user_id,
                 AdoptionDraft.status == "active",
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def lock_active_for_adopter(self, adopter_user_id: UUID) -> AdoptionDraft | None:
+        """Serialize mutations for one active conversation."""
+        result = await self.session.execute(
+            select(AdoptionDraft)
+            .where(
+                AdoptionDraft.adopter_user_id == adopter_user_id,
+                AdoptionDraft.status == "active",
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 

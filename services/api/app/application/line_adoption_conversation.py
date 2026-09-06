@@ -66,11 +66,13 @@ class LineAdoptionConversationService:
         action: str,
         value: str | None,
         event_id: str,
+        expected_question: str | None = None,
+        expected_version: int | None = None,
     ) -> AdoptionConversationResult:
         draft = (
-            await self.draft_repository.get_by_token(token)
+            await self.draft_repository.lock_by_token(token)
             if token
-            else await self.draft_repository.get_active_for_adopter(adopter_user_id)
+            else await self.draft_repository.lock_active_for_adopter(adopter_user_id)
         )
         if draft is None or draft.adopter_user_id != adopter_user_id or draft.status != "active":
             raise DomainError("draft_access_denied", "對話不存在或無法存取", 404)
@@ -88,6 +90,14 @@ class LineAdoptionConversationService:
         )
         inquiry_id: UUID | None = None
         session = self.draft_repository.session
+
+        if expected_version is not None and expected_version != draft.interaction_version:
+            raise DomainError("stale_adoption_action", "這個選項已經處理過，已顯示目前題目。", 409)
+        if action == "answer" and expected_question is not None:
+            if expected_question != machine.next_answer_key():
+                raise DomainError(
+                    "stale_adoption_action", "這個選項已經處理過，已顯示目前題目。", 409
+                )
 
         if action == "edit_contact":
             machine.edit_contact(value or "")
@@ -228,6 +238,7 @@ class LineAdoptionConversationService:
         elif machine.state == AdoptionDraftState.EXPIRED:
             draft.status = "expired"
         draft.last_interaction_at = datetime.now(timezone.utc)
+        draft.interaction_version += 1
         await session.flush()
         return AdoptionConversationResult(
             state=machine.state,
