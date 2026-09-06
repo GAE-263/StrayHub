@@ -377,6 +377,20 @@ class AdoptionDraftStateMachine:
             raise DomainError("invalid_state_transition", "目前步驟已完成", 409)
         return key
 
+    def prepare_answer_replay(self, key: str) -> bool:
+        """Allow a saved answer to be safely confirmed again on its own step.
+
+        Older concurrent webhook handling could persist an answer while leaving
+        ``current_step`` on the same question.  Treating the matching card click
+        as reconfirmation lets the normal answer transition repair that draft.
+        """
+        expected = _STATE_QUESTIONS.get(self.state)
+        if expected is None or key not in expected:
+            return False
+        if key in self.answers.values:
+            self.reconfirmation_keys.add(key)
+        return True
+
     def answer_current(self, value: Any) -> AdoptionDraftState:
         return self.answer_question(self.next_answer_key(), value)
 

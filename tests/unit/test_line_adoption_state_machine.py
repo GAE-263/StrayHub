@@ -350,3 +350,19 @@ def test_resume_repairs_missing_answers_before_saved_step():
     assert machine.repair_for_resume() == "housing_type"
     assert machine.state == AdoptionDraftState.ANSWERING_HOUSING
     assert machine.answers.values["parenting_style"] == "structured"
+
+
+def test_saved_answer_on_current_question_can_be_reconfirmed_and_advanced():
+    machine = AdoptionDraftStateMachine(
+        state=AdoptionDraftState.ANSWERING_OTHER_PETS,
+        path=AdoptionPath.SPECIFIC_ANIMAL,
+    )
+    machine.answers.values = {
+        "housing_type": "apartment_small",
+        "dog_experience": "first_time",
+        "other_pets": "none",
+    }
+
+    assert machine.prepare_answer_replay("other_pets") is True
+    assert machine.answer_current("cat") == AdoptionDraftState.ANSWERING_HOUSEHOLD
+    assert machine.answers.values["other_pets"] == "cat"

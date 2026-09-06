@@ -102,7 +102,7 @@ class LineAdoptionConversationService:
         if expected_state is not None and expected_state != draft.current_step:
             raise DomainError("stale_adoption_action", "這個操作已經處理過，已顯示目前步驟。", 409)
         if action == "answer" and expected_question is not None:
-            if expected_question != machine.next_answer_key():
+            if not machine.prepare_answer_replay(expected_question):
                 raise DomainError(
                     "stale_adoption_action", "這個選項已經處理過，已顯示目前題目。", 409
                 )
