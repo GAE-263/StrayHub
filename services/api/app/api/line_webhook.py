@@ -2600,13 +2600,31 @@ async def _reply_next_step(
     draft,
     raw_token: str,
     lead: list[dict] | None = None,
+    public_base_url: str | None = None,
 ) -> None:
     # A LINE reply token is single-use and short-lived, so a message that has to
     # precede the next step is passed in here and sent in the same reply call
     # rather than in a second reply that LINE would reject.
     lead_messages = lead or []
     state = DraftState(draft.current_step)
-    if state in {
+    if state == DraftState.SELECTING_ANIMAL:
+        await _reply(line, event, [*lead_messages, _find_dog_hub_bubble()])
+    elif state == DraftState.CONFIRMING_ANIMAL:
+        if (draft.modification_summary or {}).get("handoff_selection"):
+            card = await _handoff_switch_bubble(session, organization_id, draft)
+        else:
+            candidate = await _selection_service(session, organization_id).confirm(
+                animal_id=draft.animal_id,
+                user_id=draft.volunteer_user_id,
+                organization_id=organization_id,
+                membership_id=draft.membership_id,
+                role="VOLUNTEER",
+            )
+            card = await _walk_confirmation_bubble(
+                session, organization_id, candidate, public_base_url=public_base_url
+            )
+        await _reply(line, event, [*lead_messages, card])
+    elif state in {
         DraftState.ANSWERING_WALK_COMPLETION,
         DraftState.ANSWERING_ACTIVITY,
         DraftState.ANSWERING_GAIT,
@@ -3048,6 +3066,7 @@ async def _handle_postback(
             lead=[
                 _text(f"已保留 {animal.name if animal is not None else '原本毛孩'} 的回報內容。")
             ],
+            public_base_url=public_base_url,
         )
         return None
     if action == "resume_draft" and not token:
@@ -3064,7 +3083,8 @@ async def _handle_postback(
             organization_id=organization_id,
             draft=draft,
             raw_token="",
-            lead=[_text("已恢復未完成回報，請繼續回答目前問題。")],
+            lead=[_text("已恢復未完成回報，請依下方卡片繼續。")],
+            public_base_url=public_base_url,
         )
         return None
     if not token and action not in {
