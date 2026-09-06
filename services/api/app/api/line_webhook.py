@@ -1541,7 +1541,6 @@ async def _reply_next_step(
                             "✅",
                         ),
                         ("再改一下", f"action=back&draft_token={raw_token}", "✏️"),
-                        ("換一隻", f"action=reselect_animal&draft_token={raw_token}", "🔄"),
                         (
                             "取消回報",
                             f"action={'cancel' if raw_token else 'cancel_current'}&draft_token={raw_token}",
