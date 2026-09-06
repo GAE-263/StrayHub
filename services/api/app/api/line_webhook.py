@@ -872,6 +872,18 @@ async def _adoption_reply_for_state(
     lead: list[dict] | None = None,
 ) -> None:
     state = AdoptionDraftState(draft.current_step)
+
+    def state_action(label: str, action: str, value: str | None = None) -> dict:
+        data = {
+            "action": action,
+            "flow": "adoption",
+            "step": draft.current_step,
+            "version": draft.interaction_version,
+        }
+        if value is not None:
+            data["value"] = value
+        return _action(label, urlencode(data))
+
     if state == AdoptionDraftState.SELECTING_ORGANIZATION:
         actions = [
             (
@@ -898,26 +910,12 @@ async def _adoption_reply_for_state(
                 (
                     "💗",
                     "心有所屬",
-                    _action(
-                        "心有所屬",
-                        urlencode(
-                            {
-                                "action": "choose_path",
-                                "flow": "adoption",
-                                "value": "specific_animal",
-                            }
-                        ),
-                    ),
+                    state_action("心有所屬", "choose_path", "specific_animal"),
                 ),
                 (
                     "✨",
                     "推薦給我",
-                    _action(
-                        "推薦給我",
-                        urlencode(
-                            {"action": "choose_path", "flow": "adoption", "value": "recommend_me"}
-                        ),
-                    ),
+                    state_action("推薦給我", "choose_path", "recommend_me"),
                 ),
             ],
         )
@@ -935,10 +933,8 @@ async def _adoption_reply_for_state(
             name=animal.name,
             shelter_number=animal.shelter_number,
             photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
-            confirm_action=_action(
-                "確認是這隻", urlencode({"action": "confirm_target_animal", "flow": "adoption"})
-            ),
-            back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
+            confirm_action=state_action("確認是這隻", "confirm_target_animal"),
+            back_action=state_action("重新選擇", "back"),
         )
     elif state in _ADOPTION_STATE_QUESTION_KEY:
         key = _ADOPTION_STATE_QUESTION_KEY[state]
@@ -954,7 +950,7 @@ async def _adoption_reply_for_state(
                 for code, emoji, label in _ADOPTION_QUESTION_OPTIONS[key]
             ],
             accent_index=(order.index(key) % 4),
-            back_action=_action("上一步", urlencode({"action": "back", "flow": "adoption"})),
+            back_action=state_action("上一步", "back"),
         )
     elif state == AdoptionDraftState.CONFIRMING_ANSWERS:
         order = _QUESTION_ORDER[draft.path]
@@ -969,11 +965,9 @@ async def _adoption_reply_for_state(
                 (
                     "✅",
                     "確認無誤",
-                    _action(
-                        "確認無誤", urlencode({"action": "confirm_answers", "flow": "adoption"})
-                    ),
+                    state_action("確認無誤", "confirm_answers"),
                 ),
-                ("✏️", "修改", _action("修改", urlencode({"action": "back", "flow": "adoption"}))),
+                ("✏️", "修改", state_action("修改", "back")),
             ],
         )
     elif state == AdoptionDraftState.SELECTING_MATCHED_ANIMAL:
@@ -1057,11 +1051,8 @@ async def _adoption_reply_for_state(
             name=animal.name,
             shelter_number=animal.shelter_number,
             photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
-            confirm_action=_action(
-                "確認是這隻",
-                urlencode({"action": "confirm_alternative_animal", "flow": "adoption"}),
-            ),
-            back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
+            confirm_action=state_action("確認是這隻", "confirm_alternative_animal"),
+            back_action=state_action("重新選擇", "back"),
         )
     elif state == AdoptionDraftState.AWAITING_ADOPTER_NAME:
         card = build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名")
@@ -1074,30 +1065,17 @@ async def _adoption_reply_for_state(
                 (
                     "🌤️",
                     "平日白天",
-                    _action(
-                        "平日白天",
-                        urlencode(
-                            {"action": "answer", "flow": "adoption", "value": "平日白天（9-18點）"}
-                        ),
-                    ),
+                    state_action("平日白天", "contact_time", "平日白天（9-18點）"),
                 ),
                 (
                     "🌙",
                     "平日晚上",
-                    _action(
-                        "平日晚上",
-                        urlencode(
-                            {"action": "answer", "flow": "adoption", "value": "平日晚上（18-22點）"}
-                        ),
-                    ),
+                    state_action("平日晚上", "contact_time", "平日晚上（18-22點）"),
                 ),
                 (
                     "🌈",
                     "假日皆可",
-                    _action(
-                        "假日皆可",
-                        urlencode({"action": "answer", "flow": "adoption", "value": "假日皆可"}),
-                    ),
+                    state_action("假日皆可", "contact_time", "假日皆可"),
                 ),
             ],
         )
@@ -1119,9 +1097,7 @@ async def _adoption_reply_for_state(
                 (
                     "↩️",
                     "返回摘要",
-                    _action(
-                        "返回摘要", urlencode({"action": "cancel_contact_edit", "flow": "adoption"})
-                    ),
+                    state_action("返回摘要", "cancel_contact_edit"),
                 )
             ],
         )
@@ -1138,16 +1114,13 @@ async def _adoption_reply_for_state(
                 (
                     "📮",
                     "送出",
-                    _action("送出", urlencode({"action": "submit", "flow": "adoption"})),
+                    state_action("送出", "submit"),
                 ),
                 *[
                     (
                         "✏️",
                         label,
-                        _action(
-                            label,
-                            urlencode({"action": "edit_contact", "flow": "adoption", "value": key}),
-                        ),
+                        state_action(label, "edit_contact", key),
                     )
                     for key, label in (
                         ("adopter_name", "修改姓名"),
@@ -1878,6 +1851,14 @@ async def _handle_adoption_postback(
     value = values.get("value", [None])[0]
     adopter_user_id = draft.adopter_user_id
 
+    if action == "back" and (
+        values.get("step", [None])[0] is None or values.get("version", [None])[0] is None
+    ):
+        await _adoption_reply_for_state(
+            session, line, event, draft=draft, public_base_url=public_base_url
+        )
+        return
+
     if action == "answer":
         state = AdoptionDraftState(draft.current_step)
         current_question = _ADOPTION_STATE_QUESTION_KEY.get(state)
@@ -1977,6 +1958,7 @@ async def _handle_adoption_postback(
             value=value,
             event_id=event.get("webhookEventId", ""),
             expected_question=values.get("question", [None])[0],
+            expected_state=values.get("step", [None])[0],
             expected_version=expected_version,
         )
     except DomainError as error:

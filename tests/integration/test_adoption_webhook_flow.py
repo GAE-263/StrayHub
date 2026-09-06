@@ -587,17 +587,17 @@ def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
         assert result["status"] == "processed", result
         return line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
 
-    def find_action_data(value, question):
+    def find_action_data(value, fragment):
         if isinstance(value, dict):
             data = value.get("data")
-            if isinstance(data, str) and f"question={question}" in data:
+            if isinstance(data, str) and fragment in data:
                 return data
             for child in value.values():
-                if found := find_action_data(child, question):
+                if found := find_action_data(child, fragment):
                     return found
         elif isinstance(value, list):
             for child in value:
-                if found := find_action_data(child, question):
+                if found := find_action_data(child, fragment):
                     return found
         return None
 
@@ -619,7 +619,7 @@ def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
             messages = send(f"action=answer&flow=adoption&question={question}&value={value}")
 
         assert messages is not None
-        repeated = find_action_data(messages, "parenting_style")
+        repeated = find_action_data(messages, "question=parenting_style")
         assert repeated is not None and "version=" in repeated
         send(repeated)
         send(repeated)
@@ -644,6 +644,26 @@ def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
                 await connection.close()
 
         asyncio.run(verify())
+
+        back = find_action_data(messages, "action=back")
+        assert back is not None and "step=answering_patience" in back and "version=" in back
+        send(back)
+        send(back)
+
+        async def verify_repeated_back():
+            connection = await asyncpg.connect(_database_url())
+            try:
+                step = await connection.fetchval(
+                    """SELECT current_step FROM adoption_drafts d
+                    JOIN line_user_bindings b ON b.user_id=d.adopter_user_id
+                    WHERE b.line_user_id=$1 AND d.status='active'""",
+                    line_user_id,
+                )
+                assert step == "answering_parenting_style"
+            finally:
+                await connection.close()
+
+        asyncio.run(verify_repeated_back())
     finally:
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()

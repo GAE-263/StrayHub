@@ -71,6 +71,7 @@ class LineAdoptionConversationService:
         value: str | None,
         event_id: str,
         expected_question: str | None = None,
+        expected_state: str | None = None,
         expected_version: int | None = None,
     ) -> AdoptionConversationResult:
         draft = (
@@ -98,6 +99,8 @@ class LineAdoptionConversationService:
 
         if expected_version is not None and expected_version != draft.interaction_version:
             raise DomainError("stale_adoption_action", "這個選項已經處理過，已顯示目前題目。", 409)
+        if expected_state is not None and expected_state != draft.current_step:
+            raise DomainError("stale_adoption_action", "這個操作已經處理過，已顯示目前步驟。", 409)
         if action == "answer" and expected_question is not None:
             if expected_question != machine.next_answer_key():
                 raise DomainError(
@@ -208,6 +211,10 @@ class LineAdoptionConversationService:
             if value is None:
                 raise DomainError("phone_number_required", "需要提供手機號碼", 422)
             machine.answer_question("phone_number", value)
+        elif action == "contact_time":
+            if value is None:
+                raise DomainError("contact_time_required", "需要提供方便聯絡的時間", 422)
+            machine.answer_question("contact_time", value)
         elif action == "back":
             machine.back()
             if machine.path is None:
