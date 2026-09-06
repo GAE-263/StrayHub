@@ -265,6 +265,9 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
             "action=choose_path&flow=adoption&value=specific_animal",
             f"action=select_target_animal&flow=adoption&value={animal_id}",
             "action=confirm_target_animal&flow=adoption",
+            # Skip the free-text self-introduction step (方向 D) and fall
+            # back to the one-by-one questions below.
+            "action=finish_freetext_profile&flow=adoption",
         ]
         actions.extend(
             f"action=answer&flow=adoption&value={value}"

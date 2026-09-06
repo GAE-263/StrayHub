@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy.exc import SQLAlchemyError
 
+from services.api.app.api.adoption_inquiries import router as adoption_inquiries_router
 from services.api.app.api.ai_observations import router as ai_observations_router
 from services.api.app.api.animal_selection import router as animal_selection_router
 from services.api.app.api.animal_timeline import router as animal_timeline_router
@@ -107,6 +108,7 @@ app.include_router(line_webhook_router)
 app.include_router(media_router)
 app.include_router(line_binding_router)
 app.include_router(growth_diary_router)
+app.include_router(adoption_inquiries_router)
 app.include_router(line_drafts_router)
 app.include_router(volunteer_access_router)
 app.include_router(medical_records_router)

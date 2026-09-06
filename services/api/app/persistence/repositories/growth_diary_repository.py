@@ -28,15 +28,38 @@ class GrowthDiaryRepository:
         photo_key: str | None,
         note: str | None,
     ) -> GrowthDiaryEntry:
+        """Opens a brand new day's entry — `photo_key` names this first
+        message's photo, if any (kept singular in this signature since every
+        call site only ever has one photo in hand at a time; see
+        append_to_entry for adding to an already-open entry)."""
         entry = GrowthDiaryEntry(
             organization_id=self.organization_id,
             inquiry_id=inquiry_id,
             animal_id=animal_id,
             adopter_user_id=adopter_user_id,
-            photo_key=photo_key,
+            photo_keys=[photo_key] if photo_key else [],
             note=note,
         )
         self.session.add(entry)
+        await self.session.flush()
+        return entry
+
+    async def append_to_entry(
+        self, entry_id: UUID, *, photo_key: str | None, note: str | None
+    ) -> GrowthDiaryEntry:
+        """Merges one more same-day message onto an already-open entry —
+        `note` is appended (paragraph-separated) rather than replacing what's
+        there, and `photo_key` (if any) is added to photo_keys rather than
+        replacing the existing list, so nothing from earlier the same day is
+        lost. See _handle_growth_diary_message for the same-day/new-day
+        decision that calls this vs add_entry."""
+        entry = await self.session.get(GrowthDiaryEntry, entry_id)
+        if entry is None:
+            raise ValueError(f"growth diary entry {entry_id} not found")
+        if note:
+            entry.note = f"{entry.note}\n\n{note}" if entry.note else note
+        if photo_key:
+            entry.photo_keys = [*entry.photo_keys, photo_key]
         await self.session.flush()
         return entry
 
@@ -102,6 +125,17 @@ async def set_pending_draft(
 ) -> GrowthDiaryDraft:
     existing = await session.get(GrowthDiaryDraft, adopter_user_id)
     if existing is not None:
+        if existing.inquiry_id != inquiry_id:
+            # Switching to a different animal — today's open thread (if any)
+            # belongs to the *previous* animal, so it must not be reused for
+            # this one. Leave it as None; the next message opens a fresh
+            # entry for the newly-picked animal (see _handle_growth_diary_
+            # message). Re-picking the *same* animal deliberately falls
+            # through without resetting these, so a repeat "新增一篇" tap for
+            # a pet already being talked to today still appends instead of
+            # forking a second entry for the same day.
+            existing.current_entry_id = None
+            existing.entry_date = None
         existing.organization_id = organization_id
         existing.inquiry_id = inquiry_id
         existing.animal_id = animal_id

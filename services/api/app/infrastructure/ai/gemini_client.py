@@ -42,6 +42,14 @@ _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 # Refresh a bit before the token's real expiry so a slow request never races
 # a token that expires mid-flight.
 _TOKEN_REFRESH_MARGIN_SECONDS = 60
+# Gemini's default sampling temperature (~1.0) occasionally hallucinates a
+# field the free text never mentioned when extracting questionnaire answers
+# (confirmed by reproducing the exact same input against the live model) —
+# a low temperature makes this strict "grounded in the text, or null"
+# classification task noticeably more conservative. Not applied to any
+# other call: the adopter-facing reply/explanation text elsewhere benefits
+# from Gemini's default variety, this one specifically doesn't want it.
+_EXTRACTION_TEMPERATURE = 0.1
 
 
 @dataclass(frozen=True)
@@ -152,15 +160,48 @@ class GeminiClient:
         )
         return self._cached_token
 
-    async def _generate_content(self, prompt: str) -> str:
+    async def _generate_content(
+        self,
+        prompt: str,
+        *,
+        image: bytes | None = None,
+        image_mime_type: str | None = None,
+        temperature: float | None = None,
+    ) -> str:
         """Returns the raw text of Gemini's one response part. Raises on any
         failure — callers are the `try/except -> None` boundary, matching
-        this module's "never raises" contract at the public-method level."""
+        this module's "never raises" contract at the public-method level.
+
+        `image`, when given, is sent as a second `parts` entry (inline
+        base64) alongside the text prompt — the same multimodal shape on
+        both AI Studio and Vertex AI, so no other branching is needed here
+        beyond the existing auth-mode split.
+
+        `temperature`, when given, overrides Gemini's default sampling
+        temperature (~1.0) — left unset for calls that want some natural-
+        language variety (a warm adopter-facing reply, an explanation), but
+        worth pinning low for a strict classification task like extracting
+        questionnaire answers from free text, where "confidently grounded in
+        the input, or null" matters far more than variety and a high default
+        temperature measurably invites the odd hallucinated field."""
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        if image is not None:
+            parts.append(
+                {
+                    "inlineData": {
+                        "mimeType": image_mime_type or "image/jpeg",
+                        "data": base64.b64encode(image).decode("ascii"),
+                    }
+                }
+            )
+        generation_config: dict[str, Any] = {"responseMimeType": "application/json"}
+        if temperature is not None:
+            generation_config["temperature"] = temperature
         body = {
             # Vertex AI (unlike AI Studio) rejects a content entry with no
             # explicit "role" — harmless to always send it either way.
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"responseMimeType": "application/json"},
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": generation_config,
         }
         if self._service_account_info is not None:
             token = await self._vertex_access_token()
@@ -263,13 +304,46 @@ class GeminiClient:
                 )
         return results[:5]
 
-    async def analyze_growth_diary_entry(self, prompt: str) -> GeminiGrowthDiaryAnalysis | None:
+    async def extract_adoption_profile(
+        self, prompt: str, *, valid_values: dict[str, set[str]]
+    ) -> dict[str, str]:
+        """Parses a free-text self-introduction into the same question-code
+        answers the one-by-one questionnaire collects (see
+        AdoptionProfileExtractionService). Any field Gemini omits, returns
+        null for, or returns a value outside `valid_values[key]` for is
+        simply absent from the result — the caller then knows to ask that
+        one directly rather than trusting a hallucinated code. Returns {}
+        (not None) on any failure, consistent with "nothing was extracted
+        this round" rather than a distinct error case the caller has to
+        handle separately."""
+        try:
+            text = await self._generate_content(prompt, temperature=_EXTRACTION_TEMPERATURE)
+            parsed = json.loads(text)
+        except Exception:
+            logger.exception("gemini_adoption_profile_extraction_failed")
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        result: dict[str, str] = {}
+        for key, allowed in valid_values.items():
+            value = parsed.get(key)
+            if isinstance(value, str) and value in allowed:
+                result[key] = value
+        return result
+
+    async def analyze_growth_diary_entry(
+        self, prompt: str, *, image: bytes | None = None, image_mime_type: str | None = None
+    ) -> GeminiGrowthDiaryAnalysis | None:
         """One call produces both outputs 毛孩日記 needs: a warm reply for the
         adopter and an objective observation summary for shelter staff, plus
         a mood classification that decides whether staff also get pushed a
-        LINE notification (`concern`) or just the written record."""
+        LINE notification (`concern`) or just the written record. `image`
+        lets this look at the shared photo itself, not just its presence —
+        see growth_diary_ai_analysis_service.py's prompt builder."""
         try:
-            text = await self._generate_content(prompt)
+            text = await self._generate_content(
+                prompt, image=image, image_mime_type=image_mime_type
+            )
             parsed = json.loads(text)
             mood = str(parsed["mood"]).strip().lower()
             adopter_reply = str(parsed["adopter_reply"])

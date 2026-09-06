@@ -557,6 +557,12 @@ summary:focus-visible {
   font-weight: 700;
   padding: 4px 9px;
 }
+/* 毛孩日記：AI 心情「需留意」、狀態「未讀」都用警示色標示，跟其他一般
+   badge 區隔開，提醒工作人員優先處理。 */
+.ui-badge-danger {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
 .ui-breadcrumb {
   color: var(--muted);
   font-size: 13px;

@@ -89,6 +89,70 @@ def verify_adoption_photo_object_key(claims: AdoptionPhotoClaims, object_key: st
         raise DomainError("adoption_photo_not_found", "照片不存在或連結已失效", 404)
 
 
+@dataclass(frozen=True)
+class GrowthDiaryPhotoClaims:
+    organization_id: UUID
+    entry_id: UUID
+    object_key: str
+
+
+def issue_growth_diary_photo_token(
+    *, organization_id: UUID, entry_id: UUID, object_key: str, ttl_seconds: int = 300
+) -> str:
+    """Short-lived capability for one 毛孩日記 photo — unlike the adoption
+    animal photo token (one fixed `current_photo_key` per animal, so only
+    its digest needs to travel), an entry can hold several photos
+    (photo_keys), so the object_key itself has to be in the token to know
+    which one to serve; it's an internal storage path, not a secret, so
+    carrying it in plaintext here is fine."""
+    payload = {
+        "purpose": "public_growth_diary_photo",
+        "organization_id": str(organization_id),
+        "entry_id": str(entry_id),
+        "object_key": object_key,
+        "expires_at": int(time.time()) + max(1, ttl_seconds),
+    }
+    encoded = _encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
+    signature = hmac.new(
+        get_settings().animal_confirmation_secret.encode(), encoded.encode(), hashlib.sha256
+    ).digest()
+    return f"{encoded}.{_encode(signature)}"
+
+
+def verify_growth_diary_photo_token(token: str, *, entry_id: UUID) -> GrowthDiaryPhotoClaims:
+    try:
+        encoded, signature = token.split(".", 1)
+        expected = hmac.new(
+            get_settings().animal_confirmation_secret.encode(), encoded.encode(), hashlib.sha256
+        ).digest()
+        payload = json.loads(_decode(encoded))
+        valid = (
+            hmac.compare_digest(_decode(signature), expected)
+            and payload.get("purpose") == "public_growth_diary_photo"
+            and payload.get("entry_id") == str(entry_id)
+            and int(payload["expires_at"]) >= int(time.time())
+        )
+        organization_id = UUID(payload["organization_id"])
+        object_key = str(payload["object_key"])
+        if not object_key:
+            valid = False
+    except (
+        AttributeError,
+        binascii.Error,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        UnicodeDecodeError,
+        ValueError,
+    ):
+        valid = False
+        organization_id = UUID(int=0)
+        object_key = ""
+    if not valid:
+        raise DomainError("growth_diary_photo_not_found", "照片不存在或連結已失效", 404)
+    return GrowthDiaryPhotoClaims(organization_id, entry_id, object_key)
+
+
 class MediaAccessService:
     def __init__(self, storage: ObjectStoragePort, organization_id: UUID) -> None:
         self.storage = storage

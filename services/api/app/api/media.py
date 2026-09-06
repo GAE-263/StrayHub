@@ -15,11 +15,13 @@ from services.api.app.application.media_access import (
     MediaAccessService,
     verify_adoption_photo_object_key,
     verify_adoption_photo_token,
+    verify_growth_diary_photo_token,
 )
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.infrastructure.storage.ports import ObjectScope
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.care_report import MediaAsset
+from services.api.app.persistence.models.growth_diary import GrowthDiaryEntry
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.media_repository import MediaRepository
 from sqlalchemy import select
@@ -79,6 +81,48 @@ async def public_adoption_animal_photo(
     return Response(
         content=content,
         media_type=media.content_type,
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get(
+    "/v1/public/growth-diary/entries/{entryId}/photo",
+    response_class=Response,
+    responses={404: {"model": ErrorResponse, "description": "照片不存在或連結已失效"}},
+    openapi_extra={"security": []},
+)
+async def public_growth_diary_entry_photo(
+    entryId: UUID,  # noqa: N803
+    token: str,
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> Response:
+    """Serve one photo from a 毛孩日記 entry without exposing private MinIO
+    (or requiring it to be publicly/HTTPS-reachable at all) — used to build
+    the photo_url in the LINE 日記回顧 carousel (see _reply_growth_diary_
+    history), since a raw MinIO signed URL fails LINE's Flex Message
+    validation whenever MinIO isn't itself served over a public https://
+    endpoint (true for local/dev setups)."""
+    claims = verify_growth_diary_photo_token(token, entry_id=entryId)
+    await set_organization_scope(session, claims.organization_id)
+    entry = await session.get(GrowthDiaryEntry, entryId)
+    if (
+        entry is None
+        or entry.organization_id != claims.organization_id
+        or claims.object_key not in entry.photo_keys
+    ):
+        raise DomainError("growth_diary_photo_not_found", "照片不存在或連結已失效", 404)
+    try:
+        content, content_type = await MinioStorageAdapter().get_with_content_type(
+            scope=ObjectScope(claims.organization_id), key=claims.object_key
+        )
+    except Exception as exc:
+        raise DomainError("growth_diary_photo_not_found", "照片不存在或連結已失效", 404) from exc
+    return Response(
+        content=content,
+        media_type=content_type,
         headers={
             "Cache-Control": "private, max-age=300",
             "X-Content-Type-Options": "nosniff",

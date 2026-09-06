@@ -11,10 +11,12 @@ from services.api.app.api.dependencies import (
     request_session,
 )
 from services.api.app.api.management_access import require_staff_or_admin
-from services.api.app.application.growth_diary_service import GrowthDiaryInboxService
+from services.api.app.application.adoption_inquiry_service import AdoptionInquiryInboxService
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter(prefix="/v1/management/growth-diary-entries", tags=["Management Growth Diary"])
+router = APIRouter(
+    prefix="/v1/management/adoption-inquiries", tags=["Management Adoption Inquiries"]
+)
 
 
 class StatusUpdateRequest(BaseModel):
@@ -22,10 +24,10 @@ class StatusUpdateRequest(BaseModel):
 
 
 @router.get("")
-async def list_growth_diary_entries(
+async def list_adoption_inquiries(
     search: str | None = Query(default=None),  # noqa: B008
-    mood: str | None = Query(default=None),  # noqa: B008
-    entry_status: str | None = Query(default=None, alias="status"),  # noqa: B008
+    path: str | None = Query(default=None),  # noqa: B008
+    inquiry_status: str | None = Query(default=None, alias="status"),  # noqa: B008
     from_date: date | None = Query(default=None),  # noqa: B008
     to_date: date | None = Query(default=None),  # noqa: B008
     page: int = Query(default=1, ge=1),  # noqa: B008
@@ -34,10 +36,10 @@ async def list_growth_diary_entries(
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
     organization_id = require_staff_or_admin(context)
-    return await GrowthDiaryInboxService(session, organization_id).list(
+    return await AdoptionInquiryInboxService(session, organization_id).list(
         search=search,
-        mood=mood,
-        entry_status=entry_status,
+        path=path,
+        inquiry_status=inquiry_status,
         from_date=from_date,
         to_date=to_date,
         page=page,
@@ -45,16 +47,16 @@ async def list_growth_diary_entries(
     )
 
 
-@router.patch("/{entry_id}/status")
-async def update_growth_diary_entry_status(
-    entry_id: UUID,
+@router.patch("/{inquiry_id}/status")
+async def update_adoption_inquiry_status(
+    inquiry_id: UUID,
     payload: StatusUpdateRequest,
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
     organization_id = require_staff_or_admin(context)
-    entry = await GrowthDiaryInboxService(session, organization_id).set_status(
-        entry_id, entry_status=payload.status
+    inquiry = await AdoptionInquiryInboxService(session, organization_id).set_status(
+        inquiry_id, inquiry_status=payload.status, actor_user_id=context.user_id
     )
     await session.commit()
-    return {"entry": entry}
+    return {"inquiry": inquiry}

@@ -36,21 +36,39 @@ class AdoptionDraftRepository:
         return result.scalar_one_or_none()
 
     async def get_by_token(self, token: str) -> AdoptionDraft | None:
+        # FOR UPDATE: this is the fetch every mutating flow (the postback/text
+        # dispatch in LineAdoptionConversationService.handle, and the free-
+        # text-extraction background task's apply_freetext_answers) starts
+        # from — without a row lock, two overlapping writes to the same
+        # draft (e.g. an adopter firing off two free-text messages seconds
+        # apart, each spawning its own background extraction task) can both
+        # read the same pre-write snapshot and race, with whichever commits
+        # last silently discarding the other's answers/state. Locking here
+        # serializes any two writers on the same draft row; a plain read
+        # (e.g. re-fetching "updated" just to render a reply) waits at most
+        # as long as the other request's single transaction, which is fine
+        # at this one-active-draft-per-adopter, one-request-at-a-time scale.
         result = await self.session.execute(
-            select(AdoptionDraft).where(
+            select(AdoptionDraft)
+            .where(
                 AdoptionDraft.opaque_token_digest == adoption_draft_token_digest(token),
                 AdoptionDraft.organization_id == self.organization_id,
             )
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 
     async def get_active_for_adopter(self, adopter_user_id: UUID) -> AdoptionDraft | None:
-        """Not scoped by organization_id — safe to call before a shelter is chosen."""
+        """Not scoped by organization_id — safe to call before a shelter is
+        chosen. FOR UPDATE for the same reason as get_by_token above — see
+        its comment."""
         result = await self.session.execute(
-            select(AdoptionDraft).where(
+            select(AdoptionDraft)
+            .where(
                 AdoptionDraft.adopter_user_id == adopter_user_id,
                 AdoptionDraft.status == "active",
             )
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 

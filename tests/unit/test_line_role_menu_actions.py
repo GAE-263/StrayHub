@@ -31,6 +31,8 @@ WEBHOOK_HANDLED_ACTIONS = {
     "start_binding",
     "start_volunteer_application",
     "start_adoption_matching",
+    "open_adoption_hub",
+    "start_growth_diary",
     "walk_report",
     BACK_TO_DEFAULT_MENU_ACTION,
     *STAFF_MENU_ACTIONS,
@@ -262,7 +264,10 @@ def test_every_configured_menu_action_has_a_handler(path: Path) -> None:
 
 
 def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
-    """一進來就分成志工／領養兩條路；綁定不是獨立按鈕（報名時會隱含建立）。"""
+    """一進來就分成志工／領養兩條路；綁定不是獨立按鈕（報名時會隱含建立）。
+
+    「領養流程」只是入口，不直接進領養對話——見
+    test_adoption_hub_menu_offers_matching_and_growth_diary_entries。"""
     import yaml
 
     document = yaml.safe_load(
@@ -272,7 +277,22 @@ def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
 
     assert actions == [
         "start_volunteer_application",
+        "open_adoption_hub",
+    ]
+
+
+def test_adoption_hub_menu_offers_matching_and_growth_diary_entries() -> None:
+    """預設選單的「領養流程」切到這張兩格選單——見 open_adoption_hub postback。"""
+    import yaml
+
+    document = yaml.safe_load(
+        Path("infra/local/line-rich-menu-adoption-hub.yaml").read_text(encoding="utf-8")
+    )
+    actions = [item["data"].split("action=", 1)[1] for item in document["actions"]]
+
+    assert actions == [
         "start_adoption_matching&flow=adoption",
+        "start_growth_diary&flow=growth_diary",
     ]
 
 

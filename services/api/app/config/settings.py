@@ -89,6 +89,15 @@ class Settings(BaseSettings):
     line_rich_menu_volunteer_id: str = ""
     line_rich_menu_adopter_id: str = ""
     line_rich_menu_staff_id: str = ""
+    # Adoption-flow sub-menus — separate from the role-based set above (an
+    # adopter mid-flow isn't a "role"). Same additive/no-op-when-empty
+    # contract: see _sync_adoption_rich_menu in line_webhook.py.
+    line_rich_menu_region_select_id: str = ""
+    line_rich_menu_path_select_id: str = ""
+    # 「領養流程」在預設選單上只是入口——點下去先切到這張兩格選單（領養媒合／
+    # 毛孩日記），不直接進領養對話。同樣是 additive/no-op-when-empty；見
+    # line_webhook.py 的 "open_adoption_hub" postback。
+    line_rich_menu_adoption_hub_id: str = ""
     # New role-menu/adoption behavior is always available to local/test runtimes, but is
     # fail-closed in every non-local runtime until the release contract is explicitly satisfied.
     line_role_menu_features_enabled: bool = False
