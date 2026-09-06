@@ -34,6 +34,9 @@ type Observation = {
   id: string;
   source_type: string;
   source_id: string | null;
+  animal_name: string | null;
+  shelter_number: string | null;
+  report_submitted_at: string | null;
   status: string;
   failure_reason: string | null;
   raw_ai_output: unknown;
@@ -66,6 +69,8 @@ export default function AiReviewPage() {
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(
     null,
   );
+  const [viewingObservation, setViewingObservation] =
+    useState<Observation | null>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const load = () => {
@@ -178,10 +183,9 @@ export default function AiReviewPage() {
             <Table>
               <TableHeader>
                 <tr>
-                  <TableHead>來源</TableHead>
+                  <TableHead>動物・回報</TableHead>
                   <TableHead>狀態</TableHead>
                   <TableHead>失敗原因</TableHead>
-                  <TableHead>原始資料</TableHead>
                   <TableHead>操作</TableHead>
                 </tr>
               </TableHeader>
@@ -189,9 +193,24 @@ export default function AiReviewPage() {
                 {items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      {item.source_type === "care_report_summary"
-                        ? "照護回報摘要"
-                        : item.source_type}{" "}
+                      {item.animal_name ? (
+                        <p>
+                          <strong>{item.animal_name}</strong>
+                          {item.shelter_number ? ` (${item.shelter_number})` : ""}
+                          <br />
+                          {item.report_submitted_at
+                            ? new Date(
+                                item.report_submitted_at,
+                              ).toLocaleString("zh-TW")
+                            : "—"}
+                        </p>
+                      ) : (
+                        <p>
+                          {item.source_type === "care_report_summary"
+                            ? "照護回報摘要"
+                            : item.source_type}
+                        </p>
+                      )}
                       {item.source_id ? (
                         <Link
                           className="text-link"
@@ -199,46 +218,20 @@ export default function AiReviewPage() {
                         >
                           查看來源
                         </Link>
-                      ) : (
-                        "—"
-                      )}
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Badge>{statusLabels[item.status] ?? item.status}</Badge>
                     </TableCell>
                     <TableCell>{item.failure_reason ?? "—"}</TableCell>
                     <TableCell>
-                      {item.source_type === "care_report_summary" ? (
-                        <p>
-                          {typeof (
-                            item.validated_ai_observation as {
-                              summary?: unknown;
-                            }
-                          )?.summary === "string"
-                            ? (
-                                item.validated_ai_observation as {
-                                  summary: string;
-                                }
-                              ).summary
-                            : "摘要尚未完成，請查看來源回報。"}
-                        </p>
-                      ) : (
-                        <details>
-                          <summary>查看</summary>
-                          <pre className="json-view">
-                            {JSON.stringify(
-                              {
-                                raw: item.raw_ai_output,
-                                validated: item.validated_ai_observation,
-                              },
-                              null,
-                              2,
-                            )}
-                          </pre>
-                        </details>
-                      )}
-                    </TableCell>
-                    <TableCell>
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        onClick={() => setViewingObservation(item)}
+                      >
+                        查看原始資料
+                      </Button>{" "}
                       <Button
                         variant="secondary"
                         type="button"
@@ -321,6 +314,37 @@ export default function AiReviewPage() {
                 : "確認覆核"}
           </Button>
         </div>
+      </Dialog>
+      <Dialog
+        open={viewingObservation !== null}
+        title="AI 原始資料"
+        onClose={() => setViewingObservation(null)}
+      >
+        {viewingObservation?.source_type === "care_report_summary" ? (
+          <p>
+            {typeof (
+              viewingObservation.validated_ai_observation as {
+                summary?: unknown;
+              }
+            )?.summary === "string"
+              ? (
+                  viewingObservation.validated_ai_observation as {
+                    summary: string;
+                  }
+                ).summary
+              : "摘要尚未完成，請查看來源回報。"}
+          </p>
+        ) : null}
+        <pre className="json-view">
+          {JSON.stringify(
+            {
+              raw: viewingObservation?.raw_ai_output,
+              validated: viewingObservation?.validated_ai_observation,
+            },
+            null,
+            2,
+          )}
+        </pre>
       </Dialog>
     </section>
   );
