@@ -801,6 +801,67 @@ def _adoption_cancel_item() -> dict:
     return _postback("取消", urlencode({"action": "cancel", "flow": "adoption"}))
 
 
+async def _reply_adoption_animal_page(
+    session, line, event, *, draft, public_base_url, page=1, query=""
+):
+    if draft.current_step != AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
+        raise DomainError("invalid_browse_step", "請先回到心有所屬的動物清單再搜尋或翻頁。", 409)
+    if draft.expires_at <= datetime.now(timezone.utc):
+        raise DomainError("draft_expired", "對話已過期，請重新點選領養媒合。", 409)
+    query = query.strip()
+    if len(query) > 20:
+        raise DomainError("invalid_search", "請輸入 20 字以內的名字或收容編號。", 422)
+    await set_organization_scope(session, draft.organization_id)
+    animals, total = await AnimalRepository(session, draft.organization_id).list_adoptable_page(
+        page=page, query=query
+    )
+    pages = max(1, (total + 11) // 12)
+    page = max(1, min(page, pages))
+    items = []
+    for label, target in (("上一頁", page - 1), ("下一頁", page + 1)):
+        if 1 <= target <= pages:
+            items.append(
+                _postback(
+                    label,
+                    urlencode(
+                        {
+                            "action": "browse_animals",
+                            "flow": "adoption",
+                            "page": target,
+                            "query": query,
+                        }
+                    ),
+                )
+            )
+    if query:
+        items.append(_postback("返回全部清單", "action=browse_animals&flow=adoption&page=1"))
+    items.extend([_postback("返回領養方式", "action=back&flow=adoption"), _adoption_cancel_item()])
+    description = f"共 {total} 隻，第 {page}／{pages} 頁。可輸入名字或收容編號搜尋（最多 20 字）。"
+    if not animals:
+        description = (
+            "找不到符合的動物，請檢查名字或收容編號，或返回全部清單。"
+            if query
+            else "目前沒有可領養的動物，可返回選擇其他收容所。"
+        )
+    messages = [_text(description)]
+    if animals:
+        cards = [
+            MatchReportCard(
+                animal_id=str(animal.id),
+                name=animal.name,
+                shelter_number=animal.shelter_number,
+                photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
+                selectable=True,
+                select_action="select_target_animal",
+                select_label="選這隻",
+            )
+            for animal in animals
+        ]
+        messages.append(build_target_animal_picker(cards))
+    messages[-1]["quickReply"] = {"items": items}
+    await _reply(line, event, messages)
+
+
 async def _adoption_reply_for_state(
     session, line, event: dict, *, draft, public_base_url: str | None
 ) -> None:
@@ -855,23 +916,10 @@ async def _adoption_reply_for_state(
             ],
         )
     elif state == AdoptionDraftState.SELECTING_TARGET_ANIMAL:
-        animals = await AnimalRepository(session, draft.organization_id).list_adoptable()
-        cards = [
-            MatchReportCard(
-                animal_id=str(animal.id),
-                name=animal.name,
-                shelter_number=animal.shelter_number,
-                photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
-                selectable=True,
-                select_action="select_target_animal",
-                select_label="選這隻",
-            )
-            for animal in animals[:12]
-        ]
-        if not cards:
-            await _reply(line, event, [_text("目前沒有可領養的動物，請聯繫工作人員協助。")])
-            return
-        card = build_target_animal_picker(cards)
+        await _reply_adoption_animal_page(
+            session, line, event, draft=draft, public_base_url=public_base_url
+        )
+        return
     elif state == AdoptionDraftState.CONFIRMING_TARGET_ANIMAL:
         animal = await AnimalRepository(session, draft.organization_id).get(draft.target_animal_id)
         if animal is None:
@@ -1822,6 +1870,24 @@ async def _handle_adoption_postback(
     value = values.get("value", [None])[0]
     adopter_user_id = draft.adopter_user_id
 
+    if action == "browse_animals":
+        try:
+            page = int(values.get("page", ["1"])[0])
+        except ValueError as exc:
+            raise DomainError("invalid_page", "請使用清單上的翻頁按鈕。", 422) from exc
+        if not 1 <= page <= 10000:
+            raise DomainError("invalid_page", "請使用清單上的翻頁按鈕。", 422)
+        await _reply_adoption_animal_page(
+            session,
+            line,
+            event,
+            draft=draft,
+            public_base_url=public_base_url,
+            page=page,
+            query=values.get("query", [""])[0],
+        )
+        return
+
     if action == "select_region":
         if not value:
             raise DomainError("region_required", "需要選擇地區", 422)
@@ -1998,15 +2064,10 @@ async def _handle_adoption_text(
     if draft.current_step in CONTACT_EDIT_STATES:
         action, value = "save_contact", text.strip()
     elif draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
-        matches = [
-            animal
-            for animal in await AnimalRepository(session, draft.organization_id).search(text)
-            if animal.is_adoptable
-        ]
-        if len(matches) != 1:
-            await _reply(line, event, [_text("請輸入唯一的收容編號／名稱，或由清單選擇毛孩。")])
-            return
-        action, value = "select_target_animal", str(matches[0].id)
+        await _reply_adoption_animal_page(
+            session, line, event, draft=draft, public_base_url=public_base_url, query=text
+        )
+        return
     elif draft.current_step in {
         AdoptionDraftState.AWAITING_ADOPTER_NAME.value,
         AdoptionDraftState.AWAITING_CONTACT_TIME.value,

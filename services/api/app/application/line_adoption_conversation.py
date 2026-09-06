@@ -118,6 +118,13 @@ class LineAdoptionConversationService:
             draft.target_animal_id = animal_id
             machine.advance()
         elif action == "confirm_target_animal":
+            animal = await AnimalRepository(session, draft.organization_id).get(
+                draft.target_animal_id
+            )
+            if animal is None or not animal.is_adoptable or animal.status != "active":
+                raise DomainError(
+                    "animal_not_adoptable", "這隻動物目前無法領養，請按重新選擇。", 409
+                )
             machine.advance()
         elif action == "confirm_answers":
             machine.advance()

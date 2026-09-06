@@ -496,3 +496,78 @@ def test_switching_flow_preserves_adoption_and_routes_volunteer_note(monkeypatch
         asyncio.run(inspect_and_cleanup(cleanup=True))
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()
+
+
+def test_adoption_browse_paginates_searches_and_revalidates_selection(monkeypatch):
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-adoption-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id, other_org, other_animal = uuid4(), uuid4(), uuid4(), uuid4()
+    line_user_id = f"Ubrowse{uuid4().hex}"
+    extra_ids = [uuid4() for _ in range(13)]
+    asyncio.run(_seed(organization_id, animal_id))
+    asyncio.run(_seed(other_org, other_animal))
+
+    async def add_animals():
+        connection = await asyncpg.connect(_database_url())
+        try:
+            for i, aid in enumerate(extra_ids):
+                await connection.execute(
+                    """INSERT INTO animals
+                    (id,organization_id,name,shelter_number,status,is_adoptable,created_at,updated_at)
+                    VALUES ($1,$2,$3,$4,'active',true,now(),now())""",
+                    aid,
+                    organization_id,
+                    f"測試犬{i:02}",
+                    f"B{i:03}",
+                )
+        finally:
+            await connection.close()
+
+    client = TestClient(app)
+    transport = line_webhook.LineMessagingApiAdapter.reply
+
+    def send(data=None, text=None):
+        event = _event(line_user_id, data) if data else _text_event(line_user_id, text)
+        event["replyToken"] = "test-reply"
+        result = _post(client, [event]).json()["event_results"][0]
+        assert result["status"] == "processed", result
+        return transport.call_args.kwargs["messages"]
+
+    try:
+        asyncio.run(add_animals())
+        send("action=start_adoption_matching&flow=adoption")
+        send(f"action=select_organization&flow=adoption&value={organization_id}")
+        messages = send("action=choose_path&flow=adoption&value=specific_animal")
+        assert "共 14 隻" in messages[0]["text"]
+        assert len(messages[1]["contents"]["contents"]) == 12
+        assert str(other_animal) not in json.dumps(messages)
+        messages = send(text="測試犬")
+        assert "共 13 隻" in messages[0]["text"]
+        messages = send("action=browse_animals&flow=adoption&page=2&query=測試犬")
+        assert "第 2／2 頁" in messages[0]["text"]
+        assert str(extra_ids[-1]) in json.dumps(messages)
+        messages = send(text="%")
+        assert "找不到" in messages[0]["text"]
+        assert "返回全部清單" in json.dumps(messages, ensure_ascii=False)
+        messages = send(text="B012")
+        assert "共 1 隻" in messages[0]["text"]
+        send(f"action=select_target_animal&flow=adoption&value={extra_ids[-1]}")
+
+        async def deactivate():
+            connection = await asyncpg.connect(_database_url())
+            try:
+                await connection.execute(
+                    "UPDATE animals SET is_adoptable=false WHERE id=$1", extra_ids[-1]
+                )
+            finally:
+                await connection.close()
+
+        asyncio.run(deactivate())
+        result = _post(
+            client, [_event(line_user_id, "action=confirm_target_animal&flow=adoption")]
+        ).json()["event_results"][0]
+        assert result["reason"] == "animal_not_adoptable"
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        asyncio.run(_cleanup(other_org, ()))
+        get_settings.cache_clear()
