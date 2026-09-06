@@ -95,7 +95,7 @@ from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
 from services.api.app.config.settings import get_settings
-from services.api.app.domain.line_adoption_state import AdoptionDraftState
+from services.api.app.domain.line_adoption_state import CONTACT_EDIT_STATES, AdoptionDraftState
 from services.api.app.domain.line_care_report_state import (
     REQUIRED_ANSWER_KEYS,
     UNOBSERVED,
@@ -1047,6 +1047,28 @@ async def _adoption_reply_for_state(
         )
     elif state == AdoptionDraftState.AWAITING_PHONE_NUMBER:
         card = build_info_card("請留下手機號碼 📞", accent_index=1, body="例如 0912345678")
+    elif state in CONTACT_EDIT_STATES:
+        key = CONTACT_EDIT_STATES[state]
+        label = {"adopter_name": "姓名", "contact_time": "聯絡時間", "phone_number": "電話"}[key]
+        hint = (
+            "請輸入 10 碼手機號碼，例如 0912345678"
+            if key == "phone_number"
+            else "請直接輸入修改後的內容"
+        )
+        card = build_info_card(
+            f"修改{label}",
+            accent_index=1,
+            body=f"目前內容：{draft.answers.get(key, '')}\n{hint}",
+            actions=[
+                (
+                    "↩️",
+                    "返回摘要",
+                    _action(
+                        "返回摘要", urlencode({"action": "cancel_contact_edit", "flow": "adoption"})
+                    ),
+                )
+            ],
+        )
     elif state == AdoptionDraftState.REVIEWING:
         card = build_info_card(
             "領養意願摘要 📋",
@@ -1062,7 +1084,21 @@ async def _adoption_reply_for_state(
                     "送出",
                     _action("送出", urlencode({"action": "submit", "flow": "adoption"})),
                 ),
-                ("✏️", "修改", _action("修改", urlencode({"action": "back", "flow": "adoption"}))),
+                *[
+                    (
+                        "✏️",
+                        label,
+                        _action(
+                            label,
+                            urlencode({"action": "edit_contact", "flow": "adoption", "value": key}),
+                        ),
+                    )
+                    for key, label in (
+                        ("adopter_name", "修改姓名"),
+                        ("contact_time", "修改聯絡時間"),
+                        ("phone_number", "修改電話"),
+                    )
+                ],
             ],
         )
     else:
@@ -1959,7 +1995,9 @@ async def _handle_adoption_text(
             line, event, [_text("AI 適配度分析還在進行中，完成後會馬上通知你，請稍等一下下 🤖")]
         )
         return
-    if draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
+    if draft.current_step in CONTACT_EDIT_STATES:
+        action, value = "save_contact", text.strip()
+    elif draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
         matches = [
             animal
             for animal in await AnimalRepository(session, draft.organization_id).search(text)

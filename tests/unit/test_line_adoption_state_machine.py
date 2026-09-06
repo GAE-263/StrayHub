@@ -273,3 +273,36 @@ def test_submit_without_completing_required_answers_is_rejected() -> None:
 
     with pytest.raises(DomainError, match="領養問卷"):
         machine.transition(AdoptionDraftState.REVIEWING)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [("adopter_name", "陳小明"), ("contact_time", "假日下午"), ("phone_number", "0987654321")],
+)
+def test_contact_edit_preserves_other_answers_and_returns_to_review(key, value):
+    machine = AdoptionDraftStateMachine(state=AdoptionDraftState.REVIEWING)
+    machine.answers.values = {
+        "adopter_name": "王小明",
+        "contact_time": "平日白天",
+        "phone_number": "0912345678",
+        "housing_type": "house",
+    }
+    before = dict(machine.answers.values)
+    machine.edit_contact(key)
+    machine.save_contact(value)
+    assert machine.state == AdoptionDraftState.REVIEWING
+    assert machine.answers.values == {**before, key: value}
+
+
+def test_invalid_contact_edit_preserves_previous_phone_and_can_cancel():
+    machine = AdoptionDraftStateMachine(state=AdoptionDraftState.REVIEWING)
+    machine.answers.values = {"phone_number": "0912345678"}
+    machine.edit_contact("phone_number")
+    with pytest.raises(DomainError):
+        machine.save_contact("123")
+    assert machine.answers.values["phone_number"] == "0912345678"
+    assert machine.state == AdoptionDraftState.EDITING_PHONE_NUMBER
+    machine.cancel_contact_edit()
+    assert machine.state == AdoptionDraftState.REVIEWING
+    with pytest.raises(DomainError):
+        machine.save_contact("0987654321")

@@ -289,6 +289,46 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
         for value in ("王小明", "平日白天", "0911222333"):
             result = _post(client, [_text_event(line_user_id, value)]).json()["event_results"][0]
             assert result["status"] == "processed", result
+        for key, value in (
+            ("adopter_name", "陳小明"),
+            ("contact_time", "假日下午"),
+            ("phone_number", "0987654321"),
+        ):
+            result = _post(
+                client, [_event(line_user_id, f"action=edit_contact&flow=adoption&value={key}")]
+            ).json()["event_results"][0]
+            assert result["status"] == "processed", result
+            # Re-entering the flow resumes the edit, without repeating AI.
+            assert (
+                _post(
+                    client, [_event(line_user_id, "action=start_adoption_matching&flow=adoption")]
+                ).json()["event_results"][0]["status"]
+                == "processed"
+            )
+            if key == "phone_number":
+                invalid = _post(client, [_text_event(line_user_id, "123")]).json()["event_results"][
+                    0
+                ]
+                assert invalid["reason"] == "invalid_phone_number"
+            assert (
+                _post(client, [_text_event(line_user_id, value)]).json()["event_results"][0][
+                    "status"
+                ]
+                == "processed"
+            )
+        assert (
+            _post(
+                client,
+                [_event(line_user_id, "action=edit_contact&flow=adoption&value=adopter_name")],
+            ).json()["event_results"][0]["status"]
+            == "processed"
+        )
+        assert (
+            _post(
+                client, [_event(line_user_id, "action=cancel_contact_edit&flow=adoption")]
+            ).json()["event_results"][0]["status"]
+            == "processed"
+        )
         result = _post(client, [_event(line_user_id, "action=submit&flow=adoption")]).json()[
             "event_results"
         ][0]
@@ -302,7 +342,9 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
                     organization_id,
                 )
                 assert inquiry["target_animal_id"] == animal_id
-                assert inquiry["adopter_name"] == "王小明"
+                assert inquiry["adopter_name"] == "陳小明"
+                assert inquiry["phone_number"] == "0987654321"
+                assert json.loads(inquiry["answers"])["contact_time"] == "假日下午"
                 assert inquiry["status"] == "new"
             finally:
                 await connection.close()

@@ -89,7 +89,13 @@ class LineAdoptionConversationService:
         inquiry_id: UUID | None = None
         session = self.draft_repository.session
 
-        if action == "select_organization":
+        if action == "edit_contact":
+            machine.edit_contact(value or "")
+        elif action == "save_contact":
+            machine.save_contact(value or "")
+        elif action == "cancel_contact_edit":
+            machine.cancel_contact_edit()
+        elif action == "select_organization":
             organization_id = _require_uuid(value, "organization_id_required", "需要選擇收容所")
             if draft.organization_id is not None:
                 raise DomainError("organization_already_selected", "已經選擇過收容所", 409)

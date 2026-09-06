@@ -51,6 +51,9 @@ class AdoptionDraftState(StrEnum):
     AWAITING_ADOPTER_NAME = "awaiting_adopter_name"
     AWAITING_CONTACT_TIME = "awaiting_contact_time"
     AWAITING_PHONE_NUMBER = "awaiting_phone_number"
+    EDITING_ADOPTER_NAME = "editing_adopter_name"
+    EDITING_CONTACT_TIME = "editing_contact_time"
+    EDITING_PHONE_NUMBER = "editing_phone_number"
     REVIEWING = "reviewing"
     SUBMITTING = "submitting"
     SUBMITTED = "submitted"
@@ -60,6 +63,12 @@ class AdoptionDraftState(StrEnum):
 
 _S = AdoptionDraftState
 _P = AdoptionPath
+
+CONTACT_EDIT_STATES = {
+    _S.EDITING_ADOPTER_NAME: "adopter_name",
+    _S.EDITING_CONTACT_TIME: "contact_time",
+    _S.EDITING_PHONE_NUMBER: "phone_number",
+}
 
 BASE_PREFERENCE_KEYS = (
     "housing_type",
@@ -246,7 +255,7 @@ def _resolve(
 
 def _validate_phone_number(value: Any) -> None:
     if not isinstance(value, str) or not PHONE_NUMBER_PATTERN.match(value):
-        raise DomainError("invalid_phone_number", "手機號碼格式無效，請輸入台灣手機號碼", 422)
+        raise DomainError("invalid_phone_number", "請輸入 10 碼台灣手機號碼，例如 0912345678", 422)
 
 
 @dataclass
@@ -406,6 +415,27 @@ class AdoptionDraftStateMachine:
         self.state = previous
         self.last_interaction_at = datetime.now(timezone.utc)
         return self.state
+
+    def edit_contact(self, key: str) -> None:
+        if self.state != _S.REVIEWING or key not in CONTACT_EDIT_STATES.values():
+            raise DomainError("invalid_contact_edit", "請從領養意願摘要選擇要修改的聯絡資料", 409)
+        self.state = next(state for state, field in CONTACT_EDIT_STATES.items() if field == key)
+
+    def save_contact(self, value: str) -> None:
+        key = CONTACT_EDIT_STATES.get(self.state)
+        if key is None:
+            raise DomainError("invalid_contact_edit", "目前沒有正在修改的聯絡資料", 409)
+        clean = value.strip()
+        if not clean or len(clean) > 100:
+            raise DomainError("invalid_contact_value", "請輸入 1 至 100 字的聯絡資料", 422)
+        self.answers.set(key, clean)
+        self.state = _S.REVIEWING
+        self.last_interaction_at = datetime.now(timezone.utc)
+
+    def cancel_contact_edit(self) -> None:
+        if self.state not in CONTACT_EDIT_STATES:
+            raise DomainError("invalid_contact_edit", "目前沒有正在修改的聯絡資料", 409)
+        self.state = _S.REVIEWING
 
     def submit(self) -> AdoptionInquiryAnswers:
         if self.state != AdoptionDraftState.SUBMITTING:
