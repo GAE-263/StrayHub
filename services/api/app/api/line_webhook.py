@@ -3055,6 +3055,13 @@ async def _handle_postback(
             draft_repository,
             ttl_seconds=get_settings().draft_ttl_seconds,
         ).cancel_handoff_switch(volunteer_user_id=user_id)
+        await _selection_service(session, organization_id).confirm(
+            animal_id=draft.animal_id, user_id=user_id,
+            organization_id=organization_id, membership_id=membership_id, role="VOLUNTEER",
+        )
+        draft = await LineDraftService(draft_repository).resume(
+            draft.id, volunteer_user_id=user_id
+        )
         animal = await AnimalRepository(session, organization_id).get(draft.animal_id)
         await _reply_next_step(
             session,
@@ -3076,6 +3083,13 @@ async def _handle_postback(
         if draft is None:
             await _reply(line, event, [_text("目前沒有可繼續的回報。")])
             return None
+        await _selection_service(session, organization_id).confirm(
+            animal_id=draft.animal_id, user_id=user_id,
+            organization_id=organization_id, membership_id=membership_id, role="VOLUNTEER",
+        )
+        draft = await LineDraftService(
+            CareReportDraftRepository(session, organization_id)
+        ).resume(draft.id, volunteer_user_id=user_id)
         await _reply_next_step(
             session,
             line,

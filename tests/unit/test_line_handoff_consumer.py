@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -24,20 +26,29 @@ async def test_resume_before_questions_sends_actionable_card_with_notice(monkeyp
         volunteer_user_id=user_id,
         membership_id=membership_id,
         modification_summary={},
+        id=uuid4(),
+        status="active",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        answers={"walk_completion": "walk_completion.completed"},
+        reconfirmation_keys=[],
     )
-    repository = SimpleNamespace(get_active_for_volunteer=AsyncMock(return_value=draft))
+    repository = SimpleNamespace(
+        get_active_for_volunteer=AsyncMock(return_value=draft), get=AsyncMock(return_value=draft)
+    )
     monkeypatch.setattr(line_webhook, "CareReportDraftRepository", lambda *_: repository)
     candidate = SimpleNamespace(animal=SimpleNamespace(id=animal_id))
     selection = SimpleNamespace(confirm=AsyncMock(return_value=candidate))
     monkeypatch.setattr(line_webhook, "_selection_service", lambda *_: selection)
-    confirmation = line_webhook.prompt_bubble(
-        title="是柴福福嗎？",
-        caption="散步回報",
-        body_text="請確認動物",
-        choices=[("確認是這隻", f"action=confirm_animal&animal_id={animal_id}", "✅")],
+    from services.api.app.application.effective_observation_service import EffectiveOption
+
+    monkeypatch.setattr(
+        line_webhook,
+        "_answer_options",
+        AsyncMock(return_value=[EffectiveOption("activity.normal", "精神正常")]),
     )
-    build = AsyncMock(return_value=confirmation)
-    monkeypatch.setattr(line_webhook, "_walk_confirmation_bubble", build)
+    monkeypatch.setattr(
+        line_webhook, "_category_titles", AsyncMock(return_value={"activity": "精神體力"})
+    )
     reply = AsyncMock()
     monkeypatch.setattr(line_webhook, "_reply", reply)
     event = {"postback": {"data": "action=resume_draft"}}
@@ -57,16 +68,17 @@ async def test_resume_before_questions_sends_actionable_card_with_notice(monkeyp
     assert len(messages) == 2
     assert messages[0]["type"] == "text"
     assert messages[1]["type"] == "flex"
-    if state == DraftState.CONFIRMING_ANIMAL:
-        assert messages[1] == confirmation
-        selection.confirm.assert_awaited_once_with(
-            animal_id=animal_id,
-            user_id=user_id,
-            organization_id=organization_id,
-            membership_id=membership_id,
-            role="VOLUNTEER",
-        )
-        assert build.call_args.kwargs["public_base_url"] == "https://example.test"
+    assert draft.current_step == DraftState.ANSWERING_ACTIVITY.value
+    assert draft.answers == {"walk_completion": "walk_completion.completed"}
+    assert "精神體力" in json.dumps(messages, ensure_ascii=False)
+    assert "要幫哪隻" not in json.dumps(messages, ensure_ascii=False)
+    selection.confirm.assert_awaited_once_with(
+        animal_id=animal_id,
+        user_id=user_id,
+        organization_id=organization_id,
+        membership_id=membership_id,
+        role="VOLUNTEER",
+    )
 
 
 class _Savepoint:
