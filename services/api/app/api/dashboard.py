@@ -18,8 +18,5 @@ async def dashboard_summary(
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:
-    organization_id = require_staff_or_admin(context)
-    return await DashboardService(session).summary(
-        organization_id=organization_id,
-        role=context.role,
-    )
+    require_staff_or_admin(context)
+    return await DashboardService(session).summary(context=context)

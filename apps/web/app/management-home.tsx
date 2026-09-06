@@ -35,6 +35,24 @@ type Dashboard = {
     status: string;
     ai_job_status: string;
   }>;
+  recent_anomalies: Array<{
+    animal_id: string;
+    animal_name: string;
+    animal_shelter_number: string | null;
+    report_id: string;
+    attention_level: string;
+    submitted_at: string;
+  }>;
+  today_special_care: Array<{
+    occurrence_id: string;
+    animal_id: string;
+    animal_name: string;
+    shelter_number: string | null;
+    reminder_type: string;
+    title: string;
+    scheduled_at: string;
+    status: string;
+  }>;
 };
 
 const metrics = [
@@ -68,6 +86,20 @@ function reportStatusLabel(value: string) {
 function aiJobStatusLabel(value: string) {
   return AI_JOB_STATUS_LABELS[value] ?? statusLabel(value);
 }
+
+const ATTENTION_LEVEL_LABELS: Record<string, string> = {
+  urgent: "緊急",
+  review: "需複核",
+};
+
+const REMINDER_TYPE_LABELS: Record<string, string> = {
+  medication: "吃藥",
+  follow_up: "回診",
+  weight: "量體重",
+  vaccination: "疫苗",
+  examination: "檢查",
+  other: "其他",
+};
 
 export default function ManagementHome() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -190,6 +222,111 @@ export default function ManagementHome() {
                           </div>
                           <span className="recent-report-time muted">
                             {new Date(report.submitted_at).toLocaleString(
+                              "zh-TW",
+                            )}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+            <Card
+              className="ui-card-padded"
+              aria-labelledby="recent-anomalies-title"
+            >
+              <div className="panel-heading">
+                <h2 id="recent-anomalies-title">2 週內異常動物</h2>
+                <Link className="text-link" href="/reports">
+                  開啟回報收件匣 →
+                </Link>
+              </div>
+              {dashboard.recent_anomalies.length === 0 ? (
+                <EmptyState title="近 2 週沒有異常回報" />
+              ) : (
+                <div className="recent-reports-table">
+                  <div className="recent-report-row recent-report-header">
+                    <span>動物</span>
+                    <span>異常等級</span>
+                    <span>回報時間</span>
+                  </div>
+                  <ul className="recent-reports-list">
+                    {dashboard.recent_anomalies.map((anomaly) => (
+                      <li key={anomaly.report_id}>
+                        <Link
+                          className="recent-report-row"
+                          href={`/animals/${anomaly.animal_id}`}
+                        >
+                          <div className="recent-report-animal">
+                            <strong>{anomaly.animal_name}</strong>
+                            {anomaly.animal_shelter_number ? (
+                              <span className="recent-report-shelter-no">
+                                {anomaly.animal_shelter_number}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="recent-report-badges">
+                            <Badge>
+                              {ATTENTION_LEVEL_LABELS[anomaly.attention_level] ??
+                                anomaly.attention_level}
+                            </Badge>
+                          </div>
+                          <span className="recent-report-time muted">
+                            {new Date(anomaly.submitted_at).toLocaleString(
+                              "zh-TW",
+                            )}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+            <Card
+              className="ui-card-padded"
+              aria-labelledby="today-special-care-title"
+            >
+              <div className="panel-heading">
+                <h2 id="today-special-care-title">今日特別照護</h2>
+                <Link className="text-link" href="/care-calendar">
+                  開啟照護行事曆 →
+                </Link>
+              </div>
+              {dashboard.today_special_care.length === 0 ? (
+                <EmptyState title="今日沒有待處理的特別照護" />
+              ) : (
+                <div className="recent-reports-table">
+                  <div className="recent-report-row recent-report-header">
+                    <span>動物</span>
+                    <span>項目</span>
+                    <span>時間</span>
+                  </div>
+                  <ul className="recent-reports-list">
+                    {dashboard.today_special_care.map((item) => (
+                      <li key={item.occurrence_id}>
+                        <Link
+                          className="recent-report-row"
+                          href={`/animals/${item.animal_id}`}
+                        >
+                          <div className="recent-report-animal">
+                            <strong>{item.animal_name}</strong>
+                            {item.shelter_number ? (
+                              <span className="recent-report-shelter-no">
+                                {item.shelter_number}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="recent-report-badges">
+                            <Badge>
+                              {REMINDER_TYPE_LABELS[item.reminder_type] ??
+                                "其他"}
+                            </Badge>
+                            <span>{item.title}</span>
+                          </div>
+                          <span className="recent-report-time muted">
+                            {new Date(item.scheduled_at).toLocaleString(
                               "zh-TW",
                             )}
                           </span>
