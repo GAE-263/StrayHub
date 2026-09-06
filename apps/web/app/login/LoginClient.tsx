@@ -177,25 +177,6 @@ export default function LoginClient() {
             onChange={(event) => setUsername(event.target.value)}
             required
           />
-          {pendingLogin && organizations.length > 1 ? (
-            <>
-              <Label htmlFor="organization">目前收容所</Label>
-              <Select
-                id="organization"
-                value={selectedOrganizationId || organizations[0]?.id}
-                onChange={(event) =>
-                  setSelectedOrganizationId(event.target.value)
-                }
-                required
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}（{organization.code}）
-                  </option>
-                ))}
-              </Select>
-            </>
-          ) : null}
           <Label htmlFor="password">密碼</Label>
           <Input
             id="password"
@@ -225,6 +206,19 @@ export default function LoginClient() {
             aria-labelledby="context-title"
           >
             <h2 id="context-title">確認目前收容所</h2>
+            <Label htmlFor="organization">目前收容所</Label>
+            <Select
+              id="organization"
+              value={selectedOrganizationId || organizations[0]?.id}
+              onChange={(event) => setSelectedOrganizationId(event.target.value)}
+              required
+            >
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}（{organization.code}）
+                </option>
+              ))}
+            </Select>
             <p className="muted">
               請選擇這次工作的目前收容所；後端會重新驗證成員資格。
             </p>

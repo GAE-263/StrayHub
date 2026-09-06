@@ -48,12 +48,13 @@ class DashboardService:
         )
         recent = (
             await self.session.execute(
-                select(CareReport)
+                select(CareReport, Animal.name, Animal.shelter_number)
+                .join(Animal, Animal.id == CareReport.animal_id)
                 .where(CareReport.organization_id == organization_id)
                 .order_by(CareReport.submitted_at.desc())
-                .limit(5)
+                .limit(20)
             )
-        ).scalars()
+        ).all()
         return {
             "organization_id": str(organization_id),
             "role": role,
@@ -68,10 +69,12 @@ class DashboardService:
                 {
                     "id": str(report.id),
                     "animal_id": str(report.animal_id),
+                    "animal_name": animal_name,
+                    "animal_shelter_number": shelter_number,
                     "submitted_at": report.submitted_at.isoformat(),
                     "status": report.status,
                     "ai_job_status": report.ai_job_status,
                 }
-                for report in recent
+                for report, animal_name, shelter_number in recent
             ],
         }

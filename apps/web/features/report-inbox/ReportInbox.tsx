@@ -262,7 +262,22 @@ export function ReportInbox() {
                 </h2>
               </div>
               <div>
-                <p>{report.summary?.summary || "查看完整志工回報"}</p>
+                {report.summary_status === "succeeded" ? (
+                  <p>{report.summary?.summary || "查看完整志工回報"}</p>
+                ) : report.summary?.evidence?.length ? (
+                  <ul className={`${styles.evidenceChips} ${styles.evidenceChipsCompact}`}>
+                    {report.summary.evidence.map((e, i) => (
+                      <li key={i} className={styles.evidenceChip}>
+                        <span className={styles.chipKey}>
+                          {titles[e.field] || "觀察"}
+                        </span>
+                        <span className={styles.chipValue}>{e.quote}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{report.summary?.summary || "查看完整志工回報"}</p>
+                )}
                 <small>
                   {report.summary_status === "succeeded"
                     ? "AI 初步整理"
@@ -448,9 +463,26 @@ export function ReportDetail({ id }: { id: string }) {
             ? "AI 初步整理"
             : "固定回答整理"}
         </h2>
-        <p className={styles.summary}>
-          {summary?.summary || "尚無整理，請查看原始回報。"}
-        </p>
+        {report.summary_status === "succeeded" ? (
+          <p className={styles.summary}>
+            {summary?.summary || "尚無整理，請查看原始回報。"}
+          </p>
+        ) : summary?.evidence?.length ? (
+          <ul className={styles.evidenceChips}>
+            {summary.evidence.map((e, i) => (
+              <li key={i} className={styles.evidenceChip}>
+                <span className={styles.chipKey}>
+                  {titles[e.field] || "觀察"}
+                </span>
+                <span className={styles.chipValue}>{e.quote}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.summary}>
+            {summary?.summary || "尚無整理，請查看原始回報。"}
+          </p>
+        )}
         {report.summary_status !== "succeeded" && (
           <p className={styles.hint}>
             {report.summary_status === "pending"
@@ -467,21 +499,32 @@ export function ReportDetail({ id }: { id: string }) {
         {summary?.information_quality === "conflicting" && (
           <p>描述有出入，請對照原文確認。</p>
         )}
-        <div className={styles.columns}>
-          <div>
-            <h3>觀察依據</h3>
-            {summary?.evidence?.length ? (
-              <ul>
-                {summary.evidence.map((e, i) => (
-                  <li key={i}>
-                    {titles[e.field] || "觀察"}：「{e.quote}」
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>目前沒有列出特殊觀察依據。</p>
-            )}
-          </div>
+        <div
+          className={
+            report.summary_status === "succeeded"
+              ? styles.columns
+              : undefined
+          }
+        >
+          {report.summary_status === "succeeded" ? (
+            <div>
+              <h3>觀察依據</h3>
+              {summary?.evidence?.length ? (
+                <ul className={styles.evidenceChips}>
+                  {summary.evidence.map((e, i) => (
+                    <li key={i} className={styles.evidenceChip}>
+                      <span className={styles.chipKey}>
+                        {titles[e.field] || "觀察"}
+                      </span>
+                      <span className={styles.chipValue}>{e.quote}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>目前沒有列出特殊觀察依據。</p>
+              )}
+            </div>
+          ) : null}
           <div>
             <h3>待確認事項</h3>
             {summary?.uncertainties?.length ? (

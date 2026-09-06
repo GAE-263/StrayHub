@@ -205,7 +205,7 @@ footer{padding:34px 0 60px; color:var(--ink-mute); font-size:13px; border-top:1p
       <div class="card">
         <h3>🐕 志工選單</h3>
         <div class="path">line-liff/volunteer/</div>
-        <ul><li>散步回報</li><li>志工報到</li></ul>
+        <ul><li>散步回報</li></ul>
       </div>
       <div class="card">
         <h3>🏡 領養人選單</h3>
@@ -294,7 +294,7 @@ const ROLES = [
     menu:[ {mi:"ℹ️",label:"收容所基本資訊",action:"shelter_info"}, {mi:"🔗",label:"綁定身分",action:"start_binding"} ] },
   { key:"volunteer", em:"🐕", name:"志工", desc:"role = VOLUNTEER", tag:"VOLUNTEER", bar:"志工選單",
     intro:"綁定成功，歡迎回來，志工！", chatbar:"chatBarText：志工選單",
-    menu:[ {mi:"🚶",label:"散步回報",action:"walk_report"}, {mi:"✅",label:"志工報到",action:"volunteer_checkin"} ] },
+    menu:[ {mi:"🚶",label:"散步回報",action:"walk_report"}, {mi:"↩️",label:"返回主選單",action:"back_to_default_menu"} ] },
   { key:"adopter", em:"🏡", name:"領養人", desc:"role = ADOPTER（新角色）", tag:"ADOPTER", bar:"領養選單",
     intro:"綁定成功，歡迎，領養人！", chatbar:"chatBarText：領養選單",
     menu:[ {mi:"💛",label:"我想領養",action:"want_to_adopt"}, {mi:"📷",label:"領養回報",action:"adoption_report"} ] },
@@ -308,7 +308,7 @@ const REPLIES = {
   shelter_info:{k:"todo",t:"這裡將顯示收容所基本資訊（開發中）。"},
   start_binding:{k:"brand",t:"請開啟 LIFF 完成身分綁定：https://liff.line.me/&lt;LIFF_ID&gt;"},
   walk_report:{k:"todo",t:"散步回報功能開發中，稍後開放。"},
-  volunteer_checkin:{k:"todo",t:"志工報到功能開發中，稍後開放。"},
+  back_to_default_menu:{k:"brand",t:"已切回主選單。"},
   want_to_adopt:{k:"todo",t:"「我想領養」功能開發中，稍後開放。"},
   adoption_report:{k:"todo",t:"領養回報功能開發中，稍後開放。"},
   staff_create_animal:{k:"brand",t:"請開啟工作人員動物輸入：https://liff.line.me/&lt;LIFF_ID&gt;/staff-animal"},

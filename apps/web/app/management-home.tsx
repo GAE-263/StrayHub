@@ -15,7 +15,6 @@ import { statusLabel } from "../components/management/ui-status";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Table } from "../components/ui/table";
 
 type Dashboard = {
   organization_id: string;
@@ -30,6 +29,8 @@ type Dashboard = {
   recent_reports: Array<{
     id: string;
     animal_id: string;
+    animal_name: string;
+    animal_shelter_number: string | null;
     submitted_at: string;
     status: string;
     ai_job_status: string;
@@ -42,6 +43,31 @@ const metrics = [
   ["active_draft_count", "未完成 Draft"],
   ["pending_ai_count", "待處理 AI"],
 ] as const;
+
+const REPORT_STATUS_LABELS: Record<string, string> = {
+  saved: "回報已送出",
+  amended: "已修正回報",
+};
+
+const AI_JOB_STATUS_LABELS: Record<string, string> = {
+  not_required: "不需要 AI 覆核",
+  pending: "等待 AI 處理",
+  pending_enqueue: "等待 AI 處理",
+  enqueue_failed: "AI 派工失敗",
+  retry_wait: "等待重試",
+  running: "AI 處理中",
+  succeeded: "AI 已完成，待覆核",
+  failed: "AI 處理失敗",
+  invalid: "AI 結果無效",
+};
+
+function reportStatusLabel(value: string) {
+  return REPORT_STATUS_LABELS[value] ?? statusLabel(value);
+}
+
+function aiJobStatusLabel(value: string) {
+  return AI_JOB_STATUS_LABELS[value] ?? statusLabel(value);
+}
 
 export default function ManagementHome() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -134,39 +160,44 @@ export default function ManagementHome() {
                   }
                 />
               ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>提交時間</th>
-                      <th>Animal ID</th>
-                      <th>狀態</th>
-                      <th>AI</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div className="recent-reports-table">
+                  <div className="recent-report-row recent-report-header">
+                    <span>動物</span>
+                    <span>回報狀態</span>
+                    <span>AI 處理</span>
+                    <span>提交時間</span>
+                  </div>
+                  <ul className="recent-reports-list">
                     {dashboard.recent_reports.map((report) => (
-                      <tr key={report.id}>
-                        <td>
-                          {new Date(report.submitted_at).toLocaleString(
-                            "zh-TW",
-                          )}
-                        </td>
-                        <td>
-                          <Link
-                            className="text-link"
-                            href={`/animals/${report.animal_id}`}
-                          >
-                            {report.animal_id.slice(0, 8)}…
-                          </Link>
-                        </td>
-                        <td>
-                          <Badge>{statusLabel(report.status)}</Badge>
-                        </td>
-                        <td>{statusLabel(report.ai_job_status)}</td>
-                      </tr>
+                      <li key={report.id}>
+                        <Link
+                          className="recent-report-row"
+                          href={`/animals/${report.animal_id}`}
+                        >
+                          <div className="recent-report-animal">
+                            <strong>{report.animal_name}</strong>
+                            {report.animal_shelter_number ? (
+                              <span className="recent-report-shelter-no">
+                                {report.animal_shelter_number}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="recent-report-badges">
+                            <Badge>{reportStatusLabel(report.status)}</Badge>
+                          </div>
+                          <div className="recent-report-badges">
+                            <Badge>{aiJobStatusLabel(report.ai_job_status)}</Badge>
+                          </div>
+                          <span className="recent-report-time muted">
+                            {new Date(report.submitted_at).toLocaleString(
+                              "zh-TW",
+                            )}
+                          </span>
+                        </Link>
+                      </li>
                     ))}
-                  </tbody>
-                </Table>
+                  </ul>
+                </div>
               )}
             </Card>
             <Card

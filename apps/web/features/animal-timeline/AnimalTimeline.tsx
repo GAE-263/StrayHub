@@ -133,9 +133,11 @@ export function AnimalTimeline({
   if (error) return <ErrorState title="歷程載入失敗" description={error} />;
   if (days.length === 0) return <EmptyState title="目前沒有可顯示的歷程" />;
 
+  const orderedDays = [...days].reverse();
+
   return (
     <ol className="animal-timeline" aria-label="動物近 14 天歷程">
-      {days.map((day) => (
+      {orderedDays.map((day) => (
         <TimelineDaySection
           key={day.date}
           timezone={timezone}

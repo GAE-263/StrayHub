@@ -169,7 +169,7 @@ export default function AnimalsPage() {
           />
         ) : null}
         {!loading && !error && data?.items.length ? (
-          <Table>
+          <Table className={styles.directoryTable}>
             <thead>
               <tr>
                 <th>名稱</th>
@@ -184,12 +184,14 @@ export default function AnimalsPage() {
                 <tr key={animal.id}>
                   <td>
                     <div className={styles.directoryIdentity}>
-                      {animal.photo_url && (
-                        <AnimalPhoto
-                          photoUrl={animal.photo_url}
-                          alt={`${animal.name} 的照片`}
-                        />
-                      )}
+                      <span className={styles.directoryPhotoSlot}>
+                        {animal.photo_url && (
+                          <AnimalPhoto
+                            photoUrl={animal.photo_url}
+                            alt={`${animal.name} 的照片`}
+                          />
+                        )}
+                      </span>
                       <div>
                         <Link
                           className="text-link"
