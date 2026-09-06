@@ -2980,6 +2980,42 @@ dialog.ui-sheet[open] {
   gap: 6px;
   justify-content: center;
 }
+.today-special-care-panel {
+  margin-bottom: 22px;
+}
+.care-scroll {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scroll-snap-type: x proximity;
+}
+.care-scroll-item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: inherit;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  padding: 16px;
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.care-scroll-item:hover {
+  background: var(--surface-soft);
+  border-color: var(--accent);
+}
+.care-scroll-item strong {
+  font-size: 15px;
+}
+.care-scroll-item p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
 @media (max-width: 640px) {
   .recent-report-header {
     display: none;

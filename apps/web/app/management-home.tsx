@@ -173,6 +173,44 @@ export default function ManagementHome() {
               </Card>
             ))}
           </div>
+          <Card
+            className="ui-card-padded today-special-care-panel"
+            aria-labelledby="today-special-care-title"
+          >
+            <div className="panel-heading">
+              <h2 id="today-special-care-title">今日特別照護</h2>
+              <Link className="text-link" href="/care-calendar">
+                開啟照護行事曆 →
+              </Link>
+            </div>
+            {dashboard.today_special_care.length === 0 ? (
+              <EmptyState title="今日沒有待處理的特別照護" />
+            ) : (
+              <div className="care-scroll">
+                {dashboard.today_special_care.map((item) => (
+                  <Link
+                    className="care-scroll-item"
+                    key={item.occurrence_id}
+                    href={`/animals/${item.animal_id}`}
+                  >
+                    <Badge>
+                      {REMINDER_TYPE_LABELS[item.reminder_type] ?? "其他"}
+                    </Badge>
+                    <strong>{item.animal_name}</strong>
+                    {item.shelter_number ? (
+                      <span className="recent-report-shelter-no">
+                        {item.shelter_number}
+                      </span>
+                    ) : null}
+                    <p>{item.title}</p>
+                    <span className="muted">
+                      {new Date(item.scheduled_at).toLocaleString("zh-TW")}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
           <div className="content-grid">
             <Card
               className="ui-card-padded"
@@ -274,59 +312,6 @@ export default function ManagementHome() {
                           </div>
                           <span className="recent-report-time muted">
                             {new Date(anomaly.submitted_at).toLocaleString(
-                              "zh-TW",
-                            )}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Card>
-            <Card
-              className="ui-card-padded"
-              aria-labelledby="today-special-care-title"
-            >
-              <div className="panel-heading">
-                <h2 id="today-special-care-title">今日特別照護</h2>
-                <Link className="text-link" href="/care-calendar">
-                  開啟照護行事曆 →
-                </Link>
-              </div>
-              {dashboard.today_special_care.length === 0 ? (
-                <EmptyState title="今日沒有待處理的特別照護" />
-              ) : (
-                <div className="recent-reports-table">
-                  <div className="recent-report-row recent-report-header">
-                    <span>動物</span>
-                    <span>項目</span>
-                    <span>時間</span>
-                  </div>
-                  <ul className="recent-reports-list">
-                    {dashboard.today_special_care.map((item) => (
-                      <li key={item.occurrence_id}>
-                        <Link
-                          className="recent-report-row"
-                          href={`/animals/${item.animal_id}`}
-                        >
-                          <div className="recent-report-animal">
-                            <strong>{item.animal_name}</strong>
-                            {item.shelter_number ? (
-                              <span className="recent-report-shelter-no">
-                                {item.shelter_number}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="recent-report-badges">
-                            <Badge>
-                              {REMINDER_TYPE_LABELS[item.reminder_type] ??
-                                "其他"}
-                            </Badge>
-                            <span>{item.title}</span>
-                          </div>
-                          <span className="recent-report-time muted">
-                            {new Date(item.scheduled_at).toLocaleString(
                               "zh-TW",
                             )}
                           </span>
