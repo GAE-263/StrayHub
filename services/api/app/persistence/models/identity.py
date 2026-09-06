@@ -147,6 +147,8 @@ class LoginIpAttempt(IdentityMixin, Base):
 class LineUserBinding(IdentityMixin, AuditMixin, Base):
     __tablename__ = "line_user_bindings"
 
+    # Conversation preference only; never grants shelter access. NULL is legacy.
+    current_flow: Mapped[str | None] = mapped_column(String(30), nullable=True)
     line_user_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)

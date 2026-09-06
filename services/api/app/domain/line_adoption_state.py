@@ -51,6 +51,9 @@ class AdoptionDraftState(StrEnum):
     AWAITING_ADOPTER_NAME = "awaiting_adopter_name"
     AWAITING_CONTACT_TIME = "awaiting_contact_time"
     AWAITING_PHONE_NUMBER = "awaiting_phone_number"
+    EDITING_ADOPTER_NAME = "editing_adopter_name"
+    EDITING_CONTACT_TIME = "editing_contact_time"
+    EDITING_PHONE_NUMBER = "editing_phone_number"
     REVIEWING = "reviewing"
     SUBMITTING = "submitting"
     SUBMITTED = "submitted"
@@ -60,6 +63,12 @@ class AdoptionDraftState(StrEnum):
 
 _S = AdoptionDraftState
 _P = AdoptionPath
+
+CONTACT_EDIT_STATES = {
+    _S.EDITING_ADOPTER_NAME: "adopter_name",
+    _S.EDITING_CONTACT_TIME: "contact_time",
+    _S.EDITING_PHONE_NUMBER: "phone_number",
+}
 
 BASE_PREFERENCE_KEYS = (
     "housing_type",
@@ -246,7 +255,7 @@ def _resolve(
 
 def _validate_phone_number(value: Any) -> None:
     if not isinstance(value, str) or not PHONE_NUMBER_PATTERN.match(value):
-        raise DomainError("invalid_phone_number", "手機號碼格式無效，請輸入台灣手機號碼", 422)
+        raise DomainError("invalid_phone_number", "請輸入 10 碼台灣手機號碼，例如 0912345678", 422)
 
 
 @dataclass
@@ -368,6 +377,20 @@ class AdoptionDraftStateMachine:
             raise DomainError("invalid_state_transition", "目前步驟已完成", 409)
         return key
 
+    def prepare_answer_replay(self, key: str) -> bool:
+        """Allow a saved answer to be safely confirmed again on its own step.
+
+        Older concurrent webhook handling could persist an answer while leaving
+        ``current_step`` on the same question.  Treating the matching card click
+        as reconfirmation lets the normal answer transition repair that draft.
+        """
+        expected = _STATE_QUESTIONS.get(self.state)
+        if expected is None or key not in expected:
+            return False
+        if key in self.answers.values:
+            self.reconfirmation_keys.add(key)
+        return True
+
     def answer_current(self, value: Any) -> AdoptionDraftState:
         return self.answer_question(self.next_answer_key(), value)
 
@@ -406,6 +429,76 @@ class AdoptionDraftStateMachine:
         self.state = previous
         self.last_interaction_at = datetime.now(timezone.utc)
         return self.state
+
+    def repair_to_first_missing(self, required_keys: tuple[str, ...]) -> str | None:
+        """Move an inconsistent legacy draft to its first missing question."""
+        if self.path is None:
+            return None
+        missing = next((key for key in required_keys if key not in self.answers.values), None)
+        if missing is None:
+            return None
+        order = _STATE_ORDER_BY_PATH[self.path]
+        target = next(
+            (state for state in order if missing in _STATE_QUESTIONS.get(state, ())),
+            None,
+        )
+        if target is None:
+            raise DomainError("invalid_state_transition", "找不到需要補填的問卷題目", 409)
+        self.state = target
+        self.reconfirmation_keys.discard(missing)
+        self.last_interaction_at = datetime.now(timezone.utc)
+        return missing
+
+    def repair_for_resume(self) -> str | None:
+        """Validate answers that must exist before the saved current step."""
+        if self.path is None:
+            return None
+        order = _STATE_ORDER_BY_PATH[self.path]
+        if self.state in order:
+            required = tuple(
+                key
+                for state in order[: order.index(self.state)]
+                for key in _STATE_QUESTIONS.get(state, ())
+            )
+        elif self.state in {
+            _S.CONFIRMING_ANSWERS,
+            _S.AWAITING_AI_SUITABILITY,
+            _S.SELECTING_ALTERNATIVE_ANIMAL,
+            _S.CONFIRMING_ALTERNATIVE_ANIMAL,
+        }:
+            required = BASE_PREFERENCE_KEYS
+        elif self.state in {
+            _S.PRESENTING_MATCHES,
+            _S.AWAITING_AI_RECOMMENDATIONS,
+            _S.SELECTING_MATCHED_ANIMAL,
+        }:
+            required = MATCH_PREFERENCE_KEYS
+        elif self.state in {_S.REVIEWING, _S.SUBMITTING}:
+            required = REQUIRED_KEYS_BY_PATH[self.path]
+        else:
+            return None
+        return self.repair_to_first_missing(required)
+
+    def edit_contact(self, key: str) -> None:
+        if self.state != _S.REVIEWING or key not in CONTACT_EDIT_STATES.values():
+            raise DomainError("invalid_contact_edit", "請從領養意願摘要選擇要修改的聯絡資料", 409)
+        self.state = next(state for state, field in CONTACT_EDIT_STATES.items() if field == key)
+
+    def save_contact(self, value: str) -> None:
+        key = CONTACT_EDIT_STATES.get(self.state)
+        if key is None:
+            raise DomainError("invalid_contact_edit", "目前沒有正在修改的聯絡資料", 409)
+        clean = value.strip()
+        if not clean or len(clean) > 100:
+            raise DomainError("invalid_contact_value", "請輸入 1 至 100 字的聯絡資料", 422)
+        self.answers.set(key, clean)
+        self.state = _S.REVIEWING
+        self.last_interaction_at = datetime.now(timezone.utc)
+
+    def cancel_contact_edit(self) -> None:
+        if self.state not in CONTACT_EDIT_STATES:
+            raise DomainError("invalid_contact_edit", "目前沒有正在修改的聯絡資料", 409)
+        self.state = _S.REVIEWING
 
     def submit(self) -> AdoptionInquiryAnswers:
         if self.state != AdoptionDraftState.SUBMITTING:

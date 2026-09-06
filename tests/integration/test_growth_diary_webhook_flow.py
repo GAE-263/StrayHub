@@ -132,16 +132,16 @@ def _submit_adoption_inquiry(
         "action=confirm_target_animal&flow=adoption",
     ]
     actions.extend(
-        f"action=answer&flow=adoption&value={value}"
-        for value in (
-            "apartment_small",
-            "first_time",
-            "none",
-            "adults_only",
-            "work_from_home",
-            "structured",
-            "high_patience",
-            "companionship",
+        f"action=answer&flow=adoption&question={question}&value={value}"
+        for question, value in (
+            ("housing_type", "apartment_small"),
+            ("dog_experience", "first_time"),
+            ("other_pets", "none"),
+            ("household_members", "adults_only"),
+            ("work_schedule", "work_from_home"),
+            ("parenting_style", "structured"),
+            ("patience_level", "high_patience"),
+            ("adoption_motivation", "companionship"),
         )
     )
     actions.append("action=confirm_answers&flow=adoption")

@@ -273,3 +273,96 @@ def test_submit_without_completing_required_answers_is_rejected() -> None:
 
     with pytest.raises(DomainError, match="領養問卷"):
         machine.transition(AdoptionDraftState.REVIEWING)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [("adopter_name", "陳小明"), ("contact_time", "假日下午"), ("phone_number", "0987654321")],
+)
+def test_contact_edit_preserves_other_answers_and_returns_to_review(key, value):
+    machine = AdoptionDraftStateMachine(state=AdoptionDraftState.REVIEWING)
+    machine.answers.values = {
+        "adopter_name": "王小明",
+        "contact_time": "平日白天",
+        "phone_number": "0912345678",
+        "housing_type": "house",
+    }
+    before = dict(machine.answers.values)
+    machine.edit_contact(key)
+    machine.save_contact(value)
+    assert machine.state == AdoptionDraftState.REVIEWING
+    assert machine.answers.values == {**before, key: value}
+
+
+def test_invalid_contact_edit_preserves_previous_phone_and_can_cancel():
+    machine = AdoptionDraftStateMachine(state=AdoptionDraftState.REVIEWING)
+    machine.answers.values = {"phone_number": "0912345678"}
+    machine.edit_contact("phone_number")
+    with pytest.raises(DomainError):
+        machine.save_contact("123")
+    assert machine.answers.values["phone_number"] == "0912345678"
+    assert machine.state == AdoptionDraftState.EDITING_PHONE_NUMBER
+    machine.cancel_contact_edit()
+    assert machine.state == AdoptionDraftState.REVIEWING
+    with pytest.raises(DomainError):
+        machine.save_contact("0987654321")
+
+
+def test_repair_incomplete_draft_preserves_answers_and_returns_to_first_missing():
+    machine = AdoptionDraftStateMachine(
+        state=AdoptionDraftState.CONFIRMING_ANSWERS,
+        path=AdoptionPath.SPECIFIC_ANIMAL,
+    )
+    machine.answers.values = {
+        "dog_experience": "first_time",
+        "parenting_style": "structured",
+    }
+
+    missing = machine.repair_to_first_missing(
+        (
+            "housing_type",
+            "dog_experience",
+            "parenting_style",
+        )
+    )
+
+    assert missing == "housing_type"
+    assert machine.state == AdoptionDraftState.ANSWERING_HOUSING
+    assert machine.answers.values == {
+        "dog_experience": "first_time",
+        "parenting_style": "structured",
+    }
+
+
+def test_resume_repairs_missing_answers_before_saved_step():
+    machine = AdoptionDraftStateMachine(
+        state=AdoptionDraftState.ANSWERING_ADOPTION_MOTIVATION,
+        path=AdoptionPath.SPECIFIC_ANIMAL,
+    )
+    machine.answers.values = {
+        "other_pets": "none",
+        "household_members": "adults_only",
+        "work_schedule": "work_from_home",
+        "parenting_style": "structured",
+        "patience_level": "high_patience",
+    }
+
+    assert machine.repair_for_resume() == "housing_type"
+    assert machine.state == AdoptionDraftState.ANSWERING_HOUSING
+    assert machine.answers.values["parenting_style"] == "structured"
+
+
+def test_saved_answer_on_current_question_can_be_reconfirmed_and_advanced():
+    machine = AdoptionDraftStateMachine(
+        state=AdoptionDraftState.ANSWERING_OTHER_PETS,
+        path=AdoptionPath.SPECIFIC_ANIMAL,
+    )
+    machine.answers.values = {
+        "housing_type": "apartment_small",
+        "dog_experience": "first_time",
+        "other_pets": "none",
+    }
+
+    assert machine.prepare_answer_replay("other_pets") is True
+    assert machine.answer_current("cat") == AdoptionDraftState.ANSWERING_HOUSEHOLD
+    assert machine.answers.values["other_pets"] == "cat"

@@ -31,6 +31,7 @@ class AdoptionDraft(IdentityMixin, AuditMixin, Base):
     )
     answers: Mapped[dict] = mapped_column(JSON, default=dict)
     reconfirmation_keys: Mapped[list] = mapped_column(JSON, default=list)
+    interaction_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     last_interaction_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

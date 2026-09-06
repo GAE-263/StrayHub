@@ -1,6 +1,7 @@
 import pytest
 from services.api.app.application.effective_observation_service import EffectiveOption
 from services.api.app.application.line_message_presenter import (
+    INK,
     animal_confirmation_bubble,
     daily_care_bubble,
     question_bubble,
@@ -68,6 +69,30 @@ def test_question_bubble_states_which_question_is_being_asked() -> None:
     assert "大便" in bubble["altText"]
 
 
+def test_question_and_daily_progress_bars_use_visible_ink_fill() -> None:
+    question = question_bubble(
+        [EffectiveOption("activity.normal", "正常")],
+        draft_token="opaque",
+        step="activity",
+        title="精神體力",
+        position=3,
+        total=6,
+    )
+    daily = daily_care_bubble(
+        [("小森／A-001", "action=select_animal&animal_id=a", "今天尚未回報", False)],
+        done=1,
+        total=4,
+        shown_through=1,
+        more_data="action=today_overview&page=2",
+    )
+
+    for bubble, expected_width in ((question, "50%"), (daily, "25%")):
+        progress = bubble["contents"]["header"]["contents"][-1]
+        fill = progress["contents"][0]
+        assert fill["backgroundColor"] == INK
+        assert fill["width"] == expected_width
+
+
 def test_question_bubble_without_options_explains_instead_of_showing_nothing() -> None:
     bubble = question_bubble(
         [], draft_token="opaque", step="appearance", title="身體外觀", position=6, total=6
@@ -91,6 +116,7 @@ def test_confirmation_shows_full_identity_photo_and_both_actions() -> None:
     assert {"A-001", "北區 A3", "浪浪森友會 A", "確認是這隻", "重新選擇"} <= set(texts)
     assert any("小森" in text for text in texts)
     assert bubble["contents"]["hero"]["url"] == "https://example.test/photo.jpg"
+    assert bubble["contents"]["hero"]["aspectMode"] == "fit"
 
 
 @pytest.mark.parametrize(

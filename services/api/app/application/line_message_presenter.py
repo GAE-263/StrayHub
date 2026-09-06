@@ -87,6 +87,8 @@ def _choice_box(label: str, action: dict, *, tint: str = SURFACE, glyph: str = "
 
 
 def _progress_bar(position: int, total: int) -> dict:
+    # The bar sits inside pastel headers. A dark fill stays visible on both
+    # the question card's BUTTER header and the daily list's LEAF header.
     percent = max(6, min(100, round(position * 100 / max(1, total))))
     return {
         "type": "box",
@@ -101,7 +103,7 @@ def _progress_bar(position: int, total: int) -> dict:
                 "type": "box",
                 "layout": "vertical",
                 "width": f"{percent}%",
-                "backgroundColor": BUTTER,
+                "backgroundColor": INK,
                 "cornerRadius": "999px",
                 "contents": [{"type": "filler"}],
             }
@@ -368,7 +370,9 @@ def animal_confirmation_bubble(
             "url": safe_photo_url,
             "size": "full",
             "aspectRatio": "20:13",
-            "aspectMode": "cover",
+            # Keep the whole animal visible so volunteers can confirm markings
+            # and body shape; portrait photos may leave some surrounding space.
+            "aspectMode": "fit",
         }
     return {
         "type": "flex",

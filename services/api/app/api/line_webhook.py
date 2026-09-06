@@ -95,7 +95,13 @@ from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
 from services.api.app.config.settings import get_settings
-from services.api.app.domain.line_adoption_state import AdoptionDraftState
+from services.api.app.domain.line_adoption_state import (
+    CONTACT_EDIT_STATES,
+    AdoptionDraftAnswers,
+    AdoptionDraftState,
+    AdoptionDraftStateMachine,
+    AdoptionPath,
+)
 from services.api.app.domain.line_care_report_state import (
     REQUIRED_ANSWER_KEYS,
     UNOBSERVED,
@@ -639,7 +645,7 @@ async def _handle_public_volunteer_application_entry(
         await _reply(
             line,
             event,
-            [_text("已切回志工選單，請由下方選單點選「散步回報」或「志工報到」。")],
+            [_text("已切回志工選單，請由下方選單點選「散步回報」。")],
         )
         return True
     await _reply(line, event, [_volunteer_application_entry_message()])
@@ -801,10 +807,89 @@ def _adoption_cancel_item() -> dict:
     return _postback("取消", urlencode({"action": "cancel", "flow": "adoption"}))
 
 
+async def _reply_adoption_animal_page(
+    session, line, event, *, draft, public_base_url, page=1, query=""
+):
+    if draft.current_step != AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
+        raise DomainError("invalid_browse_step", "請先回到心有所屬的動物清單再搜尋或翻頁。", 409)
+    if draft.expires_at <= datetime.now(timezone.utc):
+        raise DomainError("draft_expired", "對話已過期，請重新點選領養媒合。", 409)
+    query = query.strip()
+    if len(query) > 20:
+        raise DomainError("invalid_search", "請輸入 20 字以內的名字或收容編號。", 422)
+    await set_organization_scope(session, draft.organization_id)
+    animals, total = await AnimalRepository(session, draft.organization_id).list_adoptable_page(
+        page=page, query=query
+    )
+    pages = max(1, (total + 11) // 12)
+    page = max(1, min(page, pages))
+    items = []
+    for label, target in (("上一頁", page - 1), ("下一頁", page + 1)):
+        if 1 <= target <= pages:
+            items.append(
+                _postback(
+                    label,
+                    urlencode(
+                        {
+                            "action": "browse_animals",
+                            "flow": "adoption",
+                            "page": target,
+                            "query": query,
+                        }
+                    ),
+                )
+            )
+    if query:
+        items.append(_postback("返回全部清單", "action=browse_animals&flow=adoption&page=1"))
+    items.extend([_postback("返回領養方式", "action=back&flow=adoption"), _adoption_cancel_item()])
+    description = f"共 {total} 隻，第 {page}／{pages} 頁。可輸入名字或收容編號搜尋（最多 20 字）。"
+    if not animals:
+        description = (
+            "找不到符合的動物，請檢查名字或收容編號，或返回全部清單。"
+            if query
+            else "目前沒有可領養的動物，可返回選擇其他收容所。"
+        )
+    messages = [_text(description)]
+    if animals:
+        cards = [
+            MatchReportCard(
+                animal_id=str(animal.id),
+                name=animal.name,
+                shelter_number=animal.shelter_number,
+                photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
+                selectable=True,
+                select_action="select_target_animal",
+                select_label="選這隻",
+            )
+            for animal in animals
+        ]
+        messages.append(build_target_animal_picker(cards))
+    messages[-1]["quickReply"] = {"items": items}
+    await _reply(line, event, messages)
+
+
 async def _adoption_reply_for_state(
-    session, line, event: dict, *, draft, public_base_url: str | None
+    session,
+    line,
+    event: dict,
+    *,
+    draft,
+    public_base_url: str | None,
+    lead: list[dict] | None = None,
 ) -> None:
     state = AdoptionDraftState(draft.current_step)
+
+    def state_action(label: str, action: str, value: str | None = None) -> dict:
+        data = {
+            "action": action,
+            "flow": "adoption",
+            "step": draft.current_step,
+            "version": draft.interaction_version,
+        }
+        if value is not None:
+            data["value"] = value
+        return _action(label, urlencode(data))
+
     if state == AdoptionDraftState.SELECTING_ORGANIZATION:
         actions = [
             (
@@ -831,47 +916,20 @@ async def _adoption_reply_for_state(
                 (
                     "💗",
                     "心有所屬",
-                    _action(
-                        "心有所屬",
-                        urlencode(
-                            {
-                                "action": "choose_path",
-                                "flow": "adoption",
-                                "value": "specific_animal",
-                            }
-                        ),
-                    ),
+                    state_action("心有所屬", "choose_path", "specific_animal"),
                 ),
                 (
                     "✨",
                     "推薦給我",
-                    _action(
-                        "推薦給我",
-                        urlencode(
-                            {"action": "choose_path", "flow": "adoption", "value": "recommend_me"}
-                        ),
-                    ),
+                    state_action("推薦給我", "choose_path", "recommend_me"),
                 ),
             ],
         )
     elif state == AdoptionDraftState.SELECTING_TARGET_ANIMAL:
-        animals = await AnimalRepository(session, draft.organization_id).list_adoptable()
-        cards = [
-            MatchReportCard(
-                animal_id=str(animal.id),
-                name=animal.name,
-                shelter_number=animal.shelter_number,
-                photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
-                selectable=True,
-                select_action="select_target_animal",
-                select_label="選這隻",
-            )
-            for animal in animals[:12]
-        ]
-        if not cards:
-            await _reply(line, event, [_text("目前沒有可領養的動物，請聯繫工作人員協助。")])
-            return
-        card = build_target_animal_picker(cards)
+        await _reply_adoption_animal_page(
+            session, line, event, draft=draft, public_base_url=public_base_url
+        )
+        return
     elif state == AdoptionDraftState.CONFIRMING_TARGET_ANIMAL:
         animal = await AnimalRepository(session, draft.organization_id).get(draft.target_animal_id)
         if animal is None:
@@ -881,15 +939,15 @@ async def _adoption_reply_for_state(
             name=animal.name,
             shelter_number=animal.shelter_number,
             photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
-            confirm_action=_action(
-                "確認是這隻", urlencode({"action": "confirm_target_animal", "flow": "adoption"})
-            ),
-            back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
+            confirm_action=state_action("確認是這隻", "confirm_target_animal"),
+            back_action=state_action("重新選擇", "back"),
         )
     elif state in _ADOPTION_STATE_QUESTION_KEY:
         key = _ADOPTION_STATE_QUESTION_KEY[state]
         order = _QUESTION_ORDER[draft.path]
         card = build_question_card(
+            question_key=key,
+            interaction_version=draft.interaction_version,
             step=order.index(key) + 1,
             total=len(order),
             prompt=_ADOPTION_QUESTION_PROMPT[key],
@@ -898,7 +956,7 @@ async def _adoption_reply_for_state(
                 for code, emoji, label in _ADOPTION_QUESTION_OPTIONS[key]
             ],
             accent_index=(order.index(key) % 4),
-            back_action=_action("上一步", urlencode({"action": "back", "flow": "adoption"})),
+            back_action=state_action("上一步", "back"),
         )
     elif state == AdoptionDraftState.CONFIRMING_ANSWERS:
         order = _QUESTION_ORDER[draft.path]
@@ -913,11 +971,9 @@ async def _adoption_reply_for_state(
                 (
                     "✅",
                     "確認無誤",
-                    _action(
-                        "確認無誤", urlencode({"action": "confirm_answers", "flow": "adoption"})
-                    ),
+                    state_action("確認無誤", "confirm_answers"),
                 ),
-                ("✏️", "修改", _action("修改", urlencode({"action": "back", "flow": "adoption"}))),
+                ("✏️", "修改", state_action("修改", "back")),
             ],
         )
     elif state == AdoptionDraftState.SELECTING_MATCHED_ANIMAL:
@@ -1001,11 +1057,8 @@ async def _adoption_reply_for_state(
             name=animal.name,
             shelter_number=animal.shelter_number,
             photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
-            confirm_action=_action(
-                "確認是這隻",
-                urlencode({"action": "confirm_alternative_animal", "flow": "adoption"}),
-            ),
-            back_action=_action("重新選擇", urlencode({"action": "back", "flow": "adoption"})),
+            confirm_action=state_action("確認是這隻", "confirm_alternative_animal"),
+            back_action=state_action("重新選擇", "back"),
         )
     elif state == AdoptionDraftState.AWAITING_ADOPTER_NAME:
         card = build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名")
@@ -1018,35 +1071,42 @@ async def _adoption_reply_for_state(
                 (
                     "🌤️",
                     "平日白天",
-                    _action(
-                        "平日白天",
-                        urlencode(
-                            {"action": "answer", "flow": "adoption", "value": "平日白天（9-18點）"}
-                        ),
-                    ),
+                    state_action("平日白天", "contact_time", "平日白天（9-18點）"),
                 ),
                 (
                     "🌙",
                     "平日晚上",
-                    _action(
-                        "平日晚上",
-                        urlencode(
-                            {"action": "answer", "flow": "adoption", "value": "平日晚上（18-22點）"}
-                        ),
-                    ),
+                    state_action("平日晚上", "contact_time", "平日晚上（18-22點）"),
                 ),
                 (
                     "🌈",
                     "假日皆可",
-                    _action(
-                        "假日皆可",
-                        urlencode({"action": "answer", "flow": "adoption", "value": "假日皆可"}),
-                    ),
+                    state_action("假日皆可", "contact_time", "假日皆可"),
                 ),
             ],
         )
     elif state == AdoptionDraftState.AWAITING_PHONE_NUMBER:
         card = build_info_card("請留下手機號碼 📞", accent_index=1, body="例如 0912345678")
+    elif state in CONTACT_EDIT_STATES:
+        key = CONTACT_EDIT_STATES[state]
+        label = {"adopter_name": "姓名", "contact_time": "聯絡時間", "phone_number": "電話"}[key]
+        hint = (
+            "請輸入 10 碼手機號碼，例如 0912345678"
+            if key == "phone_number"
+            else "請直接輸入修改後的內容"
+        )
+        card = build_info_card(
+            f"修改{label}",
+            accent_index=1,
+            body=f"目前內容：{draft.answers.get(key, '')}\n{hint}",
+            actions=[
+                (
+                    "↩️",
+                    "返回摘要",
+                    state_action("返回摘要", "cancel_contact_edit"),
+                )
+            ],
+        )
     elif state == AdoptionDraftState.REVIEWING:
         card = build_info_card(
             "領養意願摘要 📋",
@@ -1060,16 +1120,27 @@ async def _adoption_reply_for_state(
                 (
                     "📮",
                     "送出",
-                    _action("送出", urlencode({"action": "submit", "flow": "adoption"})),
+                    state_action("送出", "submit"),
                 ),
-                ("✏️", "修改", _action("修改", urlencode({"action": "back", "flow": "adoption"}))),
+                *[
+                    (
+                        "✏️",
+                        label,
+                        state_action(label, "edit_contact", key),
+                    )
+                    for key, label in (
+                        ("adopter_name", "修改姓名"),
+                        ("contact_time", "修改聯絡時間"),
+                        ("phone_number", "修改電話"),
+                    )
+                ],
             ],
         )
     else:
         await _reply(line, event, [_text("領養流程狀態已更新，請重新點選「領養流程」。")])
         return
     card["quickReply"] = {"items": [_adoption_cancel_item()]}
-    await _reply(line, event, [card])
+    await _reply(line, event, [*(lead or []), card])
 
 
 def _build_gemini_client(settings) -> GeminiClient | None:
@@ -1760,15 +1831,37 @@ async def _handle_adoption_start(
     adopter_user_id = await _get_or_create_adopter_identity(session, line_user_id)
     await set_authentication_user_scope(session, adopter_user_id)
     repository = AdoptionDraftRepository(session, None)
-    draft = await repository.get_active_for_adopter(adopter_user_id)
+    draft = await repository.lock_active_for_adopter(adopter_user_id)
+    repaired_missing_key = None
     if draft is None:
         draft, _ = await LineAdoptionDraftService(
             repository, ttl_seconds=get_settings().draft_ttl_seconds
         ).create(adopter_user_id=adopter_user_id)
     elif draft.organization_id is not None:
         await set_organization_scope(session, draft.organization_id)
+        machine = AdoptionDraftStateMachine(
+            state=AdoptionDraftState(draft.current_step),
+            path=AdoptionPath(draft.path) if draft.path else None,
+            answers=AdoptionDraftAnswers(dict(draft.answers)),
+            reconfirmation_keys=set(draft.reconfirmation_keys or []),
+        )
+        repaired_missing_key = machine.repair_for_resume()
+        if repaired_missing_key is not None:
+            draft.current_step = machine.state.value
+            draft.reconfirmation_keys = sorted(machine.reconfirmation_keys)
+            draft.interaction_version += 1
+            await session.flush()
     await _adoption_reply_for_state(
-        session, line, event, draft=draft, public_base_url=public_base_url
+        session,
+        line,
+        event,
+        draft=draft,
+        public_base_url=public_base_url,
+        lead=(
+            [_text("先前的問卷還有題目未完成，其他答案已保留，請從這題繼續。")]
+            if repaired_missing_key is not None
+            else None
+        ),
     )
 
 
@@ -1785,6 +1878,46 @@ async def _handle_adoption_postback(
     action = values.get("action", [""])[0]
     value = values.get("value", [None])[0]
     adopter_user_id = draft.adopter_user_id
+
+    if action == "back" and (
+        values.get("step", [None])[0] is None or values.get("version", [None])[0] is None
+    ):
+        await _adoption_reply_for_state(
+            session, line, event, draft=draft, public_base_url=public_base_url
+        )
+        return
+
+    if action == "answer":
+        state = AdoptionDraftState(draft.current_step)
+        current_question = _ADOPTION_STATE_QUESTION_KEY.get(state)
+        card_question = values.get("question", [None])[0]
+        if current_question is None or card_question != current_question:
+            await _adoption_reply_for_state(
+                session,
+                line,
+                event,
+                draft=draft,
+                public_base_url=public_base_url,
+            )
+            return
+
+    if action == "browse_animals":
+        try:
+            page = int(values.get("page", ["1"])[0])
+        except ValueError as exc:
+            raise DomainError("invalid_page", "請使用清單上的翻頁按鈕。", 422) from exc
+        if not 1 <= page <= 10000:
+            raise DomainError("invalid_page", "請使用清單上的翻頁按鈕。", 422)
+        await _reply_adoption_animal_page(
+            session,
+            line,
+            event,
+            draft=draft,
+            public_base_url=public_base_url,
+            page=page,
+            query=values.get("query", [""])[0],
+        )
+        return
 
     if action == "select_region":
         if not value:
@@ -1835,18 +1968,42 @@ async def _handle_adoption_postback(
         await set_authentication_user_scope(session, adopter_user_id)
 
     repository = AdoptionDraftRepository(session, draft.organization_id)
-    result = await LineAdoptionConversationService(
-        repository,
-        organization_validator=(lambda candidate_id: _true_async(candidate_id)),
-        answer_validator=_adoption_answer_validator,
-        match_top_n=5,
-    ).handle(
-        token=None,
-        adopter_user_id=adopter_user_id,
-        action=action,
-        value=value,
-        event_id=event.get("webhookEventId", ""),
-    )
+    raw_version = values.get("version", [None])[0]
+    try:
+        expected_version = int(raw_version) if raw_version is not None else None
+    except ValueError:
+        expected_version = -1
+    try:
+        result = await LineAdoptionConversationService(
+            repository,
+            organization_validator=(lambda candidate_id: _true_async(candidate_id)),
+            answer_validator=_adoption_answer_validator,
+            match_top_n=5,
+        ).handle(
+            token=None,
+            adopter_user_id=adopter_user_id,
+            action=action,
+            value=value,
+            event_id=event.get("webhookEventId", ""),
+            expected_question=values.get("question", [None])[0],
+            expected_state=values.get("step", [None])[0],
+            expected_version=expected_version,
+        )
+    except DomainError as error:
+        if error.code != "stale_adoption_action":
+            raise
+        await set_authentication_user_scope(session, adopter_user_id)
+        current = await AdoptionDraftRepository(session, None).get_active_for_adopter(
+            adopter_user_id
+        )
+        if current is None:
+            raise
+        if current.organization_id is not None:
+            await set_organization_scope(session, current.organization_id)
+        await _adoption_reply_for_state(
+            session, line, event, draft=current, public_base_url=public_base_url
+        )
+        return
     if result.inquiry_id is not None:
         await _reply(
             line,
@@ -1902,7 +2059,16 @@ async def _handle_adoption_postback(
                 public_base_url=public_base_url,
             )
         await _adoption_reply_for_state(
-            session, line, event, draft=updated, public_base_url=public_base_url
+            session,
+            line,
+            event,
+            draft=updated,
+            public_base_url=public_base_url,
+            lead=(
+                [_text("剛剛的問卷還有一題需要補填，其他答案已為你保留。")]
+                if result.repaired_missing_key is not None
+                else None
+            ),
         )
 
 
@@ -1959,16 +2125,13 @@ async def _handle_adoption_text(
             line, event, [_text("AI 適配度分析還在進行中，完成後會馬上通知你，請稍等一下下 🤖")]
         )
         return
-    if draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
-        matches = [
-            animal
-            for animal in await AnimalRepository(session, draft.organization_id).search(text)
-            if animal.is_adoptable
-        ]
-        if len(matches) != 1:
-            await _reply(line, event, [_text("請輸入唯一的收容編號／名稱，或由清單選擇毛孩。")])
-            return
-        action, value = "select_target_animal", str(matches[0].id)
+    if draft.current_step in CONTACT_EDIT_STATES:
+        action, value = "save_contact", text.strip()
+    elif draft.current_step == AdoptionDraftState.SELECTING_TARGET_ANIMAL.value:
+        await _reply_adoption_animal_page(
+            session, line, event, draft=draft, public_base_url=public_base_url, query=text
+        )
+        return
     elif draft.current_step in {
         AdoptionDraftState.AWAITING_ADOPTER_NAME.value,
         AdoptionDraftState.AWAITING_CONTACT_TIME.value,
@@ -2580,7 +2743,6 @@ async def _reply_next_step(
                             "✅",
                         ),
                         ("再改一下", f"action=back&draft_token={raw_token}", "✏️"),
-                        ("換一隻", f"action=reselect_animal&draft_token={raw_token}", "🔄"),
                         (
                             "取消回報",
                             f"action={'cancel' if raw_token else 'cancel_current'}&draft_token={raw_token}",
@@ -2968,6 +3130,88 @@ def _uuid_value(value: str) -> UUID | None:
         return None
 
 
+async def _select_line_flow(session, line_user_id: str, event: dict) -> str | None:
+    """Route input by explicit entry, preserving inactive drafts and authorization."""
+    values = parse_qs(event.get("postback", {}).get("data", ""))
+    action = values.get("action", [""])[0]
+    flow = values.get("flow", [""])[0]
+    binding = await LineWebhookRepository(session).binding(line_user_id)
+    entry = None
+    if action == "back_to_default_menu":
+        entry = "menu"
+    elif action == "start_adoption_matching":
+        await _get_or_create_adopter_identity(session, line_user_id)
+        binding = await LineWebhookRepository(session).binding(line_user_id)
+        entry = "adoption"
+    elif _is_walk_report_command(event) or action in {"walk_report", "start_care_report"}:
+        await _resolve_context(session, line_user_id)
+        entry = "care_report"
+    elif _is_growth_diary_command(event) or (
+        flow == "growth_diary" and action in {"start_growth_diary", "view_growth_diary_history"}
+    ):
+        entry = "growth_diary"
+    if action == "start_volunteer_application" or (
+        event.get("message", {}).get("text", "").strip() == VOLUNTEER_APPLICATION_COMMAND
+    ):
+        entry = "menu"
+    if binding is None:
+        return None
+    if entry is not None:
+        binding.current_flow = entry
+        await session.flush()
+        return entry
+    # Menu actions do not submit conversation answers.
+    if (
+        action in STAFF_MENU_ACTIONS
+        or action in MENU_PLACEHOLDER_ACTIONS
+        or action == "start_binding"
+    ):
+        return binding.current_flow
+    current = binding.current_flow
+    if current is None:
+        active = []
+        adoption = await _active_adoption_draft(session, line_user_id)
+        if adoption is not None and adoption.expires_at > datetime.now(timezone.utc):
+            active.append("adoption")
+        if await _resolve_growth_diary_pending(session, line_user_id) is not None:
+            active.append("growth_diary")
+        try:
+            user_id, organization_id, _, _ = await _resolve_context(session, line_user_id)
+        except DomainError:
+            pass
+        else:
+            draft = await CareReportDraftRepository(
+                session, organization_id
+            ).get_active_for_volunteer(user_id)
+            if draft is not None and draft.expires_at > datetime.now(timezone.utc):
+                active.append("care_report")
+        if len(active) > 1:
+            raise DomainError(
+                "line_flow_required",
+                "你有多份未完成的紀錄，請先點選散步回報、領養媒合，或輸入「毛孩日記」再繼續。",
+                409,
+            )
+        current = active[0] if active else None
+        if current is not None:
+            binding.current_flow = current
+            await session.flush()
+    if current == "menu":
+        raise DomainError(
+            "line_flow_required",
+            "請先由選單選擇散步回報或領養媒合；記錄日記請輸入「毛孩日記」。原本的草稿仍保留。",
+            409,
+        )
+    if event.get("type") == "postback" and action:
+        expected = flow if flow in {"adoption", "growth_diary"} else "care_report"
+        if current is not None and expected != current:
+            raise DomainError(
+                "line_flow_mismatch",
+                "這是另一個流程的舊卡片，請先切回對應入口再繼續。草稿仍保留。",
+                409,
+            )
+    return current
+
+
 @router.post("/webhook", openapi_extra={"security": []})
 async def webhook(
     request: Request,
@@ -3017,6 +3261,7 @@ async def webhook(
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    current_flow = await _select_line_flow(session, line_user_id, event)
                     if await _handle_menu_action(line, event):
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
@@ -3058,7 +3303,11 @@ async def webhook(
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
-                    adoption_draft = await _active_adoption_draft(session, line_user_id)
+                    adoption_draft = (
+                        await _active_adoption_draft(session, line_user_id)
+                        if current_flow in {None, "adoption"}
+                        else None
+                    )
                     if (
                         adoption_draft is not None
                         and event.get("type") == "postback"
@@ -3100,13 +3349,21 @@ async def webhook(
                         await _reply(
                             line,
                             event,
-                            [build_info_card("領養媒合目前不接受照片，請使用卡片按鈕繼續。")],
+                            [
+                                build_info_card(
+                                    "領養媒合目前不接受照片，請使用卡片按鈕繼續。", accent_index=0
+                                )
+                            ],
                         )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
-                    growth_diary_pending = await _resolve_growth_diary_pending(
-                        session, line_user_id
+                    growth_diary_pending = (
+                        await _resolve_growth_diary_pending(session, line_user_id)
+                        if current_flow in {None, "growth_diary"}
+                        and not _is_growth_diary_command(event)
+                        and action != "start_growth_diary"
+                        else None
                     )
                     if growth_diary_pending is not None:
                         diary_adopter_user_id, pending_draft = growth_diary_pending
@@ -3183,6 +3440,12 @@ async def webhook(
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
+                    if current_flow in {"adoption", "growth_diary"}:
+                        raise DomainError(
+                            "line_flow_resume_required",
+                            "這個流程目前沒有可填寫的步驟，請重新點選領養媒合或輸入「毛孩日記」。",
+                            409,
+                        )
                     (
                         user_id,
                         organization_id,

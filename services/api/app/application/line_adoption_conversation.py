@@ -13,6 +13,9 @@ from services.api.app.application.adoption_matching_service import AdoptionMatch
 from services.api.app.application.audit_service import AuditService
 from services.api.app.domain.adoption_matching import AdopterPreferences, MatchScore
 from services.api.app.domain.line_adoption_state import (
+    BASE_PREFERENCE_KEYS,
+    MATCH_PREFERENCE_KEYS,
+    REQUIRED_KEYS_BY_PATH,
     AdoptionDraftAnswers,
     AdoptionDraftState,
     AdoptionDraftStateMachine,
@@ -40,6 +43,7 @@ class AdoptionConversationResult:
     entered_awaiting_ai_suitability: bool = False
     # Same idea, for the recommend_me path's AI-curated recommendation list.
     entered_awaiting_ai_recommendations: bool = False
+    repaired_missing_key: str | None = None
 
 
 class LineAdoptionConversationService:
@@ -66,11 +70,14 @@ class LineAdoptionConversationService:
         action: str,
         value: str | None,
         event_id: str,
+        expected_question: str | None = None,
+        expected_state: str | None = None,
+        expected_version: int | None = None,
     ) -> AdoptionConversationResult:
         draft = (
-            await self.draft_repository.get_by_token(token)
+            await self.draft_repository.lock_by_token(token)
             if token
-            else await self.draft_repository.get_active_for_adopter(adopter_user_id)
+            else await self.draft_repository.lock_active_for_adopter(adopter_user_id)
         )
         if draft is None or draft.adopter_user_id != adopter_user_id or draft.status != "active":
             raise DomainError("draft_access_denied", "對話不存在或無法存取", 404)
@@ -87,9 +94,26 @@ class LineAdoptionConversationService:
             reconfirmation_keys=set(draft.reconfirmation_keys or []),
         )
         inquiry_id: UUID | None = None
+        repaired_missing_key: str | None = None
         session = self.draft_repository.session
 
-        if action == "select_organization":
+        if expected_version is not None and expected_version != draft.interaction_version:
+            raise DomainError("stale_adoption_action", "這個選項已經處理過，已顯示目前題目。", 409)
+        if expected_state is not None and expected_state != draft.current_step:
+            raise DomainError("stale_adoption_action", "這個操作已經處理過，已顯示目前步驟。", 409)
+        if action == "answer" and expected_question is not None:
+            if not machine.prepare_answer_replay(expected_question):
+                raise DomainError(
+                    "stale_adoption_action", "這個選項已經處理過，已顯示目前題目。", 409
+                )
+
+        if action == "edit_contact":
+            machine.edit_contact(value or "")
+        elif action == "save_contact":
+            machine.save_contact(value or "")
+        elif action == "cancel_contact_edit":
+            machine.cancel_contact_edit()
+        elif action == "select_organization":
             organization_id = _require_uuid(value, "organization_id_required", "需要選擇收容所")
             if draft.organization_id is not None:
                 raise DomainError("organization_already_selected", "已經選擇過收容所", 409)
@@ -112,9 +136,18 @@ class LineAdoptionConversationService:
             draft.target_animal_id = animal_id
             machine.advance()
         elif action == "confirm_target_animal":
+            animal = await AnimalRepository(session, draft.organization_id).get(
+                draft.target_animal_id
+            )
+            if animal is None or not animal.is_adoptable or animal.status != "active":
+                raise DomainError(
+                    "animal_not_adoptable", "這隻動物目前無法領養，請按重新選擇。", 409
+                )
             machine.advance()
         elif action == "confirm_answers":
-            machine.advance()
+            repaired_missing_key = machine.repair_to_first_missing(BASE_PREFERENCE_KEYS)
+            if repaired_missing_key is None:
+                machine.advance()
         elif action == "select_matched_animal":
             animal_id = _require_uuid(value, "animal_id_required", "需要選擇動物")
             if str(animal_id) not in (draft.candidate_match_ids or []):
@@ -139,6 +172,10 @@ class LineAdoptionConversationService:
                 self.answer_validator(machine.next_answer_key(), value)
             new_state = machine.answer_current(value)
             if new_state == AdoptionDraftState.PRESENTING_MATCHES:
+                repaired_missing_key = machine.repair_to_first_missing(MATCH_PREFERENCE_KEYS)
+                if repaired_missing_key is not None:
+                    new_state = machine.state
+            if new_state == AdoptionDraftState.PRESENTING_MATCHES:
                 # top_n is wider than the 3-5 finally shown — this is just the
                 # rule-based candidate pool that AI reranks in the background
                 # (see _run_adoption_ai_recommendation_curation) before the
@@ -155,6 +192,14 @@ class LineAdoptionConversationService:
                 and machine.path == AdoptionPath.SPECIFIC_ANIMAL
                 and draft.target_animal_id is not None
             ):
+                repaired_missing_key = machine.repair_to_first_missing(BASE_PREFERENCE_KEYS)
+                if repaired_missing_key is not None:
+                    new_state = machine.state
+            if (
+                new_state == AdoptionDraftState.CONFIRMING_ANSWERS
+                and machine.path == AdoptionPath.SPECIFIC_ANIMAL
+                and draft.target_animal_id is not None
+            ):
                 # The specific_animal path never ranks a candidate pool, but it
                 # asks the same preference questions after confirming the
                 # target — score that one animal now that the answers exist.
@@ -166,6 +211,10 @@ class LineAdoptionConversationService:
             if value is None:
                 raise DomainError("phone_number_required", "需要提供手機號碼", 422)
             machine.answer_question("phone_number", value)
+        elif action == "contact_time":
+            if value is None:
+                raise DomainError("contact_time_required", "需要提供方便聯絡的時間", 422)
+            machine.answer_question("contact_time", value)
         elif action == "back":
             machine.back()
             if machine.path is None:
@@ -181,25 +230,29 @@ class LineAdoptionConversationService:
                 # notes: 返回地區選單 → pick a shelter → organization_already_selected).
                 draft.organization_id = None
         elif action in {"submit", "submit_current"}:
-            machine.transition(AdoptionDraftState.SUBMITTING)
-            answers = machine.submit()
-            if draft.target_animal_id is None:
-                raise DomainError("target_animal_required", "尚未選擇要領養的動物", 409)
-            animal = await AnimalRepository(session, draft.organization_id).get(
-                draft.target_animal_id
+            repaired_missing_key = machine.repair_to_first_missing(
+                REQUIRED_KEYS_BY_PATH[machine.path]
             )
-            if animal is None:
-                raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
-            inquiry = await AdoptionInquirySubmissionService(
-                AdoptionInquiryRepository(session, draft.organization_id),
-                audit=AuditService(session),
-            ).submit(
-                draft=draft,
-                animal=animal,
-                answers=answers,
-                match_scores_snapshot=(draft.match_results or None),
-            )
-            inquiry_id = inquiry.id
+            if repaired_missing_key is None:
+                machine.transition(AdoptionDraftState.SUBMITTING)
+                answers = machine.submit()
+                if draft.target_animal_id is None:
+                    raise DomainError("target_animal_required", "尚未選擇要領養的動物", 409)
+                animal = await AnimalRepository(session, draft.organization_id).get(
+                    draft.target_animal_id
+                )
+                if animal is None:
+                    raise DomainError("animal_not_found", "動物不存在或無法存取", 404)
+                inquiry = await AdoptionInquirySubmissionService(
+                    AdoptionInquiryRepository(session, draft.organization_id),
+                    audit=AuditService(session),
+                ).submit(
+                    draft=draft,
+                    animal=animal,
+                    answers=answers,
+                    match_scores_snapshot=(draft.match_results or None),
+                )
+                inquiry_id = inquiry.id
         elif action in {"cancel", "cancel_current"}:
             machine.transition(AdoptionDraftState.CANCELLED)
         else:
@@ -215,6 +268,7 @@ class LineAdoptionConversationService:
         elif machine.state == AdoptionDraftState.EXPIRED:
             draft.status = "expired"
         draft.last_interaction_at = datetime.now(timezone.utc)
+        draft.interaction_version += 1
         await session.flush()
         return AdoptionConversationResult(
             state=machine.state,
@@ -228,6 +282,7 @@ class LineAdoptionConversationService:
                 initial_state != AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
                 and machine.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
             ),
+            repaired_missing_key=repaired_missing_key,
         )
 
     async def _compute_matches(
@@ -240,6 +295,9 @@ class LineAdoptionConversationService:
 
     @staticmethod
     def _preferences_from_answers(values: dict) -> AdopterPreferences:
+        missing = [key for key in BASE_PREFERENCE_KEYS if key not in values]
+        if missing:
+            raise DomainError("incomplete_answers", "領養問卷仍有未完成的題目", 409)
         return AdopterPreferences(
             housing_type=values["housing_type"],
             dog_experience=values["dog_experience"],
