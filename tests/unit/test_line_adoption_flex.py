@@ -149,6 +149,7 @@ def test_target_animal_picker_caps_at_twelve_bubbles() -> None:
 
 def test_question_card_renders_progress_bar_and_pill_options() -> None:
     message = build_question_card(
+        question_key="housing_type",
         step=2,
         total=8,
         prompt="你家是什麼樣子呢？🏠",
@@ -177,6 +178,7 @@ def test_question_card_renders_progress_bar_and_pill_options() -> None:
 
 def test_question_card_omits_footer_without_back_action() -> None:
     message = build_question_card(
+        question_key="housing_type",
         step=1,
         total=8,
         prompt="你家是什麼樣子呢？🏠",

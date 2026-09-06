@@ -270,16 +270,16 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
             "action=confirm_target_animal&flow=adoption",
         ]
         actions.extend(
-            f"action=answer&flow=adoption&value={value}"
-            for value in (
-                "apartment_small",
-                "first_time",
-                "none",
-                "adults_only",
-                "work_from_home",
-                "structured",
-                "high_patience",
-                "companionship",
+            f"action=answer&flow=adoption&question={question}&value={value}"
+            for question, value in (
+                ("housing_type", "apartment_small"),
+                ("dog_experience", "first_time"),
+                ("other_pets", "none"),
+                ("household_members", "adults_only"),
+                ("work_schedule", "work_from_home"),
+                ("parenting_style", "structured"),
+                ("patience_level", "high_patience"),
+                ("adoption_motivation", "companionship"),
             )
         )
         actions.append("action=confirm_answers&flow=adoption")
@@ -570,4 +570,63 @@ def test_adoption_browse_paginates_searches_and_revalidates_selection(monkeypatc
     finally:
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         asyncio.run(_cleanup(other_org, ()))
+        get_settings.cache_clear()
+
+
+def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-adoption-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id = uuid4(), uuid4()
+    line_user_id = f"Urepeat{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+    client = TestClient(app)
+
+    def send(data):
+        event = _event(line_user_id, data)
+        event["replyToken"] = "test-reply"
+        result = _post(client, [event]).json()["event_results"][0]
+        assert result["status"] == "processed", result
+
+    try:
+        send("action=start_adoption_matching&flow=adoption")
+        send(f"action=select_organization&flow=adoption&value={organization_id}")
+        send("action=choose_path&flow=adoption&value=specific_animal")
+        send(f"action=select_target_animal&flow=adoption&value={animal_id}")
+        send("action=confirm_target_animal&flow=adoption")
+        answers = (
+            ("housing_type", "apartment_small"),
+            ("dog_experience", "first_time"),
+            ("other_pets", "none"),
+            ("household_members", "adults_only"),
+            ("work_schedule", "work_from_home"),
+        )
+        for question, value in answers:
+            send(f"action=answer&flow=adoption&question={question}&value={value}")
+
+        repeated = "action=answer&flow=adoption&question=parenting_style&value=structured"
+        send(repeated)
+        send(repeated)
+
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert "耐心" in json.dumps(messages, ensure_ascii=False)
+
+        async def verify():
+            connection = await asyncpg.connect(_database_url())
+            try:
+                row = await connection.fetchrow(
+                    """SELECT current_step, answers FROM adoption_drafts d
+                    JOIN line_user_bindings b ON b.user_id=d.adopter_user_id
+                    WHERE b.line_user_id=$1 AND d.status='active'""",
+                    line_user_id,
+                )
+                assert row["current_step"] == "answering_patience"
+                stored = json.loads(row["answers"])
+                assert stored["parenting_style"] == "structured"
+                assert "patience_level" not in stored
+            finally:
+                await connection.close()
+
+        asyncio.run(verify())
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()

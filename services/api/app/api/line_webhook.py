@@ -938,6 +938,7 @@ async def _adoption_reply_for_state(
         key = _ADOPTION_STATE_QUESTION_KEY[state]
         order = _QUESTION_ORDER[draft.path]
         card = build_question_card(
+            question_key=key,
             step=order.index(key) + 1,
             total=len(order),
             prompt=_ADOPTION_QUESTION_PROMPT[key],
@@ -1869,6 +1870,20 @@ async def _handle_adoption_postback(
     action = values.get("action", [""])[0]
     value = values.get("value", [None])[0]
     adopter_user_id = draft.adopter_user_id
+
+    if action == "answer":
+        state = AdoptionDraftState(draft.current_step)
+        current_question = _ADOPTION_STATE_QUESTION_KEY.get(state)
+        card_question = values.get("question", [None])[0]
+        if current_question is None or card_question != current_question:
+            await _adoption_reply_for_state(
+                session,
+                line,
+                event,
+                draft=draft,
+                public_base_url=public_base_url,
+            )
+            return
 
     if action == "browse_animals":
         try:
