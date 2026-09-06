@@ -81,6 +81,9 @@ def _choice_box(label: str, action: dict, *, tint: str = SURFACE, glyph: str = "
 
 
 def _progress_bar(position: int, total: int) -> dict:
+    # Question card headers are BUTTER-toned; filling the bar with that same
+    # BUTTER made the fill invisible against its own header. INK reads clearly
+    # against every header tone this presenter uses, not just BUTTER.
     percent = max(6, min(100, round(position * 100 / max(1, total))))
     return {
         "type": "box",
@@ -95,7 +98,7 @@ def _progress_bar(position: int, total: int) -> dict:
                 "type": "box",
                 "layout": "vertical",
                 "width": f"{percent}%",
-                "backgroundColor": BUTTER,
+                "backgroundColor": INK,
                 "cornerRadius": "999px",
                 "contents": [{"type": "filler"}],
             }
@@ -356,12 +359,16 @@ def animal_confirmation_bubble(
         _body_box(body_rows),
     )
     if photo_url:
+        # "cover" fills the 20:13 frame by cropping whatever doesn't fit; source
+        # photos vary in shape (portrait close-ups, landscape full-body), and a
+        # volunteer confirming identity needs the whole animal visible, not a
+        # tighter crop that happens to look flush with the card border.
         bubble["hero"] = {
             "type": "image",
             "url": photo_url,
             "size": "full",
             "aspectRatio": "20:13",
-            "aspectMode": "cover",
+            "aspectMode": "fit",
         }
     return {
         "type": "flex",
