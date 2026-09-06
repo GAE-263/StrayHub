@@ -8,6 +8,19 @@ from services.api.app.domain.line_care_report_state import (
     WALK_COMPLETION_CODES,
 )
 
+# The 6th required answer key is "appearance_special_status", but its stable
+# CRM codes are the shorter "appearance.*" (e.g. "appearance.none_found") --
+# every other category's code prefix matches its field name exactly, so this
+# one mismatch is easy to miss. Without this mapping, is_valid()/validate_answer()
+# reject every answer to that question (category != code prefix), which is
+# exactly the "觀察選項無效或已停用" a volunteer would hit on the last question
+# no matter which option they pick.
+_CATEGORY_CODE_PREFIXES = {"appearance_special_status": "appearance"}
+
+
+def _code_prefix(category: str) -> str:
+    return _CATEGORY_CODE_PREFIXES.get(category, category)
+
 
 @dataclass(frozen=True)
 class EffectiveOption:
@@ -33,7 +46,7 @@ class EffectiveObservationService:
         return (
             option is not None
             and option.active
-            and (category is None or code.startswith(f"{category}."))
+            and (category is None or code.startswith(f"{_code_prefix(category)}."))
         )
 
     def validate_answer(self, field: str, code: str) -> None:
@@ -55,8 +68,9 @@ class EffectiveObservationService:
             raise DomainError("observation_note_required", f"選擇「{labels}」時需要補充說明", 422)
 
     def build_quick_reply_options(self, *, category: str) -> list[dict[str, str]]:
+        prefix = _code_prefix(category)
         return [
             {"label": option.display_name, "code": option.code}
             for option in self.options.values()
-            if option.active and option.code.startswith(f"{category}.")
+            if option.active and option.code.startswith(f"{prefix}.")
         ]
