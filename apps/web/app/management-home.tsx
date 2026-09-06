@@ -283,43 +283,34 @@ export default function ManagementHome() {
               {dashboard.recent_anomalies.length === 0 ? (
                 <EmptyState title="近 2 週沒有異常回報" />
               ) : (
-                <div className="recent-reports-table">
-                  <div className="recent-report-row recent-report-header">
-                    <span>動物</span>
-                    <span>異常等級</span>
-                    <span>回報時間</span>
-                  </div>
-                  <ul className="recent-reports-list">
-                    {dashboard.recent_anomalies.map((anomaly) => (
-                      <li key={anomaly.report_id}>
-                        <Link
-                          className="recent-report-row"
-                          href={`/animals/${anomaly.animal_id}`}
-                        >
-                          <div className="recent-report-animal">
-                            <strong>{anomaly.animal_name}</strong>
-                            {anomaly.animal_shelter_number ? (
-                              <span className="recent-report-shelter-no">
-                                {anomaly.animal_shelter_number}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="recent-report-badges">
-                            <Badge>
-                              {ATTENTION_LEVEL_LABELS[anomaly.attention_level] ??
-                                anomaly.attention_level}
-                            </Badge>
-                          </div>
-                          <span className="recent-report-time muted">
-                            {new Date(anomaly.submitted_at).toLocaleString(
-                              "zh-TW",
-                            )}
+                <ul className="anomaly-list">
+                  {dashboard.recent_anomalies.map((anomaly) => (
+                    <li key={anomaly.report_id}>
+                      <Link
+                        className="anomaly-item"
+                        href={`/animals/${anomaly.animal_id}`}
+                      >
+                        <div className="anomaly-item-heading">
+                          <strong>{anomaly.animal_name}</strong>
+                          <Badge>
+                            {ATTENTION_LEVEL_LABELS[anomaly.attention_level] ??
+                              anomaly.attention_level}
+                          </Badge>
+                        </div>
+                        {anomaly.animal_shelter_number ? (
+                          <span className="recent-report-shelter-no">
+                            {anomaly.animal_shelter_number}
                           </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                        ) : null}
+                        <span className="muted">
+                          {new Date(anomaly.submitted_at).toLocaleString(
+                            "zh-TW",
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               )}
             </Card>
             <Card
