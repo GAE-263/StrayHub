@@ -306,3 +306,29 @@ def test_invalid_contact_edit_preserves_previous_phone_and_can_cancel():
     assert machine.state == AdoptionDraftState.REVIEWING
     with pytest.raises(DomainError):
         machine.save_contact("0987654321")
+
+
+def test_repair_incomplete_draft_preserves_answers_and_returns_to_first_missing():
+    machine = AdoptionDraftStateMachine(
+        state=AdoptionDraftState.CONFIRMING_ANSWERS,
+        path=AdoptionPath.SPECIFIC_ANIMAL,
+    )
+    machine.answers.values = {
+        "dog_experience": "first_time",
+        "parenting_style": "structured",
+    }
+
+    missing = machine.repair_to_first_missing(
+        (
+            "housing_type",
+            "dog_experience",
+            "parenting_style",
+        )
+    )
+
+    assert missing == "housing_type"
+    assert machine.state == AdoptionDraftState.ANSWERING_HOUSING
+    assert machine.answers.values == {
+        "dog_experience": "first_time",
+        "parenting_style": "structured",
+    }

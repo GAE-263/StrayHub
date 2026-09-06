@@ -647,3 +647,87 @@ def test_repeated_old_question_click_refreshes_current_question(monkeypatch):
     finally:
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()
+
+
+def test_incomplete_legacy_draft_returns_to_missing_question_without_500(monkeypatch):
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-adoption-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id = uuid4(), uuid4()
+    line_user_id = f"Uincomplete{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+    client = TestClient(app)
+
+    def send(data):
+        event = _event(line_user_id, data)
+        event["replyToken"] = "test-reply"
+        return _post(client, [event]).json()["event_results"][0]
+
+    async def corrupt_to_observed_legacy_shape():
+        connection = await asyncpg.connect(_database_url())
+        try:
+            await connection.execute(
+                """UPDATE adoption_drafts d
+                SET current_step='answering_adoption_motivation',
+                    answers=$2::jsonb, interaction_version=12
+                FROM line_user_bindings b
+                WHERE b.user_id=d.adopter_user_id AND b.line_user_id=$1""",
+                line_user_id,
+                json.dumps(
+                    {
+                        "dog_experience": "first_time",
+                        "other_pets": "none",
+                        "household_members": "adults_only",
+                        "work_schedule": "work_from_home",
+                        "parenting_style": "structured",
+                        "patience_level": "high_patience",
+                    }
+                ),
+            )
+        finally:
+            await connection.close()
+
+    async def verify():
+        connection = await asyncpg.connect(_database_url())
+        try:
+            row = await connection.fetchrow(
+                """SELECT current_step, answers FROM adoption_drafts d
+                JOIN line_user_bindings b ON b.user_id=d.adopter_user_id
+                WHERE b.line_user_id=$1 AND d.status='active'""",
+                line_user_id,
+            )
+            assert row["current_step"] == "answering_housing"
+            answers = json.loads(row["answers"])
+            assert answers["parenting_style"] == "structured"
+            assert answers["adoption_motivation"] == "companionship"
+            assert "housing_type" not in answers
+        finally:
+            await connection.close()
+
+    try:
+        assert send("action=start_adoption_matching&flow=adoption")["status"] == "processed"
+        assert (
+            send(f"action=select_organization&flow=adoption&value={organization_id}")["status"]
+            == "processed"
+        )
+        assert send("action=choose_path&flow=adoption&value=specific_animal")["status"] == (
+            "processed"
+        )
+        assert (
+            send(f"action=select_target_animal&flow=adoption&value={animal_id}")["status"]
+            == "processed"
+        )
+        assert send("action=confirm_target_animal&flow=adoption")["status"] == "processed"
+        asyncio.run(corrupt_to_observed_legacy_shape())
+
+        result = send(
+            "action=answer&flow=adoption&question=adoption_motivation&version=12"
+            "&value=companionship"
+        )
+        assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert "還有一題需要補填" in messages[0]["text"]
+        assert "你家是什麼樣子" in json.dumps(messages[1], ensure_ascii=False)
+        asyncio.run(verify())
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        get_settings.cache_clear()

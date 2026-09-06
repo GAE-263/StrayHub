@@ -416,6 +416,25 @@ class AdoptionDraftStateMachine:
         self.last_interaction_at = datetime.now(timezone.utc)
         return self.state
 
+    def repair_to_first_missing(self, required_keys: tuple[str, ...]) -> str | None:
+        """Move an inconsistent legacy draft to its first missing question."""
+        if self.path is None:
+            return None
+        missing = next((key for key in required_keys if key not in self.answers.values), None)
+        if missing is None:
+            return None
+        order = _STATE_ORDER_BY_PATH[self.path]
+        target = next(
+            (state for state in order if missing in _STATE_QUESTIONS.get(state, ())),
+            None,
+        )
+        if target is None:
+            raise DomainError("invalid_state_transition", "找不到需要補填的問卷題目", 409)
+        self.state = target
+        self.reconfirmation_keys.discard(missing)
+        self.last_interaction_at = datetime.now(timezone.utc)
+        return missing
+
     def edit_contact(self, key: str) -> None:
         if self.state != _S.REVIEWING or key not in CONTACT_EDIT_STATES.values():
             raise DomainError("invalid_contact_edit", "請從領養意願摘要選擇要修改的聯絡資料", 409)

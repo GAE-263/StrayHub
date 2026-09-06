@@ -863,7 +863,13 @@ async def _reply_adoption_animal_page(
 
 
 async def _adoption_reply_for_state(
-    session, line, event: dict, *, draft, public_base_url: str | None
+    session,
+    line,
+    event: dict,
+    *,
+    draft,
+    public_base_url: str | None,
+    lead: list[dict] | None = None,
 ) -> None:
     state = AdoptionDraftState(draft.current_step)
     if state == AdoptionDraftState.SELECTING_ORGANIZATION:
@@ -1155,7 +1161,7 @@ async def _adoption_reply_for_state(
         await _reply(line, event, [_text("領養流程狀態已更新，請重新點選「領養流程」。")])
         return
     card["quickReply"] = {"items": [_adoption_cancel_item()]}
-    await _reply(line, event, [card])
+    await _reply(line, event, [*(lead or []), card])
 
 
 def _build_gemini_client(settings) -> GeminiClient | None:
@@ -2043,7 +2049,16 @@ async def _handle_adoption_postback(
                 public_base_url=public_base_url,
             )
         await _adoption_reply_for_state(
-            session, line, event, draft=updated, public_base_url=public_base_url
+            session,
+            line,
+            event,
+            draft=updated,
+            public_base_url=public_base_url,
+            lead=(
+                [_text("剛剛的問卷還有一題需要補填，其他答案已為你保留。")]
+                if result.repaired_missing_key is not None
+                else None
+            ),
         )
 
 
