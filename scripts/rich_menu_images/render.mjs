@@ -74,16 +74,16 @@ function html(doc, role) {
         <div class="num">${index + 1}</div><div class="spark">🌟</div>
         <div class="mid"><div class="emoji">${EMOJI[code] || "✨"}</div>
         <div class="label">${action.label}</div></div>
-        <div class="code">action=${code}</div>
+        ${role === "volunteer" ? "" : `<div class="code">action=${code}</div>`}
       </div>`;
     })
     .join("");
   return `<style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap');
+
   *{box-sizing:border-box;margin:0}
   body{width:${WIDTH}px;height:${HEIGHT}px;background:#FAF6EE;
     background-image:radial-gradient(#E9DFCC 3px,transparent 3px);background-size:60px 60px;
-    font-family:'Noto Sans TC','Apple Color Emoji',sans-serif;color:#716053;
+    font-family:'PingFang TC','Noto Sans TC','Apple Color Emoji',sans-serif;color:#716053;
     padding:56px;display:flex;flex-direction:column;gap:28px}
   .bar{background:#F0DFC4;border:9px solid #716053;border-radius:44px;padding:26px 44px;
     display:flex;align-items:center;justify-content:space-between}
@@ -110,18 +110,24 @@ function html(doc, role) {
   <div class="bar"><h1>🐾 ${ROLE_TITLE[role] || role}</h1>
     <div class="chat">聊天列：${doc.chatBarText} 🎈</div></div>
   <div class="row">${cards}</div>
-  <div class="foot"><div>🌟 ${role}.png · ${WIDTH} × ${HEIGHT} · ${doc.actions.length} 區</div>
-    <div>占位底圖，之後可換正式插畫</div></div>`;
+  ${role === "volunteer"
+    ? '<div class="foot"><div>散步後，記下今天的觀察</div><div>報到請洽現場工作人員</div></div>'
+    : `<div class="foot"><div>🌟 ${role}.png · ${WIDTH} × ${HEIGHT} · ${doc.actions.length} 區</div><div>占位底圖，之後可換正式插畫</div></div>`}`;
 }
 
 // PLAYWRIGHT_CHROMIUM_PATH 可指向已安裝的 Chromium，省去為了產圖再下載一份
 // （apps/web 的 playwright 版本與快取內的 build 未必相同）。
+const selectedRole = process.argv[2];
+if (selectedRole && !Object.hasOwn(ROLE_TITLE, selectedRole)) {
+  throw new Error("請指定 default、volunteer、adopter 或 staff");
+}
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined;
 const browser = await chromium.launch(executablePath ? { executablePath } : {});
 const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
 for (const file of readdirSync(CONFIG_DIR).filter((f) => /^line-rich-menu-.*\.yaml$/.test(f))) {
   const doc = parseMenu(readFileSync(join(CONFIG_DIR, file), "utf8"));
   const role = doc.role;
+  if (selectedRole && role !== selectedRole) continue;
   await page.setContent(html(doc, role));
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: join(OUT_DIR, `${role}.png`) });

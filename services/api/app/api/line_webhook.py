@@ -639,7 +639,7 @@ async def _handle_public_volunteer_application_entry(
         await _reply(
             line,
             event,
-            [_text("已切回志工選單，請由下方選單點選「散步回報」或「志工報到」。")],
+            [_text("已切回志工選單，請由下方選單點選「散步回報」。")],
         )
         return True
     await _reply(line, event, [_volunteer_application_entry_message()])

@@ -26,7 +26,7 @@ matching 為必要基線；AI 是可選增強，停用或失敗時仍可完成�
   └─ default（志工服務、領養流程）
 
 active VOLUNTEER membership
-  └─ volunteer（散步回報、志工報到、返回主選單）
+  └─ volunteer（散步回報、返回主選單）
 
 active STAFF 或 SHELTER_ADMIN membership + server-side shelter context
   └─ staff（新增動物、更新健康、動物清單、變更狀態）
@@ -75,3 +75,15 @@ Production 另受 `LINE_ROLE_MENU_FEATURES_ENABLED` fail-closed gate 保護，�
 實機設定見 [line-account-setup.md](line-account-setup.md)，staff contract 見
 [staff-animal-line-input.md](staff-animal-line-input.md)，production gate 見
 [deployment/production-config-contract.md](deployment/production-config-contract.md)。
+
+
+## 志工選單更新（2026-09-06）
+
+線上報到尚未開放，志工選單已移除報到入口。舊選單的 `volunteer_checkin`
+仍回覆請向現場工作人員確認報到方式，不建立報到紀錄。
+
+可用 `node scripts/rich_menu_images/render.mjs volunteer` 只重繪志工圖片。
+本次僅更新程式、定義與圖片，尚未發布至 LINE。部署時先套用
+`0048_line_current_flow` migration，再載入新版 API；依既有選單同步流程發布
+新定義與圖片，更新 `LINE_RICH_MENU_VOLUNTEER_ID` 並確認重新進入志工服務後
+兩個按鈕的點擊範圍正確。
