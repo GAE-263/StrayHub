@@ -332,3 +332,21 @@ def test_repair_incomplete_draft_preserves_answers_and_returns_to_first_missing(
         "dog_experience": "first_time",
         "parenting_style": "structured",
     }
+
+
+def test_resume_repairs_missing_answers_before_saved_step():
+    machine = AdoptionDraftStateMachine(
+        state=AdoptionDraftState.ANSWERING_ADOPTION_MOTIVATION,
+        path=AdoptionPath.SPECIFIC_ANIMAL,
+    )
+    machine.answers.values = {
+        "other_pets": "none",
+        "household_members": "adults_only",
+        "work_schedule": "work_from_home",
+        "parenting_style": "structured",
+        "patience_level": "high_patience",
+    }
+
+    assert machine.repair_for_resume() == "housing_type"
+    assert machine.state == AdoptionDraftState.ANSWERING_HOUSING
+    assert machine.answers.values["parenting_style"] == "structured"

@@ -95,7 +95,13 @@ from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
 from services.api.app.config.settings import get_settings
-from services.api.app.domain.line_adoption_state import CONTACT_EDIT_STATES, AdoptionDraftState
+from services.api.app.domain.line_adoption_state import (
+    CONTACT_EDIT_STATES,
+    AdoptionDraftAnswers,
+    AdoptionDraftState,
+    AdoptionDraftStateMachine,
+    AdoptionPath,
+)
 from services.api.app.domain.line_care_report_state import (
     REQUIRED_ANSWER_KEYS,
     UNOBSERVED,
@@ -1825,15 +1831,37 @@ async def _handle_adoption_start(
     adopter_user_id = await _get_or_create_adopter_identity(session, line_user_id)
     await set_authentication_user_scope(session, adopter_user_id)
     repository = AdoptionDraftRepository(session, None)
-    draft = await repository.get_active_for_adopter(adopter_user_id)
+    draft = await repository.lock_active_for_adopter(adopter_user_id)
+    repaired_missing_key = None
     if draft is None:
         draft, _ = await LineAdoptionDraftService(
             repository, ttl_seconds=get_settings().draft_ttl_seconds
         ).create(adopter_user_id=adopter_user_id)
     elif draft.organization_id is not None:
         await set_organization_scope(session, draft.organization_id)
+        machine = AdoptionDraftStateMachine(
+            state=AdoptionDraftState(draft.current_step),
+            path=AdoptionPath(draft.path) if draft.path else None,
+            answers=AdoptionDraftAnswers(dict(draft.answers)),
+            reconfirmation_keys=set(draft.reconfirmation_keys or []),
+        )
+        repaired_missing_key = machine.repair_for_resume()
+        if repaired_missing_key is not None:
+            draft.current_step = machine.state.value
+            draft.reconfirmation_keys = sorted(machine.reconfirmation_keys)
+            draft.interaction_version += 1
+            await session.flush()
     await _adoption_reply_for_state(
-        session, line, event, draft=draft, public_base_url=public_base_url
+        session,
+        line,
+        event,
+        draft=draft,
+        public_base_url=public_base_url,
+        lead=(
+            [_text("先前的問卷還有題目未完成，其他答案已保留，請從這題繼續。")]
+            if repaired_missing_key is not None
+            else None
+        ),
     )
 
 

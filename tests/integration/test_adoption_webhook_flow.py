@@ -718,7 +718,6 @@ def test_incomplete_legacy_draft_returns_to_missing_question_without_500(monkeyp
             assert row["current_step"] == "answering_housing"
             answers = json.loads(row["answers"])
             assert answers["parenting_style"] == "structured"
-            assert answers["adoption_motivation"] == "companionship"
             assert "housing_type" not in answers
         finally:
             await connection.close()
@@ -739,13 +738,10 @@ def test_incomplete_legacy_draft_returns_to_missing_question_without_500(monkeyp
         assert send("action=confirm_target_animal&flow=adoption")["status"] == "processed"
         asyncio.run(corrupt_to_observed_legacy_shape())
 
-        result = send(
-            "action=answer&flow=adoption&question=adoption_motivation&version=12"
-            "&value=companionship"
-        )
+        result = send("action=start_adoption_matching&flow=adoption")
         assert result["status"] == "processed", result
         messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
-        assert "還有一題需要補填" in messages[0]["text"]
+        assert "還有題目未完成" in messages[0]["text"]
         assert "你家是什麼樣子" in json.dumps(messages[1], ensure_ascii=False)
         asyncio.run(verify())
     finally:

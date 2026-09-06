@@ -435,6 +435,36 @@ class AdoptionDraftStateMachine:
         self.last_interaction_at = datetime.now(timezone.utc)
         return missing
 
+    def repair_for_resume(self) -> str | None:
+        """Validate answers that must exist before the saved current step."""
+        if self.path is None:
+            return None
+        order = _STATE_ORDER_BY_PATH[self.path]
+        if self.state in order:
+            required = tuple(
+                key
+                for state in order[: order.index(self.state)]
+                for key in _STATE_QUESTIONS.get(state, ())
+            )
+        elif self.state in {
+            _S.CONFIRMING_ANSWERS,
+            _S.AWAITING_AI_SUITABILITY,
+            _S.SELECTING_ALTERNATIVE_ANIMAL,
+            _S.CONFIRMING_ALTERNATIVE_ANIMAL,
+        }:
+            required = BASE_PREFERENCE_KEYS
+        elif self.state in {
+            _S.PRESENTING_MATCHES,
+            _S.AWAITING_AI_RECOMMENDATIONS,
+            _S.SELECTING_MATCHED_ANIMAL,
+        }:
+            required = MATCH_PREFERENCE_KEYS
+        elif self.state in {_S.REVIEWING, _S.SUBMITTING}:
+            required = REQUIRED_KEYS_BY_PATH[self.path]
+        else:
+            return None
+        return self.repair_to_first_missing(required)
+
     def edit_contact(self, key: str) -> None:
         if self.state != _S.REVIEWING or key not in CONTACT_EDIT_STATES.values():
             raise DomainError("invalid_contact_edit", "請從領養意願摘要選擇要修改的聯絡資料", 409)
