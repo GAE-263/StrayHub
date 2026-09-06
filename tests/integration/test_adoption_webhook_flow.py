@@ -6,10 +6,13 @@ import hashlib
 import hmac
 import json
 import os
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import asyncpg
+import pytest
 from fastapi.testclient import TestClient
+from services.api.app.api import line_webhook
 from services.api.app.config.settings import get_settings
 from services.api.app.main import app
 from services.api.app.persistence.database.engine import engine
@@ -306,5 +309,148 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
 
         asyncio.run(verify())
     finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def isolated_line_transport(monkeypatch):
+    monkeypatch.setattr(line_webhook.LineMessagingApiAdapter, "reply", AsyncMock())
+    monkeypatch.setattr(line_webhook.LineMessagingApiAdapter, "push", AsyncMock())
+    monkeypatch.setattr(line_webhook.LineMessagingApiAdapter, "link_rich_menu", AsyncMock())
+    monkeypatch.setattr(line_webhook, "_build_gemini_client", lambda settings: None)
+
+
+def test_switching_flow_preserves_adoption_and_routes_volunteer_note(monkeypatch):
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-adoption-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id, membership_id, care_id = uuid4(), uuid4(), uuid4(), uuid4()
+    line_user_id = f"Umixed{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+    client = TestClient(app)
+
+    def send(data):
+        return _post(client, [_event(line_user_id, data)]).json()["event_results"][0]
+
+    async def seed_care():
+        connection = await asyncpg.connect(_database_url())
+        try:
+            user_id = await connection.fetchval(
+                "SELECT user_id FROM line_user_bindings WHERE line_user_id=$1", line_user_id
+            )
+            await connection.execute(
+                """INSERT INTO organization_memberships
+                (id,organization_id,user_id,role,status,valid_from,expires_at,created_at,updated_at)
+                VALUES ($1,$2,$3,'VOLUNTEER','active',now()-interval '1 day',
+                        now()+interval '1 day',now(),now())""",
+                membership_id,
+                organization_id,
+                user_id,
+            )
+            application_id = uuid4()
+            await connection.execute(
+                """INSERT INTO volunteer_applications
+                (id,organization_id,user_id,status,source_channel,submitted_at,
+                 decided_at,decided_by_user_id,created_at,updated_at)
+                VALUES ($1,$2,$3,'approved','liff',now(),now(),$3,now(),now())""",
+                application_id,
+                organization_id,
+                user_id,
+            )
+            await connection.execute(
+                """INSERT INTO volunteer_access_grants
+                (id,organization_id,user_id,membership_id,application_id,status,
+                 valid_from,expires_at,approved_at,source_type,created_at,updated_at)
+                VALUES ($1,$2,$3,$4,$5,'active',now()-interval '1 day',
+                        now()+interval '1 day',now(),'manager_approval',now(),now())""",
+                uuid4(),
+                organization_id,
+                user_id,
+                membership_id,
+                application_id,
+            )
+            await connection.execute(
+                """INSERT INTO care_report_drafts
+                (id,organization_id,volunteer_user_id,membership_id,animal_id,opaque_token_digest,
+                 current_step,answers,status,last_interaction_at,expires_at,created_at,updated_at)
+                VALUES ($1,$2,$3,$4,$5,$6,'awaiting_note','{}','active',now(),
+                        now()+interval '1 day',now(),now())""",
+                care_id,
+                organization_id,
+                user_id,
+                membership_id,
+                animal_id,
+                uuid4().hex,
+            )
+        finally:
+            await connection.close()
+
+    async def inspect_and_cleanup(cleanup=False):
+        connection = await asyncpg.connect(_database_url())
+        try:
+            if cleanup:
+                await connection.execute("DELETE FROM care_report_drafts WHERE id=$1", care_id)
+                await connection.execute(
+                    "DELETE FROM webhook_sessions WHERE organization_id=$1", organization_id
+                )
+                await connection.execute(
+                    "DELETE FROM volunteer_access_grants WHERE organization_id=$1", organization_id
+                )
+                await connection.execute(
+                    "DELETE FROM volunteer_applications WHERE organization_id=$1", organization_id
+                )
+                await connection.execute(
+                    "DELETE FROM organization_memberships WHERE id=$1", membership_id
+                )
+            else:
+                assert (
+                    await connection.fetchval(
+                        "SELECT note FROM care_report_drafts WHERE id=$1", care_id
+                    )
+                    == "今天走得很穩"
+                )
+                assert (
+                    await connection.fetchval(
+                        "SELECT current_step FROM adoption_drafts d "
+                        "JOIN line_user_bindings b ON b.user_id=d.adopter_user_id "
+                        "WHERE b.line_user_id=$1",
+                        line_user_id,
+                    )
+                    == "selecting_organization"
+                )
+        finally:
+            await connection.close()
+
+    try:
+        assert send("action=start_adoption_matching&flow=adoption")["status"] == "processed"
+        asyncio.run(seed_care())
+        result = send("action=start_care_report")
+        assert result["status"] == "processed", result
+        result = _post(client, [_text_event(line_user_id, "今天走得很穩")]).json()["event_results"][
+            0
+        ]
+        assert result["status"] == "processed", result
+        asyncio.run(inspect_and_cleanup())
+        assert (
+            send("action=select_region&flow=adoption&value=north")["reason"] == "line_flow_mismatch"
+        )
+        assert send("action=back_to_default_menu")["status"] == "processed"
+        assert (
+            _post(client, [_text_event(line_user_id, "不應寫入")]).json()["event_results"][0][
+                "reason"
+            ]
+            == "line_flow_required"
+        )
+        assert send("action=start_adoption_matching&flow=adoption")["status"] == "processed"
+        image_event = {
+            "type": "message",
+            "webhookEventId": uuid4().hex,
+            "source": {"userId": line_user_id},
+            "message": {"type": "image", "id": "test-image"},
+        }
+        assert _post(client, [image_event]).json()["event_results"][0]["status"] == "processed"
+        asyncio.run(inspect_and_cleanup())
+    finally:
+        asyncio.run(inspect_and_cleanup(cleanup=True))
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()

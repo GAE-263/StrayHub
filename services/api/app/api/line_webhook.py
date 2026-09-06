@@ -2968,6 +2968,88 @@ def _uuid_value(value: str) -> UUID | None:
         return None
 
 
+async def _select_line_flow(session, line_user_id: str, event: dict) -> str | None:
+    """Route input by explicit entry, preserving inactive drafts and authorization."""
+    values = parse_qs(event.get("postback", {}).get("data", ""))
+    action = values.get("action", [""])[0]
+    flow = values.get("flow", [""])[0]
+    binding = await LineWebhookRepository(session).binding(line_user_id)
+    entry = None
+    if action == "back_to_default_menu":
+        entry = "menu"
+    elif action == "start_adoption_matching":
+        await _get_or_create_adopter_identity(session, line_user_id)
+        binding = await LineWebhookRepository(session).binding(line_user_id)
+        entry = "adoption"
+    elif _is_walk_report_command(event) or action in {"walk_report", "start_care_report"}:
+        await _resolve_context(session, line_user_id)
+        entry = "care_report"
+    elif _is_growth_diary_command(event) or (
+        flow == "growth_diary" and action in {"start_growth_diary", "view_growth_diary_history"}
+    ):
+        entry = "growth_diary"
+    if action == "start_volunteer_application" or (
+        event.get("message", {}).get("text", "").strip() == VOLUNTEER_APPLICATION_COMMAND
+    ):
+        entry = "menu"
+    if binding is None:
+        return None
+    if entry is not None:
+        binding.current_flow = entry
+        await session.flush()
+        return entry
+    # Menu actions do not submit conversation answers.
+    if (
+        action in STAFF_MENU_ACTIONS
+        or action in MENU_PLACEHOLDER_ACTIONS
+        or action == "start_binding"
+    ):
+        return binding.current_flow
+    current = binding.current_flow
+    if current is None:
+        active = []
+        adoption = await _active_adoption_draft(session, line_user_id)
+        if adoption is not None and adoption.expires_at > datetime.now(timezone.utc):
+            active.append("adoption")
+        if await _resolve_growth_diary_pending(session, line_user_id) is not None:
+            active.append("growth_diary")
+        try:
+            user_id, organization_id, _, _ = await _resolve_context(session, line_user_id)
+        except DomainError:
+            pass
+        else:
+            draft = await CareReportDraftRepository(
+                session, organization_id
+            ).get_active_for_volunteer(user_id)
+            if draft is not None and draft.expires_at > datetime.now(timezone.utc):
+                active.append("care_report")
+        if len(active) > 1:
+            raise DomainError(
+                "line_flow_required",
+                "你有多份未完成的紀錄，請先點選散步回報、領養媒合，或輸入「毛孩日記」再繼續。",
+                409,
+            )
+        current = active[0] if active else None
+        if current is not None:
+            binding.current_flow = current
+            await session.flush()
+    if current == "menu":
+        raise DomainError(
+            "line_flow_required",
+            "請先由選單選擇散步回報或領養媒合；記錄日記請輸入「毛孩日記」。原本的草稿仍保留。",
+            409,
+        )
+    if event.get("type") == "postback" and action:
+        expected = flow if flow in {"adoption", "growth_diary"} else "care_report"
+        if current is not None and expected != current:
+            raise DomainError(
+                "line_flow_mismatch",
+                "這是另一個流程的舊卡片，請先切回對應入口再繼續。草稿仍保留。",
+                409,
+            )
+    return current
+
+
 @router.post("/webhook", openapi_extra={"security": []})
 async def webhook(
     request: Request,
@@ -3017,6 +3099,7 @@ async def webhook(
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    current_flow = await _select_line_flow(session, line_user_id, event)
                     if await _handle_menu_action(line, event):
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
@@ -3058,7 +3141,11 @@ async def webhook(
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
-                    adoption_draft = await _active_adoption_draft(session, line_user_id)
+                    adoption_draft = (
+                        await _active_adoption_draft(session, line_user_id)
+                        if current_flow in {None, "adoption"}
+                        else None
+                    )
                     if (
                         adoption_draft is not None
                         and event.get("type") == "postback"
@@ -3100,13 +3187,21 @@ async def webhook(
                         await _reply(
                             line,
                             event,
-                            [build_info_card("領養媒合目前不接受照片，請使用卡片按鈕繼續。")],
+                            [
+                                build_info_card(
+                                    "領養媒合目前不接受照片，請使用卡片按鈕繼續。", accent_index=0
+                                )
+                            ],
                         )
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
-                    growth_diary_pending = await _resolve_growth_diary_pending(
-                        session, line_user_id
+                    growth_diary_pending = (
+                        await _resolve_growth_diary_pending(session, line_user_id)
+                        if current_flow in {None, "growth_diary"}
+                        and not _is_growth_diary_command(event)
+                        and action != "start_growth_diary"
+                        else None
                     )
                     if growth_diary_pending is not None:
                         diary_adopter_user_id, pending_draft = growth_diary_pending
@@ -3183,6 +3278,12 @@ async def webhook(
                         await identity.complete_event(stored_event)
                         results.append({"webhook_event_id": event_id, "status": "processed"})
                         continue
+                    if current_flow in {"adoption", "growth_diary"}:
+                        raise DomainError(
+                            "line_flow_resume_required",
+                            "這個流程目前沒有可填寫的步驟，請重新點選領養媒合或輸入「毛孩日記」。",
+                            409,
+                        )
                     (
                         user_id,
                         organization_id,
