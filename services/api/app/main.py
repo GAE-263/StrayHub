@@ -21,6 +21,7 @@ from services.api.app.api.errors import (
     request_validation_error_handler,
     sqlalchemy_error_handler,
 )
+from services.api.app.api.google_authentication import router as google_authentication_router
 from services.api.app.api.growth_diary import router as growth_diary_router
 from services.api.app.api.line_binding import router as line_binding_router
 from services.api.app.api.line_drafts import router as line_drafts_router
@@ -93,6 +94,7 @@ app.add_exception_handler(DomainError, domain_error_handler)
 app.add_exception_handler(RequestValidationError, request_validation_error_handler)
 app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
 app.include_router(authentication_router)
+app.include_router(google_authentication_router)
 app.include_router(dashboard_router)
 app.include_router(management_animals_router)
 app.include_router(report_inbox_router)

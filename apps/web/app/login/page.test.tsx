@@ -38,11 +38,11 @@ describe("LoginPage", () => {
   it("exposes the localized form contract and saving announcement", () => {
     const { document } = renderLoginForm();
     const html = document.documentElement.outerHTML;
-    expect(html).toContain("浪浪森友會管理入口");
+    expect(html).toContain("歡迎回到森友會");
     expect(html).toContain('for="username"');
     expect(html).toContain('for="password"');
     expect(html).toContain("登入");
-    expect(html).toContain("目前收容所");
+    expect(html).toContain("登入設定");
   });
 
   it("fails closed before hydration and preserves password-manager semantics", () => {

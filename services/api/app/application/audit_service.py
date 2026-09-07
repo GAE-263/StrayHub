@@ -32,7 +32,11 @@ class AuditService:
     ) -> AuditRecord:
         if not action or not resource_type or not source_channel:
             raise ValueError("audit action, resource_type and source_channel are required")
-        if organization_id is None and resource_type not in {"organization", "platform"}:
+        if resource_type == "account" and (
+            organization_id is not None or actor_user_id is None or resource_id != actor_user_id
+        ):
+            raise ValueError("account audit must reference the authenticated actor")
+        if organization_id is None and resource_type not in {"organization", "platform", "account"}:
             raise ValueError("tenant business audit records require an organization scope")
         if actor_user_id is None and not (actor_reference or "").strip():
             raise ValueError("system audit records require actor_reference")

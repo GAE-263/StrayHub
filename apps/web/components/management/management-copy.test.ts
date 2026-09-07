@@ -78,7 +78,7 @@ const copyContracts = [
   {
     file: "app/login/LoginClient.tsx",
     removed: [/Active Shelter Context/, /Membership/],
-    added: [/目前收容所/, /成員資格/],
+    added: [/目前收容所/, /登入設定/],
   },
   {
     file: "components/management/ManagementLayout.tsx",

@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { mockLoginApi, mockManagementApi } from "./fixtures";
 
+// Password regression stays independent of local Google configuration.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/v1/auth/google/config", (route) =>
+    route.fulfill({ json: { enabled: false } }),
+  );
+});
+
 const viewports = [
   { width: 360, height: 800 },
   { width: 768, height: 1024 },
@@ -24,7 +31,7 @@ for (const viewport of viewports) {
     await mockLoginApi(page);
     await page.goto("/login");
     await expect(
-      page.getByRole("heading", { name: "浪浪森友會管理入口" }),
+      page.getByRole("heading", { name: "歡迎回到森友會" }),
     ).toBeVisible();
     await expect(page.getByLabel("帳號")).toHaveValue("");
     await expect(page.getByLabel("密碼")).toHaveValue("");

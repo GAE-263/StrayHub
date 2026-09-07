@@ -123,17 +123,15 @@ async def current_request_context(
 ) -> RequestContext:
     """從 verified Access Token／Server-side Session 建立不可由前端覆寫的 Scope。"""
 
-    context = getattr(request.state, "auth_context", None)
-    if not isinstance(context, RequestContext):
-        context = await _load_request_context(
-            session,
-            request=request,
-            authorization=authorization,
-            session_id=x_session_id,
-            require_organization=True,
-        )
-        request.state.auth_context = context
-    return context
+    # Always establish this dependency's database scope; a weaker dependency
+    # may have run earlier in the same request.
+    return await _load_request_context(
+        session,
+        request=request,
+        authorization=authorization,
+        session_id=x_session_id,
+        require_organization=True,
+    )
 
 
 async def authenticated_request_context(
@@ -144,17 +142,31 @@ async def authenticated_request_context(
 ) -> RequestContext:
     """建立已驗證的使用者 Context，但允許尚未選定收容所的 Session。"""
 
-    context = getattr(request.state, "auth_context", None)
-    if not isinstance(context, RequestContext):
-        context = await _load_request_context(
-            session,
-            request=request,
-            authorization=authorization,
-            session_id=x_session_id,
-            require_organization=False,
-        )
-        request.state.auth_context = context
-    return context
+    return await _load_request_context(
+        session,
+        request=request,
+        authorization=authorization,
+        session_id=x_session_id,
+        require_organization=False,
+    )
+
+
+async def identity_request_context(
+    request: Request,
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+    authorization: str | None = Header(default=None),  # noqa: B008
+) -> RequestContext:
+    """Bearer-only account operations; never establish tenant/platform scope."""
+    if not authorization:
+        raise DomainError("authentication_required", "請先完成身分驗證", 401)
+    return await _load_request_context(
+        session,
+        request=request,
+        authorization=authorization,
+        session_id=None,
+        require_organization=False,
+        identity_only=True,
+    )
 
 
 async def _load_request_context(
@@ -164,6 +176,7 @@ async def _load_request_context(
     authorization: str | None,
     session_id: UUID | None,
     require_organization: bool = True,
+    identity_only: bool = False,
 ) -> RequestContext:
     from services.api.app.api.management_access import (
         enforce_session_exposure_profile,
@@ -229,6 +242,19 @@ async def _load_request_context(
     if authorization and token_user_id != user.id:
         raise DomainError("invalid_access_token", "Access Token 無效", 401)
 
+    if getattr(session_record, "account_access_enabled", False) and public_exposure_profile:
+        raise DomainError("invalid_session", "Session 無效", 401)
+    if identity_only:
+        await set_authentication_user_scope(session, user.id)
+        return RequestContext(
+            user_id=user.id,
+            organization_id=None,
+            membership_id=None,
+            role="",
+            session_id=session_record.id,
+            public_exposure_profile=public_exposure_profile,
+        )
+
     platform_scope = user.platform_role == "PLATFORM_ADMIN"
     if platform_scope:
         await set_platform_scope(session)
@@ -243,9 +269,24 @@ async def _load_request_context(
             # user/organization pair, not the broad membership-discovery scope.
             await set_authentication_user_organization_scope(session, user.id, organization_id)
         organization = await repository.get_organization(organization_id)
+        membership = await repository.get_effective_membership(user.id, organization_id)
+        if (
+            not require_organization
+            and getattr(session_record, "account_access_enabled", False)
+            and not platform_scope
+            and (organization is None or organization.status != "active" or membership is None)
+        ):
+            await set_authentication_user_scope(session, user.id)
+            return RequestContext(
+                user_id=user.id,
+                organization_id=None,
+                membership_id=None,
+                role="",
+                session_id=session_record.id,
+                public_exposure_profile=public_exposure_profile,
+            )
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)
-        membership = await repository.get_effective_membership(user.id, organization_id)
         if membership is not None:
             membership_id = membership.id
             if not platform_scope:

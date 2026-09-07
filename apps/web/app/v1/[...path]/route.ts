@@ -167,8 +167,11 @@ async function proxy(
 
     const responseHeaders = new Headers();
     upstream.headers.forEach((value, key) => {
-      if (!HOP_BY_HOP_HEADERS.has(key)) responseHeaders.set(key, value);
+      if (!HOP_BY_HOP_HEADERS.has(key) && key !== "set-cookie")
+        responseHeaders.set(key, value);
     });
+    for (const cookie of upstream.headers.getSetCookie())
+      responseHeaders.append("set-cookie", cookie);
     return new Response(upstreamBody.body, {
       status: upstream.status,
       headers: responseHeaders,

@@ -6,6 +6,10 @@ from urllib.parse import unquote
 
 _EXACT_SENSITIVE_KEYS = {
     "authorization",
+    "credential",
+    "nonce",
+    "cookie",
+    "set_cookie",
     "password",
     "temporary_password",
     "access_token",
@@ -34,7 +38,7 @@ _COLLAPSED_SENSITIVE_KEYS = {key.replace("_", "") for key in _EXACT_SENSITIVE_KE
 _BEARER_PATTERN = re.compile(r"(?P<prefix>\bbearer\s+)(?P<value>[^\s,;&]+)", re.I)
 _SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>[\"']?(?P<key>(?:[A-Za-z0-9_.-]*(?:password|secret|token|credential|signature)|"
-    r"authorization|entry|signed[_-]?url|line[_-]?user[_-]?id|"
+    r"authorization|nonce|cookie|set[_-]?cookie|entry|signed[_-]?url|line[_-]?user[_-]?id|"
     r"recipient[_-]?(?:id|identifier)))[\"']?\s*[:=]\s*[\"']?)"
     r"(?P<value>[^\"'\s,;&}\]]+)",
     re.I,

@@ -98,6 +98,9 @@ class SessionRecord(IdentityMixin, AuditMixin, Base):
     )
 
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    account_access_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     active_organization_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("organizations.id"), nullable=True, index=True
     )
@@ -142,6 +145,74 @@ class LoginIpAttempt(IdentityMixin, Base):
 
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GoogleUserBinding(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "google_user_bindings"
+
+    google_sub: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+
+
+class GoogleAuthTransaction(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "google_auth_transactions"
+
+    purpose: Mapped[str] = mapped_column(String(20), nullable=False)
+    browser_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    csrf_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    nonce_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    session_id: Mapped[UUID | None] = mapped_column(ForeignKey("session_records.id"), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class OrganizationInvitation(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "organization_invitations"
+    __table_args__ = (
+        CheckConstraint("role IN ('STAFF', 'SHELTER_ADMIN')", name="ck_invitation_role"),
+        CheckConstraint(
+            "status IN ('open', 'claimed', 'approved', 'revoked')", name="ck_invitation_status"
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
+    organization_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    token_digest: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    claimed_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class OrganizationJoinApplication(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "organization_join_applications"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','approved','rejected')", name="ck_join_status"),
+        CheckConstraint("role IS NULL OR role IN ('STAFF','SHELTER_ADMIN')", name="ck_join_role"),
+        Index("ix_join_user", "user_id"),
+        Index("ix_join_org", "organization_id"),
+        Index(
+            "uq_join_pending",
+            "organization_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"))
+    organization_name: Mapped[str] = mapped_column(String(200))
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    role: Mapped[str | None] = mapped_column(String(30))
+    reviewed_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class LineUserBinding(IdentityMixin, AuditMixin, Base):
