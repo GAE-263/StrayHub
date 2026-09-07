@@ -6,18 +6,24 @@ export type GrowthDiaryAiProvenance =
   components["schemas"]["GrowthDiaryAiProvenance"];
 type GeneratedGrowthDiaryListItem =
   components["schemas"]["GrowthDiaryListItem"];
-export type GrowthDiaryListItem = GeneratedGrowthDiaryListItem & {
+export type GrowthDiaryListItem = Omit<
+  GeneratedGrowthDiaryListItem,
+  "photo_endpoints" | "entry_date" | "status" | "status_updated_at"
+> & {
   photo_endpoints?: string[];
   entry_date?: string;
   status?: "new" | "reviewed";
   status_updated_at?: string | null;
 };
-export type GrowthDiaryDetail = components["schemas"]["GrowthDiaryDetail"] &
+export type GrowthDiaryDetail = Omit<
+  components["schemas"]["GrowthDiaryDetail"],
+  keyof GrowthDiaryListItem
+> &
   GrowthDiaryListItem;
 export type GrowthDiaryListResponse = Omit<
   components["schemas"]["GrowthDiaryListResponse"],
   "items"
-> & { items: GrowthDiaryListItem[] };
+> & { items: GrowthDiaryListItem[]; timezone: string };
 
 export type GrowthDiaryMoodFilter =
   "all" | "concern" | "positive" | "neutral" | "unanalyzed";

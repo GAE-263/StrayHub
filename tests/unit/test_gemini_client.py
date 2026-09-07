@@ -5,7 +5,11 @@ import json
 
 import httpx
 import pytest
-from services.api.app.infrastructure.ai.gemini_client import GeminiClient
+from services.api.app.infrastructure.ai.gemini_client import (
+    GeminiClient,
+    MalformedAiResponse,
+    TransientAiError,
+)
 
 
 def _gemini_response(payload: dict) -> httpx.Response:
@@ -21,6 +25,22 @@ def _client(handler) -> GeminiClient:
         api_key="fake-key",
         transport=httpx.MockTransport(handler),
     )
+
+
+@pytest.mark.asyncio
+async def test_strict_suitability_classifies_retryable_http_failure() -> None:
+    client = _client(lambda _: httpx.Response(503, json={"error": "busy"}))
+
+    with pytest.raises(TransientAiError):
+        await client.analyze_suitability_strict("prompt")
+
+
+@pytest.mark.asyncio
+async def test_strict_suitability_rejects_malformed_output() -> None:
+    client = _client(lambda _: _gemini_response({"score": "not-a-number"}))
+
+    with pytest.raises(MalformedAiResponse):
+        await client.analyze_suitability_strict("prompt")
 
 
 @pytest.mark.asyncio

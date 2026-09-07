@@ -13,7 +13,11 @@ const item: GrowthDiaryFixtureItem = {
   shelter_number: "A-102",
   has_photo: false,
   photo_endpoint: null,
+  photo_endpoints: [],
   note: "今天願意吃晚餐。",
+  status: "new",
+  status_updated_at: null,
+  entry_date: "2026-09-01",
   ai_analysis: {
     status: "succeeded",
     provenance_status: "available",
@@ -75,6 +79,7 @@ test("search, mood filter, filtered empty, clear, and pagination stay server-sid
         page: Number(params.get("page") ?? 1),
         page_size: Number(params.get("page_size") ?? 20),
         total: filtered ? 0 : 21,
+        timezone: "Asia/Taipei",
       };
     },
   });

@@ -22,6 +22,24 @@ async def test_line_push_uses_minimal_recipient_and_message_contract() -> None:
 
 
 @pytest.mark.asyncio
+async def test_line_push_sends_retry_key_and_accepts_duplicate_response() -> None:
+    response = httpx.Response(409, request=httpx.Request("POST", "https://api.line.me"))
+    client = AsyncMock()
+    client.post.return_value = response
+    adapter = LineMessagingApiAdapter(client=client)
+
+    await adapter.push(
+        to_user_id="line-user",
+        messages=[{"type": "text", "text": "分析完成"}],
+        retry_key="5d0fa3fb-50a8-4bca-8ba8-76488b6b05cd",
+    )
+
+    assert client.post.await_args.kwargs["headers"]["X-Line-Retry-Key"] == (
+        "5d0fa3fb-50a8-4bca-8ba8-76488b6b05cd"
+    )
+
+
+@pytest.mark.asyncio
 async def test_mock_push_has_deterministic_transient_and_terminal_failures() -> None:
     transient = MockLineAdapter(push_failure_mode="transient")
     with pytest.raises(DomainError) as transient_error:

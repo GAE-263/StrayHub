@@ -59,6 +59,26 @@ services:
     networks:
       - strayhub_runtime
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -ec
+      - exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$${REDIS_PASSWORD}"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '$${REDIS_PASSWORD}' --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - strayhub_runtime
+
   api:
     image: ${STRAYHUB_API_IMAGE:-strayhub-api:b1}
     build:
@@ -100,6 +120,8 @@ services:
       AI_ENDPOINT: ${AI_ENDPOINT:-}
       AI_MODEL_NAME: ${AI_MODEL_NAME:-}
       AI_API_KEY: ${AI_API_KEY:-}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
+      CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
     secrets:
       # The selected env file supplies either ignored verification paths or protected D1 staged
       # production paths. No verification or production key path is hard-coded here.
@@ -166,6 +188,81 @@ services:
     networks:
       - strayhub_runtime
 
+  celery-worker:
+    image: ${STRAYHUB_WORKER_IMAGE:-strayhub-worker:b1}
+    build:
+      context: ../..
+      dockerfile: infra/gce/images/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: ${APP_ENV:?APP_ENV is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
+      CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
+      CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:-ai}
+      CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:-system}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3.5-flash-lite}
+      GEMINI_SERVICE_ACCOUNT_PATH: ${GEMINI_SERVICE_ACCOUNT_PATH:-}
+      GEMINI_VERTEX_LOCATION: ${GEMINI_VERTEX_LOCATION:-global}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET is required}
+      WEB_PUBLIC_BASE_URL: ${WEB_PUBLIC_BASE_URL:-}
+    command:
+      - celery
+      - -A
+      - services.api.app.infrastructure.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+      - --queues=ai,system
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - celery -A services.api.app.infrastructure.celery_app:celery_app inspect ping --destination "celery@$${HOSTNAME}" --timeout 5 | grep pong
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - strayhub_runtime
+
+  celery-beat:
+    image: ${STRAYHUB_WORKER_IMAGE:-strayhub-worker:b1}
+    build:
+      context: ../..
+      dockerfile: infra/gce/images/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:?APP_ENV is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
+      CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
+      CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:-ai}
+      CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:-system}
+    command:
+      - celery
+      - -A
+      - services.api.app.infrastructure.celery_app:celery_app
+      - beat
+      - --loglevel=INFO
+    networks:
+      - strayhub_runtime
+
   web:
     image: ${STRAYHUB_WEB_IMAGE:-strayhub-web:b1}
     build:
@@ -198,6 +295,7 @@ networks:
 volumes:
   postgres_data:
   minio_data:
+  redis_data:
 
 secrets:
   runtime_jwt_private_key:

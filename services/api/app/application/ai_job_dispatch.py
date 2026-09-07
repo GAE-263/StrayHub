@@ -56,6 +56,8 @@ async def create_ai_job(
             job_type=job_type,
             target_type=target_type,
             target_id=target_id,
+            domain_version=0,
+            execution_backend="legacy_polling",
             provider=version.provider,
             model_name=version.model_name,
             model_version=version.model_version,
@@ -66,6 +68,36 @@ async def create_ai_job(
             retry_count=0,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
+        )
+    )
+
+
+async def create_adoption_suitability_job(
+    repository: AIJobRepository,
+    *,
+    draft_id: UUID,
+    domain_version: int,
+) -> AIProcessingJob:
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    return await repository.create(
+        AIProcessingJob(
+            organization_id=repository.organization_id,
+            job_type="adoption_suitability",
+            target_type="adoption_draft",
+            target_id=draft_id,
+            domain_version=domain_version,
+            execution_backend="celery",
+            provider="google_gemini",
+            model_name=settings.gemini_model_name,
+            model_version=settings.gemini_model_name,
+            prompt_template_id="adoption-suitability",
+            prompt_version="1",
+            output_schema_version="1",
+            status="pending_enqueue",
+            retry_count=0,
+            created_at=now,
+            updated_at=now,
         )
     )
 

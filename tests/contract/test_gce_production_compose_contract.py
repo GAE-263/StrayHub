@@ -42,6 +42,9 @@ def test_canonical_compose_has_runtime_services_and_bounded_helpers() -> None:
         "api",
         "migration",
         "worker",
+        "redis",
+        "celery-worker",
+        "celery-beat",
         "web",
     }
     assert services["minio-bootstrap"]["restart"] == "no"
@@ -71,6 +74,7 @@ def test_phase_b1_uses_internal_database_and_minio_dns_with_persistence() -> Non
     assert services["web"]["environment"]["API_BASE_URL"] == "http://api:8080"
     assert "ports" not in services["postgres"]
     assert "ports" not in services["minio"]
+    assert "ports" not in services["redis"]
     assert services["web"]["ports"] == [
         {
             "target": 8080,
@@ -90,7 +94,8 @@ def test_phase_b1_uses_internal_database_and_minio_dns_with_persistence() -> Non
     )
     assert "postgres_data:/var/lib/postgresql/data" in services["postgres"]["volumes"]
     assert services["minio"]["volumes"] == ["minio_data:/data"]
-    assert {"postgres_data", "minio_data"} == compose["volumes"].keys()
+    assert services["redis"]["volumes"] == ["redis_data:/data"]
+    assert {"postgres_data", "minio_data", "redis_data"} == compose["volumes"].keys()
 
 
 def test_phase_b1_dependencies_wait_for_health_and_bucket_bootstrap() -> None:
@@ -104,6 +109,11 @@ def test_phase_b1_dependencies_wait_for_health_and_bucket_bootstrap() -> None:
         == "service_completed_successfully"
     )
     assert services["worker"]["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert services["celery-worker"]["depends_on"]["redis"]["condition"] == "service_healthy"
+    assert (
+        services["celery-beat"]["depends_on"]["celery-worker"]["condition"]
+        == "service_healthy"
+    )
     assert services["web"]["depends_on"]["api"]["condition"] == "service_healthy"
 
 

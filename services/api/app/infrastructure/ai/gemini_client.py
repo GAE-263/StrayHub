@@ -77,6 +77,18 @@ class GeminiGrowthDiaryAnalysis:
     raw_output: str | None = None
 
 
+class TransientAiError(RuntimeError):
+    """A bounded retry may succeed without changing the request."""
+
+
+class PermanentAiError(RuntimeError):
+    """The request or configuration cannot be repaired by retrying it."""
+
+
+class MalformedAiResponse(PermanentAiError):
+    """Gemini returned output that violates the domain schema."""
+
+
 _VALID_GROWTH_DIARY_MOODS = {"positive", "neutral", "concern"}
 
 
@@ -239,6 +251,28 @@ class GeminiClient:
         except Exception:
             logger.exception("gemini_suitability_analysis_failed")
             return None
+        return GeminiSuitabilityResult(score=max(0, min(100, score)), explanation=explanation)
+
+    async def analyze_suitability_strict(self, prompt: str) -> GeminiSuitabilityResult:
+        """Typed failure boundary used by durable workers."""
+        try:
+            text = await self._generate_content(prompt)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        except Exception as exc:
+            raise PermanentAiError(type(exc).__name__) from exc
+        try:
+            parsed = json.loads(text)
+            score = int(parsed["score"])
+            explanation = str(parsed["explanation"]).strip()
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise MalformedAiResponse("invalid_suitability_schema") from exc
+        if not explanation or len(explanation) > 2000:
+            raise MalformedAiResponse("invalid_suitability_explanation")
         return GeminiSuitabilityResult(score=max(0, min(100, score)), explanation=explanation)
 
     async def generate_report_summary(self, prompt: str) -> str | None:

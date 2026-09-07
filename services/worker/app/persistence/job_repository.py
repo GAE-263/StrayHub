@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.async_job_types import LEGACY_POLLING_JOB_TYPES
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.care_report import CareReport
@@ -30,6 +31,8 @@ class WorkerJobRepository:
             select(AIProcessingJob)
             .where(
                 AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.execution_backend == "legacy_polling",
+                AIProcessingJob.job_type.in_(LEGACY_POLLING_JOB_TYPES),
                 AIProcessingJob.status.in_(CLAIMABLE_STATUSES),
                 or_(
                     AIProcessingJob.available_at.is_(None),
@@ -58,6 +61,8 @@ class WorkerJobRepository:
         result = await self.session.execute(
             select(AIProcessingJob).where(
                 AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.execution_backend == "legacy_polling",
+                AIProcessingJob.job_type.in_(LEGACY_POLLING_JOB_TYPES),
                 AIProcessingJob.status == "running",
                 AIProcessingJob.claimed_at < threshold,
             )
@@ -74,7 +79,7 @@ class WorkerJobRepository:
             job.claim_token = None
             job.claimed_at = None
             job.claimed_by = None
-            if job.job_type == "care_report_summary":
+            if getattr(job, "job_type", None) == "care_report_summary":
                 report = await self.session.scalar(
                     select(CareReport).where(
                         CareReport.id == job.target_id,

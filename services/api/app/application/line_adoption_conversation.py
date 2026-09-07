@@ -10,7 +10,9 @@ from services.api.app.application.adoption_inquiry_submission import (
     AdoptionInquirySubmissionService,
 )
 from services.api.app.application.adoption_matching_service import AdoptionMatchingService
+from services.api.app.application.ai_job_dispatch import create_adoption_suitability_job
 from services.api.app.application.audit_service import AuditService
+from services.api.app.config.settings import get_settings
 from services.api.app.domain.adoption_matching import AdopterPreferences, MatchScore
 from services.api.app.domain.line_adoption_state import (
     AWAITING_FREETEXT_PROFILE_MAX_ROUNDS,
@@ -28,6 +30,7 @@ from services.api.app.persistence.repositories.adoption_draft_repository import 
 from services.api.app.persistence.repositories.adoption_inquiry_repository import (
     AdoptionInquiryRepository,
 )
+from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 
 
@@ -45,6 +48,8 @@ class AdoptionConversationResult:
     # Same idea, for the recommend_me path's AI-curated recommendation list.
     entered_awaiting_ai_recommendations: bool = False
     repaired_missing_key: str | None = None
+    ai_job_id: UUID | None = None
+    ai_job_version: int | None = None
 
 
 class LineAdoptionConversationService:
@@ -269,6 +274,11 @@ class LineAdoptionConversationService:
         else:
             raise DomainError("invalid_postback_action", "目前步驟不允許此操作", 409)
 
+        entered_awaiting_ai_suitability = (
+            initial_state != AdoptionDraftState.AWAITING_AI_SUITABILITY
+            and machine.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+        )
+        celery_ai_enabled = get_settings().celery_ai_enabled
         draft.answers = dict(machine.answers.values)
         draft.reconfirmation_keys = sorted(machine.reconfirmation_keys)
         draft.freetext_profile_rounds = machine.freetext_profile_rounds
@@ -281,20 +291,31 @@ class LineAdoptionConversationService:
             draft.status = "expired"
         draft.last_interaction_at = datetime.now(timezone.utc)
         draft.interaction_version += 1
+        ai_job_id: UUID | None = None
+        if (
+            entered_awaiting_ai_suitability
+            and celery_ai_enabled
+            and draft.organization_id is not None
+        ):
+            job = await create_adoption_suitability_job(
+                AIJobRepository(session, draft.organization_id),
+                draft_id=draft.id,
+                domain_version=draft.interaction_version,
+            )
+            ai_job_id = job.id
         await session.flush()
         return AdoptionConversationResult(
             state=machine.state,
             inquiry_id=inquiry_id,
             candidate_match_ids=tuple(UUID(item) for item in draft.candidate_match_ids or []),
-            entered_awaiting_ai_suitability=(
-                initial_state != AdoptionDraftState.AWAITING_AI_SUITABILITY
-                and machine.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
-            ),
+            entered_awaiting_ai_suitability=entered_awaiting_ai_suitability,
             entered_awaiting_ai_recommendations=(
                 initial_state != AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
                 and machine.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
             ),
             repaired_missing_key=repaired_missing_key,
+            ai_job_id=ai_job_id,
+            ai_job_version=draft.interaction_version if ai_job_id is not None else None,
         )
 
     async def apply_freetext_answers(

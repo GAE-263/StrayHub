@@ -14,6 +14,7 @@ const emptyPage: GrowthDiaryListResponse = {
   page: 1,
   page_size: 50,
   total: 0,
+  timezone: "Asia/Taipei",
 };
 
 vi.mock("./api", async (importOriginal) => {

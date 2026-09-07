@@ -94,12 +94,19 @@ class LineMessagingApiAdapter:
         )
         self._raise_for_status(response, "reply")
 
-    async def push(self, *, to_user_id: str, messages: list[dict]) -> None:
+    async def push(
+        self, *, to_user_id: str, messages: list[dict], retry_key: str | None = None
+    ) -> None:
+        headers = {**self._headers, "Content-Type": "application/json"}
+        if retry_key is not None:
+            headers["X-Line-Retry-Key"] = retry_key
         response = await self._post(
             f"{self.api_base}/v2/bot/message/push",
-            headers={**self._headers, "Content-Type": "application/json"},
+            headers=headers,
             json={"to": to_user_id, "messages": messages},
         )
+        if retry_key is not None and response.status_code == 409:
+            return
         self._raise_for_status(response, "push")
 
     async def get_image_content(self, *, message_id: str) -> LineImageContent:

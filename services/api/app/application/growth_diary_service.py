@@ -6,12 +6,14 @@ from typing import Any
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.growth_diary import GrowthDiaryEntry
+from services.api.app.persistence.models.identity import Organization
 from services.api.app.persistence.repositories.growth_diary_repository import GrowthDiaryRepository
 
 
@@ -65,6 +67,7 @@ class GrowthDiaryListPage:
     page: int
     page_size: int
     total: int
+    timezone: str
 
 
 @dataclass(frozen=True)
@@ -161,11 +164,15 @@ class GrowthDiaryManagementService:
             from_date=from_date,
             to_date=to_date,
         )
+        organization_timezone = await self.session.scalar(
+            select(Organization.timezone).where(Organization.id == self.organization_id)
+        )
         return GrowthDiaryListPage(
             items=[_list_item(entry, animal) for entry, animal in rows],
             page=page,
             page_size=page_size,
             total=total,
+            timezone=organization_timezone or "UTC",
         )
 
     async def set_status(
@@ -173,15 +180,12 @@ class GrowthDiaryManagementService:
     ) -> GrowthDiaryDetail:
         if status not in {"new", "reviewed"}:
             raise DomainError("invalid_growth_diary_status", f"不支援的狀態：{status}", 422)
-        existing = await self.repository.get_for_management(entry_id)
-        if existing is None:
-            raise DomainError("growth_diary_entry_not_found", "毛孩日記不存在或無法存取", 404)
-        previous_status = existing[0].status
-        entry = await self.repository.set_status(
+        status_change = await self.repository.set_status(
             entry_id, status=status, actor_user_id=actor_user_id
         )
-        if entry is None:
+        if status_change is None:
             raise DomainError("growth_diary_entry_not_found", "毛孩日記不存在或無法存取", 404)
+        entry, previous_status = status_change
         await AuditService(self.session).record(
             organization_id=self.organization_id,
             actor_user_id=actor_user_id,

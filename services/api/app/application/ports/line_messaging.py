@@ -12,7 +12,9 @@ class LineImageContent:
 
 
 class LineMessagingPort(Protocol):
-    async def push(self, *, to_user_id: str, messages: list[dict]) -> None: ...
+    async def push(
+        self, *, to_user_id: str, messages: list[dict], retry_key: str | None = None
+    ) -> None: ...
 
     async def reply(self, *, reply_token: str, messages: list[dict]) -> None: ...
 

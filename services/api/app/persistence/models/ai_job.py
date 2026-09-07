@@ -15,6 +15,7 @@ class AIProcessingJob(IdentityMixin, AuditMixin, Base):
             "job_type",
             "target_type",
             "target_id",
+            "domain_version",
             "model_version",
             "prompt_version",
             "output_schema_version",
@@ -26,6 +27,13 @@ class AIProcessingJob(IdentityMixin, AuditMixin, Base):
     job_type: Mapped[str] = mapped_column(String(80))
     target_type: Mapped[str] = mapped_column(String(80))
     target_id: Mapped[UUID] = mapped_column(index=True)
+    domain_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    execution_backend: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="legacy_polling", server_default="legacy_polling"
+    )
+    input_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_enqueue", index=True)
     provider: Mapped[str] = mapped_column(String(120))
     model_name: Mapped[str] = mapped_column(String(200))
@@ -41,5 +49,7 @@ class AIProcessingJob(IdentityMixin, AuditMixin, Base):
     claim_token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     claimed_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    celery_task_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

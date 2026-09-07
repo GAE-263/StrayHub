@@ -84,6 +84,7 @@ class GrowthDiaryListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+    timezone: str
 
 
 class GrowthDiaryStatusUpdate(BaseModel):

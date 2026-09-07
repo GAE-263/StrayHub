@@ -99,7 +99,11 @@ export function GrowthDiaryPageView({
           <p className={styles.resultCount}>共 {data.total} 筆日記</p>
           <div className={styles.timeline}>
             {data.items.map((entry) => (
-              <GrowthDiaryEntryCard key={entry.id} entry={entry} />
+              <GrowthDiaryEntryCard
+                key={entry.id}
+                entry={entry}
+                timezone={data.timezone}
+              />
             ))}
           </div>
           {data.total > data.page_size ? (

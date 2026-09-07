@@ -254,7 +254,15 @@ function diaryItem(
     photo_endpoint: hasPhoto
       ? `/v1/management/growth-diary-entries/00000000-0000-4000-8000-0000000000${suffix}/photo`
       : null,
+    photo_endpoints: hasPhoto
+      ? [
+          `/v1/management/growth-diary-entries/00000000-0000-4000-8000-0000000000${suffix}/photos/0`,
+        ]
+      : [],
     note: `${organizationId} diary text ${suffix}`,
+    status: "new",
+    status_updated_at: null,
+    entry_date: "2026-09-01",
     ai_analysis: {
       status: "succeeded",
       provenance_status: "available",
@@ -305,7 +313,13 @@ test("delayed A diary JSON and Blob lifecycles cannot publish after switching to
         organizationId === "org-a"
           ? [diaryItem("org-a", "11", true), diaryItem("org-a", "12", true)]
           : [diaryItem("org-b", "21", false)];
-      return { items, page: 1, page_size: 20, total: items.length };
+      return {
+        items,
+        page: 1,
+        page_size: 20,
+        total: items.length,
+        timezone: "Asia/Taipei",
+      };
     },
     growthDiaryPhotoDelay: (entryId, organizationId) =>
       organizationId === "org-a" && entryId.endsWith("12") ? 3_000 : 0,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -181,15 +181,9 @@ class GrowthDiaryRepository:
         if status and status != "all":
             statement = statement.where(GrowthDiaryEntry.status == status)
         if from_date:
-            statement = statement.where(
-                GrowthDiaryEntry.created_at
-                >= datetime.combine(from_date, time.min, tzinfo=timezone.utc)
-            )
+            statement = statement.where(GrowthDiaryEntry.entry_date >= from_date)
         if to_date:
-            statement = statement.where(
-                GrowthDiaryEntry.created_at
-                <= datetime.combine(to_date, time.max, tzinfo=timezone.utc)
-            )
+            statement = statement.where(GrowthDiaryEntry.entry_date <= to_date)
         return statement
 
     async def count_for_management(
@@ -248,7 +242,7 @@ class GrowthDiaryRepository:
 
     async def set_status(
         self, entry_id: UUID, *, status: str, actor_user_id: UUID
-    ) -> GrowthDiaryEntry | None:
+    ) -> tuple[GrowthDiaryEntry, str] | None:
         result = await self.session.execute(
             select(GrowthDiaryEntry)
             .where(
@@ -260,11 +254,12 @@ class GrowthDiaryRepository:
         entry = result.scalar_one_or_none()
         if entry is None:
             return None
+        previous_status = entry.status
         entry.status = status
         entry.status_updated_at = datetime.now(timezone.utc)
         entry.status_updated_by_user_id = actor_user_id
         await self.session.flush()
-        return entry
+        return entry, previous_status
 
     async def list_staff_line_user_ids(self) -> list[str]:
         """Every active STAFF/SHELTER_ADMIN in this organization who also has

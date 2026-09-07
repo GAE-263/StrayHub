@@ -22,6 +22,7 @@ from services.api.app.application.animal_selection import (
 from services.api.app.application.care_report_handoff_service import (
     CareReportHandoffService,
 )
+from services.api.app.application.celery_job_dispatch import dispatch_ai_job
 from services.api.app.application.effective_observation_service import (
     EffectiveObservationService,
     EffectiveOption,
@@ -2209,7 +2210,9 @@ async def _handle_adoption_postback(
         ):
             raise DomainError("invalid_browse_step", "請先完成推薦問卷再瀏覽其他毛孩。", 409)
         await set_organization_scope(session, draft.organization_id)
-        animals = await AnimalRepository(session, draft.organization_id).list_adoptable()
+        animals, _total = await AnimalRepository(
+            session, draft.organization_id
+        ).list_adoptable_page(page=1, limit=12)
         cards = [
             MatchReportCard(
                 animal_id=str(animal.id),
@@ -2222,7 +2225,7 @@ async def _handle_adoption_postback(
                 select_action="select_target_animal",
                 select_label="選這隻",
             )
-            for animal in animals[:12]
+            for animal in animals
         ]
         if not cards:
             await _reply(line, event, [_text("目前沒有可領養的動物，請聯繫工作人員協助。")])
@@ -2340,13 +2343,21 @@ async def _handle_adoption_postback(
         # extra checks are cheap insurance against a future graph change
         # silently over-firing this.
         line_user_id = event.get("source", {}).get("userId")
-        if (
+        if result.ai_job_id is not None and updated.organization_id is not None:
+            background_tasks.add_task(
+                dispatch_ai_job,
+                result.ai_job_id,
+                updated.organization_id,
+            )
+        elif (
             result.entered_awaiting_ai_suitability
             and updated.path == "specific_animal"
             and updated.organization_id is not None
             and updated.target_animal_id is not None
             and line_user_id
         ):
+            # Rollout fallback: preserve the proven in-process path until the
+            # Celery worker is explicitly enabled for this environment.
             background_tasks.add_task(
                 _run_adoption_ai_suitability_analysis,
                 line,

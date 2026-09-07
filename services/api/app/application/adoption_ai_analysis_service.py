@@ -255,6 +255,11 @@ def _build_suitability_prompt(answers: dict, animal: Animal) -> str:
     )
 
 
+def build_suitability_prompt(answers: dict, animal: Animal) -> str:
+    """Public pure prompt builder for durable execution services."""
+    return _build_suitability_prompt(answers, animal)
+
+
 def _build_alternatives_prompt(special_request: str, candidates: list[Animal]) -> str:
     candidate_lines = "\n".join(
         f"- id: {candidate.id}；{_describe_animal(candidate)}" for candidate in candidates
@@ -329,8 +334,9 @@ class AdoptionAiAnalysisService:
         an empty list means there was simply no other adoptable animal to
         suggest — callers should tell these apart when wording the fallback
         message."""
-        animals = await AnimalRepository(self.session, self.organization_id).list_adoptable()
-        candidates = [animal for animal in animals if animal.id != exclude_animal_id]
+        candidates = await AnimalRepository(
+            self.session, self.organization_id
+        ).list_adoptable_excluding(exclude_animal_id, limit=30)
         if not candidates:
             return []
         prompt = _build_alternatives_prompt(special_request, candidates)

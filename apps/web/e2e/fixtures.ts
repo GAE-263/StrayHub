@@ -411,6 +411,7 @@ export async function mockManagementApi(
             page: Number(params.get("page") ?? 1),
             page_size: Number(params.get("page_size") ?? 20),
             total: entries.length,
+            timezone: "Asia/Taipei",
           };
       options.growthDiaryEvents?.push(`list:start:${requestOrganizationId}`);
       const growthDiaryStatus =

@@ -4332,6 +4332,7 @@ export interface components {
             page: number;
             page_size: number;
             total: number;
+            timezone: string;
         };
         GrowthDiaryStatusUpdate: {
             /** @enum {string} */

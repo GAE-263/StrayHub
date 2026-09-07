@@ -21,9 +21,9 @@ const STATUS_COPY: Record<string, string> = {
   unavailable: "尚無分析",
 };
 
-function formatSubmittedAt(value: string): string {
+function formatSubmittedAt(value: string, timezone: string): string {
   return new Intl.DateTimeFormat("zh-TW", {
-    timeZone: "Asia/Taipei",
+    timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -35,8 +35,10 @@ function formatSubmittedAt(value: string): string {
 
 export function GrowthDiaryEntryCard({
   entry,
+  timezone = "UTC",
 }: {
   entry: GrowthDiaryListItem;
+  timezone?: string;
 }) {
   const concern = entry.ai_analysis.mood === "concern";
   const [detail, setDetail] = useState<GrowthDiaryDetail | null>(null);
@@ -106,7 +108,7 @@ export function GrowthDiaryEntryCard({
             </div>
           </div>
           <time dateTime={entry.created_at}>
-            {formatSubmittedAt(entry.created_at)}
+            {formatSubmittedAt(entry.created_at, timezone)}
           </time>
         </header>
 
@@ -235,7 +237,10 @@ export function GrowthDiaryEntryCard({
                       <dt>分析時間</dt>
                       <dd>
                         {detail.ai_provenance.analyzed_at
-                          ? formatSubmittedAt(detail.ai_provenance.analyzed_at)
+                          ? formatSubmittedAt(
+                              detail.ai_provenance.analyzed_at,
+                              timezone,
+                            )
                           : "未提供"}
                       </dd>
                     </div>

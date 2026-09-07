@@ -157,6 +157,16 @@ class Settings(BaseSettings):
     # account takes precedence (see GeminiClient).
     gemini_service_account_path: str | None = None
     gemini_vertex_location: str = "global"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_queue_ai: str = "ai"
+    celery_queue_system: str = "system"
+    celery_task_soft_time_limit: int = Field(default=45, ge=1)
+    celery_task_time_limit: int = Field(default=60, ge=1)
+    celery_visibility_timeout: int = Field(default=180, ge=1)
+    celery_max_retries: int = Field(default=3, ge=0, le=10)
+    celery_retry_backoff_max: int = Field(default=120, ge=1)
+    celery_ai_enabled: bool = False
+    celery_reconcile_interval_seconds: int = Field(default=30, ge=5, le=3600)
 
     def line_role_menu_features_active(self) -> bool:
         environment = self.app_env.strip().lower()
@@ -191,6 +201,13 @@ class Settings(BaseSettings):
             and parsed_database_url.password == "strayhub"
         ):
             problems.append("DATABASE_URL uses local development credentials")
+
+        if process in {"api", "worker"} and self.celery_ai_enabled:
+            missing("CELERY_BROKER_URL", self.celery_broker_url)
+            if is_loopback_url(self.celery_broker_url):
+                problems.append("CELERY_BROKER_URL uses a loopback host")
+            if self.celery_task_soft_time_limit >= self.celery_task_time_limit:
+                problems.append("CELERY_TASK_SOFT_TIME_LIMIT must be below CELERY_TASK_TIME_LIMIT")
 
         if process == "worker" and self.line_role_menu_features_enabled:
             placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)

@@ -5726,7 +5726,7 @@ components:
                 - { type: 'null' }
     GrowthDiaryListResponse:
       type: object
-      required: [items, page, page_size, total]
+      required: [items, page, page_size, total, timezone]
       properties:
         items:
           type: array
@@ -5734,6 +5734,7 @@ components:
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
     GrowthDiaryStatusUpdate:
       type: object
       required: [status]
