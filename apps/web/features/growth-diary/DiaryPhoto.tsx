@@ -7,7 +7,15 @@ import styles from "./growth-diary.module.css";
 
 type PhotoState = "loading" | "ready" | "error";
 
-export function DiaryPhoto({ entryId, alt }: { entryId: string; alt: string }) {
+export function DiaryPhoto({
+  entryId,
+  photoIndex,
+  alt,
+}: {
+  entryId: string;
+  photoIndex?: number;
+  alt: string;
+}) {
   const [photoState, setPhotoState] = useState<PhotoState>("loading");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const objectUrl = useRef<string | null>(null);
@@ -25,7 +33,11 @@ export function DiaryPhoto({ entryId, alt }: { entryId: string; alt: string }) {
     setPhotoUrl(null);
     setPhotoState("loading");
 
-    void fetchGrowthDiaryPhoto(entryId, controller.signal)
+    const photoRequest =
+      photoIndex === undefined
+        ? fetchGrowthDiaryPhoto(entryId, controller.signal)
+        : fetchGrowthDiaryPhoto(entryId, controller.signal, photoIndex);
+    void photoRequest
       .then((blob) => {
         if (!current || controller.signal.aborted) return;
         const nextUrl = URL.createObjectURL(blob);
@@ -49,7 +61,7 @@ export function DiaryPhoto({ entryId, alt }: { entryId: string; alt: string }) {
       controller.abort();
       releaseObjectUrl();
     };
-  }, [entryId]);
+  }, [entryId, photoIndex]);
 
   if (photoState === "ready" && photoUrl) {
     return (

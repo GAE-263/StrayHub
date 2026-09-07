@@ -22,6 +22,12 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       { href: "/", label: "總覽", icon: "view" },
       { href: "/animals", label: "動物檔案", icon: "search" },
       { href: "/reports", label: "回報收件匣", icon: "audit" },
+      {
+        href: "/adoption-inquiries",
+        label: "領養意願",
+        roles: ["STAFF", "SHELTER_ADMIN", "PLATFORM_ADMIN"],
+        icon: "access",
+      },
       { href: "/care-calendar", label: "照護行事曆", icon: "calendar" },
       {
         href: "/growth-diary",

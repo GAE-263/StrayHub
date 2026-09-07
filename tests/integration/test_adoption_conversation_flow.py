@@ -131,6 +131,13 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
                     value="recommend_me",
                     event_id="e-choose-path",
                 )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="finish_freetext_profile",
+                    value=None,
+                    event_id="e-finish-freetext",
+                )
                 for index, value in enumerate(
                     [
                         "house",
@@ -331,6 +338,13 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
                     value=None,
                     event_id="e-confirm-target",
                 )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="finish_freetext_profile",
+                    value=None,
+                    event_id="e-finish-freetext",
+                )
                 for index, value in enumerate(
                     [
                         "house",
@@ -463,6 +477,13 @@ async def test_entered_awaiting_ai_suitability_fires_only_on_the_transition_edge
                     action="confirm_target_animal",
                     value=None,
                     event_id="e-confirm-target",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="finish_freetext_profile",
+                    value=None,
+                    event_id="e-finish-freetext",
                 )
                 for index, value in enumerate(
                     ["house", "first_time", "none", "adults_only", "work_from_home"]

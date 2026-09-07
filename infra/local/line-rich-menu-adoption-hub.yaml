@@ -1,0 +1,15 @@
+# 領養流程入口選單：預設選單點「領養流程」（action=open_adoption_hub）就切到
+# 這裡，不算獨立角色（沒有「完成領養」那種 lifecycle 會自動綁定它），純粹是
+# 「領養媒合」和「毛孩日記」共用的兩格入口。見 line_webhook.py 的
+# "open_adoption_hub" postback。
+version: 1
+role: adoption_hub
+name: strayhub-adoption-hub
+chatBarText: 領養與日記
+actions:
+  - label: 領養媒合
+    type: postback
+    data: action=start_adoption_matching&flow=adoption
+  - label: 毛孩日記
+    type: postback
+    data: action=start_growth_diary&flow=growth_diary

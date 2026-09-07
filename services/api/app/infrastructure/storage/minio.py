@@ -53,6 +53,15 @@ class MinioStorageAdapter:
         response = self.client.get_object(Bucket=self.bucket, Key=self._scoped_key(scope, key))
         return response["Body"].read()
 
+    async def get_with_content_type(self, *, scope: ObjectScope, key: str) -> tuple[bytes, str]:
+        """Same object `get` fetches, plus the Content-Type `put` recorded on
+        it — object keys here don't carry a file extension (e.g. 毛孩日記's
+        `growth-diary/<inquiry>/<event>.media`), so a caller that needs the
+        real MIME type (e.g. handing the bytes to a multimodal AI call)
+        can't infer it from the key the way a browser guesses from a URL."""
+        response = self.client.get_object(Bucket=self.bucket, Key=self._scoped_key(scope, key))
+        return response["Body"].read(), response.get("ContentType", "application/octet-stream")
+
     async def delete(self, *, scope: ObjectScope, key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=self._scoped_key(scope, key))
 

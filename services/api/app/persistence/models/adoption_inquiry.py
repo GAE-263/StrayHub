@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin
@@ -47,3 +47,10 @@ class AdoptionInquiry(IdentityMixin, AuditMixin, Base):
     last_growth_diary_prompted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 推薦名單 only: True when the adopter picked an animal outside the last
+    # AI-curated candidate_match_ids snapshot instead of one of the
+    # recommendations (see "browse_all_animals" in line_webhook.py) — a raw
+    # signal for future matching-quality analysis, not something anything
+    # currently reads back. NULL for 心有所屬, which never had a curated list
+    # to override in the first place.
+    ai_recommendation_overridden: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

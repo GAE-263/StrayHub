@@ -82,7 +82,13 @@ function defaultGrowthDiaryEntries(
       has_photo: true,
       photo_endpoint:
         "/v1/management/growth-diary-entries/00000000-0000-4000-8000-000000000001/photo",
+      photo_endpoints: [
+        "/v1/management/growth-diary-entries/00000000-0000-4000-8000-000000000001/photos/0",
+      ],
       note: `${organizationId} 的近況文字`,
+      status: "new",
+      status_updated_at: null,
+      entry_date: "2026-09-01",
       ai_analysis: {
         status: "succeeded",
         provenance_status: "available",
@@ -100,7 +106,11 @@ function defaultGrowthDiaryEntries(
       shelter_number: `${suffix}-103`,
       has_photo: false,
       photo_endpoint: null,
+      photo_endpoints: [],
       note: "今天在窗邊曬太陽。",
+      status: "reviewed",
+      status_updated_at: "2026-09-01T09:00:00Z",
+      entry_date: "2026-08-31",
       ai_analysis: {
         status: "legacy",
         provenance_status: "legacy_missing",

@@ -1,20 +1,18 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Sparkles } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { fetchGrowthDiaryDetail } from "./api";
+import { fetchGrowthDiaryDetail, updateGrowthDiaryStatus } from "./api";
 import { DiaryPhoto } from "./DiaryPhoto";
 import type { GrowthDiaryDetail, GrowthDiaryListItem } from "./types";
 import styles from "./growth-diary.module.css";
 
-const STATUS_COPY: Record<
-  GrowthDiaryListItem["ai_analysis"]["status"],
-  string
-> = {
+const STATUS_COPY: Record<string, string> = {
   pending: "等待分析",
+  processing: "分析中",
   succeeded: "分析完成",
   failed: "尚無分析",
   unconfigured: "尚無分析",
@@ -46,6 +44,10 @@ export function GrowthDiaryEntryCard({
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [expanded, setExpanded] = useState(false);
+  const [status, setStatus] = useState(entry.status ?? "new");
+  const [statusState, setStatusState] = useState<"idle" | "loading" | "error">(
+    "idle",
+  );
   const request = useRef<AbortController | null>(null);
   const detailId = `growth-diary-provenance-${entry.id}`;
 
@@ -77,6 +79,18 @@ export function GrowthDiaryEntryCard({
     }
   }
 
+  async function toggleStatus() {
+    const nextStatus = status === "new" ? "reviewed" : "new";
+    setStatusState("loading");
+    try {
+      const updated = await updateGrowthDiaryStatus(entry.id, nextStatus);
+      setStatus(updated.status ?? nextStatus);
+      setStatusState("idle");
+    } catch {
+      setStatusState("error");
+    }
+  }
+
   return (
     <article className={styles.timelineItem}>
       <span className={styles.timelineNode} aria-hidden="true" />
@@ -96,6 +110,38 @@ export function GrowthDiaryEntryCard({
           </time>
         </header>
 
+        <div className={styles.reviewRow}>
+          <Badge
+            className={
+              status === "new" ? styles.newBadge : styles.reviewedBadge
+            }
+          >
+            {status === "new" ? "待查看" : "已查看"}
+          </Badge>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={statusState === "loading"}
+            onClick={() => void toggleStatus()}
+          >
+            {statusState === "loading" ? (
+              "更新中…"
+            ) : status === "new" ? (
+              <>
+                <Check size={15} aria-hidden="true" />
+                標記已查看
+              </>
+            ) : (
+              "標記待查看"
+            )}
+          </Button>
+          {statusState === "error" ? (
+            <span className={styles.statusError} role="alert">
+              狀態未更新，請重試。
+            </span>
+          ) : null}
+        </div>
+
         <div className={styles.originalSection}>
           <p className={styles.sectionLabel}>領養人原文</p>
           {entry.note ? (
@@ -104,10 +150,19 @@ export function GrowthDiaryEntryCard({
             <p className={styles.muted}>這篇日記沒有文字內容。</p>
           )}
           {entry.has_photo ? (
-            <DiaryPhoto
-              entryId={entry.id}
-              alt={`${entry.animal_name ?? "未命名毛孩"}的日記照片`}
-            />
+            <div className={styles.photoGrid}>
+              {(entry.photo_endpoints?.length
+                ? entry.photo_endpoints
+                : [entry.photo_endpoint]
+              ).map((_, index) => (
+                <DiaryPhoto
+                  key={`${entry.id}-${index}`}
+                  entryId={entry.id}
+                  photoIndex={entry.photo_endpoints?.length ? index : undefined}
+                  alt={`${entry.animal_name ?? "未命名毛孩"}的日記照片 ${index + 1}`}
+                />
+              ))}
+            </div>
           ) : null}
         </div>
 
@@ -133,7 +188,7 @@ export function GrowthDiaryEntryCard({
             </p>
           ) : (
             <p className={styles.muted}>
-              {STATUS_COPY[entry.ai_analysis.status]}
+              {STATUS_COPY[entry.ai_analysis.status] ?? "尚無分析"}
             </p>
           )}
           <Button
