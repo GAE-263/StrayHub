@@ -111,9 +111,7 @@ def test_confirming_answers_back_returns_to_last_question_and_clears_it() -> Non
 
 def test_recommend_me_path_asks_extra_preferences_and_skips_shared_questionnaire() -> None:
     machine = _advance_to_choosing_path()
-    machine.transition(
-        AdoptionDraftState.AWAITING_FREETEXT_PROFILE, path=AdoptionPath.RECOMMEND_ME
-    )
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE, path=AdoptionPath.RECOMMEND_ME)
     machine.transition(AdoptionDraftState.ANSWERING_PREFERENCE_HOUSING)
     for key, value in [
         ("housing_type", "house"),
@@ -244,9 +242,7 @@ def test_back_from_answering_state_clears_that_and_later_answers() -> None:
 
 def test_back_out_of_choosing_path_resets_selected_path() -> None:
     machine = _advance_to_choosing_path()
-    machine.transition(
-        AdoptionDraftState.AWAITING_FREETEXT_PROFILE, path=AdoptionPath.RECOMMEND_ME
-    )
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE, path=AdoptionPath.RECOMMEND_ME)
 
     machine.back()
 
@@ -307,9 +303,7 @@ def test_skip_prefilled_questions_lands_on_first_genuine_gap() -> None:
 def test_can_go_back_matches_the_state_graph() -> None:
     assert can_go_back(AdoptionDraftState.SELECTING_ORGANIZATION, None) is False
     assert can_go_back(AdoptionDraftState.CHOOSING_PATH, None) is True
-    assert can_go_back(
-        AdoptionDraftState.AWAITING_FREETEXT_PROFILE, AdoptionPath.RECOMMEND_ME
-    )
+    assert can_go_back(AdoptionDraftState.AWAITING_FREETEXT_PROFILE, AdoptionPath.RECOMMEND_ME)
 
 
 @pytest.mark.parametrize(

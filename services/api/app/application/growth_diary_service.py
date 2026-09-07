@@ -106,10 +106,14 @@ def _summary(entry: GrowthDiaryEntry) -> GrowthDiaryAiSummary:
 def _list_item(entry: GrowthDiaryEntry, animal: Animal) -> GrowthDiaryListItem:
     photo_keys = list(entry.photo_keys or ([] if entry.photo_key is None else [entry.photo_key]))
     trusted_photo = bool(photo_keys and entry.photo_content_type == "image/webp")
-    photo_endpoints = tuple(
-        f"/v1/management/growth-diary-entries/{entry.id}/photos/{index}"
-        for index in range(len(photo_keys))
-    ) if trusted_photo else ()
+    photo_endpoints = (
+        tuple(
+            f"/v1/management/growth-diary-entries/{entry.id}/photos/{index}"
+            for index in range(len(photo_keys))
+        )
+        if trusted_photo
+        else ()
+    )
     return GrowthDiaryListItem(
         id=entry.id,
         inquiry_id=entry.inquiry_id,
@@ -247,9 +251,7 @@ class GrowthDiaryInboxService:
             filters["status"] = filters.pop("entry_status")
         return jsonable_encoder(asdict(await self.service.list(**filters)))
 
-    async def set_status(
-        self, entry_id: UUID, *, entry_status: str, actor_user_id: UUID
-    ) -> dict:
+    async def set_status(self, entry_id: UUID, *, entry_status: str, actor_user_id: UUID) -> dict:
         return jsonable_encoder(
             await self.service.set_status(
                 entry_id, status=entry_status, actor_user_id=actor_user_id

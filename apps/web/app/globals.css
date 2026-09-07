@@ -2934,7 +2934,9 @@ dialog.ui-sheet[open] {
   gap: 14px;
   grid-template-columns: minmax(0, 1.3fr) 132px 168px 152px;
   padding: 14px 16px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 .recent-report-row:hover {
   background: var(--surface-soft);
@@ -3000,7 +3002,9 @@ dialog.ui-sheet[open] {
   flex-direction: column;
   gap: 4px;
   padding: 12px 16px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 .anomaly-item:hover {
   background: var(--surface-soft);
@@ -3038,7 +3042,9 @@ dialog.ui-sheet[open] {
   min-width: 220px;
   padding: 16px;
   scroll-snap-align: start;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 .care-scroll-item:hover {
   background: var(--surface-soft);

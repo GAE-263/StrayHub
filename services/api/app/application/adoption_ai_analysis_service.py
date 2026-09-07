@@ -146,9 +146,8 @@ def _build_extraction_prompt(text: str, keys: tuple[str, ...]) -> str:
     guess here would silently feed the AI suitability analysis downstream
     with an answer the adopter never actually gave."""
     field_lines = "\n".join(
-        f"- {_ANSWER_LABELS.get(key, key)}（{key}）：" + "、".join(
-            f'"{code}"={label}' for code, _emoji, label in _ANSWER_OPTIONS.get(key, ())
-        )
+        f"- {_ANSWER_LABELS.get(key, key)}（{key}）："
+        + "、".join(f'"{code}"={label}' for code, _emoji, label in _ANSWER_OPTIONS.get(key, ()))
         for key in keys
     )
     keys_json = ", ".join(f'"{key}": "<代碼或 null>"' for key in keys)
@@ -159,9 +158,44 @@ def _build_extraction_prompt(text: str, keys: tuple[str, ...]) -> str:
         "不要用猜的、也不要自己發明代碼。\n\n"
         f"欄位與選項：\n{field_lines}\n\n"
         f"領養者的自我介紹：\n「{text}」\n\n"
-        f'請只回傳 JSON，格式為 {{{keys_json}}}，代碼必須完全照抄上面列出的選項代碼，'
+        f"請只回傳 JSON，格式為 {{{keys_json}}}，代碼必須完全照抄上面列出的選項代碼，"
         "不要有其他文字或 markdown 標記。"
     )
+
+
+def profile_extraction_contract(
+    *, include_recommend_me_keys: bool
+) -> tuple[tuple[str, ...], dict[str, set[str]]]:
+    """Return the existing questionnaire allowlist without exposing webhook internals."""
+    extra = RECOMMEND_ME_EXTRA_PROFILE_KEYS if include_recommend_me_keys else ()
+    keys = BASE_PROFILE_KEYS + extra
+    return keys, {
+        key: {code for code, _emoji, _label in _ANSWER_OPTIONS.get(key, ())} for key in keys
+    }
+
+
+def build_profile_extraction_prompt(
+    text: str, *, include_recommend_me_keys: bool
+) -> tuple[str, dict[str, set[str]]]:
+    keys, valid_values = profile_extraction_contract(
+        include_recommend_me_keys=include_recommend_me_keys
+    )
+    return _build_extraction_prompt(text, keys), valid_values
+
+
+def build_profile_summary_rows(
+    *, include_recommend_me_keys: bool, answers: dict[str, str]
+) -> list[tuple[str, str]]:
+    keys, _valid_values = profile_extraction_contract(
+        include_recommend_me_keys=include_recommend_me_keys
+    )
+    return [
+        (
+            _ANSWER_LABELS[key],
+            _answer_display(key, answers[key]) if key in answers else "待確認",
+        )
+        for key in keys
+    ]
 
 
 def _describe_animal(animal: Animal) -> str:
@@ -276,6 +310,11 @@ def _build_alternatives_prompt(special_request: str, candidates: list[Animal]) -
     )
 
 
+def build_alternatives_prompt(special_request: str, candidates: list[Animal]) -> str:
+    """Build the existing bounded-candidate prompt for durable workers."""
+    return _build_alternatives_prompt(special_request, candidates)
+
+
 def _build_recommendation_prompt(answers: dict, candidates: list[Animal]) -> str:
     answer_lines = "\n".join(
         f"- {_ANSWER_LABELS.get(key, key)}：{_answer_display(key, value)}"
@@ -299,6 +338,11 @@ def _build_recommendation_prompt(answers: dict, candidates: list[Animal]) -> str
     )
 
 
+def build_recommendation_prompt(answers: dict, candidates: list[Animal]) -> str:
+    """Build the existing curation prompt from frozen preferences and candidates."""
+    return _build_recommendation_prompt(answers, candidates)
+
+
 class AdoptionAiAnalysisService:
     def __init__(self, session: AsyncSession, organization_id: UUID, gemini: GeminiClient) -> None:
         self.session = session
@@ -319,12 +363,9 @@ class AdoptionAiAnalysisService:
         推薦名單; 心有所屬 never asks those. Always returns a dict (possibly
         empty) rather than None — "nothing extracted" isn't a distinct
         failure the caller needs to branch on."""
-        extra = RECOMMEND_ME_EXTRA_PROFILE_KEYS if include_recommend_me_keys else ()
-        keys = BASE_PROFILE_KEYS + extra
-        prompt = _build_extraction_prompt(text, keys)
-        valid_values = {
-            key: {code for code, _emoji, _label in _ANSWER_OPTIONS.get(key, ())} for key in keys
-        }
+        prompt, valid_values = build_profile_extraction_prompt(
+            text, include_recommend_me_keys=include_recommend_me_keys
+        )
         return await self.gemini.extract_adoption_profile(prompt, valid_values=valid_values)
 
     async def recommend_alternatives(

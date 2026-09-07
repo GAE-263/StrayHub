@@ -125,6 +125,17 @@ class GrowthDiaryRepository:
         entry.photo_keys = keys
         entry.content_version += 1
         entry.ai_analysis_status = "pending"
+        entry.ai_content_version = None
+        entry.ai_mood = None
+        entry.ai_reply = None
+        entry.ai_staff_summary = None
+        entry.ai_provider = None
+        entry.ai_model_name = None
+        entry.ai_model_version = None
+        entry.ai_prompt_version = None
+        entry.ai_output_schema_version = None
+        entry.ai_raw_output = None
+        entry.ai_analyzed_at = None
         await self.session.flush()
         return entry
 
@@ -197,9 +208,7 @@ class GrowthDiaryRepository:
     ) -> int:
         statement = self._management_query(
             query=query, mood=mood, status=status, from_date=from_date, to_date=to_date
-        ).with_only_columns(
-            func.count(GrowthDiaryEntry.id), maintain_column_froms=True
-        )
+        ).with_only_columns(func.count(GrowthDiaryEntry.id), maintain_column_froms=True)
         result = await self.session.execute(statement)
         return int(result.scalar_one())
 

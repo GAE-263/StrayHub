@@ -91,6 +91,9 @@ def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
         line_role_menu_features_enabled=True,
         line_channel_access_token="production-line-access-token",
         line_rich_menu_default_id="richmenu-default-production",
@@ -100,15 +103,41 @@ def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
     assert settings.validate_runtime_safety(process="worker") is settings
 
 
-@pytest.mark.parametrize("process", ["worker", "migration"])
-def test_non_api_process_policy_requires_only_its_database(process: str) -> None:
+def test_migration_process_policy_requires_only_its_database() -> None:
     settings = Settings(
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
     )
 
-    assert settings.validate_runtime_safety(process=process).app_env == "production"
+    assert settings.validate_runtime_safety(process="migration").app_env == "production"
+
+
+def test_worker_process_requires_database_and_object_storage() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
+        minio_bucket="strayhub-private",
+    )
+
+    assert settings.validate_runtime_safety(process="worker").app_env == "production"
+
+
+def test_worker_process_rejects_unsafe_object_storage_defaults() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+    )
+
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        settings.validate_runtime_safety(process="worker")
+
+    assert "MINIO_ENDPOINT" in str(caught.value)
 
 
 @pytest.mark.parametrize("process", ["worker", "migration"])
@@ -186,6 +215,9 @@ def test_worker_stool_provider_requires_complete_nonlocal_secret_pair() -> None:
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
         stool_api_url="https://stool.internal/analyze",
         stool_api_key=None,
     )
@@ -201,8 +233,33 @@ def test_worker_stool_provider_accepts_safe_url_and_secret_without_leaking_it() 
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
         stool_api_url="https://stool.internal/analyze",
         stool_api_key="synthetic-provider-credential",
     )
 
     assert settings.validate_runtime_safety(process="worker") is settings
+
+
+def test_enabled_celery_worker_requires_broker_line_and_gemini_credentials() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
+        celery_ai_enabled=True,
+        celery_broker_url="redis://redis.internal:6379/0",
+        line_channel_access_token="",
+        gemini_api_key=None,
+    )
+
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        settings.validate_runtime_safety(process="worker")
+
+    message = str(caught.value)
+    assert "LINE_CHANNEL_ACCESS_TOKEN" in message
+    assert "GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH" in message

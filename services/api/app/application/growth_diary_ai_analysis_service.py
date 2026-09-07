@@ -34,9 +34,7 @@ class GrowthDiaryAiAnalysisResult:
     raw_output: str | None
 
 
-def _build_growth_diary_prompt(
-    *, animal_name: str, note: str | None, has_photo: bool
-) -> str:
+def _build_growth_diary_prompt(*, animal_name: str, note: str | None, has_photo: bool) -> str:
     if note and has_photo:
         content = f"領養者同時附上一張照片與以下說明：\n\n「{note}」"
     elif note:
@@ -60,6 +58,11 @@ def _build_growth_diary_prompt(
         '"adopter_reply": "<給領養者的回覆>", "staff_summary": "<給工作人員的摘要>"}，'
         "不要有其他文字或 markdown 標記。"
     )
+
+
+def build_growth_diary_prompt(*, animal_name: str, note: str | None, has_photo: bool) -> str:
+    """Build the established prompt for the durable worker."""
+    return _build_growth_diary_prompt(animal_name=animal_name, note=note, has_photo=has_photo)
 
 
 class GrowthDiaryAiAnalysisService:
@@ -96,5 +99,37 @@ class GrowthDiaryAiAnalysisService:
             raw_output=result.raw_output,
         )
 
+    async def analyze_entry_strict(
+        self,
+        *,
+        animal_name: str,
+        note: str | None,
+        photo: bytes | None,
+        photo_mime_type: str | None = None,
+    ) -> GrowthDiaryAiAnalysisResult:
+        if not note and photo is None:
+            raise ValueError("growth diary analysis requires text or photo")
+        prompt = build_growth_diary_prompt(
+            animal_name=animal_name, note=note, has_photo=photo is not None
+        )
+        result = await self.gemini.analyze_growth_diary_entry_strict(
+            prompt, image=photo, image_mime_type=photo_mime_type
+        )
+        return GrowthDiaryAiAnalysisResult(
+            mood=result.mood,
+            adopter_reply=result.adopter_reply,
+            staff_summary=result.staff_summary,
+            provider="google_gemini",
+            model_name=self.gemini.model_name,
+            model_version=self.gemini.model_name,
+            prompt_version=GROWTH_DIARY_PROMPT_VERSION,
+            output_schema_version=GROWTH_DIARY_OUTPUT_SCHEMA_VERSION,
+            raw_output=result.raw_output,
+        )
 
-__all__ = ["GrowthDiaryAiAnalysisResult", "GrowthDiaryAiAnalysisService"]
+
+__all__ = [
+    "GrowthDiaryAiAnalysisResult",
+    "GrowthDiaryAiAnalysisService",
+    "build_growth_diary_prompt",
+]

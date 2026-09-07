@@ -196,12 +196,14 @@ export default function AiReviewPage() {
                       {item.animal_name ? (
                         <p>
                           <strong>{item.animal_name}</strong>
-                          {item.shelter_number ? ` (${item.shelter_number})` : ""}
+                          {item.shelter_number
+                            ? ` (${item.shelter_number})`
+                            : ""}
                           <br />
                           {item.report_submitted_at
-                            ? new Date(
-                                item.report_submitted_at,
-                              ).toLocaleString("zh-TW")
+                            ? new Date(item.report_submitted_at).toLocaleString(
+                                "zh-TW",
+                              )
                             : "—"}
                         </p>
                       ) : (

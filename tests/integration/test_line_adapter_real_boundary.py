@@ -3,10 +3,11 @@ from services.api.app.infrastructure.line.messaging_api_adapter import LineMessa
 
 
 class Response:
-    def __init__(self, payload=None, content=b"image", headers=None):
+    def __init__(self, payload=None, content=b"image", headers=None, status_code=200):
         self._payload = payload or {}
         self.content = content
         self.headers = headers or {"content-type": "image/jpeg"}
+        self.status_code = status_code
 
     def raise_for_status(self):
         return None
@@ -32,6 +33,12 @@ class Client:
     async def delete(self, url, **kwargs):
         self.calls.append(("DELETE", url, kwargs))
         return Response()
+
+
+class AlreadyAcceptedClient(Client):
+    async def post(self, url, **kwargs):
+        self.calls.append(("POST", url, kwargs))
+        return Response(status_code=409)
 
 
 @pytest.mark.asyncio
@@ -69,3 +76,16 @@ async def test_real_adapter_rich_menu_flow_is_repeatable_and_validated() -> None
         "DELETE",
         "https://api.line.me/v2/bot/user/U-user/richmenu",
     )
+
+
+@pytest.mark.asyncio
+async def test_push_409_with_retry_key_is_already_accepted() -> None:
+    client = AlreadyAcceptedClient()
+
+    await LineMessagingApiAdapter(client=client).push(
+        to_user_id="U-user",
+        messages=[{"type": "text", "text": "ok"}],
+        retry_key="deterministic-key",
+    )
+
+    assert client.calls[0][2]["headers"]["X-Line-Retry-Key"] == "deterministic-key"

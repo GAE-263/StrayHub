@@ -280,7 +280,7 @@ cleanup() {
   done
   rm -rf "$log_dir"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 trap 'exit 130' INT
 trap 'exit 143' TERM
 

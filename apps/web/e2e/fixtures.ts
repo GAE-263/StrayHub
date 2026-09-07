@@ -358,6 +358,8 @@ export async function mockManagementApi(
             alerts: [],
           },
           recent_reports: [],
+          recent_anomalies: [],
+          today_special_care: [],
         },
         options.dashboardStatus ?? 200,
       );
@@ -432,7 +434,7 @@ export async function mockManagementApi(
       return;
     }
     const growthDiaryPhotoMatch = url.pathname.match(
-      /^\/v1\/management\/growth-diary-entries\/([^/]+)\/photo$/,
+      /^\/v1\/management\/growth-diary-entries\/([^/]+)\/(?:photo|photos\/\d+)$/,
     );
     if (growthDiaryPhotoMatch) {
       const entryId = growthDiaryPhotoMatch[1];
@@ -743,6 +745,7 @@ export async function mockManagementApi(
             note: null,
             media_ids: [],
             ai_observations: [],
+            can_archive: true,
           },
         },
         options.reportDetailStatus ?? 200,

@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, BackgroundTasks, Header, Request
 from services.api.app.api.errors import DomainError
 from services.api.app.application.adoption_ai_analysis_service import AdoptionAiAnalysisService
+from services.api.app.application.ai_job_dispatch import create_growth_diary_analysis_job
 from services.api.app.application.animal_selection import (
     AnimalSelectionService,
     TodayAnimalListService,
@@ -131,6 +132,7 @@ from services.api.app.persistence.repositories.adoption_inquiry_repository impor
     AdoptionInquiryRepository,
     list_inquiries_for_adopter,
 )
+from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -182,6 +184,8 @@ class _GrowthDiaryPostCommit:
     animal_name: str
     note: str | None
     has_photo: bool
+    ai_job_id: UUID | None
+    legacy_ai: bool
 
 
 class _GrowthDiaryEventBoundary:
@@ -209,6 +213,8 @@ class _GrowthDiaryEventBoundary:
         animal_name: str,
         note: str | None,
         has_photo: bool,
+        ai_job_id: UUID | None = None,
+        legacy_ai: bool = False,
     ) -> None:
         self.post_commit = _GrowthDiaryPostCommit(
             line=line,
@@ -219,6 +225,8 @@ class _GrowthDiaryEventBoundary:
             animal_name=animal_name,
             note=note,
             has_photo=has_photo,
+            ai_job_id=ai_job_id,
+            legacy_ai=legacy_ai,
         )
 
     async def compensate(self) -> None:
@@ -254,8 +262,12 @@ class _GrowthDiaryEventBoundary:
                 [
                     {
                         **_text(
-                            "已記錄毛孩的成長日記！感謝分享 🐾 "
-                            "AI 小幫手正在看看，稍後會再傳訊息給你 🤖"
+                            "已記錄毛孩的成長日記！感謝分享 🐾"
+                            + (
+                                " AI 小幫手正在看看，稍後會再傳訊息給你 🤖"
+                                if action.ai_job_id is not None or action.legacy_ai
+                                else ""
+                            )
                         ),
                         "quickReply": {"items": growth_diary_quick_reply_items()},
                     }
@@ -267,7 +279,20 @@ class _GrowthDiaryEventBoundary:
                 extra={"webhook_event_id": self.event_id},
             )
 
-        if action.line_user_id is None:
+        if action.ai_job_id is not None:
+            try:
+                self.background_tasks.add_task(
+                    dispatch_ai_job,
+                    action.ai_job_id,
+                    action.organization_id,
+                )
+            except Exception:
+                logger.exception(
+                    "growth_diary_ai_dispatch_registration_failed",
+                    extra={"webhook_event_id": self.event_id},
+                )
+            return
+        if action.line_user_id is None or not action.legacy_ai:
             return
         try:
             self.background_tasks.add_task(
@@ -1295,9 +1320,7 @@ async def _run_adoption_profile_extraction(
         summary = build_info_card(
             "AI 已整理問卷內容 🤖",
             accent_index=1,
-            body=(
-                "已填入你明確提到的項目；標示待確認的內容仍會由系統詢問。"
-            ),
+            body=("已填入你明確提到的項目；標示待確認的內容仍會由系統詢問。"),
             rows=[
                 (
                     _ADOPTION_QUESTION_LABEL[key],
@@ -1323,9 +1346,9 @@ async def _run_adoption_profile_extraction(
         async with session_factory() as render_session:
             async with render_session.begin():
                 await set_organization_scope(render_session, organization_id)
-                current = await AdoptionDraftRepository(
-                    render_session, organization_id
-                ).get(draft_id)
+                current = await AdoptionDraftRepository(render_session, organization_id).get(
+                    draft_id
+                )
                 if current is not None:
                     await _adoption_reply_for_state(
                         render_session,
@@ -1810,8 +1833,7 @@ async def _reply_growth_diary_history(
                 object_key=photo_keys[-1],
             )
             photo_url = (
-                f"{public_base_url}/v1/public/growth-diary/entries/"
-                f"{entry.id}/photo?token={token}"
+                f"{public_base_url}/v1/public/growth-diary/entries/{entry.id}/photo?token={token}"
             )
         history_entries.append(
             GrowthDiaryHistoryEntry(
@@ -1944,11 +1966,31 @@ async def _handle_growth_diary_message(
         )
         pending_draft.current_entry_id = entry.id
         pending_draft.entry_date = today
-    configured = bool(
-        get_settings().gemini_service_account_path or get_settings().gemini_api_key
+    configured = bool(get_settings().gemini_service_account_path or get_settings().gemini_api_key)
+    settings = get_settings()
+    celery_enabled = settings.celery_ai_enabled
+    local_legacy = (
+        configured
+        and not celery_enabled
+        and settings.app_env.strip().lower() in {"local", "test", "testing"}
     )
-    entry.ai_analysis_status = "pending" if configured else "unconfigured"
-    if not configured:
+    ai_job_id: UUID | None = None
+    if celery_enabled:
+        entry.ai_analysis_status = "pending"
+        photo_keys = list(
+            entry.photo_keys or ([] if entry.photo_key is None else [entry.photo_key])
+        )
+        ai_job = await create_growth_diary_analysis_job(
+            AIJobRepository(session, pending_draft.organization_id),
+            entry_id=entry.id,
+            content_version=entry.content_version,
+            photo_keys=photo_keys,
+        )
+        ai_job_id = ai_job.id
+    elif local_legacy:
+        entry.ai_analysis_status = "pending"
+    else:
+        entry.ai_analysis_status = "unconfigured"
         entry.ai_analyzed_at = datetime.now(timezone.utc)
     # Sharing (whether self-initiated or reminder-triggered) resets the
     # reminder cadence clock, so a scheduled nudge never fires right after
@@ -1968,6 +2010,8 @@ async def _handle_growth_diary_message(
         animal_name=inquiry.animal_name_snapshot if inquiry is not None else "毛孩",
         note=note,
         has_photo=photo_key is not None,
+        ai_job_id=ai_job_id,
+        legacy_ai=local_legacy,
     )
 
 
@@ -2004,17 +2048,16 @@ async def _run_growth_diary_ai_analysis(
                 if entry is None:
                     return
                 claimed_version = entry.content_version
-                if (
-                    entry.ai_content_version == claimed_version
-                    and entry.ai_analysis_status in {"processing", "succeeded"}
-                ):
+                if entry.ai_content_version == claimed_version and entry.ai_analysis_status in {
+                    "processing",
+                    "succeeded",
+                }:
                     return
                 entry.ai_content_version = claimed_version
                 entry.ai_analysis_status = "processing"
                 current_note = entry.note
                 photo_keys = list(
-                    entry.photo_keys
-                    or ([] if entry.photo_key is None else [entry.photo_key])
+                    entry.photo_keys or ([] if entry.photo_key is None else [entry.photo_key])
                 )
 
         photo: bytes | None = None
@@ -2081,9 +2124,7 @@ async def _run_growth_diary_ai_analysis(
                             "請儘快確認並視需要主動聯繫領養者。"
                         )
         if result is None and photo_keys:
-            reply_message = _text(
-                f"謝謝分享{animal_name}的照片！看到牠現在的樣子真替你們開心 🥰"
-            )
+            reply_message = _text(f"謝謝分享{animal_name}的照片！看到牠現在的樣子真替你們開心 🥰")
         if reply_message is not None:
             reply_message["quickReply"] = {"items": growth_diary_quick_reply_items()}
     except Exception:
@@ -2218,9 +2259,7 @@ async def _handle_adoption_postback(
                 animal_id=str(animal.id),
                 name=animal.name,
                 shelter_number=animal.shelter_number,
-                photo_url=await _animal_photo_url(
-                    public_base_url, draft.organization_id, animal
-                ),
+                photo_url=await _animal_photo_url(public_base_url, draft.organization_id, animal),
                 selectable=True,
                 select_action="select_target_animal",
                 select_label="選這隻",
@@ -2351,6 +2390,7 @@ async def _handle_adoption_postback(
             )
         elif (
             result.entered_awaiting_ai_suitability
+            and get_settings().app_env.strip().lower() in {"local", "test", "testing"}
             and updated.path == "specific_animal"
             and updated.organization_id is not None
             and updated.target_animal_id is not None
@@ -2370,6 +2410,8 @@ async def _handle_adoption_postback(
         # Same idea, for 推薦名單's AI-curated recommendation list.
         if (
             result.entered_awaiting_ai_recommendations
+            and result.ai_job_id is None
+            and get_settings().app_env.strip().lower() in {"local", "test", "testing"}
             and updated.path == "recommend_me"
             and updated.organization_id is not None
             and line_user_id
@@ -2418,7 +2460,46 @@ async def _handle_adoption_text(
         if not stripped:
             await _reply(line, event, [_text("請直接打字介紹你的生活狀況，或選擇逐題回答。")])
             return
+        if len(stripped) > 2000:
+            raise DomainError(
+                "invalid_adoption_profile_text",
+                "請輸入 1 至 2000 字的生活狀況介紹",
+                422,
+            )
+        settings = get_settings()
         line_user_id = event.get("source", {}).get("userId")
+        if settings.celery_ai_enabled and draft.organization_id is not None:
+            result = await LineAdoptionConversationService(repository).submit_freetext_profile(
+                adopter_user_id=draft.adopter_user_id,
+                profile_text=stripped,
+            )
+            assert result.ai_job_id is not None
+            background_tasks.add_task(
+                dispatch_ai_job,
+                result.ai_job_id,
+                draft.organization_id,
+            )
+            await _reply(line, event, [_text("收到了，正在整理問卷內容；完成後會通知你 🤖")])
+            return
+        if settings.app_env.strip().lower() not in {"local", "test", "testing"}:
+            await LineAdoptionConversationService(repository).handle(
+                token=None,
+                adopter_user_id=draft.adopter_user_id,
+                action="finish_freetext_profile",
+                value=None,
+                event_id=event.get("webhookEventId", ""),
+            )
+            updated = await repository.get(draft.id)
+            if updated is not None:
+                await _adoption_reply_for_state(
+                    session,
+                    line,
+                    event,
+                    draft=updated,
+                    public_base_url=public_base_url,
+                    lead=[_text("AI 整理目前未啟用，已改為逐題回答。")],
+                )
+            return
         if line_user_id and draft.organization_id is not None:
             background_tasks.add_task(
                 _run_adoption_profile_extraction,
@@ -2426,7 +2507,7 @@ async def _handle_adoption_text(
                 line_user_id=line_user_id,
                 organization_id=draft.organization_id,
                 draft_id=draft.id,
-                text=stripped[:2000],
+                text=stripped,
                 public_base_url=public_base_url,
             )
         await _reply(line, event, [_text("收到了，正在整理問卷內容；完成後會通知你 🤖")])
@@ -2437,6 +2518,51 @@ async def _handle_adoption_text(
         # answer to the AI's low-score follow-up question, or (if that
         # hasn't arrived yet) just a stray message to gently defer.
         if draft.ai_followup_target_animal_id is not None:
+            special_request = text.strip()
+            if not special_request or len(special_request) > 2000:
+                raise DomainError(
+                    "invalid_adoption_special_request",
+                    "請輸入 1 至 2000 字的特殊需求",
+                    422,
+                )
+            settings = get_settings()
+            if settings.celery_ai_enabled and draft.organization_id is not None:
+                result = await LineAdoptionConversationService(repository).submit_followup_request(
+                    adopter_user_id=draft.adopter_user_id,
+                    special_request=special_request,
+                )
+                assert result.ai_job_id is not None
+                background_tasks.add_task(
+                    dispatch_ai_job,
+                    result.ai_job_id,
+                    draft.organization_id,
+                )
+                await _reply(
+                    line,
+                    event,
+                    [
+                        _text(
+                            "收到了，謝謝告訴我們！我們馬上幫你看看有沒有更適合的毛孩，"
+                            "找到後會再傳訊息通知你 🐾"
+                        )
+                    ],
+                )
+                return
+            if settings.app_env.strip().lower() not in {"local", "test", "testing"}:
+                await LineAdoptionConversationService(repository).finish_followup_without_ai(
+                    adopter_user_id=draft.adopter_user_id
+                )
+                updated = await repository.get(draft.id)
+                if updated is not None:
+                    await _adoption_reply_for_state(
+                        session,
+                        line,
+                        event,
+                        draft=updated,
+                        public_base_url=public_base_url,
+                        lead=[_text("進階推薦目前未啟用，已保留你原本選定的毛孩。")],
+                    )
+                return
             target_animal_id = draft.ai_followup_target_animal_id
             draft.ai_followup_target_animal_id = None
             await session.flush()
@@ -2449,7 +2575,7 @@ async def _handle_adoption_text(
                     organization_id=draft.organization_id,
                     draft_id=draft.id,
                     exclude_animal_id=target_animal_id,
-                    special_request=text.strip(),
+                    special_request=special_request,
                     public_base_url=public_base_url,
                 )
             await _reply(
@@ -3398,12 +3524,13 @@ async def _handle_postback(
             ttl_seconds=get_settings().draft_ttl_seconds,
         ).cancel_handoff_switch(volunteer_user_id=user_id)
         await _selection_service(session, organization_id).confirm(
-            animal_id=draft.animal_id, user_id=user_id,
-            organization_id=organization_id, membership_id=membership_id, role="VOLUNTEER",
+            animal_id=draft.animal_id,
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
+            role="VOLUNTEER",
         )
-        draft = await LineDraftService(draft_repository).resume(
-            draft.id, volunteer_user_id=user_id
-        )
+        draft = await LineDraftService(draft_repository).resume(draft.id, volunteer_user_id=user_id)
         animal = await AnimalRepository(session, organization_id).get(draft.animal_id)
         await _reply_next_step(
             session,
@@ -3426,12 +3553,15 @@ async def _handle_postback(
             await _reply(line, event, [_text("目前沒有可繼續的回報。")])
             return None
         await _selection_service(session, organization_id).confirm(
-            animal_id=draft.animal_id, user_id=user_id,
-            organization_id=organization_id, membership_id=membership_id, role="VOLUNTEER",
+            animal_id=draft.animal_id,
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
+            role="VOLUNTEER",
         )
-        draft = await LineDraftService(
-            CareReportDraftRepository(session, organization_id)
-        ).resume(draft.id, volunteer_user_id=user_id)
+        draft = await LineDraftService(CareReportDraftRepository(session, organization_id)).resume(
+            draft.id, volunteer_user_id=user_id
+        )
         await _reply_next_step(
             session,
             line,
@@ -3992,8 +4122,9 @@ async def webhook(
                     )
                     reply_message: dict
                     if error.code in {"line_binding_required", "shelter_context_required"}:
-                        if error.code == "shelter_context_required" and await (
-                            _is_adopter_only_line_user(session, line_user_id)
+                        if (
+                            error.code == "shelter_context_required"
+                            and await _is_adopter_only_line_user(session, line_user_id)
                         ):
                             reply_message = _adopter_lost_message()
                         else:

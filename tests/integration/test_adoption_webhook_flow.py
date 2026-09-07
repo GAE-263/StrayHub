@@ -723,9 +723,7 @@ def test_saved_current_answer_is_reconfirmed_and_next_question_is_shown(monkeypa
         send(f"action=select_target_animal&flow=adoption&value={animal_id}")
         send("action=confirm_target_animal&flow=adoption")
         send("action=finish_freetext_profile&flow=adoption")
-        messages = send(
-            "action=answer&flow=adoption&question=housing_type&value=apartment_small"
-        )
+        messages = send("action=answer&flow=adoption&question=housing_type&value=apartment_small")
         experience = find_action_data(messages, "question=dog_experience")
         assert experience is not None
         messages = send(experience)

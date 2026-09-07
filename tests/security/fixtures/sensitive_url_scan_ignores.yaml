@@ -20,3 +20,13 @@ ignores:
     parameter: access_token
     reason: dict.get reads a JSON response body before constructing an Authorization header.
     owner: acceptance-tooling
+  - path: services/api/app/application/media_access.py
+    rule: query_reader
+    parameter: entry_id
+    reason: dict.get validates a signed capability payload; it does not read a URL query parameter.
+    owner: media-access
+  - path: scripts/dev.py
+    rule: query_reader
+    parameter: STRAYHUB_DEMO_PASSWORD
+    reason: os.environ.get reads a local process environment variable; it does not read or construct a URL query.
+    owner: local-developer-tooling

@@ -127,9 +127,7 @@ async def get_growth_diary_entry(
     return GrowthDiaryDetail.model_validate(result)
 
 
-@router.patch(
-    "/{entryId}/status", response_model=GrowthDiaryDetail, responses=ERROR_RESPONSES
-)
+@router.patch("/{entryId}/status", response_model=GrowthDiaryDetail, responses=ERROR_RESPONSES)
 async def update_growth_diary_status(
     entryId: UUID,
     payload: GrowthDiaryStatusUpdate,

@@ -70,9 +70,7 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
-    op.create_index(
-        "ix_growth_diary_entries_entry_date", "growth_diary_entries", ["entry_date"]
-    )
+    op.create_index("ix_growth_diary_entries_entry_date", "growth_diary_entries", ["entry_date"])
     op.create_index("ix_growth_diary_entries_status", "growth_diary_entries", ["status"])
 
     op.add_column(
@@ -84,9 +82,7 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
-    op.add_column(
-        "growth_diary_drafts", sa.Column("entry_date", sa.Date(), nullable=True)
-    )
+    op.add_column("growth_diary_drafts", sa.Column("entry_date", sa.Date(), nullable=True))
 
 
 def downgrade() -> None:

@@ -263,8 +263,6 @@ class GeminiClient:
             status = exc.response.status_code
             error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
             raise error_type(f"gemini_http_{status}") from exc
-        except Exception as exc:
-            raise PermanentAiError(type(exc).__name__) from exc
         try:
             parsed = json.loads(text)
             score = int(parsed["score"])
@@ -273,7 +271,9 @@ class GeminiClient:
             raise MalformedAiResponse("invalid_suitability_schema") from exc
         if not explanation or len(explanation) > 2000:
             raise MalformedAiResponse("invalid_suitability_explanation")
-        return GeminiSuitabilityResult(score=max(0, min(100, score)), explanation=explanation)
+        if not 0 <= score <= 100:
+            raise MalformedAiResponse("invalid_suitability_score")
+        return GeminiSuitabilityResult(score=score, explanation=explanation)
 
     async def generate_report_summary(self, prompt: str) -> str | None:
         """Return raw output for domain validation; never log private report text."""
@@ -315,6 +315,44 @@ class GeminiClient:
                 )
         return recommendations[:3]
 
+    async def recommend_alternatives_strict(
+        self, prompt: str, *, valid_animal_ids: set[str]
+    ) -> list[GeminiAnimalRecommendation]:
+        """Typed, allowlisted parser for durable follow-up recommendation jobs."""
+        try:
+            text = await self._generate_content(prompt)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_followup_json") from exc
+        if not isinstance(parsed, dict) or set(parsed) != {"recommendations"}:
+            raise MalformedAiResponse("invalid_followup_schema")
+        items = parsed["recommendations"]
+        if not isinstance(items, list) or len(items) > 3:
+            raise MalformedAiResponse("invalid_followup_count")
+        results: list[GeminiAnimalRecommendation] = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, dict) or set(item) != {"animal_id", "reason"}:
+                raise MalformedAiResponse("invalid_followup_item")
+            animal_id = item["animal_id"]
+            reason = item["reason"]
+            if not isinstance(animal_id, str) or animal_id not in valid_animal_ids:
+                raise MalformedAiResponse("invalid_followup_animal_id")
+            if not isinstance(reason, str) or not reason.strip() or len(reason) > 100:
+                raise MalformedAiResponse("invalid_followup_reason")
+            if animal_id in seen:
+                continue
+            seen.add(animal_id)
+            results.append(GeminiAnimalRecommendation(animal_id=animal_id, reason=reason.strip()))
+        return results
+
     async def rank_recommendations(
         self, prompt: str, *, valid_animal_ids: set[str]
     ) -> list[GeminiRankedRecommendation] | None:
@@ -348,6 +386,61 @@ class GeminiClient:
                 )
         return results[:5]
 
+    async def rank_recommendations_strict(
+        self, prompt: str, *, valid_animal_ids: set[str]
+    ) -> list[GeminiRankedRecommendation]:
+        """Typed, allowlisted parser for durable recommendation curation."""
+        try:
+            text = await self._generate_content(prompt)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_curation_json") from exc
+        if not isinstance(parsed, dict) or set(parsed) != {"recommendations"}:
+            raise MalformedAiResponse("invalid_curation_schema")
+        items = parsed["recommendations"]
+        if not isinstance(items, list) or len(items) > 5:
+            raise MalformedAiResponse("invalid_curation_count")
+        results: list[GeminiRankedRecommendation] = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, dict) or set(item) != {
+                "animal_id",
+                "score",
+                "explanation",
+            }:
+                raise MalformedAiResponse("invalid_curation_item")
+            animal_id = item["animal_id"]
+            score = item["score"]
+            explanation = item["explanation"]
+            if not isinstance(animal_id, str) or animal_id not in valid_animal_ids:
+                raise MalformedAiResponse("invalid_curation_animal_id")
+            if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 100:
+                raise MalformedAiResponse("invalid_curation_score")
+            if (
+                not isinstance(explanation, str)
+                or not explanation.strip()
+                or len(explanation) > 200
+            ):
+                raise MalformedAiResponse("invalid_curation_explanation")
+            if animal_id in seen:
+                continue
+            seen.add(animal_id)
+            results.append(
+                GeminiRankedRecommendation(
+                    animal_id=animal_id,
+                    score=score,
+                    explanation=explanation.strip(),
+                )
+            )
+        return results
+
     async def extract_adoption_profile(
         self, prompt: str, *, valid_values: dict[str, set[str]]
     ) -> dict[str, str]:
@@ -375,6 +468,40 @@ class GeminiClient:
                 result[key] = value
         return result
 
+    async def extract_adoption_profile_strict(
+        self, prompt: str, *, valid_values: dict[str, set[str]]
+    ) -> dict[str, str]:
+        """Typed, fail-closed profile parser used by the durable worker."""
+        try:
+            text = await self._generate_content(prompt, temperature=_EXTRACTION_TEMPERATURE)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_profile_json") from exc
+        if not isinstance(parsed, dict):
+            raise MalformedAiResponse("invalid_profile_schema")
+        unknown_keys = set(parsed) - set(valid_values)
+        if unknown_keys:
+            raise MalformedAiResponse("unknown_profile_key")
+        extracted: dict[str, str] = {}
+        for key, value in parsed.items():
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise MalformedAiResponse("invalid_profile_value_type")
+            if len(value) > 100:
+                raise MalformedAiResponse("oversized_profile_value")
+            if value not in valid_values[key]:
+                raise MalformedAiResponse("invalid_profile_enum")
+            extracted[key] = value
+        return extracted
+
     async def analyze_growth_diary_entry(
         self, prompt: str, *, image: bytes | None = None, image_mime_type: str | None = None
     ) -> GeminiGrowthDiaryAnalysis | None:
@@ -401,5 +528,53 @@ class GeminiClient:
             mood=mood,
             adopter_reply=adopter_reply,
             staff_summary=staff_summary,
+            raw_output=text,
+        )
+
+    async def analyze_growth_diary_entry_strict(
+        self, prompt: str, *, image: bytes | None = None, image_mime_type: str | None = None
+    ) -> GeminiGrowthDiaryAnalysis:
+        """Typed parser for durable Growth Diary processing."""
+        try:
+            text = await self._generate_content(
+                prompt, image=image, image_mime_type=image_mime_type
+            )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_growth_diary_json") from exc
+        if not isinstance(parsed, dict) or set(parsed) != {
+            "mood",
+            "adopter_reply",
+            "staff_summary",
+        }:
+            raise MalformedAiResponse("invalid_growth_diary_schema")
+        mood = parsed["mood"]
+        adopter_reply = parsed["adopter_reply"]
+        staff_summary = parsed["staff_summary"]
+        if not isinstance(mood, str) or mood not in _VALID_GROWTH_DIARY_MOODS:
+            raise MalformedAiResponse("invalid_growth_diary_mood")
+        if (
+            not isinstance(adopter_reply, str)
+            or not adopter_reply.strip()
+            or len(adopter_reply) > 1000
+        ):
+            raise MalformedAiResponse("invalid_growth_diary_adopter_reply")
+        if (
+            not isinstance(staff_summary, str)
+            or not staff_summary.strip()
+            or len(staff_summary) > 1000
+        ):
+            raise MalformedAiResponse("invalid_growth_diary_staff_summary")
+        return GeminiGrowthDiaryAnalysis(
+            mood=mood,
+            adopter_reply=adopter_reply.strip(),
+            staff_summary=staff_summary.strip(),
             raw_output=text,
         )

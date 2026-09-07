@@ -109,12 +109,33 @@ def test_phase_b1_dependencies_wait_for_health_and_bucket_bootstrap() -> None:
         == "service_completed_successfully"
     )
     assert services["worker"]["depends_on"]["postgres"]["condition"] == "service_healthy"
-    assert services["celery-worker"]["depends_on"]["redis"]["condition"] == "service_healthy"
     assert (
-        services["celery-beat"]["depends_on"]["celery-worker"]["condition"]
-        == "service_healthy"
+        services["worker"]["depends_on"]["minio-bootstrap"]["condition"]
+        == "service_completed_successfully"
     )
+    assert services["celery-worker"]["depends_on"]["redis"]["condition"] == "service_healthy"
+    assert services["celery-beat"]["depends_on"]["celery-worker"]["condition"] == "service_healthy"
     assert services["web"]["depends_on"]["api"]["condition"] == "service_healthy"
+
+
+def test_celery_and_redis_runtime_are_bounded_and_use_one_configured_topology() -> None:
+    services = _compose()["services"]
+    redis = services["redis"]
+    api = services["api"]
+    worker = services["celery-worker"]
+    beat = services["celery-beat"]
+
+    assert "--appendonly yes" in redis["command"][-1]
+    assert "--appendfsync everysec" in redis["command"][-1]
+    assert "--maxmemory" in redis["command"][-1]
+    assert "--maxmemory-policy noeviction" in redis["command"][-1]
+    assert "--requirepass" in redis["command"][-1]
+    assert "ports" not in redis
+    assert api["environment"]["CELERY_QUEUE_AI"] == "${CELERY_QUEUE_AI:-ai}"
+    assert api["environment"]["CELERY_QUEUE_SYSTEM"] == "${CELERY_QUEUE_SYSTEM:-system}"
+    assert "--queues=${CELERY_QUEUE_AI:-ai},${CELERY_QUEUE_SYSTEM:-system}" in worker["command"]
+    assert "--concurrency=${CELERY_WORKER_CONCURRENCY:-2}" in worker["command"]
+    assert "--pidfile=/tmp/celerybeat.pid" in beat["command"]
 
 
 def test_postgres_bootstrap_separates_migration_and_rls_runtime_roles() -> None:

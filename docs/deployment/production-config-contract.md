@@ -4,8 +4,8 @@ Status: Phase B1-B4/D1-D3 contracts plus Phase E2-E4 live runtime access accepte
 Canonical Compose: `infra/gce/docker-compose.production.yml`
 Canonical non-local verification environment: `APP_ENV=gcp-demo`
 
-This contract covers the GCE single-VM runtime: Next.js, FastAPI, Worker, PostgreSQL, and MinIO on
-one private Compose network. The checked-in environment is synthetic verification configuration;
+This contract covers the GCE single-VM runtime: Next.js, FastAPI, legacy Worker, Celery Worker,
+singleton Celery Beat, PostgreSQL, Redis, and MinIO on one private Compose network. The checked-in environment is synthetic verification configuration;
 preflight generates the JWT material after checkout under an ignored directory. Neither is a
 production credential source, and neither may be copied into a real deployment.
 
@@ -40,6 +40,19 @@ without introducing a service-account JSON or application-side GCS dependency.
 | `PII_KMS_KEY_NAME` | API | Non-secret resource identifier | Structurally valid synthetic resource name | Full environment-specific CryptoKey resource name |
 | `AI_PROVIDER` | API | Non-secret | Verification env; `mock` | Compose non-secret env/config |
 | `AI_API_KEY` | API when external AI is selected | Secret | Not set because Phase B1 uses mock AI | Secret Manager → optional staged `runtime.env` entry |
+| `REDIS_MAXMEMORY` | Redis | Non-secret capacity limit | `256mb` | Compose non-secret env/config |
+| `REDIS_PASSWORD` | Redis | Secret | Synthetic verification value | Secret Manager → staged `runtime.env` |
+| `CELERY_BROKER_URL` | API, Celery Worker, Beat | Secret URL containing Redis password | Internal authenticated Redis URL | Secret Manager → staged `runtime.env` |
+| `CELERY_AI_ENABLED` | API, Celery Worker, Beat | Non-secret feature flag | `false` | Enable only after smoke evidence |
+| `CELERY_QUEUE_AI`, `CELERY_QUEUE_SYSTEM` | API, Celery Worker, Beat | Non-secret queue names | `ai`, `system` | Compose non-secret env/config; must match on every process |
+| `CELERY_TASK_SOFT_TIME_LIMIT`, `CELERY_TASK_TIME_LIMIT` | Celery Worker | Non-secret limits | `45`, `60` | Compose non-secret env/config |
+| `CELERY_VISIBILITY_TIMEOUT`, `CELERY_MAX_RETRIES`, `CELERY_RETRY_BACKOFF_MAX` | Celery Worker | Non-secret recovery policy | bounded verification values | Compose non-secret env/config |
+| `CELERY_RECONCILE_INTERVAL_SECONDS` | Beat | Non-secret schedule | `30` | Compose non-secret env/config |
+| `CELERY_WORKER_CONCURRENCY` | Celery Worker | Non-secret capacity | `2` | Compose non-secret env/config |
+| `GEMINI_API_KEY` | Celery Worker when AI flag is enabled | Secret | Unset while disabled | Secret Manager → optional staged `runtime.env`; required before enablement |
+| `GEMINI_MODEL_NAME`, `GEMINI_VERTEX_LOCATION` | Celery Worker | Non-secret | checked-in defaults | Compose non-secret env/config |
+| `STOOL_API_URL`, `STOOL_TIMEOUT_SECONDS` | Legacy Worker | Non-secret optional provider config | unset / bounded default | Compose non-secret env/config |
+| `STOOL_API_KEY` | Legacy Worker when stool provider is enabled | Secret | unset | Secret Manager → optional staged `runtime.env` |
 
 ### LINE role-menu release gate
 
@@ -180,7 +193,8 @@ curl --head -H 'Host: strayhub.enadv.quest' http://127.0.0.1:3000/
 curl --fail -H 'Host: strayhub.enadv.quest' http://127.0.0.1:8080/healthz
 ```
 
-Only API and Web publish source-restricted upstream ports. PostgreSQL, MinIO, Worker, and the MinIO
+Only API and Web publish source-restricted upstream ports. PostgreSQL, Redis, MinIO, both workers,
+Celery Beat, and the MinIO
 console have no host port. See `infra/edge-nginx/strayhub.enadv.quest.conf` for the selected public
 routing policy.
 

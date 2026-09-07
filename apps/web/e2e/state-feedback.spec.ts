@@ -197,7 +197,9 @@ test("AI processing、ai-failed 與 needs-review 都在 detail 以 polite status
     await expect(status).toHaveAttribute("aria-live", "polite");
     await expect(status).toContainText(item.label);
     if (item.status === "failed") {
-      await expect(page.getByText("原始回報保留")).toBeVisible();
+      await expect(
+        page.getByText("原始回報保留", { exact: true }).first(),
+      ).toBeVisible();
       await expect(page.getByText(/原始回報已保存/)).toHaveCount(0);
     }
   }

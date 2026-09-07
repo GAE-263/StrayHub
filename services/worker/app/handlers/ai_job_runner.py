@@ -368,10 +368,12 @@ class AIJobRunner:
                 if job is not None:
                     job.retry_count = retry_count
                     if job.job_type == "care_report_summary":
-                        report = await session.scalar(select(CareReport).where(
-                            CareReport.id == job.target_id,
-                            CareReport.organization_id == organization_id,
-                        ))
+                        report = await session.scalar(
+                            select(CareReport).where(
+                                CareReport.id == job.target_id,
+                                CareReport.organization_id == organization_id,
+                            )
+                        )
                         if report is not None:
                             report.summary_status = "failed" if status == "failed" else "pending"
                 await self._finish(

@@ -30,6 +30,10 @@ def reconcile_ai_dispatch() -> int:
                 "celery_reconciliation_publish_failed",
                 extra={"job_id": str(job_id), "organization_id": str(organization_id)},
             )
+    logger.info(
+        "celery_reconciliation_completed",
+        extra={"candidate_count": len(pending), "dispatched_count": dispatched},
+    )
     return dispatched
 
 
@@ -48,7 +52,15 @@ async def _publish(factory, *, job_id, organization_id) -> bool:
             if (
                 job is None
                 or job.execution_backend != "celery"
-                or job.status not in {"pending_enqueue", "enqueue_failed", "running"}
+                or job.status
+                not in {
+                    "pending_enqueue",
+                    "enqueue_failed",
+                    "retry_wait",
+                    "running",
+                    "succeeded",
+                    "failed",
+                }
                 or job.job_type not in CELERY_TASK_BY_JOB_TYPE
             ):
                 return False
@@ -60,7 +72,8 @@ async def _publish(factory, *, job_id, organization_id) -> bool:
                 "expected_version": job.domain_version,
             }
             result = celery_app.send_task(task_name, kwargs=payload, task_id=str(job.id))
-            job.status = "queued"
+            if job.status in {"pending_enqueue", "enqueue_failed", "retry_wait"}:
+                job.status = "queued"
             job.celery_task_id = result.id
             from datetime import datetime, timezone
 

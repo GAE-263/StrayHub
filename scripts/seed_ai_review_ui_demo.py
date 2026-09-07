@@ -11,14 +11,13 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid5
 
-from sqlalchemy import select
-
 from services.api.app.domain.report_summary import fingerprint, rule_summary
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AIObservation
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.models.identity import Organization
+from sqlalchemy import select
 
 ORGANIZATION_CODE = "FURKIDS-ASIA"
 UI_DEMO_NAMESPACE = UUID("6f2a3e9d-6c9a-4a1e-8e63-9a2f2c1d9b30")
@@ -38,7 +37,12 @@ SCENARIOS = [
     {"key": "pending", "status": "pending", "failure_reason": None, "report_index": 0},
     {"key": "succeeded", "status": "succeeded", "failure_reason": None, "report_index": 1},
     {"key": "failed", "status": "failed", "failure_reason": "AI 服務逾時無回應", "report_index": 2},
-    {"key": "invalid", "status": "invalid", "failure_reason": "AI 輸出格式驗證失敗", "report_index": 3},
+    {
+        "key": "invalid",
+        "status": "invalid",
+        "failure_reason": "AI 輸出格式驗證失敗",
+        "report_index": 3,
+    },
     {"key": "confirmed", "status": "confirmed", "failure_reason": None, "report_index": 4},
     {"key": "rejected", "status": "rejected", "failure_reason": None, "report_index": 5},
     {"key": "corrected", "status": "corrected", "failure_reason": None, "report_index": 6},
@@ -61,7 +65,8 @@ async def seed() -> int:
             ).scalar_one_or_none()
             if organization is None:
                 raise RuntimeError(
-                    f"Organization '{ORGANIZATION_CODE}' not found; run scripts/seed_furkids_demo.py first."
+                    f"Organization '{ORGANIZATION_CODE}' not found; "
+                    "run scripts/seed_furkids_demo.py first."
                 )
 
             report_count = max(scenario["report_index"] for scenario in SCENARIOS) + 1

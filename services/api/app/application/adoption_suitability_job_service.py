@@ -15,11 +15,13 @@ from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.adoption_draft import AdoptionDraft
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.animal import Animal
+from services.api.app.persistence.models.identity import LineUserBinding
 
 JOB_TYPE = "adoption_suitability"
 TARGET_TYPE = "adoption_draft"
 CLAIMABLE = {"pending_enqueue", "enqueue_failed", "queued", "retry_wait"}
 TERMINAL = {"succeeded", "failed", "discarded"}
+NOTIFICATION_CLAIMABLE = {"pending", "retry_wait", "failed"}
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,8 @@ class SuitabilitySnapshot:
     animal_name: str
     shelter_number: str | None
     current_photo_key: str | None
+    skip_ai_reason: str | None = None
+    retry_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,13 @@ class SuitabilityOutcome:
     explanation: str | None = None
     asks_followup: bool = False
     snapshot: SuitabilitySnapshot | None = None
+    actual_version: int | None = None
+
+
+@dataclass(frozen=True)
+class SuitabilityNotification:
+    line_user_id: str
+    outcome: SuitabilityOutcome
 
 
 async def claim_suitability_job(
@@ -69,12 +80,25 @@ async def claim_suitability_job(
             )
             if job is None or job.status in TERMINAL:
                 return None
-            if job.status == "running" and job.claim_token != claim_token:
+            if job.status == "retry_wait" and job.available_at is not None:
+                available_at = job.available_at
+                if available_at.tzinfo is None:
+                    available_at = available_at.replace(tzinfo=timezone.utc)
+                if available_at > datetime.now(timezone.utc):
+                    return None
+            skip_ai_reason: str | None = None
+            if job.status == "running":
                 stale_before = datetime.now(timezone.utc) - timedelta(
                     seconds=get_worker_settings().celery_visibility_timeout
                 )
-                if job.claimed_at is None or job.claimed_at >= stale_before:
+                claimed_at = job.claimed_at
+                if claimed_at is not None and claimed_at.tzinfo is None:
+                    claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+                if claimed_at is not None and claimed_at >= stale_before:
                     return None
+                job.retry_count = (job.retry_count or 0) + 1
+                if job.retry_count >= get_worker_settings().celery_max_retries:
+                    skip_ai_reason = "lease_retry_exhausted"
             if job.status not in CLAIMABLE and job.status != "running":
                 return None
             draft = await session.scalar(
@@ -111,12 +135,15 @@ async def claim_suitability_job(
             job.claimed_by = worker_name[:120]
             job.claimed_at = now
             job.started_at = job.started_at or now
+            job.available_at = None
             return SuitabilitySnapshot(
                 prompt=build_suitability_prompt(dict(draft.answers), animal),
                 animal_id=animal.id,
                 animal_name=animal.name,
                 shelter_number=animal.shelter_number,
                 current_photo_key=animal.current_photo_key,
+                skip_ai_reason=skip_ai_reason,
+                retry_count=job.retry_count or 0,
             )
 
 
@@ -162,7 +189,11 @@ async def apply_suitability_result(
                 or draft.interaction_version != expected_version
             ):
                 _discard(job, "stale_domain_state")
-                return SuitabilityOutcome(applied=False, stale=True)
+                return SuitabilityOutcome(
+                    applied=False,
+                    stale=True,
+                    actual_version=draft.interaction_version if draft is not None else None,
+                )
             asks_followup = result is not None and result.score < 60
             if result is not None:
                 draft.ai_suitability_score = result.score
@@ -178,6 +209,7 @@ async def apply_suitability_result(
             job.validation_result = {
                 "status": "valid" if result is not None else "fallback",
                 "notification_status": "pending",
+                "notification_attempt_count": 0,
             }
             job.raw_ai_output = (
                 {"score": result.score, "explanation": result.explanation}
@@ -195,6 +227,127 @@ async def apply_suitability_result(
                 explanation=result.explanation if result is not None else None,
                 asks_followup=asks_followup,
                 snapshot=snapshot,
+                actual_version=draft.interaction_version,
+            )
+
+
+async def claim_suitability_notification(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    job_id: UUID,
+    draft_id: UUID,
+    organization_id: UUID,
+    expected_version: int,
+    claim_token: str,
+) -> SuitabilityNotification | None:
+    now = datetime.now(timezone.utc)
+    stale_before_epoch = int(now.timestamp()) - get_worker_settings().celery_visibility_timeout
+    async with factory() as session:
+        async with session.begin():
+            await set_organization_scope(session, organization_id)
+            job = await session.scalar(
+                select(AIProcessingJob)
+                .where(
+                    AIProcessingJob.id == job_id,
+                    AIProcessingJob.organization_id == organization_id,
+                    AIProcessingJob.job_type == JOB_TYPE,
+                    AIProcessingJob.target_id == draft_id,
+                    AIProcessingJob.domain_version == expected_version,
+                    AIProcessingJob.status == "succeeded",
+                )
+                .with_for_update()
+            )
+            if job is None:
+                return None
+            validation = dict(job.validation_result or {})
+            notification_status = validation.get("notification_status")
+            available_at_epoch = int(validation.get("notification_available_at_epoch") or 0)
+            if notification_status == "sending":
+                claimed_at_epoch = int(validation.get("notification_claimed_at_epoch") or 0)
+                if claimed_at_epoch > stale_before_epoch:
+                    return None
+            elif notification_status not in NOTIFICATION_CLAIMABLE:
+                return None
+            if notification_status == "retry_wait" and available_at_epoch > int(now.timestamp()):
+                return None
+            attempt_count = int(validation.get("notification_attempt_count") or 0)
+            if attempt_count >= get_worker_settings().celery_max_retries + 1:
+                validation["notification_status"] = "exhausted"
+                validation["notification_failure"] = "notification_retry_exhausted"
+                job.validation_result = validation
+                return None
+
+            draft = await session.scalar(
+                select(AdoptionDraft)
+                .where(
+                    AdoptionDraft.id == draft_id,
+                    AdoptionDraft.organization_id == organization_id,
+                )
+                .with_for_update()
+            )
+            allowed_states = {
+                AdoptionDraftState.AWAITING_AI_SUITABILITY.value,
+                AdoptionDraftState.AWAITING_ADOPTER_NAME.value,
+            }
+            if (
+                draft is None
+                or draft.status != "active"
+                or draft.interaction_version != expected_version + 1
+                or draft.current_step not in allowed_states
+                or draft.target_animal_id is None
+            ):
+                validation["notification_status"] = "discarded"
+                validation["notification_failure"] = "stale_domain_state"
+                validation.pop("notification_claim_token", None)
+                job.validation_result = validation
+                return None
+            animal = await session.scalar(
+                select(Animal).where(
+                    Animal.id == draft.target_animal_id,
+                    Animal.organization_id == organization_id,
+                )
+            )
+            line_user_id = await session.scalar(
+                select(LineUserBinding.line_user_id).where(
+                    LineUserBinding.user_id == draft.adopter_user_id,
+                    LineUserBinding.status == "active",
+                )
+            )
+            if animal is None or not line_user_id:
+                validation["notification_status"] = "skipped"
+                validation["notification_failure"] = "recipient_or_animal_unavailable"
+                job.validation_result = validation
+                return None
+            raw_output = job.raw_ai_output if isinstance(job.raw_ai_output, dict) else {}
+            score = raw_output.get("score")
+            explanation = raw_output.get("explanation")
+            if not isinstance(score, int) or not isinstance(explanation, str):
+                score = None
+                explanation = None
+            validation["notification_status"] = "sending"
+            validation["notification_claim_token"] = claim_token
+            validation["notification_claimed_at_epoch"] = int(now.timestamp())
+            validation["notification_attempt_count"] = attempt_count + 1
+            validation.pop("notification_available_at_epoch", None)
+            job.validation_result = validation
+            snapshot = SuitabilitySnapshot(
+                prompt="",
+                animal_id=animal.id,
+                animal_name=animal.name,
+                shelter_number=animal.shelter_number,
+                current_photo_key=animal.current_photo_key,
+                retry_count=job.retry_count or 0,
+            )
+            return SuitabilityNotification(
+                line_user_id=line_user_id,
+                outcome=SuitabilityOutcome(
+                    applied=True,
+                    score=score,
+                    explanation=explanation,
+                    asks_followup=draft.ai_followup_target_animal_id == animal.id,
+                    snapshot=snapshot,
+                    actual_version=draft.interaction_version,
+                ),
             )
 
 
@@ -237,8 +390,10 @@ async def mark_suitability_notification(
     organization_id: UUID,
     status: str,
     failure_reason: str | None = None,
+    claim_token: str | None = None,
+    countdown: int | None = None,
 ) -> None:
-    if status not in {"sent", "failed"}:
+    if status not in {"sent", "retry_wait", "failed"}:
         raise ValueError("unsupported suitability notification status")
     async with factory() as session:
         async with session.begin():
@@ -256,11 +411,24 @@ async def mark_suitability_notification(
             if job is None:
                 return
             validation = dict(job.validation_result or {})
+            if (
+                claim_token is not None
+                and validation.get("notification_claim_token") != claim_token
+            ):
+                return
             validation["notification_status"] = status
             if failure_reason:
                 validation["notification_failure"] = failure_reason[:120]
             else:
                 validation.pop("notification_failure", None)
+            if countdown is not None:
+                validation["notification_available_at_epoch"] = int(
+                    (datetime.now(timezone.utc) + timedelta(seconds=countdown)).timestamp()
+                )
+            else:
+                validation.pop("notification_available_at_epoch", None)
+            validation.pop("notification_claim_token", None)
+            validation.pop("notification_claimed_at_epoch", None)
             job.validation_result = validation
 
 

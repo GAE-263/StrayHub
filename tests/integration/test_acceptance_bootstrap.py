@@ -129,7 +129,9 @@ def test_acceptance_bootstrap_password_sources_are_protected(tmp_path: Path) -> 
 async def test_acceptance_bootstrap_is_idempotent_and_auth_tenant_volunteer_compatible(
     isolated_application_database_pool: None,
 ) -> None:
-    clock = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+    # Access grants are intentionally time-bounded. Use the current clock so this
+    # acceptance fixture does not become invalid merely because the calendar moved.
+    clock = datetime.now(timezone.utc)
     async with session_factory() as session:
         first = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
         second = await bootstrap_acceptance(session, password=PASSWORD, now=clock)

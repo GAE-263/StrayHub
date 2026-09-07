@@ -27,6 +27,8 @@ REQUIRED_SCALARS = {
     "LINE_CHANNEL_SECRET",
     "LINE_CHANNEL_ACCESS_TOKEN",
     "ANIMAL_CONFIRMATION_SECRET",
+    "REDIS_PASSWORD",
+    "CELERY_BROKER_URL",
 }
 REQUIRED_FILES = {
     "AUTH_JWT_ACTIVE_PRIVATE_KEY": "jwt-private.pem",
@@ -61,6 +63,8 @@ def _write_source(source: Path, *, database_suffix: str = "one") -> dict[str, st
         "LINE_CHANNEL_SECRET": "d1synthetic-line-secret-6Tp9Qm3Vs8Kn4Rx7",
         "LINE_CHANNEL_ACCESS_TOKEN": "d1synthetic-line-token-7Qm9Vt4Kp2Hs6Nx8",
         "ANIMAL_CONFIRMATION_SECRET": "d1synthetic-confirmation-6Tp9Qm3Vs8Kn4Rx7",
+        "REDIS_PASSWORD": "D1SyntheticRedis-4Qm8Vs2Kn7Tp",
+        "CELERY_BROKER_URL": ("redis://:D1SyntheticRedis-4Qm8Vs2Kn7Tp@redis:6379/0"),
     }
     suffixes = {runtime_name: suffix for _, runtime_name, suffix, _, _ in _mapping()}
     for runtime_name, value in values.items():
@@ -115,6 +119,8 @@ def test_required_inventory_and_secret_id_suffixes_are_declarative() -> None:
     assert required_env == REQUIRED_SCALARS
     assert required_files == REQUIRED_FILES
     assert ("env", "AI_API_KEY", "ai-api-key", "-", "optional") in entries
+    assert ("env", "GEMINI_API_KEY", "gemini-api-key", "-", "optional") in entries
+    assert ("env", "STOOL_API_KEY", "stool-api-key", "-", "optional") in entries
     for _, _, suffix, _, _ in entries:
         assert suffix.startswith("strayhub-") is False
         assert "project" not in suffix
@@ -129,7 +135,7 @@ def test_production_template_is_nonsecret_and_distinct_from_b1_verification() ->
     assert "verification/generated" not in template
     assert "/var/lib/strayhub/secrets/current/jwt-private.pem" in template
     assert "/var/lib/strayhub/secrets/current/jwt-public.pem" in template
-    for secret_name in REQUIRED_SCALARS | {"AI_API_KEY"}:
+    for secret_name in REQUIRED_SCALARS | {"AI_API_KEY", "GEMINI_API_KEY", "STOOL_API_KEY"}:
         assert f"{secret_name}=" not in template
 
 

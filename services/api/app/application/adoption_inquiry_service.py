@@ -192,9 +192,7 @@ class AdoptionInquiryInboxService:
                     AdoptionInquiry.phone_number.ilike(pattern, escape="\\"),
                 )
             )
-        total = await self.session.scalar(
-            select(func.count(AdoptionInquiry.id)).where(*filters)
-        )
+        total = await self.session.scalar(select(func.count(AdoptionInquiry.id)).where(*filters))
         rows = await self.session.execute(
             select(AdoptionInquiry)
             .where(*filters)

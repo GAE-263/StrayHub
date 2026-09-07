@@ -106,10 +106,30 @@ async def pending_celery_dispatches(
                 .where(
                     AIProcessingJob.execution_backend == "celery",
                     or_(
-                        AIProcessingJob.status.in_(("pending_enqueue", "enqueue_failed")),
+                        AIProcessingJob.status.in_(
+                            ("pending_enqueue", "enqueue_failed", "retry_wait")
+                        ),
                         (
                             (AIProcessingJob.status == "running")
-                            & (AIProcessingJob.claimed_at < stale_before)
+                            & or_(
+                                AIProcessingJob.claimed_at.is_(None),
+                                AIProcessingJob.claimed_at < stale_before,
+                            )
+                        ),
+                        (
+                            AIProcessingJob.status.in_(("succeeded", "failed"))
+                            & AIProcessingJob.job_type.in_(
+                                (
+                                    "adoption_suitability",
+                                    "adoption_profile_extraction",
+                                    "adoption_followup_recommendations",
+                                    "adoption_recommendation_curation",
+                                    "growth_diary_analysis",
+                                )
+                            )
+                            & AIProcessingJob.validation_result["notification_status"]
+                            .as_string()
+                            .in_(("pending", "retry_wait", "failed", "sending"))
                         ),
                     ),
                     or_(

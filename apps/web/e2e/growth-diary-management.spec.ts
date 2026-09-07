@@ -45,7 +45,7 @@ test("list keeps raw output lazy and loads authenticated WebP with safe headers"
       .endsWith("/v1/management/growth-diary-entries?page=1&page_size=20"),
   );
   const photoResponse = page.waitForResponse((response) =>
-    response.url().endsWith("/photo"),
+    response.url().endsWith("/photos/0"),
   );
 
   await page.goto("/growth-diary");
@@ -174,11 +174,11 @@ test("network failure remains empty and retry creates a new request", async ({
   await authorize(page);
   let attempts = 0;
   await mockManagementApi(page, {
-    growthDiaryStatus: () => (++attempts <= 2 ? "network" : 200),
+    growthDiaryStatus: () => (++attempts === 1 ? "network" : 200),
   });
   await page.goto("/growth-diary");
   await expect(page.getByText("目前無法載入毛孩日記")).toBeVisible();
   await page.getByRole("button", { name: "重新載入" }).click();
   await expect(page.getByText("org-a 的近況文字")).toBeVisible();
-  expect(attempts).toBeGreaterThanOrEqual(2);
+  expect(attempts).toBe(2);
 });

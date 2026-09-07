@@ -8,6 +8,7 @@ import {
 async function mockVolunteerEntryNew(
   page: Parameters<typeof mockLiffBrowser>[0],
 ) {
+  await mockLiffBrowser(page);
   await page.route("**/v1/auth/liff/exchange", async (route) => {
     await route.fulfill({
       status: 200,
@@ -23,11 +24,32 @@ async function mockVolunteerEntryNew(
       }),
     });
   });
-  await mockLiffBrowser(page);
+  await page.route("**/v1/volunteer-applications/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        organization: {
+          id: "org-a",
+          name: "收容所 A",
+          applications_enabled: true,
+          insurance_required: false,
+        },
+        application: null,
+        grant: null,
+        effective_status: "none",
+        next_actions: ["apply"],
+      }),
+    });
+  });
 }
 
 test("登入核心操作可用鍵盤完成", async ({ page }) => {
   await page.goto("/login");
+  const passwordLogin = page.getByText("使用原帳號密碼登入", {
+    exact: true,
+  });
+  await passwordLogin.focus();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("帳號")).toBeFocused();
   await page.keyboard.press("Tab");
@@ -50,7 +72,7 @@ test("志工入口 NEW 狀態可用鍵盤進入報名", async ({ page }) => {
   await enterApplication.focus();
   await expect(enterApplication).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "志工報名" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "收容所 A" })).toBeVisible();
 
   const consent = page.getByRole("checkbox", {
     name: "我確認送出志工報名，並同意由此收容所審核。",
@@ -173,11 +195,11 @@ test("管理核心搜尋、篩選、detail 與 Timeline 展開可用鍵盤完成
   await expect(page).toHaveURL(/\/animals\/animal-a$/);
 
   await page.goto("/reports");
-  const status = page.getByLabel("狀態");
+  const status = page.getByLabel("處理狀態", { exact: true });
   await status.focus();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByText("小森")).toBeVisible();
-  await page.getByRole("link", { name: "查看詳情 →" }).focus();
+  await page.getByRole("link", { name: /小森/ }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/reports\/report-a$/);
 
@@ -260,8 +282,9 @@ test("Report detail AlertDialog 可用 Escape／取消並 restore focus", async 
   );
   await mockManagementApi(page);
   await page.goto("/reports/report-a");
-  await page.getByLabel("原因").fill("鍵盤確認封存流程");
-  const archive = page.getByRole("button", { name: "封存", exact: true });
+  await page.getByText("更正回報／封存").click();
+  await page.getByLabel("更正或封存原因").fill("鍵盤確認封存流程");
+  const archive = page.getByRole("button", { name: "封存回報", exact: true });
   await archive.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("alertdialog", { name: "確認封存回報" });

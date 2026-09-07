@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr
@@ -206,6 +207,13 @@ class Settings(BaseSettings):
             missing("CELERY_BROKER_URL", self.celery_broker_url)
             if is_loopback_url(self.celery_broker_url):
                 problems.append("CELERY_BROKER_URL uses a loopback host")
+            parsed_broker_url = urlparse(self.celery_broker_url)
+            if (
+                parsed_broker_url.scheme not in {"redis", "rediss"}
+                or not parsed_broker_url.hostname
+                or not parsed_broker_url.password
+            ):
+                problems.append("CELERY_BROKER_URL must use authenticated Redis")
             if self.celery_task_soft_time_limit >= self.celery_task_time_limit:
                 problems.append("CELERY_TASK_SOFT_TIME_LIMIT must be below CELERY_TASK_TIME_LIMIT")
 
@@ -215,6 +223,26 @@ class Settings(BaseSettings):
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
 
         if process == "worker":
+            missing("MINIO_ENDPOINT", self.minio_endpoint)
+            if self.minio_endpoint and is_loopback_url(self.minio_endpoint):
+                problems.append("MINIO_ENDPOINT uses a loopback host")
+            placeholder("MINIO_ACCESS_KEY", self.minio_access_key)
+            placeholder("MINIO_SECRET_KEY", self.minio_secret_key)
+            missing("MINIO_BUCKET", self.minio_bucket)
+            if self.celery_ai_enabled:
+                placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
+                if not self.gemini_api_key and not self.gemini_service_account_path:
+                    problems.append(
+                        "GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH is required when "
+                        "CELERY_AI_ENABLED=true"
+                    )
+                if self.gemini_api_key:
+                    placeholder("GEMINI_API_KEY", self.gemini_api_key)
+                if (
+                    self.gemini_service_account_path
+                    and not Path(self.gemini_service_account_path).is_file()
+                ):
+                    problems.append("GEMINI_SERVICE_ACCOUNT_PATH does not exist")
             stool_key = (
                 self.stool_api_key.get_secret_value() if self.stool_api_key is not None else None
             )

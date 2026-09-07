@@ -345,16 +345,15 @@ test("delayed A diary JSON and Blob lifecycles cannot publish after switching to
     )
     .toBeGreaterThanOrEqual(1);
   await expect
-    .poll(() => failedDiaryRequests.some((path) => path.endsWith("/photo")), {
+    .poll(() => failedDiaryRequests.some((path) => path.includes("/photos/")), {
       timeout: 7_000,
     })
     .toBe(true);
   await expect
     .poll(
       () =>
-        failedDiaryRequests.some(
-          (path) =>
-            path.includes("/growth-diary-entries/") && !path.endsWith("/photo"),
+        failedDiaryRequests.some((path) =>
+          /^\/v1\/management\/growth-diary-entries\/[^/]+$/.test(path),
         ),
       { timeout: 7_000 },
     )
