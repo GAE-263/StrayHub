@@ -1,9 +1,58 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-import { GET } from "./route";
+import { GET, POST } from "./route";
 
 const originalApiBaseUrl = process.env.API_BASE_URL;
+
+it("preserves account transaction headers and independent HttpOnly cookies", async () => {
+  process.env.API_BASE_URL = "http://127.0.0.1:8001";
+  const headers = new Headers();
+  headers.append(
+    "Set-Cookie",
+    "transaction-a=first; HttpOnly; Path=/; SameSite=Strict",
+  );
+  headers.append(
+    "Set-Cookie",
+    "transaction-b=second; HttpOnly; Path=/; SameSite=Strict",
+  );
+  const upstream = vi.fn().mockResolvedValue(new Response("{}", { headers }));
+  vi.stubGlobal("fetch", upstream);
+  try {
+    const request = new NextRequest(
+      "http://localhost:3001/v1/auth/google/exchange",
+      {
+        method: "POST",
+        body: "{}",
+        headers: {
+          "Content-Length": "2",
+          "Content-Type": "application/json",
+          Origin: "http://localhost:3001",
+          Cookie: "transaction-a=first",
+          "X-CSRF-Token": "csrf",
+          "X-StrayHub-Account": "1",
+        },
+      },
+    );
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["auth", "google", "exchange"] }),
+    });
+    const forwarded = upstream.mock.calls[0][1].headers as Headers;
+    expect(forwarded.get("origin")).toBe("http://localhost:3001");
+    expect(forwarded.get("cookie")).toBe("transaction-a=first");
+    expect(forwarded.get("x-csrf-token")).toBe("csrf");
+    expect(response.headers.getSetCookie()).toHaveLength(2);
+    expect(
+      response.headers
+        .getSetCookie()
+        .every((cookie) => cookie.includes("HttpOnly")),
+    ).toBe(true);
+  } finally {
+    vi.unstubAllGlobals();
+    if (originalApiBaseUrl === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = originalApiBaseUrl;
+  }
+});
 
 describe("Next API proxy sensitive logging boundary", () => {
   beforeEach(() => {

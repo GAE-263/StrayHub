@@ -28,6 +28,7 @@ export type AuthOrganization = {
 };
 
 export type CurrentUser = {
+  account_access_enabled?: boolean;
   user: {
     id: string;
     username?: string | null;

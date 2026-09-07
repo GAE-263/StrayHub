@@ -52,6 +52,31 @@ class AuthenticationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def google_binding(self, *, sub: str | None = None, user_id: UUID | None = None):
+        from services.api.app.persistence.models.identity import GoogleUserBinding
+
+        statement = select(GoogleUserBinding)
+        if sub is not None:
+            statement = statement.where(GoogleUserBinding.google_sub == sub)
+        elif user_id is not None:
+            statement = statement.where(GoogleUserBinding.user_id == user_id)
+        else:
+            raise ValueError("binding identity required")
+        return (
+            await self.session.execute(statement.execution_options(populate_existing=True))
+        ).scalar_one_or_none()
+
+    async def google_transaction(self, transaction_id: UUID, *, lock: bool = False):
+        from services.api.app.persistence.models.identity import GoogleAuthTransaction
+
+        statement = select(GoogleAuthTransaction).where(GoogleAuthTransaction.id == transaction_id)
+        if lock:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def lock_google_subject(self, digest: str) -> None:
+        await self._lock_login_digest(digest)
+
     async def find_user_by_username(self, username: str) -> User | None:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
@@ -212,7 +237,10 @@ class AuthenticationRepository:
 
     async def lock_user(self, user_id: UUID) -> User | None:
         result = await self.session.execute(
-            select(User).where(User.id == user_id).with_for_update()
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
@@ -408,7 +436,10 @@ class AuthenticationRepository:
 
     async def lock_session(self, session_id: UUID) -> SessionRecord | None:
         result = await self.session.execute(
-            select(SessionRecord).where(SessionRecord.id == session_id).with_for_update()
+            select(SessionRecord)
+            .where(SessionRecord.id == session_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 

@@ -248,13 +248,27 @@ class SessionService:
                 for membership, _organization in available_access
             )
         )
-        if not public_role_allowed or (
-            user.platform_role != "PLATFORM_ADMIN" and not available_access
+        account_access = bool(getattr(session, "account_access_enabled", False))
+        if (
+            (account_access and public_exposure_profile is not None)
+            or not public_role_allowed
+            or (
+                user.platform_role != "PLATFORM_ADMIN"
+                and not available_access
+                and not account_access
+            )
         ):
             if session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN:
                 session.status = "revoked"
                 await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_session", "Session 無效", 401)
+        if (
+            account_access
+            and session.active_organization_id
+            not in {organization.id for _membership, organization in available_access}
+            and user.platform_role != "PLATFORM_ADMIN"
+        ):
+            session.active_organization_id = None
         record.status = "rotated"
         return await self._issue_session(user.id, session, family_id=record.family_id)
 
@@ -370,6 +384,7 @@ class SessionService:
                 "status": user.status,
             },
             "memberships": [serialize_membership(membership) for membership in memberships],
+            "account_access_enabled": bool(getattr(session, "account_access_enabled", False)),
             "public_exposure_profile": public_exposure_profile,
         }
 

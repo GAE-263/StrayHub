@@ -138,7 +138,7 @@ test.describe("管理工作台 Shell", () => {
   }) => {
     await page.goto("/login");
     await expect(
-      page.getByRole("heading", { name: "浪浪森友會管理入口" }),
+      page.getByRole("heading", { name: "歡迎回到森友會" }),
     ).toBeVisible();
 
     const loginHeights = await page

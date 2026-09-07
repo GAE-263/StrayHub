@@ -11,12 +11,15 @@ import {
   type AuthOrganization,
 } from "../../lib/auth";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { LOGIN_STATE_COPY } from "../../components/management/route-state";
 import { hasForbiddenLoginQuery } from "./login-url-policy";
+import { GoogleSignIn } from "../../components/auth/GoogleSignIn";
+import { joinAccountPath } from "../../lib/google-auth";
+import { IdentityShell } from "../../components/auth/IdentityShell";
+import styles from "../../components/auth/identity.module.css";
 
 type LoginResponse = {
   access_token: string;
@@ -54,6 +57,7 @@ function safeLoginError(
 export default function LoginClient() {
   const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -85,7 +89,7 @@ export default function LoginClient() {
     });
     if (!contextResponse.ok) throw new Error(await readError(contextResponse));
     storeActiveOrganization(organization);
-    router.replace("/");
+    router.replace(joinAccountPath() ?? "/");
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -110,7 +114,7 @@ export default function LoginClient() {
       if (!organization) {
         if (login.platform_role === "PLATFORM_ADMIN") {
           storeSession(login);
-          router.replace("/platform-admins");
+          router.replace(joinAccountPath() ?? "/platform-admins");
           return;
         }
         throw new Error(
@@ -155,14 +159,24 @@ export default function LoginClient() {
   };
 
   return (
-    <main className="login-page" aria-labelledby="login-title">
-      <Card className="login-card">
-        <span className="eyebrow">STRAYHUB CRM</span>
-        <h1 id="login-title">浪浪森友會管理入口</h1>
-        <p className="muted">
-          登入後會設定目前收容所，進入角色感知管理工作台。
+    <IdentityShell
+      login
+      title="歡迎回到森友會"
+      eyebrow="登入，接續今天的照顧"
+      description="選擇登入方式，回到你與團隊一起工作的地方。"
+    >
+      {!pendingLogin && <GoogleSignIn onAvailability={setGoogleEnabled} />}
+      <details
+        className={styles.passwordDetails}
+        open={!googleEnabled || Boolean(pendingLogin)}
+      >
+        <summary>使用原帳號密碼登入</summary>
+        <p className={styles.helper}>
+          已有 StrayHub 帳號？先以原帳密登入，即可在「登入設定」連結
+          Google，保留原有紀錄。
         </p>
         <form
+          className={styles.form}
           method="post"
           action="/login"
           onSubmit={submit}
@@ -200,45 +214,43 @@ export default function LoginClient() {
             {submitting ? `${LOGIN_STATE_COPY.saving.label}…` : "登入"}
           </Button>
         </form>
-        {pendingLogin && organizations.length > 1 ? (
-          <section
-            className="panel login-context-panel"
-            aria-labelledby="context-title"
+      </details>
+      {pendingLogin && organizations.length > 1 ? (
+        <section
+          className={`${styles.card} ${styles.form}`}
+          aria-labelledby="context-title"
+        >
+          <h2 id="context-title">確認目前收容所</h2>
+          <Label htmlFor="organization">目前收容所</Label>
+          <Select
+            id="organization"
+            value={selectedOrganizationId || organizations[0]?.id}
+            onChange={(event) => setSelectedOrganizationId(event.target.value)}
+            required
           >
-            <h2 id="context-title">確認目前收容所</h2>
-            <Label htmlFor="organization">目前收容所</Label>
-            <Select
-              id="organization"
-              value={selectedOrganizationId || organizations[0]?.id}
-              onChange={(event) => setSelectedOrganizationId(event.target.value)}
-              required
-            >
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}（{organization.code}）
-                </option>
-              ))}
-            </Select>
-            <p className="muted">
-              請選擇這次工作的目前收容所；後端會重新驗證成員資格。
-            </p>
-            <Button
-              type="button"
-              disabled={submitting}
-              onClick={() => void confirmContext()}
-            >
-              {submitting
-                ? `${LOGIN_STATE_COPY.saving.label}…`
-                : "進入管理工作台"}
-            </Button>
-          </section>
-        ) : null}
-        {submitting ? (
-          <p className="sr-only" role="status" aria-live="polite">
-            {LOGIN_STATE_COPY.saving.nextStep}
-          </p>
-        ) : null}
-      </Card>
-    </main>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}（{organization.code}）
+              </option>
+            ))}
+          </Select>
+          <p className="muted">請選擇這次工作的目前收容所。</p>
+          <Button
+            type="button"
+            disabled={submitting}
+            onClick={() => void confirmContext()}
+          >
+            {submitting
+              ? `${LOGIN_STATE_COPY.saving.label}…`
+              : "進入管理工作台"}
+          </Button>
+        </section>
+      ) : null}
+      {submitting ? (
+        <p className="sr-only" role="status" aria-live="polite">
+          {LOGIN_STATE_COPY.saving.nextStep}
+        </p>
+      ) : null}
+    </IdentityShell>
   );
 }

@@ -22,6 +22,10 @@ class LineIdentityVerifierPort(Protocol):
     async def verify(self, token: str) -> str: ...
 
 
+class GoogleIdentityVerifierPort(Protocol):
+    async def verify(self, token: str, *, client_id: str) -> Mapping[str, object]: ...
+
+
 @dataclass(frozen=True)
 class ActiveVolunteerEntryReference:
     reference_id: UUID

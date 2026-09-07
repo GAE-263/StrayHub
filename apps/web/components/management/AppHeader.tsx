@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
+import styles from "../auth/identity.module.css";
 
 type Props = {
   displayName: string;
@@ -14,6 +15,7 @@ type Props = {
   onSwitchOrganization: (organizationId: string) => void;
   onLogout: () => void;
   mobileNavigation?: ReactNode;
+  accountLinks?: Array<{ href: string; label: string }>;
 };
 
 export function AppHeader({
@@ -24,6 +26,7 @@ export function AppHeader({
   onSwitchOrganization,
   onLogout,
   mobileNavigation,
+  accountLinks = [],
 }: Props) {
   return (
     <header className="app-header">
@@ -59,7 +62,36 @@ export function AppHeader({
             {organizationLabel}
           </span>
         )}
-        <span className="user-label">{displayName}</span>
+        {accountLinks.length ? (
+          <details
+            className={styles.headerMenu}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                event.currentTarget.open = false;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.currentTarget.open = false;
+                event.currentTarget.querySelector("summary")?.focus();
+              }
+            }}
+          >
+            <summary aria-label={`${displayName}的帳號選單`}>
+              <UserRound size={16} aria-hidden="true" />
+              {displayName}
+              <ChevronDown size={13} aria-hidden="true" />
+            </summary>
+            <nav className={styles.menuPanel} aria-label="帳號與收容所">
+              {accountLinks.map((item) => (
+                <Link key={item.href} href={item.href}>
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </details>
+        ) : (
+          <span className="user-label">{displayName}</span>
+        )}
         <Button
           className="header-logout"
           variant="ghost"

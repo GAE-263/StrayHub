@@ -1,0 +1,3030 @@
+openapi: 3.1.0
+info:
+  title: Google 帳號與收容所加入審核
+  version: 1.1.0
+paths:
+  /v1/auth/google/config:
+    get:
+      tags:
+      - Google account
+      summary: Configuration
+      operationId: configuration_v1_auth_google_config_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleConfigurationResponse'
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+      security: []
+  /v1/auth/google/transactions:
+    post:
+      tags:
+      - Google account
+      summary: Begin
+      operationId: begin_v1_auth_google_transactions_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleTransactionResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+      security: []
+  /v1/auth/join-target/{organization_id}:
+    get:
+      tags:
+      - Google account
+      summary: Join Target
+      operationId: join_target_v1_auth_join_target__organization_id__get
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinTargetResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/auth/join-applications:
+    get:
+      tags:
+      - Google account
+      summary: My Applications
+      operationId: my_applications_v1_auth_join_applications_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationResponse'
+                title: Response My Applications V1 Auth Join Applications Get
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+    post:
+      tags:
+      - Google account
+      summary: Submit Application
+      operationId: submit_application_v1_auth_join_applications_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/organizations/{organization_id}/join-applications:
+    get:
+      tags:
+      - Google account
+      summary: List Applications
+      operationId: list_applications_v1_organizations__organization_id__join_applications_get
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      - name: x-session-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Session-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationResponse'
+                title: Response List Applications V1 Organizations  Organization Id  Join
+                  Applications Get
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/organizations/{organization_id}/join-applications/{application_id}/decision:
+    post:
+      tags:
+      - Google account
+      summary: Review Application
+      operationId: review_application_v1_organizations__organization_id__join_applications__application_id__decision_post
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Application Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      - name: x-session-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Session-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/auth/google/exchange:
+    post:
+      tags:
+      - Google account
+      summary: Exchange
+      operationId: exchange_v1_auth_google_exchange_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/GoogleSessionResponse'
+                - $ref: '#/components/schemas/GoogleLinkedResponse'
+                title: Response Exchange V1 Auth Google Exchange Post
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+      security: []
+  /v1/auth/account:
+    get:
+      tags:
+      - Google account
+      summary: Account
+      operationId: account_v1_auth_account_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/auth/google/binding:
+    delete:
+      tags:
+      - Google account
+      summary: Unlink
+      operationId: unlink_v1_auth_google_binding_delete
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRequest'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/auth/invitations:
+    get:
+      tags:
+      - Google account
+      summary: My Invitations
+      operationId: my_invitations_v1_auth_invitations_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvitationResponse'
+                title: Response My Invitations V1 Auth Invitations Get
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/auth/invitations/claim:
+    post:
+      tags:
+      - Google account
+      summary: Claim
+      operationId: claim_v1_auth_invitations_claim_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/organizations/{organization_id}/invitations:
+    get:
+      tags:
+      - Google account
+      summary: List Invitations
+      operationId: list_invitations_v1_organizations__organization_id__invitations_get
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      - name: x-session-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Session-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvitationResponse'
+                title: Response List Invitations V1 Organizations  Organization Id  Invitations
+                  Get
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+    post:
+      tags:
+      - Google account
+      summary: Create Invitation
+      operationId: create_invitation_v1_organizations__organization_id__invitations_post
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      - name: x-session-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Session-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedInvitationResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+  /v1/organizations/{organization_id}/invitations/{invitation_id}/decision:
+    post:
+      tags:
+      - Google account
+      summary: Decide Invitation
+      operationId: decide_invitation_v1_organizations__organization_id__invitations__invitation_id__decision_post
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: invitation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Invitation Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      - name: x-session-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Session-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+        '422':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '401':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '403':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '404':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '409':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '410':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '429':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+        '503':
+          description: 去敏錯誤；429 包含 Retry-After
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - request_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+components:
+  schemas:
+    AccountLoginMethods:
+      properties:
+        password:
+          type: boolean
+          title: Password
+        google:
+          type: boolean
+          title: Google
+      type: object
+      required:
+      - password
+      - google
+      title: AccountLoginMethods
+    AccountOrganizationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        code:
+          type: string
+          title: Code
+        name:
+          type: string
+          title: Name
+        role:
+          type: string
+          title: Role
+      type: object
+      required:
+      - id
+      - code
+      - name
+      - role
+      title: AccountOrganizationResponse
+    AccountResponse:
+      properties:
+        user:
+          $ref: '#/components/schemas/AccountUserResponse'
+        state:
+          type: string
+          enum:
+          - account_only
+          - ready
+          title: State
+        organizations:
+          items:
+            $ref: '#/components/schemas/AccountOrganizationResponse'
+          type: array
+          title: Organizations
+        login_methods:
+          $ref: '#/components/schemas/AccountLoginMethods'
+      type: object
+      required:
+      - user
+      - state
+      - organizations
+      - login_methods
+      title: AccountResponse
+    AccountUserResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        display_name:
+          type: string
+          title: Display Name
+        username:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Username
+        platform_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Platform Role
+      type: object
+      required:
+      - id
+      - display_name
+      - username
+      - platform_role
+      title: AccountUserResponse
+    ApplicationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        organization_name:
+          type: string
+          title: Organization Name
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          title: Status
+        role:
+          anyOf:
+          - type: string
+            enum:
+            - STAFF
+            - SHELTER_ADMIN
+          - type: 'null'
+          title: Role
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        reviewed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Reviewed At
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+      type: object
+      required:
+      - id
+      - organization_id
+      - organization_name
+      - user_id
+      - status
+      - role
+      - created_at
+      - reviewed_at
+      title: ApplicationResponse
+    ClaimRequest:
+      properties:
+        invitation_token:
+          type: string
+          maxLength: 128
+          minLength: 40
+          title: Invitation Token
+      additionalProperties: false
+      type: object
+      required:
+      - invitation_token
+      title: ClaimRequest
+    CreatedInvitationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        organization_name:
+          type: string
+          title: Organization Name
+        role:
+          type: string
+          enum:
+          - STAFF
+          - SHELTER_ADMIN
+          title: Role
+        status:
+          type: string
+          enum:
+          - open
+          - claimed
+          - approved
+          - revoked
+          - expired
+          title: Status
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        claimed_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Claimed By
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        invitation_token:
+          type: string
+          title: Invitation Token
+      type: object
+      required:
+      - id
+      - organization_id
+      - organization_name
+      - role
+      - status
+      - expires_at
+      - claimed_by
+      - invitation_token
+      title: CreatedInvitationResponse
+    DecisionRequest:
+      properties:
+        approve:
+          type: boolean
+          title: Approve
+      additionalProperties: false
+      type: object
+      required:
+      - approve
+      title: DecisionRequest
+    ExchangeRequest:
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          title: Transaction Id
+        credential:
+          type: string
+          maxLength: 8192
+          minLength: 1
+          title: Credential
+      additionalProperties: false
+      type: object
+      required:
+      - transaction_id
+      - credential
+      title: ExchangeRequest
+    GoogleConfigurationResponse:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+        client_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Client Id
+      type: object
+      required:
+      - enabled
+      title: GoogleConfigurationResponse
+    GoogleLinkedResponse:
+      properties:
+        state:
+          type: string
+          const: linked
+          title: State
+      type: object
+      required:
+      - state
+      title: GoogleLinkedResponse
+    GoogleSessionResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+        session_id:
+          type: string
+          format: uuid
+          title: Session Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        expires_in:
+          type: integer
+          title: Expires In
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      - session_id
+      - user_id
+      - expires_in
+      title: GoogleSessionResponse
+    GoogleTransactionResponse:
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          title: Transaction Id
+        nonce:
+          type: string
+          title: Nonce
+        csrf_token:
+          type: string
+          title: Csrf Token
+        client_id:
+          type: string
+          title: Client Id
+        expires_in:
+          type: integer
+          title: Expires In
+      type: object
+      required:
+      - transaction_id
+      - nonce
+      - csrf_token
+      - client_id
+      - expires_in
+      title: GoogleTransactionResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InvitationRequest:
+      properties:
+        role:
+          type: string
+          pattern: ^(STAFF|SHELTER_ADMIN)$
+          title: Role
+      additionalProperties: false
+      type: object
+      required:
+      - role
+      title: InvitationRequest
+    InvitationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        organization_name:
+          type: string
+          title: Organization Name
+        role:
+          type: string
+          enum:
+          - STAFF
+          - SHELTER_ADMIN
+          title: Role
+        status:
+          type: string
+          enum:
+          - open
+          - claimed
+          - approved
+          - revoked
+          - expired
+          title: Status
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        claimed_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Claimed By
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+      type: object
+      required:
+      - id
+      - organization_id
+      - organization_name
+      - role
+      - status
+      - expires_at
+      - claimed_by
+      title: InvitationResponse
+    JoinRequest:
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+      additionalProperties: false
+      type: object
+      required:
+      - organization_id
+      title: JoinRequest
+    JoinTargetResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - id
+      - name
+      title: JoinTargetResponse
+    PasswordRequest:
+      properties:
+        password:
+          type: string
+          maxLength: 1024
+          minLength: 1
+          title: Password
+      additionalProperties: false
+      type: object
+      required:
+      - password
+      title: PasswordRequest
+    ReviewRequest:
+      properties:
+        approve:
+          type: boolean
+          title: Approve
+        role:
+          anyOf:
+          - type: string
+            enum:
+            - STAFF
+            - SHELTER_ADMIN
+          - type: 'null'
+          title: Role
+      additionalProperties: false
+      type: object
+      required:
+      - approve
+      title: ReviewRequest
+    TransactionRequest:
+      properties:
+        purpose:
+          type: string
+          pattern: ^(login|link)$
+          title: Purpose
+        display_name:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Display Name
+        password:
+          type: string
+          maxLength: 1024
+          title: Password
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - purpose
+      title: TransactionRequest
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+security:
+- bearerAuth: []

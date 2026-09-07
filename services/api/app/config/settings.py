@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     session_refresh_token_ttl_seconds: int = Field(default=604800, ge=1)
     login_abuse_hmac_secret: SecretStr = SecretStr("local-only-login-abuse-hmac-secret-material")
     login_trusted_proxy_enabled: bool = False
+    google_auth_enabled: bool = False
+    google_auth_client_id: str = ""
+    google_auth_origin: str = "http://localhost:3001"
     draft_ttl_seconds: int = Field(default=86400, ge=1)
     ai_provider: str = "mock"
     ai_model_name: str = "mock-observation-model"

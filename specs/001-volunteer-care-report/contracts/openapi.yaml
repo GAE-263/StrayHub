@@ -39,6 +39,32 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /v1/auth/google/config:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1google~1config"
+  /v1/auth/google/transactions:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1google~1transactions"
+  /v1/auth/google/exchange:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1google~1exchange"
+  /v1/auth/google/binding:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1google~1binding"
+  /v1/auth/account:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1account"
+  /v1/auth/invitations:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1invitations"
+  /v1/auth/join-target/{organization_id}:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1join-target~1{organization_id}"
+  /v1/auth/join-applications:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1join-applications"
+  /v1/organizations/{organization_id}/join-applications:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1organizations~1{organization_id}~1join-applications"
+  /v1/organizations/{organization_id}/join-applications/{application_id}/decision:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1organizations~1{organization_id}~1join-applications~1{application_id}~1decision"
+  /v1/auth/invitations/claim:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1auth~1invitations~1claim"
+  /v1/organizations/{organization_id}/invitations:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1organizations~1{organization_id}~1invitations"
+  /v1/organizations/{organization_id}/invitations/{invitation_id}/decision:
+    $ref: "../../014-google-auth/contracts/openapi.yaml#/paths/~1v1~1organizations~1{organization_id}~1invitations~1{invitation_id}~1decision"
   /v1/auth/login:
     post:
       tags: [Authentication]
@@ -3488,6 +3514,7 @@ components:
       type: object
       required: [user, memberships]
       properties:
+        account_access_enabled: { type: boolean, default: false }
         user: { $ref: "#/components/schemas/User" }
         memberships:
           type: array

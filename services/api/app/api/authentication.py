@@ -10,6 +10,7 @@ from services.api.app.api.dependencies import (
     RequestContext,
     authenticated_request_context,
     current_request_context,
+    identity_request_context,
     request_session,
 )
 from services.api.app.api.errors import DomainError
@@ -171,6 +172,7 @@ class CurrentUserResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user: CurrentUserProfile
+    account_access_enabled: bool = False
     memberships: list[CurrentUserMembership]
     public_exposure_profile: Literal["shared-demo-production", "shared-demo-dev"] | None = None
 
@@ -289,12 +291,14 @@ async def refresh(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
-    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    context: RequestContext = Depends(identity_request_context),  # noqa: B008
     service: SessionService = Depends(get_session_service),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> Response:
     if context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
     await service.logout(session_id=context.session_id)
+    await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -327,7 +331,7 @@ async def liff_exchange(
 
 @router.get("/me", response_model=CurrentUserResponse)
 async def current_user(
-    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    context: RequestContext = Depends(authenticated_request_context),  # noqa: B008
     service: SessionService = Depends(get_session_service),  # noqa: B008
 ) -> CurrentUserResponse:
     if context.session_id is None:
