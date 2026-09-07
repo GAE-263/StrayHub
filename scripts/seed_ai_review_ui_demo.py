@@ -13,6 +13,7 @@ from uuid import UUID, uuid5
 
 from sqlalchemy import select
 
+from services.api.app.domain.report_summary import fingerprint, rule_summary
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.ai_observation import AIObservation
@@ -72,6 +73,13 @@ async def seed() -> int:
 
             created_or_updated = 0
             for scenario, report in zip(SCENARIOS, reports, strict=True):
+                # The review endpoint refuses to confirm/reject/correct an
+                # AIObservation whose care_report_summary source no longer
+                # matches the report's current content-hash fingerprint. Set
+                # it here so these demo rows are actually reviewable in the UI.
+                report.summary_fingerprint = fingerprint(report)
+                report.summary_status = "succeeded"
+
                 job_id = stable_id("ai-job", scenario["key"])
                 job = await session.get(AIProcessingJob, job_id)
                 if job is None:
@@ -108,7 +116,10 @@ async def seed() -> int:
                 observation.status = scenario["status"]
                 observation.raw_ai_output = job.raw_ai_output
                 observation.validated_ai_observation = (
-                    {"summary": f"（示範資料）{scenario['status']} 狀態的 AI 摘要內容"}
+                    {
+                        **rule_summary(report),
+                        "summary": f"（示範資料）{scenario['status']} 狀態的 AI 摘要內容",
+                    }
                     if scenario["status"] not in {"failed", "invalid", "pending"}
                     else None
                 )
