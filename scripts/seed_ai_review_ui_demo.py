@@ -28,14 +28,25 @@ def stable_id(kind: str, key: str) -> UUID:
     return uuid5(UI_DEMO_NAMESPACE, f"{kind}:{key}")
 
 
+# report_index is a permanent, hand-assigned slot into the id-ordered list of
+# FURKIDS-ASIA care_reports. It must never be inferred from list position/order
+# (e.g. via zip or sorting), because uq_ai_job_target_version means reassigning
+# an existing key to a different report collides with whatever job already
+# owns that report. To add a scenario, append it with the next unused index;
+# never change an existing scenario's index.
 SCENARIOS = [
-    {"key": "pending", "status": "pending", "failure_reason": None},
-    {"key": "succeeded", "status": "succeeded", "failure_reason": None},
-    {"key": "failed", "status": "failed", "failure_reason": "AI 服務逾時無回應"},
-    {"key": "invalid", "status": "invalid", "failure_reason": "AI 輸出格式驗證失敗"},
-    {"key": "confirmed", "status": "confirmed", "failure_reason": None},
-    {"key": "rejected", "status": "rejected", "failure_reason": None},
-    {"key": "corrected", "status": "corrected", "failure_reason": None},
+    {"key": "pending", "status": "pending", "failure_reason": None, "report_index": 0},
+    {"key": "succeeded", "status": "succeeded", "failure_reason": None, "report_index": 1},
+    {"key": "failed", "status": "failed", "failure_reason": "AI 服務逾時無回應", "report_index": 2},
+    {"key": "invalid", "status": "invalid", "failure_reason": "AI 輸出格式驗證失敗", "report_index": 3},
+    {"key": "confirmed", "status": "confirmed", "failure_reason": None, "report_index": 4},
+    {"key": "rejected", "status": "rejected", "failure_reason": None, "report_index": 5},
+    {"key": "corrected", "status": "corrected", "failure_reason": None, "report_index": 6},
+    {"key": "succeeded-2", "status": "succeeded", "failure_reason": None, "report_index": 7},
+    {"key": "succeeded-3", "status": "succeeded", "failure_reason": None, "report_index": 8},
+    {"key": "succeeded-4", "status": "succeeded", "failure_reason": None, "report_index": 9},
+    {"key": "succeeded-5", "status": "succeeded", "failure_reason": None, "report_index": 10},
+    {"key": "succeeded-6", "status": "succeeded", "failure_reason": None, "report_index": 11},
 ]
 
 
@@ -53,26 +64,28 @@ async def seed() -> int:
                     f"Organization '{ORGANIZATION_CODE}' not found; run scripts/seed_furkids_demo.py first."
                 )
 
+            report_count = max(scenario["report_index"] for scenario in SCENARIOS) + 1
             reports = (
                 (
                     await session.execute(
                         select(CareReport)
                         .where(CareReport.organization_id == organization.id)
                         .order_by(CareReport.id)
-                        .limit(len(SCENARIOS))
+                        .limit(report_count)
                     )
                 )
                 .scalars()
                 .all()
             )
-            if len(reports) < len(SCENARIOS):
+            if len(reports) < report_count:
                 raise RuntimeError(
                     "Not enough care_reports for FURKIDS-ASIA to attach demo AI observations; "
                     "run scripts/seed_furkids_demo.py first."
                 )
 
             created_or_updated = 0
-            for scenario, report in zip(SCENARIOS, reports, strict=True):
+            for scenario in SCENARIOS:
+                report = reports[scenario["report_index"]]
                 # The review endpoint refuses to confirm/reject/correct an
                 # AIObservation whose care_report_summary source no longer
                 # matches the report's current content-hash fingerprint. Set
