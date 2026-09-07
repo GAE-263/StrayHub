@@ -235,10 +235,7 @@ export default function AiReviewPage() {
                       <Button
                         variant="secondary"
                         type="button"
-                        disabled={
-                          item.status === "confirmed" ||
-                          item.status === "rejected"
-                        }
+                        disabled={item.status !== "succeeded"}
                         onClick={() => void review(item, "confirm")}
                       >
                         確認
@@ -246,10 +243,7 @@ export default function AiReviewPage() {
                       <Button
                         variant="secondary"
                         type="button"
-                        disabled={
-                          item.status === "confirmed" ||
-                          item.status === "rejected"
-                        }
+                        disabled={item.status !== "succeeded"}
                         onClick={() => void review(item, "reject")}
                       >
                         拒絕
