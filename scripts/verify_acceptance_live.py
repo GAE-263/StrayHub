@@ -21,18 +21,11 @@ from scripts.bootstrap_acceptance import (
 )
 
 ANSWERS = {
-    "care_completion": "care_completion.completed",
     "walk_completion": "walk_completion.not_done",
-    "feeding": "feeding.not_observed",
-    "water": "water.not_observed",
     "activity": "activity.not_observed",
-    "urination": "urination.not_observed",
+    "gait": "gait.not_observed",
     "defecation": "defecation.not_observed",
-    "resource_guarding": "resource_guarding.not_observed",
-    "human_interaction": "human_interaction.uncertain",
     "animal_interaction": "animal_interaction.uncertain",
-    "emotion": "emotion.not_observed",
-    "walk_reaction": "walk.not_observed",
     "appearance_special_status": "appearance.not_observed",
 }
 

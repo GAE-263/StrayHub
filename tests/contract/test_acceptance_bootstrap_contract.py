@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +85,23 @@ def test_live_verifier_uses_normal_login_without_printing_credentials() -> None:
     assert "WHERE rolname = :runtime_role" in source
     assert '{"runtime_role": runtime_role_name}' in source
     assert "WHERE rolname = 'strayhub_app'" not in source
+
+    tree = ast.parse(source)
+    answers_assignment = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "ANSWERS" for target in node.targets)
+    )
+    answers = ast.literal_eval(answers_assignment.value)
+    assert set(answers) == {
+        "walk_completion",
+        "activity",
+        "gait",
+        "defecation",
+        "animal_interaction",
+        "appearance_special_status",
+    }
 
     wrapper = LIVE_WRAPPER.read_text(encoding="utf-8")
     assert 'exec python -m scripts.verify_acceptance_live "$@"' in wrapper
