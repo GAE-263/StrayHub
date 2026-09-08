@@ -8,6 +8,7 @@ locals {
     "strayhub-prod-jwt-public-key",
     "strayhub-prod-line-channel-access-token",
     "strayhub-prod-line-channel-secret",
+    "strayhub-prod-login-abuse-hmac-secret",
     "strayhub-prod-gemini-api-key",
     "strayhub-prod-minio-access-key",
     "strayhub-prod-minio-secret-key",

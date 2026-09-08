@@ -19,7 +19,8 @@ def test_platform_root_owns_only_retained_resources() -> None:
 
     assert 'bucket = "strayhub-platform-tfstate-canvas-primacy-502703-k1"' in source
     assert 'prefix = "strayhub/platform"' in source
-    assert source.count("strayhub-prod-") == 15
+    assert source.count("strayhub-prod-") == 16
+    assert '"strayhub-prod-login-abuse-hmac-secret"' in source
     assert 'resource "google_secret_manager_secret_version"' not in source
     assert 'resource "google_sql_' not in source
     assert 'resource "google_cloud_run_' not in source

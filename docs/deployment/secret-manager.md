@@ -29,6 +29,7 @@ committed. The canonical required inventory is:
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | Protected `runtime.env` | MinIO, bootstrap, API |
 | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | Protected `runtime.env` | API |
 | `ANIMAL_CONFIRMATION_SECRET` | Protected `runtime.env` | API |
+| `LOGIN_ABUSE_HMAC_SECRET` | Protected `runtime.env` | API |
 | active JWT private/public pair | `jwt-private.pem`, `jwt-public.pem` | API only, read-only |
 | `AI_API_KEY` | Optional protected `runtime.env` entry | API only when external AI is selected |
 

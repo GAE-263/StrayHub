@@ -160,7 +160,7 @@ public_key="$(cd "$(dirname "$public_key")" && pwd -P)/$(basename "$public_key")
 required_runtime=(
   POSTGRES_PASSWORD POSTGRES_RUNTIME_PASSWORD DATABASE_URL DATABASE_MIGRATION_URL
   MINIO_ACCESS_KEY MINIO_SECRET_KEY LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN
-  ANIMAL_CONFIRMATION_SECRET REDIS_PASSWORD CELERY_BROKER_URL
+  ANIMAL_CONFIRMATION_SECRET LOGIN_ABUSE_HMAC_SECRET REDIS_PASSWORD CELERY_BROKER_URL
 )
 for key in "${required_runtime[@]}"; do
   value="$(env_value "$runtime_env" "$key" 2>/dev/null || true)"
