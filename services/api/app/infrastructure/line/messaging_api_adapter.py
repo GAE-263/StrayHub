@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+
 import httpx
 
 from services.api.app.api.errors import DomainError
 from services.api.app.application.ports.line_messaging import LineImageContent
-from services.api.app.config.settings import get_settings
+from services.api.app.config.settings import Settings, get_settings
 from services.api.app.observability.logging import get_logger
 
 logger = get_logger(__name__)
@@ -30,9 +32,13 @@ async def close_shared_line_client() -> None:
 
 
 class LineMessagingApiAdapter:
-    def __init__(self, *, client: httpx.AsyncClient | None = None) -> None:
-        settings = get_settings()
+    def __init__(
+        self, *, client: httpx.AsyncClient | None = None, settings: Settings | None = None
+    ) -> None:
+        settings = settings or get_settings()
         self.access_token = settings.line_channel_access_token
+        self.app_env = settings.app_env.strip().lower()
+        self.recipient_allowlist_sha256 = settings.line_notification_recipient_hashes()
         self.api_base = "https://api.line.me"
         self.data_base = "https://api-data.line.me"
         # 這個 adapter 在 per-request 的 DI 與 webhook handler 裡都會被建立，
@@ -42,6 +48,19 @@ class LineMessagingApiAdapter:
     @property
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.access_token}"}
+
+    def ensure_recipient_allowed(self, to_user_id: str) -> None:
+        """Fail closed for every acceptance interaction with a LINE identity."""
+        if self.app_env != "acceptance":
+            return
+        recipient_digest = hashlib.sha256(to_user_id.encode("utf-8")).hexdigest()
+        if recipient_digest not in self.recipient_allowlist_sha256:
+            logger.warning("Blocked non-allowlisted LINE interaction in acceptance")
+            raise DomainError(
+                "line_recipient_not_allowlisted",
+                "Acceptance 環境禁止與未授權的 LINE 測試帳號互動",
+                403,
+            )
 
     @staticmethod
     def _raise_for_status(response, operation: str = "line_api") -> None:
@@ -97,6 +116,7 @@ class LineMessagingApiAdapter:
     async def push(
         self, *, to_user_id: str, messages: list[dict], retry_key: str | None = None
     ) -> None:
+        self.ensure_recipient_allowed(to_user_id)
         headers = {**self._headers, "Content-Type": "application/json"}
         if retry_key is not None:
             headers["X-Line-Retry-Key"] = retry_key

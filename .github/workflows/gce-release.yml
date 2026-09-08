@@ -80,6 +80,7 @@ jobs:
           uv run ruff format --check .
           uv run pytest \
             tests/contract/test_gce_release_contract.py \
+            tests/contract/test_gce_acceptance_isolation_contract.py \
             tests/contract/test_gce_production_compose_contract.py \
             tests/contract/test_gce_systemd_contract.py \
             tests/contract/test_gcp_platform_terraform_contract.py
@@ -91,12 +92,16 @@ jobs:
           bash -n infra/gce/scripts/deploy-release.sh
           bash -n infra/gce/scripts/rollback-release.sh
           bash -n infra/gce/scripts/verify-release-receipt.sh
+          bash -n infra/gce/scripts/acceptance-preflight.sh
+          bash -n infra/gce/scripts/cleanup-acceptance.sh
           shellcheck \
             scripts/build-release-bundle.sh \
             infra/gce/scripts/deploy-release-ci.sh \
             infra/gce/scripts/deploy-release.sh \
             infra/gce/scripts/rollback-release.sh \
-            infra/gce/scripts/verify-release-receipt.sh
+            infra/gce/scripts/verify-release-receipt.sh \
+            infra/gce/scripts/acceptance-preflight.sh \
+            infra/gce/scripts/cleanup-acceptance.sh
 
       - name: Production Compose and preflight contract
         run: |

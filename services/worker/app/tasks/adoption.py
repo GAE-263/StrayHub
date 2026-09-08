@@ -300,7 +300,7 @@ async def _push_curation_result(
     else:
         messages = [{"type": "text", "text": "目前沒有仍可領養的符合候選，請瀏覽其他毛孩。"}]
     async with httpx.AsyncClient(timeout=10) as client:
-        await LineMessagingApiAdapter(client=client).push(
+        await LineMessagingApiAdapter(client=client, settings=get_worker_settings()).push(
             to_user_id=notification.line_user_id,
             messages=messages,
             retry_key=str(uuid5(NAMESPACE_URL, f"strayhub:{job_id}:adoption-curation")),
@@ -577,7 +577,7 @@ async def _push_followup_result(
         )
         messages = [{"type": "text", "text": intro}, build_match_report(cards, max_bubbles=5)]
     async with httpx.AsyncClient(timeout=10) as client:
-        await LineMessagingApiAdapter(client=client).push(
+        await LineMessagingApiAdapter(client=client, settings=get_worker_settings()).push(
             to_user_id=notification.line_user_id,
             messages=messages,
             retry_key=str(uuid5(NAMESPACE_URL, f"strayhub:{job_id}:adoption-followup")),
@@ -856,7 +856,7 @@ async def _push_profile_extraction_result(
     else:
         guidance = "問卷已整理完成，請重新點選「領養媒合」繼續目前題目。"
     async with httpx.AsyncClient(timeout=10) as client:
-        line = LineMessagingApiAdapter(client=client)
+        line = LineMessagingApiAdapter(client=client, settings=get_worker_settings())
         await line.push(
             to_user_id=notification.line_user_id,
             messages=[summary, {"type": "text", "text": guidance}],
@@ -1202,7 +1202,7 @@ async def _push_suitability_result(
             build_info_card("請留下您的姓名 🧑‍🤝‍🧑", accent_index=1, body="請直接輸入姓名")
         )
     async with httpx.AsyncClient(timeout=10) as client:
-        await LineMessagingApiAdapter(client=client).push(
+        await LineMessagingApiAdapter(client=client, settings=get_worker_settings()).push(
             to_user_id=notification.line_user_id,
             messages=messages,
             retry_key=str(uuid5(NAMESPACE_URL, f"strayhub:{job_id}:adopter-suitability")),

@@ -74,9 +74,14 @@ mkdir -p "$payload_dir" "$output_dir"
 
 git -C "$ROOT_DIR" archive "$git_sha" \
   infra/gce/docker-compose.production.yml \
+  infra/gce/docker-compose.acceptance.yml \
+  infra/gce/.env.acceptance.template \
   infra/gce/scripts \
   infra/gce/secrets/production-secret-map.tsv \
+  infra/gce/secrets/acceptance-secret-map.tsv \
   infra/gce/systemd \
+  docs/deployment/acceptance-isolation.md \
+  docs/deployment/acceptance-bootstrap.md \
   scripts/verify_acceptance_live.py | tar -x -C "$payload_dir"
 
 printf '%s\n' "$git_sha" >"$payload_dir/revision"

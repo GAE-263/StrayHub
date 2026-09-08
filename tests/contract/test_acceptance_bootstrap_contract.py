@@ -44,13 +44,17 @@ def test_acceptance_bootstrap_documents_secret_and_tenant_boundaries() -> None:
         assert required in document
 
 
-def test_acceptance_compose_override_is_one_shot_and_uses_migration_url() -> None:
+def test_acceptance_compose_override_is_full_isolated_runtime() -> None:
     source = COMPOSE_OVERRIDE.read_text(encoding="utf-8")
 
     assert "DATABASE_URL: ${DATABASE_MIGRATION_URL:" in source
-    assert "APP_ENV: gcp-demo" in source
-    assert "ports:" not in source
-    assert "build:" not in source
+    assert "APP_ENV: acceptance" in source
+    assert "name: strayhub-acceptance" in source
+    assert "published: ${ACCEPTANCE_WEB_HOST_PORT:" in source
+    assert "published: ${ACCEPTANCE_API_HOST_PORT:" in source
+    assert "build: !reset null" in source
+    assert 'CELERY_AI_ENABLED: "false"' in source
+    assert "--concurrency=1" in source
     assert source.count("  api:") == 1
 
 

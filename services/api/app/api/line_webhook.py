@@ -3767,6 +3767,7 @@ async def webhook(
                     line_user_id = source.get("userId")
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
+                    line.ensure_recipient_allowed(line_user_id)
                     current_flow = await _select_line_flow(session, line_user_id, event)
                     if await _handle_menu_action(line, event):
                         await identity.complete_event(stored_event)
@@ -4135,7 +4136,10 @@ async def webhook(
                     # token is already spent or invalid; replying again would
                     # raise a second time, escape this handler and roll back the
                     # event claim, making LINE redeliver the event.
-                    if error.code != "line_api_unavailable":
+                    if error.code not in {
+                        "line_api_unavailable",
+                        "line_recipient_not_allowlisted",
+                    }:
                         try:
                             await _reply(line, event, [reply_message])
                         except DomainError:

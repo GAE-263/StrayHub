@@ -5,6 +5,7 @@ Thumbs.db
 !.env.example
 !infra/gce/.env.production.example
 !infra/gce/.env.production.template
+!infra/gce/.env.acceptance.template
 infra/gce/verification/generated/
 infra/gce/backup/generated/
 .venv/
@@ -42,3 +43,4 @@ gha-creds-*.json
 AGENTS.md
 /rose
 service.json
+/test.txt

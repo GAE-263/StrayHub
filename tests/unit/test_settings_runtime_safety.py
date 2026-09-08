@@ -45,6 +45,43 @@ def test_safe_non_local_configuration_passes_with_optional_ai_disabled() -> None
     assert safe_non_local_settings().validate_runtime_safety().app_env == "production"
 
 
+def test_acceptance_runtime_requires_isolated_celery_and_controlled_line_identities() -> None:
+    settings = safe_non_local_settings(
+        app_env="acceptance",
+        celery_broker_url="redis://:synthetic@redis:6379/0",
+        celery_queue_ai="acceptance-ai",
+        celery_queue_system="acceptance-system",
+        celery_worker_concurrency=1,
+        line_notification_recipient_allowlist_sha256=f"{'a' * 64},{'b' * 64}",
+    )
+
+    assert settings.validate_runtime_safety() is settings
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"line_notification_recipient_allowlist_sha256": ""}, "LINE_NOTIFICATION"),
+        ({"celery_ai_enabled": True}, "CELERY_AI_ENABLED"),
+        ({"celery_worker_concurrency": 2}, "CELERY_WORKER_CONCURRENCY"),
+        ({"celery_queue_system": "system"}, "CELERY_QUEUE_SYSTEM"),
+    ],
+)
+def test_acceptance_runtime_fails_closed_when_isolation_is_relaxed(overrides, expected) -> None:
+    values = {
+        "app_env": "acceptance",
+        "celery_broker_url": "redis://:synthetic@redis:6379/0",
+        "celery_queue_ai": "acceptance-ai",
+        "celery_queue_system": "acceptance-system",
+        "celery_worker_concurrency": 1,
+        "line_notification_recipient_allowlist_sha256": f"{'a' * 64},{'b' * 64}",
+    }
+    values.update(overrides)
+
+    with pytest.raises(UnsafeRuntimeConfigurationError, match=expected):
+        safe_non_local_settings(**values).validate_runtime_safety()
+
+
 def test_line_role_menu_features_are_local_by_default_and_fail_closed_nonlocal() -> None:
     assert Settings(_env_file=None, app_env="local").line_role_menu_features_active() is True
     assert safe_non_local_settings().line_role_menu_features_active() is False

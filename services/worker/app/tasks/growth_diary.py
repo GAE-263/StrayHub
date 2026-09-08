@@ -359,7 +359,7 @@ async def _push_delivery(
             "quickReply": {"items": growth_diary_quick_reply_items()},
         }
     async with httpx.AsyncClient(timeout=10) as client:
-        await LineMessagingApiAdapter(client=client).push(
+        await LineMessagingApiAdapter(client=client, settings=get_worker_settings()).push(
             to_user_id=delivery.line_user_id,
             messages=[message],
             retry_key=str(

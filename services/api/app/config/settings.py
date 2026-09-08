@@ -35,6 +35,7 @@ _KMS_CRYPTO_KEY_PATTERN = re.compile(
     r"^projects/[^/\s]+/locations/[^/\s]+/keyRings/[^/\s]+/cryptoKeys/[^/\s]+$"
 )
 _LINE_SMOKE_EVIDENCE_PATTERN = re.compile(r"^verified-[0-9]{8}-[0-9a-f]{40}$")
+_SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def is_placeholder_secret(value: str | None) -> bool:
@@ -78,6 +79,9 @@ class Settings(BaseSettings):
     line_channel_id: str = "fake-line-channel-id"
     line_channel_secret: str = "fake-line-channel-secret"
     line_channel_access_token: str = "fake-line-access-token"
+    # Acceptance sends are fail-closed at the LINE adapter. Store only SHA-256
+    # digests of approved test LINE user IDs so identities are not committed.
+    line_notification_recipient_allowlist_sha256: str = ""
     line_login_channel_id: str = ""
     line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
@@ -167,7 +171,15 @@ class Settings(BaseSettings):
     celery_max_retries: int = Field(default=3, ge=0, le=10)
     celery_retry_backoff_max: int = Field(default=120, ge=1)
     celery_ai_enabled: bool = False
+    celery_worker_concurrency: int = Field(default=2, ge=1, le=32)
     celery_reconcile_interval_seconds: int = Field(default=30, ge=5, le=3600)
+
+    def line_notification_recipient_hashes(self) -> frozenset[str]:
+        return frozenset(
+            item.strip().lower()
+            for item in self.line_notification_recipient_allowlist_sha256.split(",")
+            if item.strip()
+        )
 
     def line_role_menu_features_active(self) -> bool:
         environment = self.app_env.strip().lower()
@@ -203,7 +215,7 @@ class Settings(BaseSettings):
         ):
             problems.append("DATABASE_URL uses local development credentials")
 
-        if process in {"api", "worker"} and self.celery_ai_enabled:
+        if process in {"api", "worker"} and (self.celery_ai_enabled or environment == "acceptance"):
             missing("CELERY_BROKER_URL", self.celery_broker_url)
             if is_loopback_url(self.celery_broker_url):
                 problems.append("CELERY_BROKER_URL uses a loopback host")
@@ -216,6 +228,28 @@ class Settings(BaseSettings):
                 problems.append("CELERY_BROKER_URL must use authenticated Redis")
             if self.celery_task_soft_time_limit >= self.celery_task_time_limit:
                 problems.append("CELERY_TASK_SOFT_TIME_LIMIT must be below CELERY_TASK_TIME_LIMIT")
+
+        if process in {"api", "worker"} and environment == "acceptance":
+            placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
+            recipient_hashes = self.line_notification_recipient_hashes()
+            if len(recipient_hashes) < 2:
+                problems.append(
+                    "LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256 must contain at least "
+                    "two controlled test identities"
+                )
+            elif any(not _SHA256_HEX_PATTERN.fullmatch(value) for value in recipient_hashes):
+                problems.append(
+                    "LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256 must contain only "
+                    "comma-separated lowercase SHA-256 digests"
+                )
+            if self.celery_ai_enabled:
+                problems.append("CELERY_AI_ENABLED must be false in acceptance")
+            if self.celery_worker_concurrency != 1:
+                problems.append("CELERY_WORKER_CONCURRENCY must be 1 in acceptance")
+            if not self.celery_queue_ai.startswith("acceptance-"):
+                problems.append("CELERY_QUEUE_AI must use the acceptance- prefix")
+            if not self.celery_queue_system.startswith("acceptance-"):
+                problems.append("CELERY_QUEUE_SYSTEM must use the acceptance- prefix")
 
         if process == "worker" and self.line_role_menu_features_enabled:
             placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
