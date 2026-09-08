@@ -84,7 +84,9 @@ def _rendered_model() -> dict:
 
 
 def test_rendered_acceptance_model_passes_isolation_policy() -> None:
-    policy.validate(_rendered_model())
+    model = _rendered_model()
+    assert model["services"]["web"]["environment"]["API_BASE_URL"] == "http://api:8080"
+    policy.validate(model)
 
 
 def test_acceptance_inventory_and_template_are_dedicated() -> None:

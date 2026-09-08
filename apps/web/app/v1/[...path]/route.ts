@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 1_048_576;
 const MAX_RESPONSE_BYTES = 10_485_760;
 const STREAM_TIMEOUT_MS = 10_000;
+const TRUSTED_INTERNAL_HTTP_API_ORIGIN = "http://api:8080";
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -36,10 +37,22 @@ function errorResponse(status: number, detail: string): Response {
 function resolveApiOrigin(raw: string): URL | null {
   try {
     const origin = new URL(raw);
+    if (origin.username || origin.password || origin.hash) return null;
+
     const localDevelopment =
       origin.protocol === "http:" &&
       (origin.hostname === "127.0.0.1" || origin.hostname === "localhost");
-    if (origin.protocol !== "https:" && !localDevelopment) return null;
+    const trustedInternalComposeOrigin =
+      origin.protocol === "http:" &&
+      origin.origin === TRUSTED_INTERNAL_HTTP_API_ORIGIN &&
+      origin.pathname === "/" &&
+      !origin.search;
+    if (
+      origin.protocol !== "https:" &&
+      !localDevelopment &&
+      !trustedInternalComposeOrigin
+    )
+      return null;
     return origin;
   } catch {
     return null;
