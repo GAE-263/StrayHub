@@ -80,6 +80,10 @@ def test_live_verifier_uses_normal_login_without_printing_credentials() -> None:
     assert "private_key" not in source
     assert '"password": password' in source
     assert '"password": password,' not in source.split("return {")[-1]
+    assert "make_url(settings.database_url).username" in source
+    assert "WHERE rolname = :runtime_role" in source
+    assert '{"runtime_role": runtime_role_name}' in source
+    assert "WHERE rolname = 'strayhub_app'" not in source
 
     wrapper = LIVE_WRAPPER.read_text(encoding="utf-8")
     assert 'exec python -m scripts.verify_acceptance_live "$@"' in wrapper
