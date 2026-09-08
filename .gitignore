@@ -42,3 +42,6 @@ gha-creds-*.json
 AGENTS.md
 /rose
 service.json
+
+.claude/
+claude.md
