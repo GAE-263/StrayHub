@@ -136,11 +136,16 @@ def test_release_bundle_contains_acceptance_gate_assets() -> None:
     for path in (
         "infra/gce/docker-compose.acceptance.yml",
         "infra/gce/.env.acceptance.template",
+        "infra/gce/postgres/init-runtime-role.sh",
         "infra/gce/secrets/acceptance-secret-map.tsv",
         "docs/deployment/acceptance-isolation.md",
         "docs/deployment/acceptance-bootstrap.md",
     ):
         assert path in source
+
+    preflight = PREFLIGHT.read_text(encoding="utf-8")
+    assert '[[ -f "$ROOT_DIR/infra/gce/postgres/init-runtime-role.sh" ]]' in preflight
+    assert '[[ -x "$ROOT_DIR/infra/gce/postgres/init-runtime-role.sh" ]]' in preflight
 
 
 def test_acceptance_secret_materialization_and_static_preflight() -> None:

@@ -31,6 +31,10 @@ command -v openssl >/dev/null || fail "openssl is required"
 [[ -f "$CONFIG_ENV" ]] || fail "--config-env must name the protected acceptance config"
 [[ -f "$IMAGE_ENV" ]] || fail "--image-env must name immutable release images"
 [[ -d "$SECRETS_ROOT" ]] || fail "acceptance secret staging root does not exist"
+[[ -f "$ROOT_DIR/infra/gce/postgres/init-runtime-role.sh" ]] ||
+  fail "PostgreSQL runtime-role initializer is missing from the release"
+[[ -x "$ROOT_DIR/infra/gce/postgres/init-runtime-role.sh" ]] ||
+  fail "PostgreSQL runtime-role initializer is not executable"
 
 mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
 env_value() {

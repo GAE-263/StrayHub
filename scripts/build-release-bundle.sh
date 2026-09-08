@@ -76,6 +76,7 @@ git -C "$ROOT_DIR" archive "$git_sha" \
   infra/gce/docker-compose.production.yml \
   infra/gce/docker-compose.acceptance.yml \
   infra/gce/.env.acceptance.template \
+  infra/gce/postgres/init-runtime-role.sh \
   infra/gce/scripts \
   infra/gce/secrets/production-secret-map.tsv \
   infra/gce/secrets/acceptance-secret-map.tsv \
