@@ -126,6 +126,7 @@ def test_acceptance_celery_services_receive_nonlocal_runtime_safety_config() -> 
     worker_healthcheck = " ".join(services["celery-worker"]["healthcheck"]["test"])
     assert "AUTH_JWT_ACTIVE_PRIVATE_KEY" in worker_healthcheck
     assert "AUTH_JWT_ACTIVE_PUBLIC_KEY" in worker_healthcheck
+    assert services["celery-worker"]["healthcheck"]["timeout"] == "20s"
 
 
 def test_acceptance_inventory_and_template_are_dedicated() -> None:

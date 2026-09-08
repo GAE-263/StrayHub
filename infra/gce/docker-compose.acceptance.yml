@@ -132,6 +132,7 @@ services:
           export AUTH_JWT_ACTIVE_PUBLIC_KEY="$$(cat /run/secrets/runtime_jwt_public_key)" &&
           celery -A services.api.app.infrastructure.celery_app:celery_app inspect ping
           --destination "celery@$${HOSTNAME}" --timeout 5 | grep pong
+      timeout: 20s
 
   celery-beat:
     build: !reset null
