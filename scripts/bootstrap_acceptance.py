@@ -23,6 +23,8 @@ MINIMUM_PASSWORD_LENGTH = 20
 
 TENANT_A_CODE = "STRAYHUB-ACCEPTANCE-A"
 TENANT_B_CODE = "STRAYHUB-ACCEPTANCE-B"
+TENANT_A_SERVICE_AREA = "臺北市"
+TENANT_B_SERVICE_AREA = "新北市"
 ADMIN_A_USERNAME = "acceptance-admin-a@strayhub.local"
 ADMIN_B_USERNAME = "acceptance-admin-b@strayhub.local"
 VOLUNTEER_A_USERNAME = "acceptance-volunteer-a@strayhub.local"
@@ -102,7 +104,7 @@ def read_bootstrap_password(environ: dict[str, str] | os._Environ[str]) -> str:
 
 
 async def _ensure_organization(
-    session: AsyncSession, *, code: str, name: str
+    session: AsyncSession, *, code: str, name: str, service_area: str
 ) -> tuple[Any, FixtureStatus]:
     from services.api.app.application.audit_service import AuditService
     from services.api.app.application.organization_management import OrganizationManagementService
@@ -121,7 +123,7 @@ async def _ensure_organization(
         organization.name = name
         organization.status = "active"
         organization.address = "Synthetic acceptance data only"
-        organization.service_area = "Acceptance"
+        organization.service_area = service_area
         await AuditService(session).record(
             organization_id=None,
             actor_user_id=None,
@@ -135,10 +137,16 @@ async def _ensure_organization(
         return organization, "created"
     if organization.name != name:
         raise RuntimeError(f"acceptance_fixture_collision: organization code {code}")
+    if organization.service_area not in {service_area, "Acceptance"}:
+        raise RuntimeError(f"acceptance_fixture_collision: organization service area {code}")
+    changed = False
     if organization.status != "active":
         organization.status = "active"
-        return organization, "updated"
-    return organization, "reused"
+        changed = True
+    if organization.service_area == "Acceptance":
+        organization.service_area = service_area
+        changed = True
+    return organization, "updated" if changed else "reused"
 
 
 async def _ensure_admin(
@@ -525,11 +533,17 @@ async def bootstrap_acceptance(
     await seed_vocabulary(session)
 
     tenant_a, tenant_a_status = await _ensure_organization(
-        session, code=TENANT_A_CODE, name="Acceptance Shelter A"
+        session,
+        code=TENANT_A_CODE,
+        name="Acceptance Shelter A",
+        service_area=TENANT_A_SERVICE_AREA,
     )
     await set_platform_scope(session)
     tenant_b, tenant_b_status = await _ensure_organization(
-        session, code=TENANT_B_CODE, name="Acceptance Shelter B"
+        session,
+        code=TENANT_B_CODE,
+        name="Acceptance Shelter B",
+        service_area=TENANT_B_SERVICE_AREA,
     )
 
     await set_platform_scope(session)
