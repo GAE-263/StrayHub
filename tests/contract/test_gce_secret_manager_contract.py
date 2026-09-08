@@ -233,9 +233,7 @@ def test_compose_uses_generic_selected_jwt_files_and_scalar_secret_inputs() -> N
         "${AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE:"
     )
     assert api["environment"]["AI_API_KEY"] == "${AI_API_KEY:-}"
-    assert api["environment"]["LOGIN_ABUSE_HMAC_SECRET"].startswith(
-        "${LOGIN_ABUSE_HMAC_SECRET:"
-    )
+    assert api["environment"]["LOGIN_ABUSE_HMAC_SECRET"].startswith("${LOGIN_ABUSE_HMAC_SECRET:")
     assert api["environment"]["LINE_ROLE_MENU_FEATURES_ENABLED"] == (
         "${LINE_ROLE_MENU_FEATURES_ENABLED:-false}"
     )
