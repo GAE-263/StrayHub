@@ -89,6 +89,45 @@ def test_rendered_acceptance_model_passes_isolation_policy() -> None:
     policy.validate(model)
 
 
+def test_acceptance_celery_services_receive_nonlocal_runtime_safety_config() -> None:
+    services = _rendered_model()["services"]
+    required_environment = {
+        "APP_ENV",
+        "LINE_CHANNEL_ID",
+        "LINE_CHANNEL_SECRET",
+        "LINE_CHANNEL_ACCESS_TOKEN",
+        "LINE_LOGIN_CHANNEL_ID",
+        "LIFF_ID",
+        "ANIMAL_CONFIRMATION_SECRET",
+        "LOGIN_ABUSE_HMAC_SECRET",
+        "AUTH_JWT_ISSUER",
+        "AUTH_JWT_AUDIENCE",
+        "AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE",
+        "AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE",
+        "PII_ENCRYPTION_PROVIDER",
+        "PII_KMS_KEY_NAME",
+        "LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256",
+    }
+
+    for service_name in ("celery-worker", "celery-beat"):
+        service = services[service_name]
+        assert required_environment <= service["environment"].keys()
+        assert service["environment"]["APP_ENV"] == "acceptance"
+        assert service["environment"]["CELERY_AI_ENABLED"] == "false"
+        assert service["environment"]["CELERY_WORKER_CONCURRENCY"] == "1"
+        assert {secret["source"] for secret in service["secrets"]} == {
+            "runtime_jwt_private_key",
+            "runtime_jwt_public_key",
+        }
+        command = " ".join(service["command"])
+        assert "AUTH_JWT_ACTIVE_PRIVATE_KEY" in command
+        assert "AUTH_JWT_ACTIVE_PUBLIC_KEY" in command
+
+    worker_healthcheck = " ".join(services["celery-worker"]["healthcheck"]["test"])
+    assert "AUTH_JWT_ACTIVE_PRIVATE_KEY" in worker_healthcheck
+    assert "AUTH_JWT_ACTIVE_PUBLIC_KEY" in worker_healthcheck
+
+
 def test_acceptance_inventory_and_template_are_dedicated() -> None:
     mapping = MAP.read_text(encoding="utf-8")
     template = TEMPLATE.read_text(encoding="utf-8")

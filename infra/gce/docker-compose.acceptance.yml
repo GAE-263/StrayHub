@@ -2,6 +2,23 @@ name: strayhub-acceptance
 
 # Layer after docker-compose.production.yml. Every host-facing or persistent
 # boundary is replaced with an acceptance-only equivalent.
+x-acceptance-runtime-safety-environment: &acceptance-runtime-safety-environment
+  APP_ENV: acceptance
+  LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:?LINE_CHANNEL_ID is required}
+  LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:?LINE_CHANNEL_SECRET is required}
+  LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
+  LINE_LOGIN_CHANNEL_ID: ${LINE_LOGIN_CHANNEL_ID:?LINE_LOGIN_CHANNEL_ID is required}
+  LIFF_ID: ${LIFF_ID:?LIFF_ID is required}
+  ANIMAL_CONFIRMATION_SECRET: ${ANIMAL_CONFIRMATION_SECRET:?ANIMAL_CONFIRMATION_SECRET is required}
+  LOGIN_ABUSE_HMAC_SECRET: ${LOGIN_ABUSE_HMAC_SECRET:?LOGIN_ABUSE_HMAC_SECRET is required}
+  AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:?AUTH_JWT_ISSUER is required}
+  AUTH_JWT_AUDIENCE: ${AUTH_JWT_AUDIENCE:?AUTH_JWT_AUDIENCE is required}
+  AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE: ${AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE:?AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE is required}
+  AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE: ${AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE:?AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE is required}
+  PII_ENCRYPTION_PROVIDER: ${PII_ENCRYPTION_PROVIDER:?PII_ENCRYPTION_PROVIDER is required}
+  PII_KMS_KEY_NAME: ${PII_KMS_KEY_NAME:?PII_KMS_KEY_NAME is required}
+  LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256: ${LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256:?LINE notification allowlist is required}
+
 services:
   postgres:
     restart: "no"
@@ -84,21 +101,37 @@ services:
     cpus: "0.50"
     mem_limit: 640m
     environment:
-      APP_ENV: acceptance
+      <<: *acceptance-runtime-safety-environment
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256: ${LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256:?LINE notification allowlist is required}
       CELERY_AI_ENABLED: "false"
       CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:?CELERY_QUEUE_AI is required}
       CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:?CELERY_QUEUE_SYSTEM is required}
       CELERY_WORKER_CONCURRENCY: "1"
+    secrets: !override
+      - source: runtime_jwt_private_key
+        target: runtime_jwt_private_key
+        mode: 0400
+      - source: runtime_jwt_public_key
+        target: runtime_jwt_public_key
+        mode: 0444
     command: !override
-      - celery
-      - -A
-      - services.api.app.infrastructure.celery_app:celery_app
-      - worker
-      - --loglevel=INFO
-      - --queues=${CELERY_QUEUE_AI:?CELERY_QUEUE_AI is required},${CELERY_QUEUE_SYSTEM:?CELERY_QUEUE_SYSTEM is required}
-      - --concurrency=1
+      - /bin/sh
+      - -ec
+      - |
+        export AUTH_JWT_ACTIVE_PRIVATE_KEY="$$(cat /run/secrets/runtime_jwt_private_key)"
+        export AUTH_JWT_ACTIVE_PUBLIC_KEY="$$(cat /run/secrets/runtime_jwt_public_key)"
+        exec celery -A services.api.app.infrastructure.celery_app:celery_app worker \
+          --loglevel=INFO \
+          --queues="$${CELERY_QUEUE_AI},$${CELERY_QUEUE_SYSTEM}" \
+          --concurrency=1
+    healthcheck:
+      test: !override
+        - CMD-SHELL
+        - >-
+          export AUTH_JWT_ACTIVE_PRIVATE_KEY="$$(cat /run/secrets/runtime_jwt_private_key)" &&
+          export AUTH_JWT_ACTIVE_PUBLIC_KEY="$$(cat /run/secrets/runtime_jwt_public_key)" &&
+          celery -A services.api.app.infrastructure.celery_app:celery_app inspect ping
+          --destination "celery@$${HOSTNAME}" --timeout 5 | grep pong
 
   celery-beat:
     build: !reset null
@@ -107,13 +140,28 @@ services:
     cpus: "0.25"
     mem_limit: 256m
     environment:
-      APP_ENV: acceptance
+      <<: *acceptance-runtime-safety-environment
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256: ${LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256:?LINE notification allowlist is required}
       CELERY_AI_ENABLED: "false"
       CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:?CELERY_QUEUE_AI is required}
       CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:?CELERY_QUEUE_SYSTEM is required}
       CELERY_WORKER_CONCURRENCY: "1"
+    secrets: !override
+      - source: runtime_jwt_private_key
+        target: runtime_jwt_private_key
+        mode: 0400
+      - source: runtime_jwt_public_key
+        target: runtime_jwt_public_key
+        mode: 0444
+    command: !override
+      - /bin/sh
+      - -ec
+      - |
+        export AUTH_JWT_ACTIVE_PRIVATE_KEY="$$(cat /run/secrets/runtime_jwt_private_key)"
+        export AUTH_JWT_ACTIVE_PUBLIC_KEY="$$(cat /run/secrets/runtime_jwt_public_key)"
+        exec celery -A services.api.app.infrastructure.celery_app:celery_app beat \
+          --loglevel=INFO \
+          --pidfile=/tmp/celerybeat.pid
 
   web:
     build: !reset null
