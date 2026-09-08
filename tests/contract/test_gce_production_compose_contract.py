@@ -130,6 +130,10 @@ def test_celery_and_redis_runtime_are_bounded_and_use_one_configured_topology() 
     assert "--maxmemory" in redis["command"][-1]
     assert "--maxmemory-policy noeviction" in redis["command"][-1]
     assert "--requirepass" in redis["command"][-1]
+    redis_healthcheck = redis["healthcheck"]["test"]
+    assert redis_healthcheck[0] == "CMD-SHELL"
+    assert "REDISCLI_AUTH=$${REDIS_PASSWORD}" in redis_healthcheck[1]
+    assert "redis-cli -a" not in redis_healthcheck[1]
     assert "ports" not in redis
     assert api["environment"]["CELERY_QUEUE_AI"] == "${CELERY_QUEUE_AI:-ai}"
     assert api["environment"]["CELERY_QUEUE_SYSTEM"] == "${CELERY_QUEUE_SYSTEM:-system}"
