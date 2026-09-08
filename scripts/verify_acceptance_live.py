@@ -22,11 +22,11 @@ from scripts.bootstrap_acceptance import (
 
 ANSWERS = {
     "walk_completion": "walk_completion.not_done",
-    "activity": "activity.not_observed",
-    "gait": "gait.not_observed",
-    "defecation": "defecation.not_observed",
-    "animal_interaction": "animal_interaction.uncertain",
-    "appearance_special_status": "appearance.not_observed",
+    "activity": "activity.usual",
+    "gait": "gait.normal",
+    "defecation": "defecation.none",
+    "animal_interaction": "animal_interaction.no_encounter",
+    "appearance_special_status": "appearance.none_found",
 }
 
 

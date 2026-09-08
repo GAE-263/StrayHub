@@ -94,13 +94,13 @@ def test_live_verifier_uses_normal_login_without_printing_credentials() -> None:
         and any(isinstance(target, ast.Name) and target.id == "ANSWERS" for target in node.targets)
     )
     answers = ast.literal_eval(answers_assignment.value)
-    assert set(answers) == {
-        "walk_completion",
-        "activity",
-        "gait",
-        "defecation",
-        "animal_interaction",
-        "appearance_special_status",
+    assert answers == {
+        "walk_completion": "walk_completion.not_done",
+        "activity": "activity.usual",
+        "gait": "gait.normal",
+        "defecation": "defecation.none",
+        "animal_interaction": "animal_interaction.no_encounter",
+        "appearance_special_status": "appearance.none_found",
     }
 
     wrapper = LIVE_WRAPPER.read_text(encoding="utf-8")
