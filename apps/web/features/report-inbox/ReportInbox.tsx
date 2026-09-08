@@ -5,6 +5,18 @@ import { authFetch } from "../../lib/auth";
 import { usePublicManagementProfile } from "../../components/management/ManagementLayout";
 import styles from "./reports.module.css";
 import { AlertDialog } from "../../components/ui/alert-dialog";
+import { Badge } from "../../components/ui/badge";
+import { Breadcrumb } from "../../components/ui/breadcrumb";
+import { Button } from "../../components/ui/button";
+import { Field } from "../../components/ui/field";
+import { Input } from "../../components/ui/input";
+import { Select } from "../../components/ui/select";
+import { Textarea } from "../../components/ui/textarea";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/management/StateViews";
 
 type Summary = {
   attention_level: string;
@@ -50,6 +62,11 @@ const attention: Record<string, string> = {
   urgent: "建議優先查看",
   review: "值得留意",
   normal: "一般紀錄",
+};
+const attentionTone: Record<string, string | undefined> = {
+  urgent: styles.badgeUrgent,
+  review: styles.badgeReview,
+  normal: undefined,
 };
 const statuses: Record<string, string> = {
   pending: "待確認",
@@ -136,186 +153,203 @@ export function ReportInbox() {
     };
   }, [query, lifecycle, review, level, from, to, page, refresh]);
   return (
-    <section className={styles.page}>
+    <section className={styles.page} aria-labelledby="reports-title">
       <div className="page-heading">
         <div>
-          <h1>照護回報收件匣</h1>
+          <span className="eyebrow">回報管理</span>
+          <h1 id="reports-title">照護回報收件匣</h1>
           <p>查看志工觀察，記下需要接續追蹤的事。</p>
         </div>
-        <button onClick={() => setRefresh((x) => x + 1)}>重新整理</button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setRefresh((x) => x + 1)}
+        >
+          重新整理
+        </Button>
       </div>
-      <div className={styles.filters}>
-        <label>
-          搜尋動物／收容編號
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-            placeholder="例如：小黑、A023"
-          />
-        </label>
-        <label>
-          資料狀態
-          <select
-            aria-label="資料狀態"
-            value={lifecycle}
-            onChange={(e) => {
-              setLifecycle(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">全部</option>
-            <option value="saved">已送出</option>
-            <option value="amended">已更正</option>
-            <option value="archived">已封存</option>
-          </select>
-        </label>
-        <label>
-          處理狀態
-          <select
-            aria-label="處理狀態"
-            value={review}
-            onChange={(e) => {
-              setReview(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">全部</option>
-            {Object.entries(statuses).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          留意程度
-          <select
-            aria-label="留意程度"
-            value={level}
-            onChange={(e) => {
-              setLevel(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">全部</option>
-            {Object.entries(attention).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          開始日期
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => {
-              setFrom(e.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        <label>
-          結束日期
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => {
-              setTo(e.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-      </div>
-      <p className={styles.hint}>
-        優先列出待確認及需追蹤回報。時間以台灣時間顯示。
-      </p>
-      {error ? (
-        <p role="alert">{error}</p>
-      ) : loading ? (
-        <p role="status">正在載入回報…</p>
-      ) : !data.items.length ? (
-        <p>目前沒有符合條件的回報，請調整篩選條件。</p>
-      ) : (
-        <div className={styles.list}>
-          {data.items.map((report) => (
-            <Link
-              className={styles.row}
-              href={`/reports/${report.id}`}
-              key={report.id}
+      <section className="ui-card ui-card-padded">
+        <div className="toolbar" aria-label="回報篩選">
+          <Field>
+            <label htmlFor="report-query">搜尋動物／收容編號</label>
+            <Input
+              id="report-query"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="例如：小黑、A023"
+            />
+          </Field>
+          <Field>
+            <label htmlFor="report-lifecycle">資料狀態</label>
+            <Select
+              id="report-lifecycle"
+              value={lifecycle}
+              onChange={(e) => {
+                setLifecycle(e.target.value);
+                setPage(1);
+              }}
             >
-              <div>
-                <span
-                  className={
-                    styles[report.summary?.attention_level || "normal"]
-                  }
-                >
-                  {attention[report.summary?.attention_level || "normal"]}
-                </span>
-                <h2>
-                  {report.animal_name || "動物回報"}{" "}
-                  <small>{report.shelter_number_snapshot}</small>
-                </h2>
-              </div>
-              <div>
-                {report.summary_status === "succeeded" ? (
-                  <p>{report.summary?.summary || "查看完整志工回報"}</p>
-                ) : report.summary?.evidence?.length ? (
-                  <ul
-                    className={`${styles.evidenceChips} ${styles.evidenceChipsCompact}`}
-                  >
-                    {report.summary.evidence.map((e, i) => (
-                      <li key={i} className={styles.evidenceChip}>
-                        <span className={styles.chipKey}>
-                          {titles[e.field] || "觀察"}
-                        </span>
-                        <span className={styles.chipValue}>{e.quote}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>{report.summary?.summary || "查看完整志工回報"}</p>
-                )}
-                <small>
-                  {report.summary_status === "succeeded"
-                    ? "AI 初步整理"
-                    : "固定回答整理"}{" "}
-                  · {report.volunteer_label || "志工"} ·{" "}
-                  {time(report.submitted_at)}
-                </small>
-                {report.summary?.information_quality === "conflicting" && (
-                  <p>描述有出入，請確認原文</p>
-                )}
-                {report.summary?.information_quality === "insufficient" && (
-                  <p>部分資訊待確認</p>
-                )}
-              </div>
-              <strong>{statuses[report.review_status || "pending"]}　→</strong>
-            </Link>
-          ))}
+              <option value="">全部</option>
+              <option value="saved">已送出</option>
+              <option value="amended">已更正</option>
+              <option value="archived">已封存</option>
+            </Select>
+          </Field>
+          <Field>
+            <label htmlFor="report-review">處理狀態</label>
+            <Select
+              id="report-review"
+              value={review}
+              onChange={(e) => {
+                setReview(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">全部</option>
+              {Object.entries(statuses).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field>
+            <label htmlFor="report-level">留意程度</label>
+            <Select
+              id="report-level"
+              value={level}
+              onChange={(e) => {
+                setLevel(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">全部</option>
+              {Object.entries(attention).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field>
+            <label htmlFor="report-from">開始日期</label>
+            <Input
+              id="report-from"
+              type="date"
+              value={from}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                setPage(1);
+              }}
+            />
+          </Field>
+          <Field>
+            <label htmlFor="report-to">結束日期</label>
+            <Input
+              id="report-to"
+              type="date"
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(1);
+              }}
+            />
+          </Field>
         </div>
-      )}
-      <nav className={styles.actions} aria-label="回報分頁">
-        <button
-          disabled={page === 1 || loading}
-          onClick={() => setPage((p) => p - 1)}
-        >
-          上一頁
-        </button>
-        <span>
-          第 {page} 頁 · 共 {data.total} 筆
-        </span>
-        <button
-          disabled={page * 20 >= data.total || loading}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          下一頁
-        </button>
-      </nav>
+        <p className="muted">
+          優先列出待確認及需追蹤回報。時間以台灣時間顯示。
+        </p>
+        {error ? (
+          <ErrorState title={error} />
+        ) : loading ? (
+          <LoadingState title="正在載入回報…" />
+        ) : !data.items.length ? (
+          <EmptyState
+            title="找不到符合條件的回報"
+            description="請調整篩選條件。"
+          />
+        ) : (
+          <div className="stack-sm">
+            {data.items.map((report) => (
+              <Link
+                className={`list-card ${styles.row}`}
+                href={`/reports/${report.id}`}
+                key={report.id}
+              >
+                <div>
+                  <Badge className={attentionTone[report.summary?.attention_level || "normal"]}>
+                    {attention[report.summary?.attention_level || "normal"]}
+                  </Badge>
+                  <h2>
+                    {report.animal_name || "動物回報"}{" "}
+                    <small className="muted">
+                      {report.shelter_number_snapshot}
+                    </small>
+                  </h2>
+                </div>
+                <div>
+                  {report.summary_status === "succeeded" ? (
+                    <p>{report.summary?.summary || "查看完整志工回報"}</p>
+                  ) : report.summary?.evidence?.length ? (
+                    <ul
+                      className={`${styles.evidenceChips} ${styles.evidenceChipsCompact}`}
+                    >
+                      {report.summary.evidence.map((e, i) => (
+                        <li key={i} className={styles.evidenceChip}>
+                          <span className={styles.chipKey}>
+                            {titles[e.field] || "觀察"}
+                          </span>
+                          <span className={styles.chipValue}>{e.quote}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>{report.summary?.summary || "查看完整志工回報"}</p>
+                  )}
+                  <small className="muted">
+                    {report.summary_status === "succeeded"
+                      ? "AI 初步整理"
+                      : "固定回答整理"}{" "}
+                    · {report.volunteer_label || "志工"} ·{" "}
+                    {time(report.submitted_at)}
+                  </small>
+                  {report.summary?.information_quality === "conflicting" && (
+                    <p>描述有出入，請確認原文</p>
+                  )}
+                  {report.summary?.information_quality === "insufficient" && (
+                    <p>部分資訊待確認</p>
+                  )}
+                </div>
+                <strong>{statuses[report.review_status || "pending"]}　→</strong>
+              </Link>
+            ))}
+          </div>
+        )}
+        <div className="toolbar pagination">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={page === 1 || loading}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            上一頁
+          </Button>
+          <span className="muted">
+            第 {page} 頁 · 共 {data.total} 筆
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={page * 20 >= data.total || loading}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            下一頁
+          </Button>
+        </div>
+      </section>
     </section>
   );
 }
@@ -339,9 +373,9 @@ function ReportPhoto({ id, index }: { id: string; index: number }) {
     };
   }, [id, retry]);
   return error ? (
-    <button onClick={() => setRetry((x) => x + 1)}>
+    <Button type="button" variant="secondary" onClick={() => setRetry((x) => x + 1)}>
       照片 {index + 1} 載入失敗，重新載入
-    </button>
+    </Button>
   ) : url ? (
     <a href={url} target="_blank" rel="noreferrer">
       <img
@@ -411,15 +445,15 @@ export function ReportDetail({ id }: { id: string }) {
   };
   if (!report)
     return (
-      <section>
+      <section aria-labelledby="report-detail-loading">
         {error ? (
-          <p role="alert">{error}</p>
+          <ErrorState title={error} />
         ) : (
-          <p role="status" aria-live="polite">
-            正在載入回報…
-          </p>
+          <LoadingState title="正在載入回報…" />
         )}
-        <button onClick={() => setRevision((x) => x + 1)}>重新載入</button>
+        <Button type="button" variant="secondary" onClick={() => setRevision((x) => x + 1)}>
+          重新載入
+        </Button>
       </section>
     );
   const summary = report.summary;
@@ -435,25 +469,32 @@ export function ReportDetail({ id }: { id: string }) {
   );
   return (
     <section className={styles.page}>
-      <nav aria-label="Breadcrumb">
+      <Breadcrumb>
         <Link href="/reports">回報收件匣</Link>
         <span> ／ 回報詳情</span>
-      </nav>
+      </Breadcrumb>
       <div className="page-heading">
         <div>
+          <span className="eyebrow">回報詳情</span>
           <h1>
-            {report.animal_name} <small>{report.shelter_number_snapshot}</small>
+            {report.animal_name} <small className="muted">{report.shelter_number_snapshot}</small>
           </h1>
           <p>
             {report.volunteer_label || "志工"} · {time(report.submitted_at)}
           </p>
         </div>
-        <Link href={`/animals/${report.animal_id}/timeline`}>
+        <Link className="text-link" href={`/animals/${report.animal_id}/timeline`}>
           查看動物近期歷程 →
         </Link>
       </div>
-      <Link href={`/animals/${report.animal_id}`}>查看動物檔案</Link>
-      <button onClick={() => setRevision((x) => x + 1)}>重新載入回報</button>
+      <div className={styles.actions}>
+        <Link className="text-link" href={`/animals/${report.animal_id}`}>
+          查看動物檔案
+        </Link>
+        <Button type="button" variant="secondary" onClick={() => setRevision((x) => x + 1)}>
+          重新載入回報
+        </Button>
+      </div>
       {pendingObservation ? (
         <p role="status" aria-live="polite">
           AI 處理中，完成前仍可查看原始回報。
@@ -468,20 +509,33 @@ export function ReportDetail({ id }: { id: string }) {
           o.source_type !== "care_report_summary" && o.status === "succeeded",
       ) && (
         <p role="status" aria-live="polite">
-          AI 結果需要人工覆核。<Link href="/ai-review">前往 AI 覆核</Link>
+          AI 結果需要人工覆核。
+          <Link className="text-link" href="/ai-review">
+            前往 AI 覆核
+          </Link>
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
-      <article className={styles.card}>
-        <span className={styles[summary?.attention_level || "normal"]}>
-          {attention[summary?.attention_level || "normal"]}
-        </span>
-        <h2>
-          {report.summary_status === "succeeded"
-            ? "AI 初步整理"
-            : "固定回答整理"}
-        </h2>
+      {error && (
+        <div className="notice error" role="alert">
+          {error}
+        </div>
+      )}
+      {message && (
+        <div className="notice success" role="status">
+          {message}
+        </div>
+      )}
+      <article className="ui-card ui-card-padded">
+        <div className="section-heading">
+          <h2>
+            {report.summary_status === "succeeded"
+              ? "AI 初步整理"
+              : "固定回答整理"}
+          </h2>
+          <Badge className={attentionTone[summary?.attention_level || "normal"]}>
+            {attention[summary?.attention_level || "normal"]}
+          </Badge>
+        </div>
         {report.summary_status === "succeeded" ? (
           <p className={styles.summary}>
             {summary?.summary || "尚無整理，請查看原始回報。"}
@@ -503,7 +557,7 @@ export function ReportDetail({ id }: { id: string }) {
           </p>
         )}
         {report.summary_status !== "succeeded" && (
-          <p className={styles.hint}>
+          <p className="muted">
             {report.summary_status === "pending"
               ? "AI 正在整理，可先查看原文與處理回報。"
               : report.summary_status === "stale"
@@ -569,31 +623,35 @@ export function ReportDetail({ id }: { id: string }) {
                   rejected: "已退回",
                 }[observation.status] || "待覆核"}
               </p>
-              <label>
-                摘要文字
-                <textarea
+              <Field>
+                <label htmlFor="ai-review-summary">摘要文字</label>
+                <Textarea
+                  id="ai-review-summary"
                   value={corrected}
                   onChange={(e) => setCorrected(e.target.value)}
                   maxLength={180}
                 />
-              </label>
-              <label>
-                覆核原因
-                <input
+              </Field>
+              <Field>
+                <label htmlFor="ai-review-reason">覆核原因</label>
+                <Input
+                  id="ai-review-reason"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   maxLength={500}
                 />
-              </label>
+              </Field>
               <div className={styles.actions}>
                 {(
                   [
-                    ["confirm", "採用摘要"],
-                    ["reject", "退回摘要"],
-                    ["correct", "保存摘要修正"],
+                    ["confirm", "採用摘要", "default"],
+                    ["reject", "退回摘要", "secondary"],
+                    ["correct", "保存摘要修正", "secondary"],
                   ] as const
-                ).map(([action, label]) => (
-                  <button
+                ).map(([action, label, variant]) => (
+                  <Button
+                    type="button"
+                    variant={variant}
                     disabled={busy || !reason.trim() || !corrected.trim()}
                     key={action}
                     onClick={() =>
@@ -612,13 +670,13 @@ export function ReportDetail({ id }: { id: string }) {
                     }
                   >
                     {label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </details>
           )}
       </article>
-      <article className={styles.card}>
+      <article className="ui-card ui-card-padded">
         <h2>
           {report.status === "amended" ? "志工回報（已更正）" : "志工原始回報"}
         </h2>
@@ -645,21 +703,25 @@ export function ReportDetail({ id }: { id: string }) {
           )}
         </div>
       </article>
-      <article className={styles.card}>
+      <article className="ui-card ui-card-padded">
         <h2>工作人員處理 · {statuses[status]}</h2>
-        <p>「已確認」表示已看過這次回報。需要接續查看時，請記下追蹤事項。</p>
+        <p className="muted">
+          「已確認」表示已看過這次回報。需要接續查看時，請記下追蹤事項。
+        </p>
         {profile === null && report.status !== "archived" && (
           <>
-            <label htmlFor="processing-note">
-              處理備註（需追蹤與追蹤完成必填）
-            </label>
-            <textarea
-              id="processing-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={2000}
-              placeholder="例如：已告知照護負責人，下一班留意走路情況。"
-            />
+            <Field>
+              <label htmlFor="processing-note">
+                處理備註（需追蹤與追蹤完成必填）
+              </label>
+              <Textarea
+                id="processing-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                maxLength={2000}
+                placeholder="例如：已告知照護負責人，下一班留意走路情況。"
+              />
+            </Field>
             <div className={styles.actions}>
               {(
                 [
@@ -668,7 +730,9 @@ export function ReportDetail({ id }: { id: string }) {
                   ["resolved", "追蹤完成"],
                 ] as const
               ).map(([next, label]) => (
-                <button
+                <Button
+                  type="button"
+                  variant="secondary"
                   key={next}
                   disabled={
                     busy ||
@@ -689,7 +753,7 @@ export function ReportDetail({ id }: { id: string }) {
                   }
                 >
                   {label}
-                </button>
+                </Button>
               ))}
             </div>
           </>
@@ -710,14 +774,15 @@ export function ReportDetail({ id }: { id: string }) {
         )}
       </article>
       {profile === null && report.status !== "archived" && (
-        <details className={styles.card}>
+        <details className={`ui-card ui-card-padded ${styles.correctionPanel}`}>
           <summary>更正回報／封存</summary>
           <p>請填寫更正原因。原始內容與操作紀錄會保留，更正後需重新確認。</p>
           <div className={styles.answers}>
             {report.answer_rows?.map((row) => (
-              <label key={row.field}>
-                {row.label}
-                <select
+              <Field key={row.field}>
+                <label htmlFor={`correction-${row.field}`}>{row.label}</label>
+                <Select
+                  id={`correction-${row.field}`}
                   value={editAnswers[row.field] || row.code}
                   onChange={(e) =>
                     setEditAnswers((values) => ({
@@ -745,28 +810,31 @@ export function ReportDetail({ id }: { id: string }) {
                   {row.code !== "unobserved" && (
                     <option value="unobserved">今天沒觀察到這項</option>
                   )}
-                </select>
-              </label>
+                </Select>
+              </Field>
             ))}
           </div>
-          <label>
-            更正補充說明
-            <textarea
+          <Field>
+            <label htmlFor="correction-note">更正補充說明</label>
+            <Textarea
+              id="correction-note"
               value={editNote}
               onChange={(e) => setEditNote(e.target.value)}
               maxLength={5000}
             />
-          </label>
-          <label>
-            更正或封存原因
-            <input
+          </Field>
+          <Field>
+            <label htmlFor="correction-reason">更正或封存原因</label>
+            <Input
+              id="correction-reason"
               value={editReason}
               onChange={(e) => setEditReason(e.target.value)}
               maxLength={500}
             />
-          </label>
+          </Field>
           <div className={styles.actions}>
-            <button
+            <Button
+              type="button"
               disabled={busy || !editReason.trim()}
               onClick={() =>
                 mutate(
@@ -781,14 +849,16 @@ export function ReportDetail({ id }: { id: string }) {
               }
             >
               保存更正
-            </button>
+            </Button>
             {report.can_archive && (
-              <button
+              <Button
+                type="button"
+                variant="destructive"
                 disabled={busy || !editReason.trim()}
                 onClick={() => setArchiveOpen(true)}
               >
                 封存回報
-              </button>
+              </Button>
             )}
           </div>
         </details>
@@ -799,20 +869,26 @@ export function ReportDetail({ id }: { id: string }) {
         onClose={() => setArchiveOpen(false)}
       >
         <p>封存會保留回報與歷程，之後無法更新處理狀態。</p>
-        <button onClick={() => setArchiveOpen(false)}>取消</button>
-        <button
-          disabled={busy}
-          onClick={() => {
-            setArchiveOpen(false);
-            void mutate(
-              `/v1/management/reports/${id}/archive`,
-              { reason: editReason },
-              "回報已封存。",
-            );
-          }}
-        >
-          確認封存
-        </button>
+        <div className="dialog-actions">
+          <Button type="button" variant="secondary" onClick={() => setArchiveOpen(false)}>
+            取消
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={() => {
+              setArchiveOpen(false);
+              void mutate(
+                `/v1/management/reports/${id}/archive`,
+                { reason: editReason },
+                "回報已封存。",
+              );
+            }}
+          >
+            {busy ? "封存中…" : "確認封存"}
+          </Button>
+        </div>
       </AlertDialog>
     </section>
   );

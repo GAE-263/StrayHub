@@ -83,6 +83,10 @@
   padding: 1rem;
 }
 
+.filters :global(.ui-field) {
+  margin-bottom: 0;
+}
+
 .searchField {
   min-width: 0;
 }
