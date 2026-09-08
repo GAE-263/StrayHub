@@ -40,6 +40,8 @@ jobs:
       - name: Sensitive transport static policy
         run: uv run python scripts/check_sensitive_transport_policy.py
       - run: uv run alembic upgrade head
+      - name: Configure runtime database ACL
+        run: uv run python -m scripts.configure_runtime_role --apply
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
