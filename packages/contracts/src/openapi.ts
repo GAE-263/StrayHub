@@ -4,6 +4,229 @@
  */
 
 export interface paths {
+    "/v1/auth/google/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configuration */
+        get: operations["configuration_v1_auth_google_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin */
+        post: operations["begin_v1_auth_google_transactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange */
+        post: operations["exchange_v1_auth_google_exchange_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/binding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink */
+        delete: operations["unlink_v1_auth_google_binding_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Account */
+        get: operations["account_v1_auth_account_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Invitations */
+        get: operations["my_invitations_v1_auth_invitations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/join-target/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Join Target */
+        get: operations["join_target_v1_auth_join_target__organization_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/join-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Applications */
+        get: operations["my_applications_v1_auth_join_applications_get"];
+        put?: never;
+        /** Submit Application */
+        post: operations["submit_application_v1_auth_join_applications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organization_id}/join-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Applications */
+        get: operations["list_applications_v1_organizations__organization_id__join_applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organization_id}/join-applications/{application_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Application */
+        post: operations["review_application_v1_organizations__organization_id__join_applications__application_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/invitations/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim */
+        post: operations["claim_v1_auth_invitations_claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organization_id}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invitations */
+        get: operations["list_invitations_v1_organizations__organization_id__invitations_get"];
+        put?: never;
+        /** Create Invitation */
+        post: operations["create_invitation_v1_organizations__organization_id__invitations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organization_id}/invitations/{invitation_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Invitation */
+        post: operations["decide_invitation_v1_organizations__organization_id__invitations__invitation_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1342,6 +1565,154 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getVolunteerProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVolunteerNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}/assist-flag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateVolunteerAssistFlag"];
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteers/{membershipId}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVolunteerIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-incidents/{incidentId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decideVolunteerIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organizations/{organizationId}/volunteer-incidents/{incidentId}/restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVolunteerRestriction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/volunteer-restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformVolunteerRestrictions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/volunteer-restrictions/{restrictionId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                restrictionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decidePlatformVolunteerRestriction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/organizations/{organizationId}/volunteer-decision-batches": {
         parameters: {
             query?: never;
@@ -1833,6 +2204,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/management/adoption-inquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdoptionInquiries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/adoption-inquiries/{inquiry_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateAdoptionInquiryStatus"];
+        trace?: never;
+    };
     "/v1/management/growth-diary-entries": {
         parameters: {
             query?: never;
@@ -1879,6 +2282,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/management/growth-diary-entries/{entryId}/photos/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getGrowthDiaryPhotoAt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/growth-diary-entries/{entryId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateGrowthDiaryStatus"];
         trace?: never;
     };
 }
@@ -2417,6 +2852,8 @@ export interface components {
             };
         };
         CurrentUserResponse: {
+            /** @default false */
+            account_access_enabled: boolean;
             user: components["schemas"]["User"];
             memberships: components["schemas"]["CurrentUserMembership"][];
         };
@@ -2781,6 +3218,7 @@ export interface components {
             submitted_at: string;
             /** Format: uuid */
             volunteer_user_id: string;
+            volunteer_label: string;
             animal_name_snapshot: string;
             shelter_number_snapshot?: string | null;
             note?: string | null;
@@ -3164,21 +3602,118 @@ export interface components {
             service_date: string;
             pending_count: number;
         };
-        VolunteerServiceSummaryItemResponse: {
-            /** Format: uuid */
-            organization_id: string;
-            organization_name: string;
-            /** Format: date */
-            service_date: string;
-            /** @enum {string} */
-            service_status: "recorded" | "archived";
-            record_count: number;
-            /** @enum {string} */
-            source: "care_report";
-        };
         VolunteerServiceSummaryResponse: {
-            items: components["schemas"]["VolunteerServiceSummaryItemResponse"][];
-            next_cursor: string | null;
+            current_shelter_visits: number;
+            total_strayhub_visits: number;
+            visits_last_180_days: number;
+            visits_last_90_days: number;
+            visits_last_30_days: number;
+            /** Format: date-time */
+            last_visit_at: string | null;
+            active_months_last_6_months: number;
+            /** @enum {string} */
+            recent_status: "new" | "consistently_active" | "recently_active" | "less_recently_active" | "active";
+            has_active_platform_restriction: boolean;
+            approval_blocked: boolean;
+        };
+        VolunteerStatisticsResponse: {
+            current_shelter_visits: number;
+            total_strayhub_visits: number;
+            visits_last_180_days: number;
+            visits_last_90_days: number;
+            visits_last_30_days: number;
+            /** Format: date-time */
+            last_visit_at: string | null;
+            active_months_last_6_months: number;
+            /** @enum {string} */
+            recent_status: "new" | "consistently_active" | "recently_active" | "less_recently_active" | "active";
+        };
+        VolunteerNoteResponse: {
+            /** Format: uuid */
+            id: string;
+            content: string;
+            author_display_name: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        VolunteerIncidentResponse: {
+            /** Format: uuid */
+            id: string;
+            incident_type: string;
+            /** @enum {string} */
+            severity: "low" | "medium" | "high" | "critical";
+            factual_summary: string;
+            /** Format: date-time */
+            occurred_at: string;
+            /** @enum {string} */
+            status: "reported" | "under_review" | "confirmed" | "dismissed";
+        };
+        VolunteerRestrictionResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            scope: "SHELTER" | "PLATFORM";
+            reason_category: string;
+            /** @enum {string} */
+            status: "pending_review" | "active" | "rejected" | "expired" | "revoked";
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string | null;
+            /** Format: date-time */
+            reviewed_at: string | null;
+        };
+        VolunteerProfileResponse: {
+            /** Format: uuid */
+            membership_id: string;
+            volunteer_no: string;
+            label: string;
+            surname: string | null;
+            membership_status: string;
+            can_assist_new_volunteers: boolean;
+            statistics: components["schemas"]["VolunteerStatisticsResponse"];
+            notes: components["schemas"]["VolunteerNoteResponse"][];
+            incidents: components["schemas"]["VolunteerIncidentResponse"][];
+            restrictions: components["schemas"]["VolunteerRestrictionResponse"][];
+        };
+        VolunteerNoteCreateRequest: {
+            content: string;
+        };
+        VolunteerAssistFlagRequest: {
+            can_assist_new_volunteers: boolean;
+        };
+        VolunteerIncidentCreateRequest: {
+            incident_type: string;
+            /** @enum {string} */
+            severity: "low" | "medium" | "high" | "critical";
+            factual_summary: string;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        VolunteerIncidentDecisionRequest: {
+            /** @enum {string} */
+            decision: "confirm" | "dismiss";
+        };
+        VolunteerRestrictionCreateRequest: {
+            /** @enum {string} */
+            scope: "SHELTER" | "PLATFORM";
+            reason_category: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+        };
+        PlatformRestrictionDecisionRequest: {
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            reason?: string | null;
+        };
+        PlatformRestrictionReviewItemResponse: {
+            restriction: components["schemas"]["VolunteerRestrictionResponse"];
+            incident: components["schemas"]["VolunteerIncidentResponse"];
+            /** Format: uuid */
+            originating_organization_id: string;
+            originating_organization_name: string;
         };
         VolunteerAccessPolicy: {
             /** Format: uuid */
@@ -3332,6 +3867,7 @@ export interface components {
             user_id: string;
             /** Format: uuid */
             membership_id: string;
+            volunteer_no?: string | null;
             /** Format: uuid */
             application_id: string;
             display_name: string;
@@ -3695,9 +4231,55 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        AdoptionAnswerDisplay: {
+            key: string;
+            label: string;
+            value: string;
+        };
+        AdoptionInquiryItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            target_animal_id: string;
+            animal_name: string;
+            shelter_number: string | null;
+            /** @enum {string} */
+            path: "specific_animal" | "recommend_me";
+            adopter_name: string;
+            phone_number: string;
+            answers: {
+                [key: string]: string;
+            };
+            answers_display: components["schemas"]["AdoptionAnswerDisplay"][];
+            /** @enum {string} */
+            status: "new" | "contacted";
+            staff_notes: string | null;
+            /** Format: date-time */
+            submitted_at: string;
+            /** Format: date-time */
+            status_updated_at: string | null;
+            ai_suitability_score: number | null;
+            ai_suitability_explanation: string | null;
+            ai_recommendation_overridden: boolean | null;
+        };
+        AdoptionInquiryListResponse: {
+            items: components["schemas"]["AdoptionInquiryItem"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        AdoptionInquiryStatusUpdate: {
+            /** @enum {string} */
+            status: "new" | "contacted";
+        };
+        AdoptionInquiryStatusResponse: {
+            inquiry: components["schemas"]["AdoptionInquiryItem"];
+        };
         GrowthDiaryAiSummary: {
             /** @enum {string} */
-            status: "pending" | "succeeded" | "failed" | "unconfigured" | "not_applicable" | "legacy" | "unavailable";
+            status: "pending" | "processing" | "succeeded" | "failed" | "unconfigured" | "not_applicable" | "legacy" | "unavailable";
             /** @enum {string} */
             provenance_status: "available" | "legacy_missing" | "unavailable";
             /** @enum {string|null} */
@@ -3727,7 +4309,14 @@ export interface components {
             shelter_number: string | null;
             has_photo: boolean;
             photo_endpoint: string | null;
+            photo_endpoints: string[];
             note: string | null;
+            /** @enum {string} */
+            status: "new" | "reviewed";
+            /** Format: date-time */
+            status_updated_at: string | null;
+            /** Format: date */
+            entry_date: string;
             ai_analysis: components["schemas"]["GrowthDiaryAiSummary"];
             /** Format: date-time */
             created_at: string;
@@ -3743,6 +4332,281 @@ export interface components {
             page: number;
             page_size: number;
             total: number;
+            timezone: string;
+        };
+        GrowthDiaryStatusUpdate: {
+            /** @enum {string} */
+            status: "new" | "reviewed";
+        };
+        /** GoogleConfigurationResponse */
+        GoogleConfigurationResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Client Id */
+            client_id?: string | null;
+        };
+        /** TransactionRequest */
+        TransactionRequest: {
+            /** Purpose */
+            purpose: string;
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Password
+             * @default
+             */
+            password: string;
+        };
+        /** GoogleTransactionResponse */
+        GoogleTransactionResponse: {
+            /**
+             * Transaction Id
+             * Format: uuid
+             */
+            transaction_id: string;
+            /** Nonce */
+            nonce: string;
+            /** Csrf Token */
+            csrf_token: string;
+            /** Client Id */
+            client_id: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /** ExchangeRequest */
+        ExchangeRequest: {
+            /**
+             * Transaction Id
+             * Format: uuid
+             */
+            transaction_id: string;
+            /** Credential */
+            credential: string;
+        };
+        /** GoogleSessionResponse */
+        GoogleSessionResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Refresh Token */
+            refresh_token: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /** GoogleLinkedResponse */
+        GoogleLinkedResponse: {
+            /**
+             * State
+             * @constant
+             */
+            state: "linked";
+        };
+        /** PasswordRequest */
+        PasswordRequest: {
+            /** Password */
+            password: string;
+        };
+        /** AccountUserResponse */
+        AccountUserResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Display Name */
+            display_name: string;
+            /** Username */
+            username: string | null;
+            /** Platform Role */
+            platform_role: string | null;
+        };
+        /** AccountOrganizationResponse */
+        AccountOrganizationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
+        };
+        /** AccountLoginMethods */
+        AccountLoginMethods: {
+            /** Password */
+            password: boolean;
+            /** Google */
+            google: boolean;
+        };
+        /** AccountResponse */
+        AccountResponse: {
+            user: components["schemas"]["AccountUserResponse"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "account_only" | "ready";
+            /** Organizations */
+            organizations: components["schemas"]["AccountOrganizationResponse"][];
+            login_methods: components["schemas"]["AccountLoginMethods"];
+        };
+        /** InvitationResponse */
+        InvitationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "STAFF" | "SHELTER_ADMIN";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "claimed" | "approved" | "revoked" | "expired";
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Claimed By */
+            claimed_by: string | null;
+            /** Display Name */
+            display_name?: string | null;
+        };
+        /** JoinTargetResponse */
+        JoinTargetResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** ApplicationResponse */
+        ApplicationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /** Role */
+            role: ("STAFF" | "SHELTER_ADMIN") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Display Name */
+            display_name?: string | null;
+        };
+        /** JoinRequest */
+        JoinRequest: {
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+        };
+        /** ReviewRequest */
+        ReviewRequest: {
+            /** Approve */
+            approve: boolean;
+            /** Role */
+            role?: ("STAFF" | "SHELTER_ADMIN") | null;
+        };
+        /** ClaimRequest */
+        ClaimRequest: {
+            /** Invitation Token */
+            invitation_token: string;
+        };
+        /** InvitationRequest */
+        InvitationRequest: {
+            /** Role */
+            role: string;
+        };
+        /** CreatedInvitationResponse */
+        CreatedInvitationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Organization Id
+             * Format: uuid
+             */
+            organization_id: string;
+            /** Organization Name */
+            organization_name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "STAFF" | "SHELTER_ADMIN";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "claimed" | "approved" | "revoked" | "expired";
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Claimed By */
+            claimed_by: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Invitation Token */
+            invitation_token: string;
+        };
+        /** DecisionRequest */
+        DecisionRequest: {
+            /** Approve */
+            approve: boolean;
         };
     };
     responses: {
@@ -3912,6 +4776,1943 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    configuration_v1_auth_google_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleConfigurationResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    begin_v1_auth_google_transactions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleTransactionResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    exchange_v1_auth_google_exchange_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExchangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleSessionResponse"] | components["schemas"]["GoogleLinkedResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    unlink_v1_auth_google_binding_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    account_v1_auth_account_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    my_invitations_v1_auth_invitations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"][];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    join_target_v1_auth_join_target__organization_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinTargetResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    my_applications_v1_auth_join_applications_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationResponse"][];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    submit_application_v1_auth_join_applications_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    list_applications_v1_organizations__organization_id__join_applications_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-session-id"?: string | null;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationResponse"][];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    review_application_v1_organizations__organization_id__join_applications__application_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-session-id"?: string | null;
+            };
+            path: {
+                organization_id: string;
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    claim_v1_auth_invitations_claim_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    list_invitations_v1_organizations__organization_id__invitations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-session-id"?: string | null;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"][];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    create_invitation_v1_organizations__organization_id__invitations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-session-id"?: string | null;
+            };
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedInvitationResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
+    decide_invitation_v1_organizations__organization_id__invitations__invitation_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-session-id"?: string | null;
+            };
+            path: {
+                organization_id: string;
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description 去敏錯誤；429 包含 Retry-After */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -5601,8 +8402,14 @@ export interface operations {
     };
     getManagementAnimalPhoto: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description 目前圖片 checksum；只作為 browser cache key，不選擇 storage object。 */
+                v?: string;
+            };
+            header?: {
+                /** @description 先前收到的目前圖片 ETag；完成驗證與 tenant 檢查後可回 304。 */
+                "If-None-Match"?: string;
+            };
             path: {
                 animalId: components["parameters"]["AnimalId"];
             };
@@ -5613,7 +8420,9 @@ export interface operations {
             /** @description 已驗證、已清除 EXIF 的目前毛孩圖片 */
             200: {
                 headers: {
-                    "Cache-Control"?: "private, no-store";
+                    "Cache-Control"?: "private, max-age=300, must-revalidate";
+                    ETag?: string;
+                    Vary?: "Authorization, X-Session-ID";
                     "X-Content-Type-Options"?: "nosniff";
                     [name: string]: unknown;
                 };
@@ -5622,6 +8431,16 @@ export interface operations {
                     "image/png": string;
                     "image/webp": string;
                 };
+            };
+            /** @description 驗證、角色與 tenant 檢查皆通過，且目前圖片 ETag 未改變。 */
+            304: {
+                headers: {
+                    "Cache-Control"?: "private, max-age=300, must-revalidate";
+                    ETag?: string;
+                    Vary?: "Authorization, X-Session-ID";
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -6307,8 +9126,6 @@ export interface operations {
         parameters: {
             query: {
                 purpose_code: "volunteer_service_history_review";
-                cursor?: string;
-                limit?: number;
             };
             header?: {
                 /** @description PLATFORM_ADMIN 存取本功能任何 organization-scoped read/write 時必填；SHELTER_ADMIN 可省略 */
@@ -6372,6 +9189,227 @@ export interface operations {
             410: components["responses"]["PiiLifecycleExpired"];
             422: components["responses"]["ValidationError"];
             503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getVolunteerProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本所志工資料與不揭露其他收容所明細的服務統計 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerProfileResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerNoteCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立本所選填備註 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerNoteResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    updateVolunteerAssistFlag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerAssistFlagRequest"];
+            };
+        };
+        responses: {
+            /** @description 已更新選填協助新人標記 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerAssistFlagRequest"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerIncidentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立本所正式事件 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerIncidentResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    decideVolunteerIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerIncidentDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 已完成本所事件審查 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerIncidentResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+        };
+    };
+    createVolunteerRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: components["parameters"]["OrganizationId"];
+                incidentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolunteerRestrictionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立本所限制或送出平台限制審查 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerRestrictionResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listPlatformVolunteerRestrictions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 平台管理員可見的待審查限制與必要事件資料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformRestrictionReviewItemResponse"][];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+        };
+    };
+    decidePlatformVolunteerRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                restrictionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformRestrictionDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 平台管理員已完成平台限制審查 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolunteerRestrictionResponse"];
+                };
+            };
+            403: components["responses"]["ManagementDenied"];
+            404: components["responses"]["ScopedNotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     createVolunteerDecisionBatch: {
@@ -6485,6 +9523,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["GrantStatus"];
+                /** @description 限定查詢目前 organization 內指定志工的授權週期。 */
+                user_id?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -7235,11 +10275,77 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    listAdoptionInquiries: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                path?: "specific_animal" | "recommend_me" | null;
+                status?: "new" | "contacted" | null;
+                from_date?: string | null;
+                to_date?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active-shelter-scoped adoption inquiry page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptionInquiryListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    updateAdoptionInquiryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptionInquiryStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated active-shelter adoption inquiry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptionInquiryStatusResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
     listGrowthDiaryEntries: {
         parameters: {
             query?: {
                 query?: string;
                 mood?: "all" | "concern" | "positive" | "neutral" | "unanalyzed";
+                status?: "all" | "new" | "reviewed";
+                from_date?: string | null;
+                to_date?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -7314,6 +10420,62 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    getGrowthDiaryPhotoAt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Indexed buffered WebP scoped to the active shelter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    updateGrowthDiaryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrowthDiaryStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated active-shelter diary detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrowthDiaryDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
 }

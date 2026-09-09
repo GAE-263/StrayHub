@@ -59,6 +59,7 @@ const VALUE_LABELS: Record<string, string> = {
   "ai-failed": "AI 暫時無法使用",
   "needs-review": "需要人工覆核",
   pending: "等待處理",
+  not_required: "無需 AI 處理",
 };
 
 export function statusLabel(value: string | null | undefined) {
@@ -68,7 +69,9 @@ export function statusLabel(value: string | null | undefined) {
 
 export function statusSummary(value: string | null | undefined) {
   if (!value) return "未提供";
-  return `${statusLabel(value)}（${value}）`;
+  const label = statusLabel(value);
+  // An unmapped value falls back to itself; repeating it as "x（x）" is noise.
+  return label === value ? label : `${label}（${value}）`;
 }
 
 export function getStatusSemantics(kind: UIStatusKind) {

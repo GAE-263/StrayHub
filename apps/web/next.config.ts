@@ -19,6 +19,31 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: lineDemoWebOriginHost
     ? [lineDemoWebOriginHost]
     : undefined,
+  async headers() {
+    return [
+      {
+        source: "/access",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
+        source: "/account/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
+        source: "/login",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+    ];
+  },
   webpack(config) {
     if (liffHandoffE2EMockEnabled) {
       config.resolve.alias["@line/liff"] = path.resolve(

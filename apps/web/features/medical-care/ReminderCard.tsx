@@ -12,7 +12,7 @@ export function ReminderCard({
 }: {
   item: AgendaItem;
   timezone: string;
-  onProcess: () => void;
+  onProcess?: () => void;
 }) {
   const scheduled = new Intl.DateTimeFormat("zh-TW", {
     timeZone: timezone,
@@ -32,7 +32,7 @@ export function ReminderCard({
       <Link className="text-link" href={`/animals/${item.animal_id}`}>
         查看動物
       </Link>
-      {item.status === "pending" ? (
+      {item.status === "pending" && onProcess ? (
         <Button type="button" onClick={onProcess}>
           處理
         </Button>

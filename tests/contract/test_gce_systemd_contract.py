@@ -49,6 +49,8 @@ def test_main_unit_uses_canonical_compose_and_preserves_volumes() -> None:
     assert "--env-file /etc/strayhub/production.env" in application
     assert "--env-file /var/lib/strayhub/secrets/current/runtime.env" in application
     assert "verify-systemd-runtime.sh" in application
+    for service in ("redis", "celery-worker", "celery-beat"):
+        assert service in application
     assert " stop --timeout 30" in application
     assert "down -v" not in application
     assert "--volumes" not in application
@@ -58,7 +60,16 @@ def test_compose_restart_policy_excludes_one_shot_services() -> None:
     compose = yaml.safe_load((GCE / "docker-compose.production.yml").read_text(encoding="utf-8"))
     services = compose["services"]
 
-    for service in ("web", "api", "worker", "postgres", "minio"):
+    for service in (
+        "web",
+        "api",
+        "worker",
+        "postgres",
+        "minio",
+        "redis",
+        "celery-worker",
+        "celery-beat",
+    ):
         assert services[service]["restart"] == "unless-stopped"
     for service in ("migration", "minio-bootstrap"):
         assert services[service]["restart"] == "no"
@@ -121,6 +132,8 @@ def test_health_check_is_bounded_and_uses_only_local_routes() -> None:
     assert 'cd "$ROOT_DIR"' in health
     assert "http://127.0.0.1:$port$path" in health
     assert "container_ready nginx" not in health
+    for service in ("redis", "celery-worker", "celery-beat"):
+        assert f"container_ready {service}" in health
     for route in (
         "/healthz",
         "/v1/public/volunteer-organizations",

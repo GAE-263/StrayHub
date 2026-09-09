@@ -23,3 +23,10 @@ export function reportAIStatusSummary(
     label: statusLabel(observation.status),
   }));
 }
+import type { PublicManagementProfile } from "../../components/management/ManagementLayout";
+
+export function canMutateReport(
+  profile: PublicManagementProfile | null,
+): boolean {
+  return profile === null;
+}

@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import math
+from datetime import datetime, timedelta
 from typing import TypeVar
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.application.authentication.login_abuse import (
+    ACCOUNT_FAILURE_LIMIT,
+    ACCOUNT_LOCK_SECONDS,
+    IP_ATTEMPT_LIMIT,
+    IP_WINDOW_SECONDS,
+    LoginLimitDecision,
+)
 from services.api.app.persistence.database.scope import (
     set_authentication_user_organization_scope,
     set_authentication_user_scope,
@@ -17,6 +27,8 @@ from services.api.app.persistence.database.scope import (
 )
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
+    LoginAccountAbuseState,
+    LoginIpAttempt,
     Organization,
     OrganizationMembership,
     RefreshTokenRecord,
@@ -28,6 +40,10 @@ from services.api.app.persistence.models.volunteer_access import (
     VolunteerAccessGrant,
     VolunteerApplication,
 )
+from services.api.app.persistence.models.volunteer_management import (
+    OrganizationVolunteerNumberCounter,
+    VolunteerProfile,
+)
 
 T = TypeVar("T")
 
@@ -36,9 +52,147 @@ class AuthenticationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def google_binding(self, *, sub: str | None = None, user_id: UUID | None = None):
+        from services.api.app.persistence.models.identity import GoogleUserBinding
+
+        statement = select(GoogleUserBinding)
+        if sub is not None:
+            statement = statement.where(GoogleUserBinding.google_sub == sub)
+        elif user_id is not None:
+            statement = statement.where(GoogleUserBinding.user_id == user_id)
+        else:
+            raise ValueError("binding identity required")
+        return (
+            await self.session.execute(statement.execution_options(populate_existing=True))
+        ).scalar_one_or_none()
+
+    async def google_transaction(self, transaction_id: UUID, *, lock: bool = False):
+        from services.api.app.persistence.models.identity import GoogleAuthTransaction
+
+        statement = select(GoogleAuthTransaction).where(GoogleAuthTransaction.id == transaction_id)
+        if lock:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def lock_google_subject(self, digest: str) -> None:
+        await self._lock_login_digest(digest)
+
     async def find_user_by_username(self, username: str) -> User | None:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
+
+    @staticmethod
+    def _advisory_key(digest: str) -> int:
+        return int.from_bytes(bytes.fromhex(digest[:16]), byteorder="big", signed=True)
+
+    async def _lock_login_digest(self, digest: str) -> None:
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": self._advisory_key(digest)},
+        )
+
+    async def consume_login_ip_attempt(
+        self,
+        source_digest: str,
+        *,
+        now: datetime,
+        window_seconds: int = IP_WINDOW_SECONDS,
+        limit: int = IP_ATTEMPT_LIMIT,
+    ) -> LoginLimitDecision:
+        await self._lock_login_digest(source_digest)
+        cutoff = now - timedelta(seconds=window_seconds)
+        await self.session.execute(
+            delete(LoginIpAttempt).where(
+                LoginIpAttempt.source_digest == source_digest,
+                LoginIpAttempt.attempted_at <= cutoff,
+            )
+        )
+        attempts = list(
+            (
+                await self.session.execute(
+                    select(LoginIpAttempt.attempted_at)
+                    .where(
+                        LoginIpAttempt.source_digest == source_digest,
+                        LoginIpAttempt.attempted_at > cutoff,
+                    )
+                    .order_by(LoginIpAttempt.attempted_at, LoginIpAttempt.id)
+                    .limit(limit)
+                )
+            ).scalars()
+        )
+        if len(attempts) >= limit:
+            retry_after = max(
+                1,
+                math.ceil((attempts[0] + timedelta(seconds=window_seconds) - now).total_seconds()),
+            )
+            return LoginLimitDecision(False, retry_after)
+        self.session.add(LoginIpAttempt(source_digest=source_digest, attempted_at=now))
+        await self.session.flush()
+        await self._cleanup_expired_ip_attempts(cutoff=cutoff)
+        return LoginLimitDecision(True)
+
+    async def _cleanup_expired_ip_attempts(
+        self, *, cutoff: datetime, batch_size: int = 100
+    ) -> None:
+        stale_ids = (
+            select(LoginIpAttempt.id)
+            .where(LoginIpAttempt.attempted_at <= cutoff)
+            .order_by(LoginIpAttempt.attempted_at, LoginIpAttempt.id)
+            .limit(batch_size)
+        )
+        await self.session.execute(delete(LoginIpAttempt).where(LoginIpAttempt.id.in_(stale_ids)))
+
+    async def lock_login_account_state(
+        self, subject_digest: str, *, now: datetime
+    ) -> LoginAccountAbuseState | None:
+        await self._lock_login_digest(subject_digest)
+        state = (
+            await self.session.execute(
+                select(LoginAccountAbuseState)
+                .where(LoginAccountAbuseState.subject_digest == subject_digest)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if state is not None and state.locked_until is not None and state.locked_until <= now:
+            await self.session.delete(state)
+            await self.session.flush()
+            return None
+        return state
+
+    @staticmethod
+    def account_retry_after(state: LoginAccountAbuseState | None, *, now: datetime) -> int | None:
+        if state is None or state.locked_until is None or state.locked_until <= now:
+            return None
+        return max(1, math.ceil((state.locked_until - now).total_seconds()))
+
+    async def record_login_failure(
+        self,
+        subject_digest: str,
+        *,
+        state: LoginAccountAbuseState | None,
+        now: datetime,
+    ) -> int | None:
+        if state is None:
+            state = LoginAccountAbuseState(
+                subject_digest=subject_digest,
+                consecutive_failures=1,
+                last_failed_at=now,
+            )
+            self.session.add(state)
+        else:
+            state.consecutive_failures = min(ACCOUNT_FAILURE_LIMIT, state.consecutive_failures + 1)
+            state.last_failed_at = now
+        if state.consecutive_failures >= ACCOUNT_FAILURE_LIMIT:
+            state.locked_until = now + timedelta(seconds=ACCOUNT_LOCK_SECONDS)
+        await self.session.flush()
+        return self.account_retry_after(state, now=now)
+
+    async def clear_login_account_state(self, subject_digest: str) -> None:
+        await self.session.execute(
+            delete(LoginAccountAbuseState).where(
+                LoginAccountAbuseState.subject_digest == subject_digest
+            )
+        )
 
     async def set_authentication_user_scope(self, user_id: UUID) -> None:
         await set_authentication_user_scope(self.session, user_id)
@@ -83,7 +237,10 @@ class AuthenticationRepository:
 
     async def lock_user(self, user_id: UUID) -> User | None:
         result = await self.session.execute(
-            select(User).where(User.id == user_id).with_for_update()
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
@@ -118,6 +275,34 @@ class AuthenticationRepository:
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def upsert_volunteer_profile(
+        self, user_id: UUID, *, surname: str | None
+    ) -> VolunteerProfile:
+        profile = await self.session.get(VolunteerProfile, user_id)
+        if profile is None:
+            profile = VolunteerProfile(user_id=user_id, surname=surname)
+            self.session.add(profile)
+            await self.session.flush()
+        elif surname:
+            profile.surname = surname
+        return profile
+
+    async def get_volunteer_profile(self, user_id: UUID) -> VolunteerProfile | None:
+        return await self.session.get(VolunteerProfile, user_id)
+
+    async def allocate_volunteer_no(self, organization_id: UUID) -> str:
+        statement = (
+            pg_insert(OrganizationVolunteerNumberCounter)
+            .values(organization_id=organization_id, next_value=2)
+            .on_conflict_do_update(
+                index_elements=[OrganizationVolunteerNumberCounter.organization_id],
+                set_={"next_value": OrganizationVolunteerNumberCounter.next_value + 1},
+            )
+            .returning(OrganizationVolunteerNumberCounter.next_value - 1)
+        )
+        value = (await self.session.execute(statement)).scalar_one()
+        return f"V{value:03d}"
 
     async def get_effective_membership(
         self, user_id: UUID, organization_id: UUID
@@ -249,6 +434,15 @@ class AuthenticationRepository:
     async def get_session(self, session_id: UUID) -> SessionRecord | None:
         return await self.session.get(SessionRecord, session_id)
 
+    async def lock_session(self, session_id: UUID) -> SessionRecord | None:
+        result = await self.session.execute(
+            select(SessionRecord)
+            .where(SessionRecord.id == session_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def get_refresh_token(self, digest: str) -> RefreshTokenRecord | None:
         result = await self.session.execute(
             select(RefreshTokenRecord).where(RefreshTokenRecord.token_digest == digest)
@@ -347,6 +541,41 @@ class AuthenticationRepository:
         )
         for record in result.scalars():
             record.status = "revoked"
+
+    async def revoke_remote_management_sessions(self) -> tuple[int, int]:
+        sessions = list(
+            (
+                await self.session.execute(
+                    select(SessionRecord)
+                    .where(SessionRecord.session_origin == "remote_management_demo")
+                    .order_by(SessionRecord.id)
+                    .with_for_update()
+                )
+            ).scalars()
+        )
+        session_ids = [record.id for record in sessions]
+        refresh_tokens = (
+            list(
+                (
+                    await self.session.execute(
+                        select(RefreshTokenRecord)
+                        .where(RefreshTokenRecord.session_id.in_(session_ids))
+                        .order_by(RefreshTokenRecord.id)
+                        .with_for_update()
+                    )
+                ).scalars()
+            )
+            if session_ids
+            else []
+        )
+        active_sessions = [record for record in sessions if record.status == "active"]
+        active_refresh_tokens = [record for record in refresh_tokens if record.status == "active"]
+        for record in active_sessions:
+            record.status = "revoked"
+        for record in active_refresh_tokens:
+            record.status = "revoked"
+        await self.session.flush()
+        return len(active_sessions), len(active_refresh_tokens)
 
     async def add(self, value: T) -> T:
         self.session.add(value)

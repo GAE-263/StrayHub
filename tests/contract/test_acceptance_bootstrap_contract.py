@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,13 +45,17 @@ def test_acceptance_bootstrap_documents_secret_and_tenant_boundaries() -> None:
         assert required in document
 
 
-def test_acceptance_compose_override_is_one_shot_and_uses_migration_url() -> None:
+def test_acceptance_compose_override_is_full_isolated_runtime() -> None:
     source = COMPOSE_OVERRIDE.read_text(encoding="utf-8")
 
     assert "DATABASE_URL: ${DATABASE_MIGRATION_URL:" in source
-    assert "APP_ENV: gcp-demo" in source
-    assert "ports:" not in source
-    assert "build:" not in source
+    assert "APP_ENV: acceptance" in source
+    assert "name: strayhub-acceptance" in source
+    assert "published: ${ACCEPTANCE_WEB_HOST_PORT:" in source
+    assert "published: ${ACCEPTANCE_API_HOST_PORT:" in source
+    assert "build: !reset null" in source
+    assert 'CELERY_AI_ENABLED: "false"' in source
+    assert "--concurrency=1" in source
     assert source.count("  api:") == 1
 
 
@@ -76,6 +81,27 @@ def test_live_verifier_uses_normal_login_without_printing_credentials() -> None:
     assert "private_key" not in source
     assert '"password": password' in source
     assert '"password": password,' not in source.split("return {")[-1]
+    assert "make_url(settings.database_url).username" in source
+    assert "WHERE rolname = :runtime_role" in source
+    assert '{"runtime_role": runtime_role_name}' in source
+    assert "WHERE rolname = 'strayhub_app'" not in source
+
+    tree = ast.parse(source)
+    answers_assignment = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "ANSWERS" for target in node.targets)
+    )
+    answers = ast.literal_eval(answers_assignment.value)
+    assert answers == {
+        "walk_completion": "walk_completion.not_done",
+        "activity": "activity.usual",
+        "gait": "gait.normal",
+        "defecation": "defecation.none",
+        "animal_interaction": "animal_interaction.no_encounter",
+        "appearance_special_status": "appearance.none_found",
+    }
 
     wrapper = LIVE_WRAPPER.read_text(encoding="utf-8")
     assert 'exec python -m scripts.verify_acceptance_live "$@"' in wrapper

@@ -5,17 +5,17 @@
 Inspected `seed_local.py`, its callers, test contracts, medical/timeline extensions,
 and the current 0037 schema before changing bootstrap behavior.
 
-| Category | Existing responsibility | Classification |
-| --- | --- | --- |
-| A. Login users | local-staff-a/b, local-volunteer-a/b, local-shelter-admin-a | MOVE TO TEST FIXTURES; demo uses dedicated demo-* identities |
-| B. Organizations | ORG-A, ORG-B, ORG-DISABLED | MOVE TO TEST FIXTURES |
-| C. Synthetic animals | 小黑, duplicate shelter number, MVP cage; medical extension adds synthetic animals | MOVE TO TEST FIXTURES |
-| D. Volunteer states | approved, pending, rejected, future, expired, revoked, disabled; 100 manual + 1,200 all-filtered applicants; failed notifications | MOVE TO TEST FIXTURES |
-| E. LINE/session data | Ulocal-* bindings, pre-created sessions, stale webhook sessions, entry references | MOVE TO TEST FIXTURES; no real LINE identity is seeded by normal demo |
-| F. Vocabulary | platform categories/options with organization_id=NULL | SHARED BOOTSTRAP; preserved by cleanup |
-| G. QR/scope data | local-mvp-qr-* and DailyReportableScope | MOVE TO TEST FIXTURES; real demo Animal QR comes from FurKids/importer, no daily scope |
-| H. Platform fixtures | local-platform-admin + disabled admin | MOVE TO TEST FIXTURES; one dedicated demo-platform-admin replaces them in demo |
-| I. E2E/isolation | shared codes/IDs, batches, permission matrices, fixed timeline | MOVE TO TEST FIXTURES; legacy implementation/alias remains available |
+| Category             | Existing responsibility                                                                                                           | Classification                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| A. Login users       | local-staff-a/b, local-volunteer-a/b, local-shelter-admin-a                                                                       | MOVE TO TEST FIXTURES; demo uses dedicated demo-* identities                           |
+| B. Organizations     | ORG-A, ORG-B, ORG-DISABLED                                                                                                        | MOVE TO TEST FIXTURES                                                                  |
+| C. Synthetic animals | 小黑, duplicate shelter number, MVP cage; medical extension adds synthetic animals                                                | MOVE TO TEST FIXTURES                                                                  |
+| D. Volunteer states  | approved, pending, rejected, future, expired, revoked, disabled; 100 manual + 1,200 all-filtered applicants; failed notifications | MOVE TO TEST FIXTURES                                                                  |
+| E. LINE/session data | Ulocal-* bindings, pre-created sessions, stale webhook sessions, entry references                                                 | MOVE TO TEST FIXTURES; no real LINE identity is seeded by normal demo                  |
+| F. Vocabulary        | platform categories/options with organization_id=NULL                                                                             | SHARED BOOTSTRAP; preserved by cleanup                                                 |
+| G. QR/scope data     | local-mvp-qr-* and DailyReportableScope                                                                                           | MOVE TO TEST FIXTURES; real demo Animal QR comes from FurKids/importer, no daily scope |
+| H. Platform fixtures | local-platform-admin + disabled admin                                                                                             | MOVE TO TEST FIXTURES; one dedicated demo-platform-admin replaces them in demo         |
+| I. E2E/isolation     | shared codes/IDs, batches, permission matrices, fixed timeline                                                                    | MOVE TO TEST FIXTURES; legacy implementation/alias remains available                   |
 
 FurKids' five source-derived animals, approved photos, curated synthetic care history
 and existing demo-furkids-admin / demo-furkids-volunteer remain KEEP IN DEMO.
@@ -35,7 +35,22 @@ The MOA importer owns only shelter/animal/source/photo/QR data, never identities
 
 ## Account decision
 
-Normal demo has five synthetic accounts, all with local-only-password:
+Normal demo has five synthetic accounts. Interactive `demo.sh` generates a new
+high-entropy shared demo password for each bootstrap and withholds it by default. Use
+`--reveal-demo-password` plus the interactive `REVEAL` confirmation only when a human
+must see it once. A
+non-interactive run must provide `STRAYHUB_DEMO_PASSWORD` through its controlled
+environment; the bootstrap rotates hashes and expires existing demo sessions.
+
+`scripts.issue_volunteer_entry_reference` now emits only `reference_id` and issuance
+metadata by default. To reveal a newly issued raw reference once, run it in an
+interactive terminal with `--reveal-reference` and type `REVEAL`; redirected/non-TTY
+output fails closed. `scripts/demo-line.sh` likewise masks the entry-bearing LIFF
+Endpoint unless `--reveal-entry-reference` is explicitly confirmed in a terminal.
+Do not persist either reveal in shell transcripts, CI output, artifacts, issues, or
+screenshots. Existing automation that parsed `raw_reference` from default JSON must
+migrate to an approved interactive handoff; there is intentionally no non-interactive
+raw-output compatibility mode.
 
 - `demo-furkids-admin`: reuse existing account; explicit SHELTER_ADMIN membership
   in all three demo shelters for management switching. Not a platform administrator.

@@ -20,6 +20,7 @@ from services.api.app.application.volunteer_reporting_authorization import (
 )
 from services.api.app.main import app
 from services.api.app.persistence.database.scope import set_organization_scope
+from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.audit import AuditRecord
 from services.api.app.persistence.models.care_report_handoff import CareReportHandoff
@@ -232,6 +233,48 @@ async def test_authorized_switch_audit_scope_and_pool_reuse(runtime_api):
             assert record.resource_type == "SessionRecord" and record.resource_id == sid
             assert record.before_data == {"organization_id": str(orgs[0])}
             assert record.after_data == {"organization_id": str(orgs[1])}
+
+
+async def test_ai_job_scope_is_transaction_local_and_fails_closed(runtime_api):
+    client, factory, orgs, _user, _sid, _line_user_id = runtime_api
+    response = await client.get("/v1/auth/active-shelter-context")
+    assert response.status_code == 200
+    job_id = uuid4()
+    async with factory() as session, session.begin():
+        await set_organization_scope(session, orgs[0])
+        session.add(
+            AIProcessingJob(
+                id=job_id,
+                organization_id=orgs[0],
+                job_type="adoption_suitability",
+                target_type="adoption_draft",
+                target_id=uuid4(),
+                domain_version=1,
+                execution_backend="celery",
+                provider="google_gemini",
+                model_name="rls-test",
+                model_version="rls-test",
+                prompt_template_id="rls-test",
+                prompt_version="1",
+                output_schema_version="1",
+                status="queued",
+                retry_count=0,
+            )
+        )
+
+    # A worker's next transaction gets no ambient tenant authority from the
+    # prior one. Both an omitted scope and a forged other-org scope see zero.
+    async with factory() as session, session.begin():
+        assert (
+            await session.scalar(select(AIProcessingJob.id).where(AIProcessingJob.id == job_id))
+            is None
+        )
+    async with factory() as session, session.begin():
+        await set_organization_scope(session, orgs[1])
+        assert (
+            await session.scalar(select(AIProcessingJob.id).where(AIProcessingJob.id == job_id))
+            is None
+        )
 
 
 @pytest.mark.parametrize("runtime_api", ["VOLUNTEER"], indirect=True)

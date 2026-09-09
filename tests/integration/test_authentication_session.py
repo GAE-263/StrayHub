@@ -68,6 +68,9 @@ class FakeAuthRepository:
     async def get_session(self, session_id):
         return self.sessions.get(session_id)
 
+    async def lock_session(self, session_id):
+        return self.sessions.get(session_id)
+
     async def get_user(self, user_id):
         return self.user if user_id == self.user.id else None
 
@@ -268,9 +271,15 @@ async def test_login_refresh_rotation_and_family_replay() -> None:
     )
 
     first = await service.login(username="staff", password="password")
+    original_session = repository.sessions[first["session_id"]]
+    original_expiry = original_session.expires_at
     assert first["organizations"][0]["code"] == "SHELTER"
     second = await service.refresh(refresh_token=first["refresh_token"])
     assert first["refresh_token"] != second["refresh_token"]
+    assert second["session_id"] == first["session_id"]
+    assert second["user_id"] == first["user_id"]
+    assert original_session.expires_at == original_expiry
+    assert len(repository.sessions) == 1
 
     with pytest.raises(DomainError, match="Refresh Token 無效"):
         await service.refresh(refresh_token=first["refresh_token"])
@@ -304,6 +313,82 @@ async def test_platform_admin_login_lists_active_organizations_without_membershi
             "role": "PLATFORM_ADMIN",
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["STAFF", "SHELTER_ADMIN"])
+async def test_shared_public_login_allows_only_active_management_roles(role: str) -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="remote-staff",
+        display_name="Remote Staff",
+        password_hash=hasher.hash("password"),
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    repository.membership.role = role
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+
+    result = await service.login(
+        username=user.username,
+        password="password",
+        public_exposure_profile="shared-demo-production",
+    )
+    assert result["organizations"][0]["role"] == role
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["VOLUNTEER", "expired", "PLATFORM_ADMIN"])
+async def test_shared_public_login_rejects_out_of_scope_identity(role: str) -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="remote-denied",
+        display_name="Remote Denied",
+        password_hash=hasher.hash("password"),
+        platform_role="PLATFORM_ADMIN" if role == "PLATFORM_ADMIN" else None,
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    if role == "expired":
+        repository.membership.role = "STAFF"
+        repository.membership.status = "expired"
+    elif role != "PLATFORM_ADMIN":
+        repository.membership.role = role
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+
+    with pytest.raises(DomainError) as caught:
+        await service.login(
+            username=user.username,
+            password="password",
+            public_exposure_profile="shared-demo-dev",
+        )
+    assert (caught.value.status_code, caught.value.code) == (401, "invalid_credentials")
+
+
+@pytest.mark.asyncio
+async def test_shared_refresh_rechecks_current_management_role() -> None:
+    hasher = Argon2PasswordHasher()
+    user = User(
+        id=uuid4(),
+        username="remote-refresh",
+        display_name="Remote Refresh",
+        password_hash=hasher.hash("password"),
+        status="active",
+    )
+    repository = FakeAuthRepository(user)
+    repository.membership.role = "STAFF"
+    service = SessionService(repository, password_hasher=hasher, access_token=token_adapter())
+    issued = await service.login(username=user.username, password="password")
+    repository.membership.role = "VOLUNTEER"
+
+    with pytest.raises(DomainError) as caught:
+        await service.refresh(
+            refresh_token=issued["refresh_token"],
+            public_exposure_profile="shared-demo-production",
+        )
+    assert (caught.value.status_code, caught.value.code) == (401, "invalid_session")
 
 
 @pytest.mark.asyncio
@@ -379,3 +464,29 @@ async def test_liff_exchange_requires_valid_binding_and_entry_context() -> None:
         id_token="invalid", shelter_entry_reference="valid-entry"
     )
     assert result["state"] == "NEW"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalidity", ["expired", "revoked"])
+async def test_invalid_session_denies_refresh_and_current_user(invalidity):
+    user = User(id=uuid4(), status="active", display_name="Synthetic")
+    repository = FakeAuthRepository(user)
+    service = SessionService(
+        repository, password_hasher=Argon2PasswordHasher(), access_token=token_adapter()
+    )
+    session = SessionRecord(
+        user_id=user.id,
+        status="active",
+        session_origin="liff",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    await repository.add(session)
+    issued = await service._issue_session(user.id, session)
+    if invalidity == "expired":
+        session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    else:
+        session.status = "revoked"
+    with pytest.raises(DomainError, match="Session 無效"):
+        await service.refresh(refresh_token=issued["refresh_token"])
+    with pytest.raises(DomainError, match="Session 無效"):
+        await service.current_user(session_id=session.id)

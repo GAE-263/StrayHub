@@ -27,6 +27,7 @@ export function CareAgenda({
   onLoadMore,
   loadingBucket = null,
   paginationError = "",
+  readOnly = false,
 }: {
   data: CareAgenda | null;
   loading: boolean;
@@ -35,6 +36,7 @@ export function CareAgenda({
   onLoadMore?: (bucket: AgendaBucket) => void;
   loadingBucket?: AgendaBucket | null;
   paginationError?: string;
+  readOnly?: boolean;
 }) {
   const [selected, setSelected] = useState<AgendaItem | null>(null);
   const [toast, setToast] = useState("");
@@ -57,7 +59,7 @@ export function CareAgenda({
             title={title}
             items={items}
             timezone={data.timezone}
-            onProcess={setSelected}
+            onProcess={readOnly ? undefined : setSelected}
             total={data.totals[bucket] ?? items.length}
             nextCursor={data.pages?.[bucket]?.next_cursor ?? null}
             loadingMore={loadingBucket === bucket}
@@ -65,14 +67,16 @@ export function CareAgenda({
           />
         );
       })}
-      <ReminderActionDialog
-        item={selected}
-        onClose={() => setSelected(null)}
-        onSaved={(message) => {
-          setToast(message);
-          onChanged?.();
-        }}
-      />
+      {!readOnly ? (
+        <ReminderActionDialog
+          item={selected}
+          onClose={() => setSelected(null)}
+          onSaved={(message) => {
+            setToast(message);
+            onChanged?.();
+          }}
+        />
+      ) : null}
       {toast ? (
         <Toast messageKey={toast} onClose={() => setToast("")}>
           {toast}

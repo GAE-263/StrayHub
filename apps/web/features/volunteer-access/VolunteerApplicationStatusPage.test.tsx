@@ -11,10 +11,14 @@ import { VolunteerApplicationStatusPage } from "./VolunteerApplicationStatusPage
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 
-function response(items: unknown[], ok = true) {
+function response(
+  items: unknown[],
+  ok = true,
+  code = "dependency_unavailable",
+) {
   return {
     ok,
-    json: async () => (ok ? { items } : { code: "dependency_unavailable" }),
+    json: async () => (ok ? { items } : { code }),
   };
 }
 
@@ -131,7 +135,31 @@ describe("VolunteerApplicationStatusPage", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response([], false)));
     await render();
     expect(host.textContent).toContain("我的志工申請");
-    expect(host.textContent).toContain("LINE 身分服務暫時無法使用");
+    expect(host.textContent).toContain("系統暫時無法完成申請");
     expect(host.textContent).not.toContain("選擇想服務的地區");
+  });
+
+  it("reserves the LINE outage message for identity-provider failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          response([], false, "line_identity_provider_unavailable"),
+        ),
+    );
+    await render();
+    expect(host.textContent).toContain("LINE 身分服務暫時無法使用");
+    expect(host.textContent).not.toContain("系統暫時無法完成申請");
+  });
+
+  it("shows a generic system message for persistence failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(response([], false, "internal_error")),
+    );
+    await render();
+    expect(host.textContent).toContain("系統暫時無法完成申請");
+    expect(host.textContent).not.toContain("LINE 身分服務暫時無法使用");
   });
 });

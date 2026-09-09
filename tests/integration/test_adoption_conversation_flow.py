@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from uuid import uuid4
 
 import asyncpg
 import pytest
+from services.api.app.api.errors import DomainError
 from services.api.app.application.line_adoption_conversation import (
     LineAdoptionConversationService,
 )
@@ -129,6 +131,13 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
                     value="recommend_me",
                     event_id="e-choose-path",
                 )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="finish_freetext_profile",
+                    value=None,
+                    event_id="e-finish-freetext",
+                )
                 for index, value in enumerate(
                     [
                         "house",
@@ -220,6 +229,72 @@ async def test_recommend_me_path_matches_and_submits_inquiry() -> None:
 
 
 @pytest.mark.asyncio
+async def test_concurrent_questionnaire_clicks_serialize_on_latest_version() -> None:
+    organization_id, adopter_id, animal_id = uuid4(), uuid4(), uuid4()
+    await engine.dispose(close=False)
+    try:
+        await _insert_fixtures(
+            organization_id=organization_id,
+            adopter_id=adopter_id,
+            animal_ids=[(animal_id, "連點測試犬", "medium", "medium", [])],
+        )
+        async with session_factory() as session:
+            async with session.begin():
+                await set_organization_scope(session, organization_id)
+                unscoped = AdoptionDraftRepository(session, None)
+                draft, _ = await LineAdoptionDraftService(unscoped).create(
+                    adopter_user_id=adopter_id
+                )
+                draft.organization_id = organization_id
+                draft.path = "specific_animal"
+                draft.target_animal_id = animal_id
+                draft.current_step = AdoptionDraftState.ANSWERING_PARENTING_STYLE.value
+                draft.answers = {
+                    "housing_type": "apartment_small",
+                    "dog_experience": "first_time",
+                    "other_pets": "none",
+                    "household_members": "adults_only",
+                    "work_schedule": "work_from_home",
+                }
+
+        async def click(event_id: str):
+            async with session_factory() as session:
+                async with session.begin():
+                    await set_organization_scope(session, organization_id)
+                    return await LineAdoptionConversationService(
+                        AdoptionDraftRepository(session, organization_id)
+                    ).handle(
+                        token=None,
+                        adopter_user_id=adopter_id,
+                        action="answer",
+                        value="structured",
+                        event_id=event_id,
+                        expected_question="parenting_style",
+                        expected_state=AdoptionDraftState.ANSWERING_PARENTING_STYLE.value,
+                        expected_version=0,
+                    )
+
+        results = await asyncio.gather(click("rapid-1"), click("rapid-2"), return_exceptions=True)
+        assert sum(not isinstance(result, Exception) for result in results) == 1
+        stale = next(result for result in results if isinstance(result, Exception))
+        assert isinstance(stale, DomainError)
+        assert stale.code == "stale_adoption_action"
+
+        async with session_factory() as session:
+            async with session.begin():
+                await set_organization_scope(session, organization_id)
+                saved = await AdoptionDraftRepository(
+                    session, organization_id
+                ).get_active_for_adopter(adopter_id)
+                assert saved.current_step == AdoptionDraftState.ANSWERING_PATIENCE.value
+                assert saved.answers["parenting_style"] == "structured"
+                assert "patience_level" not in saved.answers
+                assert saved.interaction_version == 1
+    finally:
+        await _cleanup(organization_id=organization_id, adopter_id=adopter_id)
+
+
+@pytest.mark.asyncio
 async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None:
     organization_id, adopter_id = uuid4(), uuid4()
     await engine.dispose(close=False)
@@ -262,6 +337,13 @@ async def test_specific_animal_path_skips_matching_and_submits_inquiry() -> None
                     action="confirm_target_animal",
                     value=None,
                     event_id="e-confirm-target",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="finish_freetext_profile",
+                    value=None,
+                    event_id="e-finish-freetext",
                 )
                 for index, value in enumerate(
                     [
@@ -395,6 +477,13 @@ async def test_entered_awaiting_ai_suitability_fires_only_on_the_transition_edge
                     action="confirm_target_animal",
                     value=None,
                     event_id="e-confirm-target",
+                )
+                await conversation.handle(
+                    token=token,
+                    adopter_user_id=adopter_id,
+                    action="finish_freetext_profile",
+                    value=None,
+                    event_id="e-finish-freetext",
                 )
                 for index, value in enumerate(
                     ["house", "first_time", "none", "adults_only", "work_from_home"]

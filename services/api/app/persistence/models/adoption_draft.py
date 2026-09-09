@@ -31,6 +31,7 @@ class AdoptionDraft(IdentityMixin, AuditMixin, Base):
     )
     answers: Mapped[dict] = mapped_column(JSON, default=dict)
     reconfirmation_keys: Mapped[list] = mapped_column(JSON, default=list)
+    interaction_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     last_interaction_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -47,3 +48,7 @@ class AdoptionDraft(IdentityMixin, AuditMixin, Base):
     ai_followup_target_animal_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("animals.id"), nullable=True
     )
+    # How many AWAITING_FREETEXT_PROFILE rounds have been consumed — see
+    # AdoptionDraftStateMachine.freetext_profile_rounds /
+    # AWAITING_FREETEXT_PROFILE_MAX_ROUNDS.
+    freetext_profile_rounds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

@@ -13,6 +13,23 @@ from services.api.app.persistence.database.scope import set_organization_scope, 
 from sqlalchemy import text
 
 
+def build_synthetic_data_evidence(
+    results: dict[str, dict[str, object]],
+) -> dict[str, str | int]:
+    """Return non-sensitive evidence only for the guarded, known demo inventory."""
+
+    if set(results) != set(DEMO_SHELTERS) or not all(
+        row.get("valid") is True for row in results.values()
+    ):
+        raise RuntimeError("synthetic_demo_inventory_not_verified")
+    canonical = json.dumps(results, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {
+        "classification": "synthetic_local_demo",
+        "organization_count": len(results),
+        "inventory_digest_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+    }
+
+
 async def verify_shelter(code, *, photos=False):
     storage = MinioStorageAdapter() if photos else None
     async with session_factory() as session, session.begin():
@@ -65,6 +82,7 @@ async def verify_shelter(code, *, photos=False):
         if code == "FURKIDS-ASIA":
             valid = valid and len(rows) == 5
         if photos and valid:
+            assert storage is not None
             for row in rows:
                 try:
                     data = await storage.get(

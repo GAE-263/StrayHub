@@ -27,14 +27,13 @@ ACCEPTANCE_BOOTSTRAP_PASSWORD_FILE=/run/secrets/acceptance-bootstrap-password \
 uv run python -m scripts.bootstrap_acceptance --confirm-synthetic-data
 ```
 
-On the canonical Compose host, add `infra/gce/docker-compose.acceptance.yml` to the one-shot Compose
-invocation. The override reuses the API image's complete non-local configuration and read-only JWT
-mounts, but maps only that disposable container's `DATABASE_URL` to the existing
-`DATABASE_MIGRATION_URL`. API and Worker continue to use the restricted `strayhub_app` runtime role.
-Use `infra/gce/scripts/run-acceptance-bootstrap.sh` as the one-shot entrypoint. It loads the existing
-JWT files into that process only so standard fail-fast configuration and QR-token services remain
-available, then executes the guarded CLI. Neither file creates a service, publishes a port, logs a
-secret, or changes the running application.
+On the canonical Compose host, layer `infra/gce/docker-compose.acceptance.yml` after the production
+base definition. Despite that base filename, the rendered project is the fully isolated
+`strayhub-acceptance` topology: dedicated PostgreSQL, Redis, MinIO, network, volumes, ports, LINE
+channel, secrets, and immutable RC images. It never reuses a production data service. Run the
+bootstrap only after Gate 3 passes and the acceptance PostgreSQL service is healthy. Use
+`infra/gce/scripts/run-acceptance-bootstrap.sh` as the one-shot entrypoint; it loads acceptance JWT
+files into that process and executes the guarded CLI.
 
 The bootstrap uses the migration role because organization creation spans RLS-protected tenant and
 policy tables. This is an operator data-provisioning boundary, not a runtime privilege change. The
@@ -50,19 +49,22 @@ command runs the complete canonical service/repository flow in a transaction and
 back. The normal form commits once after every fixture succeeds; failures roll back the entire
 transaction.
 
-The canonical host invocation uses the production Compose file followed by the acceptance override,
-the existing public and protected env files, the explicit allow flag, the protected password mount,
-and the wrapper entrypoint. In abbreviated operator form:
+The canonical host invocation uses the production base Compose followed by the acceptance override,
+the dedicated acceptance config, secrets and current RC image digests, the explicit allow flag, the
+protected acceptance password mount, and the wrapper entrypoint. In abbreviated operator form:
 
 ```bash
 docker compose \
+  --project-name strayhub-acceptance \
   --file infra/gce/docker-compose.production.yml \
   --file infra/gce/docker-compose.acceptance.yml \
-  --env-file /etc/strayhub/production.env \
-  --env-file /var/lib/strayhub/secrets/current/runtime.env \
+  --env-file /etc/strayhub/acceptance.env \
+  --env-file /var/lib/strayhub/acceptance/secrets/current/runtime.env \
+  --env-file /path/to/current-rc/image-digests.env \
   run --rm --no-deps \
   -e STRAYHUB_ALLOW_ACCEPTANCE_BOOTSTRAP=true \
   -e ACCEPTANCE_BOOTSTRAP_PASSWORD_FILE=/run/secrets/acceptance-bootstrap-password \
+  -v /var/lib/strayhub/acceptance/secrets/current/acceptance-bootstrap-password:/run/secrets/acceptance-bootstrap-password:ro \
   --entrypoint /app/infra/gce/scripts/run-acceptance-bootstrap.sh \
   api --confirm-synthetic-data
 ```

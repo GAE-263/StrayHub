@@ -14,6 +14,7 @@ const emptyPage: GrowthDiaryListResponse = {
   page: 1,
   page_size: 50,
   total: 0,
+  timezone: "Asia/Taipei",
 };
 
 vi.mock("./api", async (importOriginal) => {
@@ -108,7 +109,15 @@ describe("GrowthDiaryPageView", () => {
     });
 
     expect(fetchEntries).toHaveBeenLastCalledWith(
-      { query: "米糕", mood: "concern", page: 1, pageSize: 20 },
+      {
+        query: "米糕",
+        mood: "concern",
+        status: "all",
+        fromDate: "",
+        toDate: "",
+        page: 1,
+        pageSize: 20,
+      },
       expect.any(AbortSignal),
     );
     expect(fetchEntries.mock.calls[0][1]?.aborted).toBe(true);

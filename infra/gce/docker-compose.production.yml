@@ -59,6 +59,28 @@ services:
     networks:
       - strayhub_runtime
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -ec
+      - exec redis-server --appendonly yes --appendfsync everysec --maxmemory "$${REDIS_MAXMEMORY}" --maxmemory-policy noeviction --requirepass "$${REDIS_PASSWORD}"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:?REDIS_MAXMEMORY is required}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "REDISCLI_AUTH=$${REDIS_PASSWORD} redis-cli --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - strayhub_runtime
+
   api:
     image: ${STRAYHUB_API_IMAGE:-strayhub-api:b1}
     build:
@@ -89,6 +111,7 @@ services:
       LINE_STAFF_LIFF_ID: ${LINE_STAFF_LIFF_ID:-}
       LINE_ROLE_MENU_SMOKE_EVIDENCE: ${LINE_ROLE_MENU_SMOKE_EVIDENCE:-}
       ANIMAL_CONFIRMATION_SECRET: ${ANIMAL_CONFIRMATION_SECRET:?ANIMAL_CONFIRMATION_SECRET is required}
+      LOGIN_ABUSE_HMAC_SECRET: ${LOGIN_ABUSE_HMAC_SECRET:?LOGIN_ABUSE_HMAC_SECRET is required}
       AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:?AUTH_JWT_ISSUER is required}
       AUTH_JWT_AUDIENCE: ${AUTH_JWT_AUDIENCE:?AUTH_JWT_AUDIENCE is required}
       AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE: ${AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE:?AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE is required}
@@ -99,6 +122,16 @@ services:
       AI_ENDPOINT: ${AI_ENDPOINT:-}
       AI_MODEL_NAME: ${AI_MODEL_NAME:-}
       AI_API_KEY: ${AI_API_KEY:-}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
+      CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
+      CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:-ai}
+      CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:-system}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-45}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-60}
+      CELERY_VISIBILITY_TIMEOUT: ${CELERY_VISIBILITY_TIMEOUT:-180}
+      CELERY_MAX_RETRIES: ${CELERY_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_MAX: ${CELERY_RETRY_BACKOFF_MAX:-120}
+      CELERY_RECONCILE_INTERVAL_SECONDS: ${CELERY_RECONCILE_INTERVAL_SECONDS:-30}
     secrets:
       # The selected env file supplies either ignored verification paths or protected D1 staged
       # production paths. No verification or production key path is hard-coded here.
@@ -155,13 +188,133 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
     environment:
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET is required}
+      AI_PROVIDER: ${AI_PROVIDER:?AI_PROVIDER is required}
+      AI_ENDPOINT: ${AI_ENDPOINT:-}
+      AI_MODEL_NAME: ${AI_MODEL_NAME:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      STOOL_API_URL: ${STOOL_API_URL:-}
+      STOOL_API_KEY: ${STOOL_API_KEY:-}
+      STOOL_TIMEOUT_SECONDS: ${STOOL_TIMEOUT_SECONDS:-30}
       LINE_ROLE_MENU_FEATURES_ENABLED: ${LINE_ROLE_MENU_FEATURES_ENABLED:-false}
       LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
       LINE_RICH_MENU_DEFAULT_ID: ${LINE_RICH_MENU_DEFAULT_ID:-}
       LINE_RICH_MENU_VOLUNTEER_ID: ${LINE_RICH_MENU_VOLUNTEER_ID:-}
+    networks:
+      - strayhub_runtime
+
+  celery-worker:
+    image: ${STRAYHUB_WORKER_IMAGE:-strayhub-worker:b1}
+    build:
+      context: ../..
+      dockerfile: infra/gce/images/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: ${APP_ENV:?APP_ENV is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
+      CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
+      CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:-ai}
+      CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:-system}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-45}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-60}
+      CELERY_VISIBILITY_TIMEOUT: ${CELERY_VISIBILITY_TIMEOUT:-180}
+      CELERY_MAX_RETRIES: ${CELERY_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_MAX: ${CELERY_RETRY_BACKOFF_MAX:-120}
+      CELERY_RECONCILE_INTERVAL_SECONDS: ${CELERY_RECONCILE_INTERVAL_SECONDS:-30}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-2}
+      AI_PROVIDER: ${AI_PROVIDER:?AI_PROVIDER is required}
+      AI_ENDPOINT: ${AI_ENDPOINT:-}
+      AI_MODEL_NAME: ${AI_MODEL_NAME:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3.5-flash-lite}
+      GEMINI_SERVICE_ACCOUNT_PATH: ${GEMINI_SERVICE_ACCOUNT_PATH:-}
+      GEMINI_VERTEX_LOCATION: ${GEMINI_VERTEX_LOCATION:-global}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET is required}
+      WEB_PUBLIC_BASE_URL: ${WEB_PUBLIC_BASE_URL:-}
+    command:
+      - celery
+      - -A
+      - services.api.app.infrastructure.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+      - --queues=${CELERY_QUEUE_AI:-ai},${CELERY_QUEUE_SYSTEM:-system}
+      - --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - celery -A services.api.app.infrastructure.celery_app:celery_app inspect ping --destination "celery@$${HOSTNAME}" --timeout 5 | grep pong
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - strayhub_runtime
+
+  celery-beat:
+    image: ${STRAYHUB_WORKER_IMAGE:-strayhub-worker:b1}
+    build:
+      context: ../..
+      dockerfile: infra/gce/images/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:?APP_ENV is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
+      CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
+      CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:-ai}
+      CELERY_QUEUE_SYSTEM: ${CELERY_QUEUE_SYSTEM:-system}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-45}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-60}
+      CELERY_VISIBILITY_TIMEOUT: ${CELERY_VISIBILITY_TIMEOUT:-180}
+      CELERY_MAX_RETRIES: ${CELERY_MAX_RETRIES:-3}
+      CELERY_RETRY_BACKOFF_MAX: ${CELERY_RETRY_BACKOFF_MAX:-120}
+      CELERY_RECONCILE_INTERVAL_SECONDS: ${CELERY_RECONCILE_INTERVAL_SECONDS:-30}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3.5-flash-lite}
+      GEMINI_SERVICE_ACCOUNT_PATH: ${GEMINI_SERVICE_ACCOUNT_PATH:-}
+      GEMINI_VERTEX_LOCATION: ${GEMINI_VERTEX_LOCATION:-global}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:?LINE_CHANNEL_ACCESS_TOKEN is required}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET is required}
+      AI_PROVIDER: ${AI_PROVIDER:?AI_PROVIDER is required}
+      AI_ENDPOINT: ${AI_ENDPOINT:-}
+      AI_MODEL_NAME: ${AI_MODEL_NAME:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+    command:
+      - celery
+      - -A
+      - services.api.app.infrastructure.celery_app:celery_app
+      - beat
+      - --loglevel=INFO
+      - --pidfile=/tmp/celerybeat.pid
     networks:
       - strayhub_runtime
 
@@ -197,6 +350,7 @@ networks:
 volumes:
   postgres_data:
   minio_data:
+  redis_data:
 
 secrets:
   runtime_jwt_private_key:

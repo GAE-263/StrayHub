@@ -5,27 +5,34 @@ import json
 from datetime import datetime, timedelta, timezone
 from uuid import NAMESPACE_URL, uuid5
 
+from scripts.demo_credentials import require_demo_password
 from scripts.local_demo import DEMO_SHELTERS, guard
 from scripts.seed_observation_vocabulary import seed_vocabulary
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
 from services.api.app.persistence.models.animal import Animal
-from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
+from services.api.app.persistence.models.identity import (
+    Organization,
+    OrganizationMembership,
+    SessionRecord,
+    User,
+)
 from services.api.app.persistence.models.volunteer_access import (
     OrganizationVolunteerAccessPolicy,
     VolunteerAccessGrant,
     VolunteerApplication,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 
 def stable_id(label):
     return uuid5(NAMESPACE_URL, "strayhub:three-shelter-demo:" + label)
 
 
-async def seed():
+async def seed(*, password: str | None = None):
     guard()
+    password = require_demo_password(password)
     now = datetime.now(timezone.utc)
     async with session_factory() as session, session.begin():
         await set_platform_scope(session)
@@ -74,7 +81,13 @@ async def seed():
         admin = await session.scalar(select(User).where(User.username == "demo-furkids-admin"))
         if admin is None:
             raise RuntimeError("furkids_admin_required")
+        furkids_volunteer = await session.scalar(
+            select(User).where(User.username == "demo-furkids-volunteer")
+        )
+        if furkids_volunteer is None:
+            raise RuntimeError("furkids_volunteer_required")
         hasher = Argon2PasswordHasher()
+        demo_users = [admin, furkids_volunteer]
         for username, display, role in (
             ("demo-platform-admin", "三收容所示範平台管理員", "PLATFORM_ADMIN"),
             ("demo-xindian-volunteer", "新店示範志工", None),
@@ -86,7 +99,7 @@ async def seed():
                     id=stable_id(username),
                     username=username,
                     display_name=display,
-                    password_hash=hasher.hash("local-only-password"),
+                    password_hash=hasher.hash(password),
                     status="active",
                     platform_role=role,
                 )
@@ -95,6 +108,17 @@ async def seed():
             elif user.id != stable_id(username):
                 raise RuntimeError("demo_username_collision")
             user.status = "active"
+            demo_users.append(user)
+        for user in demo_users:
+            user.password_hash = hasher.hash(password)
+        await session.execute(
+            update(SessionRecord)
+            .where(
+                SessionRecord.user_id.in_([user.id for user in demo_users]),
+                SessionRecord.status == "active",
+            )
+            .values(status="expired", expires_at=now)
+        )
         await seed_vocabulary(session)
         for code, short in (("MOA-SHELTER-51", "xindian"), ("MOA-SHELTER-58", "wugu")):
             org = orgs[code]

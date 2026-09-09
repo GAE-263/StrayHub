@@ -47,13 +47,11 @@ const copyContracts = [
     ],
   },
   {
-    file: "app/(management)/reports/page.tsx",
-    removed: [/Report Inbox 載入失敗/, /無法載入 Report Inbox/, /查看 Detail/],
-    added: [/回報收件匣載入失敗/, /無法載入回報收件匣/, /查看詳情/],
-  },
-  {
-    file: "app/(management)/reports/[reportId]/page.tsx",
+    file: "features/report-inbox/ReportInbox.tsx",
     removed: [
+      /Report Inbox 載入失敗/,
+      /無法載入 Report Inbox/,
+      /查看 Detail/,
       /回報 Detail 載入失敗/,
       /無法載入回報 Detail/,
       /正在載入回報 Detail/,
@@ -62,12 +60,13 @@ const copyContracts = [
       />\s*回到 Timeline\s*</,
     ],
     added: [
-      /回報詳情載入失敗/,
-      /無法載入回報詳情/,
-      /正在載入回報詳情/,
-      />\s*保存修正\s*</,
-      />\s*封存\s*</,
-      />\s*回到近期歷程\s*</,
+      /照護回報收件匣/,
+      /正在載入回報/,
+      /查看完整志工回報/,
+      /回報詳情/,
+      /保存更正/,
+      /封存回報/,
+      /查看動物近期歷程/,
     ],
   },
   {
@@ -76,9 +75,9 @@ const copyContracts = [
     added: [/<strong>\s*近期歷程\s*<\/strong>/],
   },
   {
-    file: "app/login/page.tsx",
+    file: "app/login/LoginClient.tsx",
     removed: [/Active Shelter Context/, /Membership/],
-    added: [/目前收容所/, /成員資格/],
+    added: [/目前收容所/, /登入設定/],
   },
   {
     file: "components/management/ManagementLayout.tsx",

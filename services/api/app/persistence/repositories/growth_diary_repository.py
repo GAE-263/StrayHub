@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -18,6 +19,9 @@ _GROWTH_DIARY_ALERT_ROLES = ("STAFF", "SHELTER_ADMIN")
 
 
 class GrowthDiaryRepository:
+    MAX_PHOTOS_PER_ENTRY = 8
+    MAX_NOTE_LENGTH = 2000
+
     def __init__(self, session: AsyncSession, organization_id: UUID) -> None:
         self.session = session
         self.organization_id = organization_id
@@ -31,6 +35,7 @@ class GrowthDiaryRepository:
         photo_key: str | None,
         photo_content_type: str | None = None,
         note: str | None,
+        entry_date: date | None = None,
     ) -> GrowthDiaryEntry:
         if not note and photo_key is None:
             raise DomainError("growth_diary_content_required", "日記必須包含文字或照片", 422)
@@ -38,6 +43,8 @@ class GrowthDiaryRepository:
             raise DomainError("untrusted_growth_diary_photo", "日記照片格式無法確認", 422)
         if photo_key is None and photo_content_type is not None:
             raise DomainError("invalid_growth_diary_photo_metadata", "日記照片資料不一致", 422)
+        if note and len(note) > self.MAX_NOTE_LENGTH:
+            raise DomainError("growth_diary_note_too_long", "單日文字紀錄已達上限", 422)
 
         inquiry_result = await self.session.execute(
             select(AdoptionInquiry).where(
@@ -66,9 +73,69 @@ class GrowthDiaryRepository:
             adopter_user_id=adopter_user_id,
             photo_key=photo_key,
             photo_content_type=photo_content_type,
+            photo_keys=[photo_key] if photo_key else [],
             note=note,
+            entry_date=entry_date or datetime.now(timezone.utc).date(),
         )
         self.session.add(entry)
+        await self.session.flush()
+        return entry
+
+    async def append_to_entry(
+        self,
+        entry_id: UUID,
+        *,
+        inquiry_id: UUID,
+        animal_id: UUID,
+        adopter_user_id: UUID,
+        photo_key: str | None,
+        photo_content_type: str | None = None,
+        note: str | None,
+    ) -> GrowthDiaryEntry:
+        if not note and photo_key is None:
+            raise DomainError("growth_diary_content_required", "日記必須包含文字或照片", 422)
+        if photo_key is not None and photo_content_type != "image/webp":
+            raise DomainError("untrusted_growth_diary_photo", "日記照片格式無法確認", 422)
+        result = await self.session.execute(
+            select(GrowthDiaryEntry)
+            .where(
+                GrowthDiaryEntry.id == entry_id,
+                GrowthDiaryEntry.organization_id == self.organization_id,
+                GrowthDiaryEntry.inquiry_id == inquiry_id,
+                GrowthDiaryEntry.animal_id == animal_id,
+                GrowthDiaryEntry.adopter_user_id == adopter_user_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            raise DomainError("growth_diary_source_not_found", "日記來源不存在或無法存取", 404)
+        next_note = f"{entry.note}\n\n{note}" if entry.note and note else note or entry.note
+        if next_note and len(next_note) > self.MAX_NOTE_LENGTH:
+            raise DomainError("growth_diary_note_too_long", "單日文字紀錄已達上限", 422)
+        keys = list(entry.photo_keys or ([] if entry.photo_key is None else [entry.photo_key]))
+        if photo_key:
+            if len(keys) >= self.MAX_PHOTOS_PER_ENTRY:
+                raise DomainError("growth_diary_photo_limit", "單日最多可上傳 8 張照片", 422)
+            keys.append(photo_key)
+            entry.photo_key = photo_key
+            entry.photo_content_type = photo_content_type
+        entry.note = next_note
+        entry.photo_keys = keys
+        entry.content_version += 1
+        entry.ai_analysis_status = "pending"
+        entry.ai_content_version = None
+        entry.ai_mood = None
+        entry.ai_reply = None
+        entry.ai_staff_summary = None
+        entry.ai_provider = None
+        entry.ai_model_name = None
+        entry.ai_model_version = None
+        entry.ai_prompt_version = None
+        entry.ai_output_schema_version = None
+        entry.ai_raw_output = None
+        entry.ai_analyzed_at = None
         await self.session.flush()
         return entry
 
@@ -80,7 +147,15 @@ class GrowthDiaryRepository:
         )
         return list(result.scalars())
 
-    def _management_query(self, *, query: str | None = None, mood: str | None = None):
+    def _management_query(
+        self,
+        *,
+        query: str | None = None,
+        mood: str | None = None,
+        status: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ):
         statement = (
             select(GrowthDiaryEntry, Animal)
             .join(
@@ -107,20 +182,33 @@ class GrowthDiaryRepository:
                 or_(
                     func.lower(Animal.name).like(pattern),
                     func.lower(Animal.shelter_number).like(pattern),
+                    func.lower(GrowthDiaryEntry.note).like(pattern),
                 )
             )
         if mood == "unanalyzed":
             statement = statement.where(GrowthDiaryEntry.ai_mood.is_(None))
         elif mood and mood != "all":
             statement = statement.where(GrowthDiaryEntry.ai_mood == mood)
+        if status and status != "all":
+            statement = statement.where(GrowthDiaryEntry.status == status)
+        if from_date:
+            statement = statement.where(GrowthDiaryEntry.entry_date >= from_date)
+        if to_date:
+            statement = statement.where(GrowthDiaryEntry.entry_date <= to_date)
         return statement
 
     async def count_for_management(
-        self, *, query: str | None = None, mood: str | None = None
+        self,
+        *,
+        query: str | None = None,
+        mood: str | None = None,
+        status: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> int:
-        statement = self._management_query(query=query, mood=mood).with_only_columns(
-            func.count(GrowthDiaryEntry.id), maintain_column_froms=True
-        )
+        statement = self._management_query(
+            query=query, mood=mood, status=status, from_date=from_date, to_date=to_date
+        ).with_only_columns(func.count(GrowthDiaryEntry.id), maintain_column_froms=True)
         result = await self.session.execute(statement)
         return int(result.scalar_one())
 
@@ -131,9 +219,14 @@ class GrowthDiaryRepository:
         page_size: int,
         query: str | None = None,
         mood: str | None = None,
+        status: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> list[tuple[GrowthDiaryEntry, Animal]]:
         statement = (
-            self._management_query(query=query, mood=mood)
+            self._management_query(
+                query=query, mood=mood, status=status, from_date=from_date, to_date=to_date
+            )
             .order_by(GrowthDiaryEntry.created_at.desc(), GrowthDiaryEntry.id.desc())
             .limit(page_size)
             .offset((page - 1) * page_size)
@@ -155,6 +248,27 @@ class GrowthDiaryRepository:
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def set_status(
+        self, entry_id: UUID, *, status: str, actor_user_id: UUID
+    ) -> tuple[GrowthDiaryEntry, str] | None:
+        result = await self.session.execute(
+            select(GrowthDiaryEntry)
+            .where(
+                GrowthDiaryEntry.id == entry_id,
+                GrowthDiaryEntry.organization_id == self.organization_id,
+            )
+            .with_for_update()
+        )
+        entry = result.scalar_one_or_none()
+        if entry is None:
+            return None
+        previous_status = entry.status
+        entry.status = status
+        entry.status_updated_at = datetime.now(timezone.utc)
+        entry.status_updated_by_user_id = actor_user_id
+        await self.session.flush()
+        return entry, previous_status
 
     async def list_staff_line_user_ids(self) -> list[str]:
         """Every active STAFF/SHELTER_ADMIN in this organization who also has
@@ -197,7 +311,13 @@ async def get_pending_draft(
 ) -> GrowthDiaryDraft | None:
     """Cross-organization lookup, like `list_inquiries_for_adopter` — the
     pending marker's organization isn't known to the caller until it's read."""
-    return await session.get(GrowthDiaryDraft, adopter_user_id)
+    result = await session.execute(
+        select(GrowthDiaryDraft)
+        .where(GrowthDiaryDraft.adopter_user_id == adopter_user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
 
 
 async def set_pending_draft(
@@ -208,8 +328,11 @@ async def set_pending_draft(
     inquiry_id: UUID,
     animal_id: UUID,
 ) -> GrowthDiaryDraft:
-    existing = await session.get(GrowthDiaryDraft, adopter_user_id)
+    existing = await get_pending_draft(session, adopter_user_id)
     if existing is not None:
+        if existing.inquiry_id != inquiry_id or existing.animal_id != animal_id:
+            existing.current_entry_id = None
+            existing.entry_date = None
         existing.organization_id = organization_id
         existing.inquiry_id = inquiry_id
         existing.animal_id = animal_id

@@ -1,4 +1,4 @@
-import type { Page, Route } from "@playwright/test";
+import type { Page, Request, Route } from "@playwright/test";
 import type { components } from "../../../packages/contracts/src/openapi";
 
 const organization = {
@@ -82,7 +82,13 @@ function defaultGrowthDiaryEntries(
       has_photo: true,
       photo_endpoint:
         "/v1/management/growth-diary-entries/00000000-0000-4000-8000-000000000001/photo",
+      photo_endpoints: [
+        "/v1/management/growth-diary-entries/00000000-0000-4000-8000-000000000001/photos/0",
+      ],
       note: `${organizationId} 的近況文字`,
+      status: "new",
+      status_updated_at: null,
+      entry_date: "2026-09-01",
       ai_analysis: {
         status: "succeeded",
         provenance_status: "available",
@@ -100,7 +106,11 @@ function defaultGrowthDiaryEntries(
       shelter_number: `${suffix}-103`,
       has_photo: false,
       photo_endpoint: null,
+      photo_endpoints: [],
       note: "今天在窗邊曬太陽。",
+      status: "reviewed",
+      status_updated_at: "2026-09-01T09:00:00Z",
+      entry_date: "2026-08-31",
       ai_analysis: {
         status: "legacy",
         provenance_status: "legacy_missing",
@@ -348,6 +358,8 @@ export async function mockManagementApi(
             alerts: [],
           },
           recent_reports: [],
+          recent_anomalies: [],
+          today_special_care: [],
         },
         options.dashboardStatus ?? 200,
       );
@@ -401,6 +413,7 @@ export async function mockManagementApi(
             page: Number(params.get("page") ?? 1),
             page_size: Number(params.get("page_size") ?? 20),
             total: entries.length,
+            timezone: "Asia/Taipei",
           };
       options.growthDiaryEvents?.push(`list:start:${requestOrganizationId}`);
       const growthDiaryStatus =
@@ -421,7 +434,7 @@ export async function mockManagementApi(
       return;
     }
     const growthDiaryPhotoMatch = url.pathname.match(
-      /^\/v1\/management\/growth-diary-entries\/([^/]+)\/photo$/,
+      /^\/v1\/management\/growth-diary-entries\/([^/]+)\/(?:photo|photos\/\d+)$/,
     );
     if (growthDiaryPhotoMatch) {
       const entryId = growthDiaryPhotoMatch[1];
@@ -732,6 +745,7 @@ export async function mockManagementApi(
             note: null,
             media_ids: [],
             ai_observations: [],
+            can_archive: true,
           },
         },
         options.reportDetailStatus ?? 200,
@@ -894,6 +908,7 @@ type LoginFixtureOptions = {
   loginStatus?: FixtureStatus;
   contextSwitchStatus?: FixtureStatus;
   platformRole?: "PLATFORM_ADMIN" | null;
+  onLoginRequest?: (request: Request) => void;
 };
 
 export async function mockLoginApi(
@@ -951,6 +966,7 @@ export async function mockLoginApi(
     });
   });
   await page.route("**/v1/auth/login", async (route) => {
+    options.onLoginRequest?.(route.request());
     await respond(
       route,
       {

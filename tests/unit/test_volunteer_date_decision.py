@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from services.api.app.api.errors import DomainError
 from services.api.app.application.volunteer_access_service import VolunteerAccessService
 from services.api.app.persistence.models.volunteer_access import VolunteerAccessGrant
 
@@ -16,6 +17,7 @@ async def test_approving_one_service_date_keeps_other_date_pending() -> None:
         user_id=uuid4(),
         status="pending",
         version=1,
+        applicant_surname="黃",
         decision_reason=None,
         decided_at=None,
         decided_by_user_id=None,
@@ -94,8 +96,167 @@ async def test_approving_one_service_date_keeps_other_date_pending() -> None:
     assert selected_date.status == "approved"
     assert other_date.status == "pending"
     assert decided_application.status == "pending"
+    assert decided_application.applicant_surname == "黃"
     assert grant.valid_from == datetime(2026, 8, 24, 16, 0, tzinfo=timezone.utc)
     assert grant.expires_at == datetime(2026, 8, 31, 16, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_two_service_date_approval_notifies_exactly_once_after_final_approval() -> None:
+    organization_id = uuid4()
+    application = SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        user_id=uuid4(),
+        status="pending",
+        version=1,
+        applicant_surname="黃",
+        decision_reason=None,
+        decided_at=None,
+        decided_by_user_id=None,
+    )
+    requested_dates = {
+        requested_date: SimpleNamespace(
+            service_date=requested_date,
+            status="pending",
+            version=1,
+            decided_at=None,
+            decided_by_user_id=None,
+            decision_reason=None,
+        )
+        for requested_date in (date(2026, 9, 10), date(2026, 9, 11))
+    }
+
+    class Repository:
+        def __init__(self) -> None:
+            self.organization_id = organization_id
+            self.grant = None
+
+        async def application(self, application_id, *, for_update=False):
+            return application if application_id == application.id else None
+
+        async def service_date_for_application(
+            self, application_id, requested_date, *, for_update=False
+        ):
+            return requested_dates.get(requested_date) if application_id == application.id else None
+
+        async def grant_for_application(self, application_id):
+            return self.grant if application_id == application.id else None
+
+        async def policy(self):
+            return SimpleNamespace(
+                version=1,
+                default_grant_duration_hours=168,
+                applications_enabled=True,
+                insurance_required=False,
+            )
+
+        async def add(self, value):
+            value.id = getattr(value, "id", None) or uuid4()
+            if isinstance(value, VolunteerAccessGrant):
+                self.grant = value
+            return value
+
+        async def pending_service_date_count(self, application_id):
+            assert application_id == application.id
+            return sum(item.status == "pending" for item in requested_dates.values())
+
+    class Identities:
+        def __init__(self) -> None:
+            self.membership = None
+            self.binding_id = uuid4()
+
+        async def get_membership(self, user_id, target_organization_id):
+            assert user_id == application.user_id
+            assert target_organization_id == organization_id
+            return self.membership
+
+        async def add(self, value):
+            value.id = getattr(value, "id", None) or uuid4()
+            self.membership = value
+            return value
+
+        async def get_organization(self, target_organization_id):
+            assert target_organization_id == organization_id
+            return SimpleNamespace(
+                id=organization_id,
+                name="收容所 A",
+                status="active",
+                timezone="Asia/Taipei",
+            )
+
+        async def get_line_binding_for_user(self, user_id):
+            assert user_id == application.user_id
+            return SimpleNamespace(id=self.binding_id)
+
+    class Audit:
+        def __init__(self) -> None:
+            self.events = []
+
+        async def record(self, **event):
+            self.events.append(event)
+
+    class Notifications:
+        def __init__(self) -> None:
+            self.events = []
+
+        async def enqueue(self, **event):
+            self.events.append(event)
+
+    repository = Repository()
+    identities = Identities()
+    audit = Audit()
+    notifications = Notifications()
+    service = VolunteerAccessService(
+        repository,
+        identities,
+        object(),
+        audit=audit,
+        notifications=notifications,
+    )
+    first_date, final_date = requested_dates
+    now = datetime(2026, 9, 9, 4, 0, tzinfo=timezone.utc)
+
+    first_result, membership, grant = await service.decide_application(
+        application_id=application.id,
+        expected_version=1,
+        decision="approve",
+        actor_user_id=uuid4(),
+        service_date=first_date,
+        now=now,
+    )
+
+    assert first_result.status == "pending"
+    assert membership is identities.membership
+    assert grant is repository.grant
+    assert requested_dates[first_date].status == "approved"
+    assert requested_dates[final_date].status == "pending"
+    assert [event["action"] for event in audit.events] == ["volunteer_application.pending"]
+    assert notifications.events == []
+
+    final_result, final_membership, final_grant = await service.decide_application(
+        application_id=application.id,
+        expected_version=2,
+        decision="approve",
+        actor_user_id=uuid4(),
+        service_date=final_date,
+        now=now,
+    )
+
+    assert final_result.status == "approved"
+    assert final_result.version == 3
+    assert final_result.applicant_surname is None
+    assert final_membership is membership
+    assert final_grant is grant
+    assert all(item.status == "approved" for item in requested_dates.values())
+    assert [event["action"] for event in audit.events] == [
+        "volunteer_application.pending",
+        "volunteer_application.approved",
+    ]
+    assert len(notifications.events) == 1
+    assert notifications.events[0]["event_type"] == "approved"
+    assert notifications.events[0]["resource_version"] == 3
+    assert notifications.events[0]["payload"]["application_status"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -107,6 +268,7 @@ async def test_rejecting_the_last_service_date_rejects_the_application() -> None
         user_id=uuid4(),
         status="pending",
         version=1,
+        applicant_surname="黃",
         decision_reason=None,
         decided_at=None,
         decided_by_user_id=None,
@@ -150,6 +312,47 @@ async def test_rejecting_the_last_service_date_rejects_the_application() -> None
 
     assert selected_date.status == "rejected"
     assert decided_application.status == "rejected"
+    assert decided_application.applicant_surname is None
+
+
+@pytest.mark.asyncio
+async def test_active_platform_restriction_blocks_backend_approval() -> None:
+    organization_id = uuid4()
+    application = SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        user_id=uuid4(),
+        status="pending",
+        version=1,
+        applicant_surname="黃",
+        decision_reason=None,
+        decided_at=None,
+        decided_by_user_id=None,
+    )
+
+    class Repository:
+        async def application(self, application_id, *, for_update=False):
+            return application if application_id == application.id else None
+
+    Repository.organization_id = organization_id
+
+    class SummaryRepository:
+        async def has_active_platform_restriction(self, user_id):
+            assert user_id == application.user_id
+            return True
+
+    service = VolunteerAccessService(
+        Repository(), object(), object(), summary_repository=SummaryRepository()
+    )
+    with pytest.raises(DomainError) as error:
+        await service.decide_application(
+            application_id=application.id,
+            expected_version=1,
+            decision="approve",
+            actor_user_id=uuid4(),
+            valid_from=datetime.now(timezone.utc),
+        )
+    assert error.value.code == "active_platform_restriction"
 
 
 @pytest.mark.asyncio
@@ -163,6 +366,7 @@ async def test_policy_change_preserves_old_grant_and_applies_to_future_approval(
             user_id=user_id,
             status="pending",
             version=1,
+            applicant_surname="黃",
             decision_reason=None,
             decided_at=None,
             decided_by_user_id=None,
@@ -218,6 +422,7 @@ async def test_policy_change_preserves_old_grant_and_applies_to_future_approval(
 
     class Identities:
         membership = None
+        profile_surnames = []
 
         async def get_membership(self, user_id, target_organization_id):
             return self.membership
@@ -235,7 +440,12 @@ async def test_policy_change_preserves_old_grant_and_applies_to_future_approval(
                 timezone="Asia/Taipei",
             )
 
-    service = VolunteerAccessService(Repository(), Identities(), object())
+        async def upsert_volunteer_profile(self, user_id, *, surname):
+            self.profile_surnames.append((user_id, surname))
+            return SimpleNamespace(user_id=user_id, surname=surname)
+
+    identities = Identities()
+    service = VolunteerAccessService(Repository(), identities, object())
     first_date, second_date = applications
     _, _, old_grant = await service.decide_application(
         application_id=applications[first_date].id,
@@ -259,6 +469,8 @@ async def test_policy_change_preserves_old_grant_and_applies_to_future_approval(
     )
 
     assert old_grant.expires_at == old_expiry == datetime(2026, 9, 16, 16, 0, tzinfo=timezone.utc)
+    assert applications[first_date].applicant_surname is None
     assert new_grant.valid_from == datetime(2026, 9, 19, 16, 0, tzinfo=timezone.utc)
     assert new_grant.expires_at == datetime(2026, 10, 3, 16, 0, tzinfo=timezone.utc)
     assert new_grant.duration_hours_used == 336
+    assert identities.profile_surnames == [(user_id, "黃"), (user_id, "黃")]

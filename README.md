@@ -12,6 +12,38 @@
 
 PostgreSQL 固定使用 `127.0.0.1:65432`，MinIO API 使用 `9000`，MinIO Console 使用 `9001`。這些值與 [`.env.example`](.env.example) 保持一致。
 
+## 開發者手動測試（平常使用這個入口）
+
+先啟動 Docker Desktop，在專案根目錄執行：
+
+```bash
+./scripts/dev.sh            # 本機完整管理介面，前後端熱更新
+./scripts/dev.sh --line     # 同時啟用 LINE Bot／LIFF tunnel
+./scripts/dev.sh doctor     # 檢查工具、Docker、設定及連接埠
+./scripts/dev.sh password   # 明確重設 demo 密碼並撤銷舊登入
+```
+
+需要 uv、Docker Compose、Node.js／npm；Python 與 Python 依賴由 uv 管理。
+`.env` 不存在才建立範本；首次自動安裝前端依賴、初始化三收容所資料，並詢問一次至少
+16 字元的開發密碼。已有完整 demo 資料時直接沿用既有密碼、角色、問卷與 LINE 綁定，
+不執行 seed、不輪替密碼、不撤銷登入。重啟不要求操作者代號或 ACTIVATE，也不做 production build。
+
+開啟 [本機登入](http://127.0.0.1:3001/login)，收容所管理使用 `demo-furkids-admin`，
+平台治理使用 `demo-platform-admin`。密碼是初始化時設定的值；忘記時使用 `password` 指令。
+JWT／PII 金鑰保存在 Git 忽略的 `.env.dev-keys.json`（權限 600），保留它才能延續登入與解密。
+若已有加密資料且缺少舊 PII 金鑰，需先還原 `.env` 中的 `PII_LOCAL_KEY_BASE64`。
+
+`--line` 另外需要 nginx、ngrok（完成帳號授權與固定 HTTPS 網域設定）、curl、python3、openssl，
+以及 `.env` 中的 `NGROK_URL`、`LIFF_ID`、`LINE_LOGIN_CHANNEL_ID`、
+`LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN` 真實設定。
+使用既有 `line-only` 路由：本機可操作完整管理介面，公開網址供 LINE 使用，平台治理不對外開放。
+Console 設定仍需首次人工完成，helper 會輸出 Webhook 與公開志工報名 LIFF Endpoint。
+
+按 `Ctrl-C` 停止本次應用服務與 tunnel，保留 PostgreSQL／MinIO 及資料。
+若舊 `demo.sh`／`demo-shared-management.sh` 還在執行，先在原終端機停止它，避免連接埠衝突。
+部分初始化失敗時不會自動覆蓋既有資料，請依錯誤指引明確重新初始化。
+詳細流程與限制見 [開發者測試流程](docs/demo/developer-test-workflow.md)。
+
 ## 快速啟動：Normal Demo
 
 ```bash
@@ -36,10 +68,14 @@ npm ci --prefix apps/web
 - 平台治理：`demo-platform-admin`（無 Shelter Membership）。
 - 單一收容所志工：`demo-furkids-volunteer`、`demo-xindian-volunteer`、
   `demo-wugu-volunteer`；各自只有所屬收容所 membership/grant。
-- 上述帳號密碼皆為 `local-only-password`；僅供本機，無真實個資。
+- 互動式 `demo.sh` 每次產生新的高熵密碼，預設不輸出；只有加上
+  `--reveal-demo-password` 並在 terminal 輸入 `REVEAL` 才顯示一次。非互動執行必須透過
+  `STRAYHUB_DEMO_PASSWORD` 安全提供。Bootstrap 會輪替上述 synthetic account 並使既有
+  session 失效。密碼不得放入 URL、版本庫或 shell argument。
 
-已知既有限制：純平台帳號在 `strayhub_runtime` 連線下的登入組織清單為空，
-尚待獨立授權修正；三收容所展示請使用 membership-based `demo-furkids-admin`。
+平台登入已在身分驗證成功後切換 platform RLS scope，並以 `strayhub_runtime` 的資料庫
+整合測試驗證無 shelter membership 的平台帳號可取得組織清單。公開 shared demo 仍拒絕
+平台管理員登入；平台治理請使用本機管理入口。
 詳細驗證與既有 DB 的未知 fixture 保留情況見下方資料流程文件。
 
 正常 `demo.sh`／`demo.sh check` 先完整驗證 PostgreSQL 與 MinIO 中的 MOA
@@ -227,6 +263,8 @@ START_WORKER=1
 
 ```bash
 ./scripts/demo-line.sh
+# 只有需要在 LINE Console 人工設定完整 Endpoint 時，互動確認後顯示 entry 一次：
+./scripts/demo-line.sh --reveal-entry-reference
 ```
 
 腳本使用 ngrok 的保留網址；先在 ngrok 建立或保留固定 HTTPS 網址，並完成本機
@@ -235,7 +273,9 @@ authtoken 設定，再將該網址設為 `NGROK_URL`。腳本只會公開 Web tu
 Internet；它不涵蓋 LINE Platform webhook。需要同時驗證 Bot webhook 與 LIFF 時，使用
 上方 `test_line_local.sh` 的 nginx single-origin 流程。腳本會以
 `ngrok http --url "$NGROK_URL"` 啟動，若實際 tunnel URL 不符合設定就會失敗，
-避免輸出會在重啟後變動的 LIFF Endpoint。腳本不會替你修改 LINE Developers Console；請將輸出的
+避免輸出會在重啟後變動的 LIFF Endpoint。預設輸出會遮蔽 entry reference；腳本不會替你修改
+LINE Developers Console，只有上述 explicit reveal 流程會顯示一次完整 Endpoint。請勿把該輸出
+保存到 log、CI artifact、issue 或截圖。
 `LIFF Endpoint` 填入 LIFF App 的 Endpoint URL，並從輸出的手機 LINE 入口開啟。
 按 `Ctrl-C` 會停止本腳本啟動的程序。
 
@@ -322,7 +362,22 @@ npm --prefix packages/contracts run check
 ./scripts/verify_local.sh
 ```
 
-Gate 會執行 Migration、空資料庫 Bootstrap、完整 Python／Frontend 測試、Ruff、TypeScript、Next build、OpenAPI generated types、MinIO／GCS adapter contract 與 Secret scan。沒有 Dockerfile 時，Docker build 會明確顯示為 skipped；這不代表 GCP 已部署。
+Sensitive transport fast gate：
+
+```bash
+uv run python scripts/check_sensitive_transport_policy.py
+uv run python scripts/verify_sensitive_transport_runtime.py
+```
+
+敏感 URL 依 Class A（禁止）、B（受限 capability）、C（公開 identifier）、D（一般 query）
+管理。新增 form、redirect、QR/LIFF/signed URL、logger 或 public route 前，先更新
+[`sensitive-url-registry.yaml`](specs/012-sensitive-data-transport-hardening/contracts/sensitive-url-registry.yaml)
+及必要時的
+[`line-tunnel-allowlist.yaml`](specs/012-sensitive-data-transport-hardening/contracts/line-tunnel-allowlist.yaml)。
+LINE/LIFF tunnel 預設 deny；`/login`、management 與未登錄 `/v1/**` 不對外。遠端 management
+demo 目前不實作，維持 [local-only decision](docs/demo/remote-management.md)。
+
+Gate 會先執行 sensitive transport static policy，再執行 Migration、空資料庫 Bootstrap、完整 Python／Frontend 測試、Ruff、TypeScript、Next build、OpenAPI generated types、MinIO／GCS adapter contract 與 Secret scan。沒有 Dockerfile 時，Docker build 會明確顯示為 skipped；這不代表 GCP 已部署。
 
 ## API／Contract／LINE 邊界
 

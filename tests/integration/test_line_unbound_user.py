@@ -28,6 +28,7 @@ class Auth:
         self.user = user
         self._memberships = memberships
         self.organization = organization
+        self.scope_calls = []
 
     async def get_user(self, _user_id):
         return self.user
@@ -37,6 +38,12 @@ class Auth:
 
     async def get_organization(self, _organization_id):
         return self.organization
+
+    async def set_authentication_user_scope(self, user_id):
+        self.scope_calls.append(("user", user_id))
+
+    async def set_authentication_context_scope(self, user_id, organization_id):
+        self.scope_calls.append(("context", user_id, organization_id))
 
 
 @pytest.mark.asyncio
@@ -77,9 +84,32 @@ async def test_selected_webhook_session_resolves_exact_membership() -> None:
     ]
     selected = SimpleNamespace(organization_id=organization_b)
     organization = SimpleNamespace(id=organization_b, status="active")
-    service = LineWebhookSessionService(
-        Identity(binding=binding, sessions=[selected]),
-        Auth(SimpleNamespace(id=user_id, status="active"), memberships, organization),
-    )
+    auth = Auth(SimpleNamespace(id=user_id, status="active"), memberships, organization)
+    service = LineWebhookSessionService(Identity(binding=binding, sessions=[selected]), auth)
 
     assert await service.resolve("line-user") is selected
+    assert auth.scope_calls == [
+        ("user", user_id),
+        ("context", user_id, organization_b),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_single_membership_creates_session_after_exact_context_scope() -> None:
+    user_id = uuid4()
+    organization_id = uuid4()
+    binding = SimpleNamespace(user_id=user_id)
+    membership = SimpleNamespace(organization_id=organization_id, status="active")
+    organization = SimpleNamespace(id=organization_id, status="active")
+    identity = Identity(binding=binding)
+    auth = Auth(SimpleNamespace(id=user_id, status="active"), [membership], organization)
+
+    resolved = await LineWebhookSessionService(identity, auth).resolve("line-user")
+
+    assert resolved.user_id == user_id
+    assert resolved.organization_id == organization_id
+    assert auth.scope_calls == [
+        ("user", user_id),
+        ("context", user_id, organization_id),
+    ]
+    assert identity.added == [resolved]

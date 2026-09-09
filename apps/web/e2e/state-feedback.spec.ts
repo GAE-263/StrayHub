@@ -197,7 +197,9 @@ test("AI processing、ai-failed 與 needs-review 都在 detail 以 polite status
     await expect(status).toHaveAttribute("aria-live", "polite");
     await expect(status).toContainText(item.label);
     if (item.status === "failed") {
-      await expect(page.getByText("原始回報保留")).toBeVisible();
+      await expect(
+        page.getByText("原始回報保留", { exact: true }).first(),
+      ).toBeVisible();
       await expect(page.getByText(/原始回報已保存/)).toHaveCount(0);
     }
   }
@@ -209,18 +211,24 @@ test("login state contract covers credentials, authorization and context failure
   await mockManagementApi(page);
   await mockLoginApi(page, { loginStatus: 401 });
   await page.goto("/login");
+  await page.getByLabel("帳號").fill("synthetic-login-user");
+  await page.getByLabel("密碼").fill("synthetic-login-password");
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.locator("#login-error")).toContainText("登入失敗");
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockLoginApi(page, { organizations: [] });
   await page.reload();
+  await page.getByLabel("帳號").fill("synthetic-login-user");
+  await page.getByLabel("密碼").fill("synthetic-login-password");
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.locator("#login-error")).toContainText("沒有收容所授權");
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mockLoginApi(page, { contextSwitchStatus: 500 });
   await page.reload();
+  await page.getByLabel("帳號").fill("synthetic-login-user");
+  await page.getByLabel("密碼").fill("synthetic-login-password");
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.locator("#login-error")).toContainText("HTTP 500");
 });

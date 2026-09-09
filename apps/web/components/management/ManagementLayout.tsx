@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
@@ -20,9 +28,25 @@ import {
   clearOrganizationRequests,
   pauseOrganizationRequests,
 } from "../../lib/organization-request-scope";
+import type { AccountProfile } from "../../lib/google-auth";
 
 type Props = { children: React.ReactNode };
 type OrganizationSummary = { id: string; code: string; name: string };
+export type PublicManagementProfile =
+  "shared-demo-production" | "shared-demo-dev";
+const PublicManagementContext = createContext<PublicManagementProfile | null>(
+  null,
+);
+
+export function isPublicManagementProfile(
+  value: string | null | undefined,
+): value is PublicManagementProfile {
+  return value === "shared-demo-production" || value === "shared-demo-dev";
+}
+
+export function usePublicManagementProfile(): PublicManagementProfile | null {
+  return useContext(PublicManagementContext);
+}
 
 export function resolveOrganizationLabel(
   organizations: OrganizationSummary[],
@@ -40,6 +64,7 @@ export function ManagementLayout({ children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [profile, setProfile] = useState<CurrentUser | null>(null);
+  const [hasPassword, setHasPassword] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +105,19 @@ export function ManagementLayout({ children }: Props) {
       }
       const nextProfile = (await profileResponse.json()) as CurrentUser;
       signal.throwIfAborted();
+      setHasPassword(false);
+      if (!nextProfile.public_exposure_profile) {
+        // Navigation is optional; failed settings lookup must not block the workbench.
+        void authFetch("/v1/auth/account", { signal })
+          .then(async (response) => {
+            if (response.ok) {
+              const account = (await response.json()) as AccountProfile;
+              if (!signal.aborted)
+                setHasPassword(account.login_methods?.password === true);
+            }
+          })
+          .catch(() => {});
+      }
       if (
         pathname === "/platform-admins" &&
         nextProfile.user.platform_role === "PLATFORM_ADMIN"
@@ -100,6 +138,16 @@ export function ManagementLayout({ children }: Props) {
         ) {
           clearAuth();
           router.replace("/login");
+          return;
+        }
+        if (
+          [contextResponse.status, organizationsResponse.status].some(
+            (status) => [403, 404, 409].includes(status),
+          ) &&
+          nextProfile.account_access_enabled &&
+          !nextProfile.public_exposure_profile
+        ) {
+          router.replace("/access");
           return;
         }
         throw new Error("目前帳號尚未準備好管理工作台權限。");
@@ -267,6 +315,11 @@ export function ManagementLayout({ children }: Props) {
   }
 
   const role = profile.user.platform_role ?? activeMembership?.role ?? "STAFF";
+  const publicManagementProfile = isPublicManagementProfile(
+    profile.public_exposure_profile,
+  )
+    ? profile.public_exposure_profile
+    : null;
   const volunteerManagementPath =
     pathname.startsWith("/volunteers/") ||
     pathname === "/settings/volunteer-access";
@@ -287,6 +340,25 @@ export function ManagementLayout({ children }: Props) {
   return (
     <div className="app-frame">
       <AppHeader
+        accountLinks={
+          publicManagementProfile === null
+            ? [
+                { href: "/access", label: "我的收容所" },
+                ...((role === "SHELTER_ADMIN" || isPlatformAdmin) &&
+                organizationId
+                  ? [
+                      {
+                        href: `/account/invitations?organization=${organizationId}`,
+                        label: "加入申請",
+                      },
+                    ]
+                  : []),
+                ...(hasPassword
+                  ? [{ href: "/account", label: "登入設定" }]
+                  : []),
+              ]
+            : []
+        }
         displayName={
           profile.user.display_name ?? profile.user.username ?? "使用者"
         }
@@ -298,16 +370,25 @@ export function ManagementLayout({ children }: Props) {
         }
         onLogout={() => void logout()}
         mobileNavigation={
-          <MobileNavigation role={role} onLogout={() => void logout()} />
+          <MobileNavigation
+            role={role}
+            publicManagement={publicManagementProfile !== null}
+            onLogout={() => void logout()}
+          />
         }
       />
       <div className="app-body">
-        <AppSidebar role={role} />
+        <AppSidebar
+          role={role}
+          publicManagement={publicManagementProfile !== null}
+        />
         <main className="app-main" key={`${contextKey}:${pathname}`}>
           {contextSwitchError ? (
             <StatusBanner kind="warning">{contextSwitchError}</StatusBanner>
           ) : null}
-          {children}
+          <PublicManagementContext.Provider value={publicManagementProfile}>
+            {children}
+          </PublicManagementContext.Provider>
         </main>
       </div>
     </div>

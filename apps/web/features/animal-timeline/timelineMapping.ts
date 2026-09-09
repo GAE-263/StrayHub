@@ -5,6 +5,7 @@ export type ApiReport = {
   id: string;
   submitted_at?: string;
   volunteer_user_id?: string;
+  volunteer_label?: string | null;
   note?: string | null;
   observations?: Record<string, string>;
   observation_snapshots?: Record<string, Record<string, string>> | null;
@@ -75,6 +76,7 @@ export function mapDays(days: ApiDay[]): TimelineDay[] {
       id: report.id,
       submittedAt: report.submitted_at,
       volunteerUserId: report.volunteer_user_id,
+      volunteerLabel: report.volunteer_label,
       note: report.note,
       observations: report.observations,
       observationSnapshots: report.observation_snapshots

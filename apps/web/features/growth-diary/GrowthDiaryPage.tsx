@@ -14,7 +14,11 @@ import { Input } from "../../components/ui/input";
 import { Select } from "../../components/ui/select";
 import { fetchGrowthDiaryEntries, GrowthDiaryApiError } from "./api";
 import { GrowthDiaryEntryCard } from "./GrowthDiaryEntryCard";
-import type { GrowthDiaryListResponse, GrowthDiaryMoodFilter } from "./types";
+import type {
+  GrowthDiaryListResponse,
+  GrowthDiaryMoodFilter,
+  GrowthDiaryStatusFilter,
+} from "./types";
 import styles from "./growth-diary.module.css";
 
 export type GrowthDiaryViewState = "loading" | "ready" | "error" | "permission";
@@ -95,7 +99,11 @@ export function GrowthDiaryPageView({
           <p className={styles.resultCount}>共 {data.total} 筆日記</p>
           <div className={styles.timeline}>
             {data.items.map((entry) => (
-              <GrowthDiaryEntryCard key={entry.id} entry={entry} />
+              <GrowthDiaryEntryCard
+                key={entry.id}
+                entry={entry}
+                timezone={data.timezone}
+              />
             ))}
           </div>
           {data.total > data.page_size ? (
@@ -134,6 +142,9 @@ export function GrowthDiaryPage() {
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [mood, setMood] = useState<GrowthDiaryMoodFilter>("all");
+  const [status, setStatus] = useState<GrowthDiaryStatusFilter>("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const retry = useCallback(() => setReloadToken((value) => value + 1), []);
@@ -142,6 +153,9 @@ export function GrowthDiaryPage() {
     setDraftQuery("");
     setQuery("");
     setMood("all");
+    setStatus("all");
+    setFromDate("");
+    setToDate("");
     setPage(1);
   }, []);
 
@@ -150,7 +164,7 @@ export function GrowthDiaryPage() {
     setState("loading");
     setData(null);
     void fetchGrowthDiaryEntries(
-      { query, mood, page, pageSize },
+      { query, mood, status, fromDate, toDate, page, pageSize },
       controller.signal,
     )
       .then((response) => {
@@ -169,7 +183,7 @@ export function GrowthDiaryPage() {
         );
       });
     return () => controller.abort();
-  }, [mood, page, query, reloadToken]);
+  }, [fromDate, mood, page, query, reloadToken, status, toDate]);
 
   const controls = (
     <form
@@ -209,9 +223,50 @@ export function GrowthDiaryPage() {
           <option value="unanalyzed">尚無有效分析</option>
         </Select>
       </Field>
+      <Field>
+        <label htmlFor="growth-diary-status">查看狀態</label>
+        <Select
+          id="growth-diary-status"
+          value={status}
+          onChange={(event) => {
+            setStatus(event.target.value as GrowthDiaryStatusFilter);
+            setPage(1);
+          }}
+        >
+          <option value="all">全部狀態</option>
+          <option value="new">待查看</option>
+          <option value="reviewed">已查看</option>
+        </Select>
+      </Field>
+      <Field>
+        <label htmlFor="growth-diary-from">開始日期</label>
+        <Input
+          id="growth-diary-from"
+          type="date"
+          value={fromDate}
+          max={toDate || undefined}
+          onChange={(event) => {
+            setFromDate(event.target.value);
+            setPage(1);
+          }}
+        />
+      </Field>
+      <Field>
+        <label htmlFor="growth-diary-to">結束日期</label>
+        <Input
+          id="growth-diary-to"
+          type="date"
+          value={toDate}
+          min={fromDate || undefined}
+          onChange={(event) => {
+            setToDate(event.target.value);
+            setPage(1);
+          }}
+        />
+      </Field>
       <div className={styles.filterActions}>
         <Button type="submit">搜尋</Button>
-        {query || mood !== "all" ? (
+        {query || mood !== "all" || status !== "all" || fromDate || toDate ? (
           <Button type="button" variant="ghost" onClick={clearFilters}>
             清除條件
           </Button>
@@ -226,7 +281,9 @@ export function GrowthDiaryPage() {
       data={data}
       onRetry={retry}
       controls={controls}
-      hasActiveFilters={Boolean(query || mood !== "all")}
+      hasActiveFilters={Boolean(
+        query || mood !== "all" || status !== "all" || fromDate || toDate,
+      )}
       onClearFilters={clearFilters}
       onPreviousPage={() => setPage((value) => Math.max(1, value - 1))}
       onNextPage={() => setPage((value) => value + 1)}

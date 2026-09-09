@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr
@@ -34,6 +35,7 @@ _KMS_CRYPTO_KEY_PATTERN = re.compile(
     r"^projects/[^/\s]+/locations/[^/\s]+/keyRings/[^/\s]+/cryptoKeys/[^/\s]+$"
 )
 _LINE_SMOKE_EVIDENCE_PATTERN = re.compile(r"^verified-[0-9]{8}-[0-9a-f]{40}$")
+_SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def is_placeholder_secret(value: str | None) -> bool:
@@ -77,18 +79,33 @@ class Settings(BaseSettings):
     line_channel_id: str = "fake-line-channel-id"
     line_channel_secret: str = "fake-line-channel-secret"
     line_channel_access_token: str = "fake-line-access-token"
+    # Acceptance sends are fail-closed at the LINE adapter. Store only SHA-256
+    # digests of approved test LINE user IDs so identities are not committed.
+    line_notification_recipient_allowlist_sha256: str = ""
     line_login_channel_id: str = ""
     line_login_channel_secret: str = ""
     liff_id: str = "fake-liff-id"
     # 對外可達的 HTTPS origin（例如 production 網址或保留的 ngrok 網址），用於
     # LINE 入口與短效簽章的公開領養照片。local webhook 未設定時可由反向代理取得 origin。
     web_public_base_url: str = ""
+    # Required only when an explicit shared management tunnel profile is compiled.
+    # The concrete reserved origin remains runtime-only and is never committed.
+    public_tunnel_reserved_origin: str = ""
     # 依角色 Rich Menu 的 richMenuId（由 scripts/sync_line_role_menus.py --apply 產生後填入）。
     # 任一有值時，綁定成功會依角色 link 對應選單；全空則此功能為 no-op。
     line_rich_menu_default_id: str = ""
     line_rich_menu_volunteer_id: str = ""
     line_rich_menu_adopter_id: str = ""
     line_rich_menu_staff_id: str = ""
+    # Adoption-flow sub-menus — separate from the role-based set above (an
+    # adopter mid-flow isn't a "role"). Same additive/no-op-when-empty
+    # contract: see _sync_adoption_rich_menu in line_webhook.py.
+    line_rich_menu_region_select_id: str = ""
+    line_rich_menu_path_select_id: str = ""
+    # 「領養流程」在預設選單上只是入口——點下去先切到這張兩格選單（領養媒合／
+    # 毛孩日記），不直接進領養對話。同樣是 additive/no-op-when-empty；見
+    # line_webhook.py 的 "open_adoption_hub" postback。
+    line_rich_menu_adoption_hub_id: str = ""
     # New role-menu/adoption behavior is always available to local/test runtimes, but is
     # fail-closed in every non-local runtime until the release contract is explicitly satisfied.
     line_role_menu_features_enabled: bool = False
@@ -110,6 +127,11 @@ class Settings(BaseSettings):
     pii_kms_key_name: str | None = None
     session_access_token_ttl_seconds: int = Field(default=900, ge=1)
     session_refresh_token_ttl_seconds: int = Field(default=604800, ge=1)
+    login_abuse_hmac_secret: SecretStr = SecretStr("local-only-login-abuse-hmac-secret-material")
+    login_trusted_proxy_enabled: bool = False
+    google_auth_enabled: bool = False
+    google_auth_client_id: str = ""
+    google_auth_origin: str = "http://localhost:3001"
     draft_ttl_seconds: int = Field(default=86400, ge=1)
     ai_provider: str = "mock"
     ai_model_name: str = "mock-observation-model"
@@ -140,6 +162,24 @@ class Settings(BaseSettings):
     # account takes precedence (see GeminiClient).
     gemini_service_account_path: str | None = None
     gemini_vertex_location: str = "global"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_queue_ai: str = "ai"
+    celery_queue_system: str = "system"
+    celery_task_soft_time_limit: int = Field(default=45, ge=1)
+    celery_task_time_limit: int = Field(default=60, ge=1)
+    celery_visibility_timeout: int = Field(default=180, ge=1)
+    celery_max_retries: int = Field(default=3, ge=0, le=10)
+    celery_retry_backoff_max: int = Field(default=120, ge=1)
+    celery_ai_enabled: bool = False
+    celery_worker_concurrency: int = Field(default=2, ge=1, le=32)
+    celery_reconcile_interval_seconds: int = Field(default=30, ge=5, le=3600)
+
+    def line_notification_recipient_hashes(self) -> frozenset[str]:
+        return frozenset(
+            item.strip().lower()
+            for item in self.line_notification_recipient_allowlist_sha256.split(",")
+            if item.strip()
+        )
 
     def line_role_menu_features_active(self) -> bool:
         environment = self.app_env.strip().lower()
@@ -175,12 +215,68 @@ class Settings(BaseSettings):
         ):
             problems.append("DATABASE_URL uses local development credentials")
 
+        if process in {"api", "worker"} and (self.celery_ai_enabled or environment == "acceptance"):
+            missing("CELERY_BROKER_URL", self.celery_broker_url)
+            if is_loopback_url(self.celery_broker_url):
+                problems.append("CELERY_BROKER_URL uses a loopback host")
+            parsed_broker_url = urlparse(self.celery_broker_url)
+            if (
+                parsed_broker_url.scheme not in {"redis", "rediss"}
+                or not parsed_broker_url.hostname
+                or not parsed_broker_url.password
+            ):
+                problems.append("CELERY_BROKER_URL must use authenticated Redis")
+            if self.celery_task_soft_time_limit >= self.celery_task_time_limit:
+                problems.append("CELERY_TASK_SOFT_TIME_LIMIT must be below CELERY_TASK_TIME_LIMIT")
+
+        if process in {"api", "worker"} and environment == "acceptance":
+            placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
+            recipient_hashes = self.line_notification_recipient_hashes()
+            if len(recipient_hashes) < 2:
+                problems.append(
+                    "LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256 must contain at least "
+                    "two controlled test identities"
+                )
+            elif any(not _SHA256_HEX_PATTERN.fullmatch(value) for value in recipient_hashes):
+                problems.append(
+                    "LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256 must contain only "
+                    "comma-separated lowercase SHA-256 digests"
+                )
+            if self.celery_ai_enabled:
+                problems.append("CELERY_AI_ENABLED must be false in acceptance")
+            if self.celery_worker_concurrency != 1:
+                problems.append("CELERY_WORKER_CONCURRENCY must be 1 in acceptance")
+            if not self.celery_queue_ai.startswith("acceptance-"):
+                problems.append("CELERY_QUEUE_AI must use the acceptance- prefix")
+            if not self.celery_queue_system.startswith("acceptance-"):
+                problems.append("CELERY_QUEUE_SYSTEM must use the acceptance- prefix")
+
         if process == "worker" and self.line_role_menu_features_enabled:
             placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
 
         if process == "worker":
+            missing("MINIO_ENDPOINT", self.minio_endpoint)
+            if self.minio_endpoint and is_loopback_url(self.minio_endpoint):
+                problems.append("MINIO_ENDPOINT uses a loopback host")
+            placeholder("MINIO_ACCESS_KEY", self.minio_access_key)
+            placeholder("MINIO_SECRET_KEY", self.minio_secret_key)
+            missing("MINIO_BUCKET", self.minio_bucket)
+            if self.celery_ai_enabled:
+                placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
+                if not self.gemini_api_key and not self.gemini_service_account_path:
+                    problems.append(
+                        "GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH is required when "
+                        "CELERY_AI_ENABLED=true"
+                    )
+                if self.gemini_api_key:
+                    placeholder("GEMINI_API_KEY", self.gemini_api_key)
+                if (
+                    self.gemini_service_account_path
+                    and not Path(self.gemini_service_account_path).is_file()
+                ):
+                    problems.append("GEMINI_SERVICE_ACCOUNT_PATH does not exist")
             stool_key = (
                 self.stool_api_key.get_secret_value() if self.stool_api_key is not None else None
             )
@@ -240,8 +336,11 @@ class Settings(BaseSettings):
                     problems.append("WEB_PUBLIC_BASE_URL uses a reserved placeholder host")
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
-            placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
-            placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
+            # Volunteer acceptance does not exercise the separate staff entry.
+            # Its handler remains fail-closed when no staff LIFF is configured.
+            if environment != "acceptance":
+                placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
+                placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
             if not _LINE_SMOKE_EVIDENCE_PATTERN.fullmatch(
                 self.line_role_menu_smoke_evidence.strip()
             ):
@@ -265,6 +364,10 @@ class Settings(BaseSettings):
         )
         placeholder("AUTH_JWT_ACTIVE_PRIVATE_KEY", self.auth_jwt_active_private_key)
         placeholder("AUTH_JWT_ACTIVE_PUBLIC_KEY", self.auth_jwt_active_public_key)
+        login_abuse_secret = self.login_abuse_hmac_secret.get_secret_value()
+        placeholder("LOGIN_ABUSE_HMAC_SECRET", login_abuse_secret)
+        if len(login_abuse_secret.encode()) < 24:
+            problems.append("LOGIN_ABUSE_HMAC_SECRET is too short")
         if self.auth_jwt_previous_public_key:
             placeholder(
                 "AUTH_JWT_PREVIOUS_PUBLIC_KEY_REFERENCE",

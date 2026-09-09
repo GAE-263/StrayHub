@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
+from services.api.app.config.settings import get_settings
 from services.api.app.domain.line_care_report_state import UNOBSERVED, CareReportAnswers
+from services.api.app.domain.report_summary import rule_summary
 from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.care_report_draft_repository import (
@@ -26,6 +28,7 @@ class ReportSubmissionService:
         note_validator: Callable[[dict[str, str], str | None], None] | None = None,
         answer_snapshots: dict[str, dict[str, str]] | None = None,
         usage_service=None,
+        ai_enabled: bool | None = None,
     ) -> None:
         self.drafts = drafts
         self.reports = reports
@@ -35,6 +38,7 @@ class ReportSubmissionService:
         self.note_validator = note_validator
         self.answer_snapshots = answer_snapshots
         self.usage_service = usage_service
+        self.ai_enabled = ai_enabled
 
     async def submit(
         self,
@@ -83,6 +87,9 @@ class ReportSubmissionService:
             raise DomainError("animal_not_reportable", "動物目前不可回報", 409)
         if self.scope_validator is not None and not await self.scope_validator(animal.id):
             raise DomainError("animal_not_reportable", "動物目前不在你的今日可回報範圍", 403)
+        ai_enabled = (
+            self.ai_enabled if self.ai_enabled is not None else get_settings().celery_ai_enabled
+        )
         report = await self.reports.add(
             CareReport(
                 organization_id=draft.organization_id,
@@ -97,7 +104,7 @@ class ReportSubmissionService:
                 note=note if note is not None else draft.note,
                 story=story if story is not None else getattr(draft, "story", None),
                 status="saved",
-                ai_job_status="pending_enqueue",
+                ai_job_status="pending_enqueue" if ai_enabled else "not_requested",
                 submitted_at=datetime.now(timezone.utc),
             )
         )
@@ -108,6 +115,25 @@ class ReportSubmissionService:
             report_id=report.id,
             media_asset_ids=media_asset_ids or await self.drafts.media_ids(draft.id),
         )
+        # Durable work in the same transaction as the report; no model call in LINE.
+        # Lightweight test repositories without a SQLAlchemy session remain supported.
+        if getattr(self.reports, "session", None) is not None:
+            from services.api.app.application.ai_job_dispatch import create_ai_job
+            from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
+
+            report.attention_level = rule_summary(report)["attention_level"]
+            report.summary_status = "pending" if ai_enabled else "not_requested"
+            if ai_enabled:
+                try:
+                    async with self.reports.session.begin_nested():
+                        await create_ai_job(
+                            AIJobRepository(self.reports.session, report.organization_id),
+                            target_type="care_report",
+                            target_id=report.id,
+                            job_type="care_report_summary",
+                        )
+                except Exception:
+                    report.summary_status = "failed"
         if self.usage_service is not None:
             try:
                 await self.usage_service.index_report(report, snapshots=report.answer_snapshots)

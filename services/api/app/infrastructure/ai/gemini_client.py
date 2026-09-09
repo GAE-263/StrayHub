@@ -1,7 +1,5 @@
 """Thin client for Google Gemini's `generateContent` REST endpoint — used
-only by the adoption suitability-analysis feature (see line_adoption_flex.py
-/ adoption_matching.py docstrings for why this is a separate integration
-from the unrelated `services/worker` AI job pipeline).
+by adoption matching, growth diaries, and background care-report summaries.
 
 Two auth modes, picked automatically by what's configured:
 
@@ -42,6 +40,14 @@ _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 # Refresh a bit before the token's real expiry so a slow request never races
 # a token that expires mid-flight.
 _TOKEN_REFRESH_MARGIN_SECONDS = 60
+# Gemini's default sampling temperature (~1.0) occasionally hallucinates a
+# field the free text never mentioned when extracting questionnaire answers
+# (confirmed by reproducing the exact same input against the live model) —
+# a low temperature makes this strict "grounded in the text, or null"
+# classification task noticeably more conservative. Not applied to any
+# other call: the adopter-facing reply/explanation text elsewhere benefits
+# from Gemini's default variety, this one specifically doesn't want it.
+_EXTRACTION_TEMPERATURE = 0.1
 
 
 @dataclass(frozen=True)
@@ -69,6 +75,18 @@ class GeminiGrowthDiaryAnalysis:
     adopter_reply: str
     staff_summary: str
     raw_output: str | None = None
+
+
+class TransientAiError(RuntimeError):
+    """A bounded retry may succeed without changing the request."""
+
+
+class PermanentAiError(RuntimeError):
+    """The request or configuration cannot be repaired by retrying it."""
+
+
+class MalformedAiResponse(PermanentAiError):
+    """Gemini returned output that violates the domain schema."""
 
 
 _VALID_GROWTH_DIARY_MOODS = {"positive", "neutral", "concern"}
@@ -153,15 +171,48 @@ class GeminiClient:
         )
         return self._cached_token
 
-    async def _generate_content(self, prompt: str) -> str:
+    async def _generate_content(
+        self,
+        prompt: str,
+        *,
+        image: bytes | None = None,
+        image_mime_type: str | None = None,
+        temperature: float | None = None,
+    ) -> str:
         """Returns the raw text of Gemini's one response part. Raises on any
         failure — callers are the `try/except -> None` boundary, matching
-        this module's "never raises" contract at the public-method level."""
+        this module's "never raises" contract at the public-method level.
+
+        `image`, when given, is sent as a second `parts` entry (inline
+        base64) alongside the text prompt — the same multimodal shape on
+        both AI Studio and Vertex AI, so no other branching is needed here
+        beyond the existing auth-mode split.
+
+        `temperature`, when given, overrides Gemini's default sampling
+        temperature (~1.0) — left unset for calls that want some natural-
+        language variety (a warm adopter-facing reply, an explanation), but
+        worth pinning low for a strict classification task like extracting
+        questionnaire answers from free text, where "confidently grounded in
+        the input, or null" matters far more than variety and a high default
+        temperature measurably invites the odd hallucinated field."""
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        if image is not None:
+            parts.append(
+                {
+                    "inlineData": {
+                        "mimeType": image_mime_type or "image/jpeg",
+                        "data": base64.b64encode(image).decode("ascii"),
+                    }
+                }
+            )
+        generation_config: dict[str, Any] = {"responseMimeType": "application/json"}
+        if temperature is not None:
+            generation_config["temperature"] = temperature
         body = {
             # Vertex AI (unlike AI Studio) rejects a content entry with no
             # explicit "role" — harmless to always send it either way.
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"responseMimeType": "application/json"},
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": generation_config,
         }
         if self._service_account_info is not None:
             token = await self._vertex_access_token()
@@ -202,6 +253,39 @@ class GeminiClient:
             return None
         return GeminiSuitabilityResult(score=max(0, min(100, score)), explanation=explanation)
 
+    async def analyze_suitability_strict(self, prompt: str) -> GeminiSuitabilityResult:
+        """Typed failure boundary used by durable workers."""
+        try:
+            text = await self._generate_content(prompt)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+            score = int(parsed["score"])
+            explanation = str(parsed["explanation"]).strip()
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise MalformedAiResponse("invalid_suitability_schema") from exc
+        if not explanation or len(explanation) > 2000:
+            raise MalformedAiResponse("invalid_suitability_explanation")
+        if not 0 <= score <= 100:
+            raise MalformedAiResponse("invalid_suitability_score")
+        return GeminiSuitabilityResult(score=score, explanation=explanation)
+
+    async def generate_report_summary(self, prompt: str) -> str | None:
+        """Return raw output for domain validation; never log private report text."""
+        try:
+            return await self._generate_content(prompt)
+        except Exception:
+            logger.warning("gemini_report_summary_unavailable")
+            return None
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
     async def recommend_alternatives(
         self, prompt: str, *, valid_animal_ids: set[str]
     ) -> list[GeminiAnimalRecommendation] | None:
@@ -230,6 +314,44 @@ class GeminiClient:
                     GeminiAnimalRecommendation(animal_id=animal_id, reason=reason)
                 )
         return recommendations[:3]
+
+    async def recommend_alternatives_strict(
+        self, prompt: str, *, valid_animal_ids: set[str]
+    ) -> list[GeminiAnimalRecommendation]:
+        """Typed, allowlisted parser for durable follow-up recommendation jobs."""
+        try:
+            text = await self._generate_content(prompt)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_followup_json") from exc
+        if not isinstance(parsed, dict) or set(parsed) != {"recommendations"}:
+            raise MalformedAiResponse("invalid_followup_schema")
+        items = parsed["recommendations"]
+        if not isinstance(items, list) or len(items) > 3:
+            raise MalformedAiResponse("invalid_followup_count")
+        results: list[GeminiAnimalRecommendation] = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, dict) or set(item) != {"animal_id", "reason"}:
+                raise MalformedAiResponse("invalid_followup_item")
+            animal_id = item["animal_id"]
+            reason = item["reason"]
+            if not isinstance(animal_id, str) or animal_id not in valid_animal_ids:
+                raise MalformedAiResponse("invalid_followup_animal_id")
+            if not isinstance(reason, str) or not reason.strip() or len(reason) > 100:
+                raise MalformedAiResponse("invalid_followup_reason")
+            if animal_id in seen:
+                continue
+            seen.add(animal_id)
+            results.append(GeminiAnimalRecommendation(animal_id=animal_id, reason=reason.strip()))
+        return results
 
     async def rank_recommendations(
         self, prompt: str, *, valid_animal_ids: set[str]
@@ -264,13 +386,135 @@ class GeminiClient:
                 )
         return results[:5]
 
-    async def analyze_growth_diary_entry(self, prompt: str) -> GeminiGrowthDiaryAnalysis | None:
+    async def rank_recommendations_strict(
+        self, prompt: str, *, valid_animal_ids: set[str]
+    ) -> list[GeminiRankedRecommendation]:
+        """Typed, allowlisted parser for durable recommendation curation."""
+        try:
+            text = await self._generate_content(prompt)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_curation_json") from exc
+        if not isinstance(parsed, dict) or set(parsed) != {"recommendations"}:
+            raise MalformedAiResponse("invalid_curation_schema")
+        items = parsed["recommendations"]
+        if not isinstance(items, list) or len(items) > 5:
+            raise MalformedAiResponse("invalid_curation_count")
+        results: list[GeminiRankedRecommendation] = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, dict) or set(item) != {
+                "animal_id",
+                "score",
+                "explanation",
+            }:
+                raise MalformedAiResponse("invalid_curation_item")
+            animal_id = item["animal_id"]
+            score = item["score"]
+            explanation = item["explanation"]
+            if not isinstance(animal_id, str) or animal_id not in valid_animal_ids:
+                raise MalformedAiResponse("invalid_curation_animal_id")
+            if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 100:
+                raise MalformedAiResponse("invalid_curation_score")
+            if (
+                not isinstance(explanation, str)
+                or not explanation.strip()
+                or len(explanation) > 200
+            ):
+                raise MalformedAiResponse("invalid_curation_explanation")
+            if animal_id in seen:
+                continue
+            seen.add(animal_id)
+            results.append(
+                GeminiRankedRecommendation(
+                    animal_id=animal_id,
+                    score=score,
+                    explanation=explanation.strip(),
+                )
+            )
+        return results
+
+    async def extract_adoption_profile(
+        self, prompt: str, *, valid_values: dict[str, set[str]]
+    ) -> dict[str, str]:
+        """Parses a free-text self-introduction into the same question-code
+        answers the one-by-one questionnaire collects (see
+        AdoptionProfileExtractionService). Any field Gemini omits, returns
+        null for, or returns a value outside `valid_values[key]` for is
+        simply absent from the result — the caller then knows to ask that
+        one directly rather than trusting a hallucinated code. Returns {}
+        (not None) on any failure, consistent with "nothing was extracted
+        this round" rather than a distinct error case the caller has to
+        handle separately."""
+        try:
+            text = await self._generate_content(prompt, temperature=_EXTRACTION_TEMPERATURE)
+            parsed = json.loads(text)
+        except Exception:
+            logger.exception("gemini_adoption_profile_extraction_failed")
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        result: dict[str, str] = {}
+        for key, allowed in valid_values.items():
+            value = parsed.get(key)
+            if isinstance(value, str) and value in allowed:
+                result[key] = value
+        return result
+
+    async def extract_adoption_profile_strict(
+        self, prompt: str, *, valid_values: dict[str, set[str]]
+    ) -> dict[str, str]:
+        """Typed, fail-closed profile parser used by the durable worker."""
+        try:
+            text = await self._generate_content(prompt, temperature=_EXTRACTION_TEMPERATURE)
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_profile_json") from exc
+        if not isinstance(parsed, dict):
+            raise MalformedAiResponse("invalid_profile_schema")
+        unknown_keys = set(parsed) - set(valid_values)
+        if unknown_keys:
+            raise MalformedAiResponse("unknown_profile_key")
+        extracted: dict[str, str] = {}
+        for key, value in parsed.items():
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise MalformedAiResponse("invalid_profile_value_type")
+            if len(value) > 100:
+                raise MalformedAiResponse("oversized_profile_value")
+            if value not in valid_values[key]:
+                raise MalformedAiResponse("invalid_profile_enum")
+            extracted[key] = value
+        return extracted
+
+    async def analyze_growth_diary_entry(
+        self, prompt: str, *, image: bytes | None = None, image_mime_type: str | None = None
+    ) -> GeminiGrowthDiaryAnalysis | None:
         """One call produces both outputs 毛孩日記 needs: a warm reply for the
         adopter and an objective observation summary for shelter staff, plus
         a mood classification that decides whether staff also get pushed a
-        LINE notification (`concern`) or just the written record."""
+        LINE notification (`concern`) or just the written record. `image`
+        lets this look at the shared photo itself, not just its presence —
+        see growth_diary_ai_analysis_service.py's prompt builder."""
         try:
-            text = await self._generate_content(prompt)
+            text = await self._generate_content(
+                prompt, image=image, image_mime_type=image_mime_type
+            )
             parsed = json.loads(text)
             mood = str(parsed["mood"]).strip().lower()
             adopter_reply = str(parsed["adopter_reply"])
@@ -284,5 +528,53 @@ class GeminiClient:
             mood=mood,
             adopter_reply=adopter_reply,
             staff_summary=staff_summary,
+            raw_output=text,
+        )
+
+    async def analyze_growth_diary_entry_strict(
+        self, prompt: str, *, image: bytes | None = None, image_mime_type: str | None = None
+    ) -> GeminiGrowthDiaryAnalysis:
+        """Typed parser for durable Growth Diary processing."""
+        try:
+            text = await self._generate_content(
+                prompt, image=image, image_mime_type=image_mime_type
+            )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientAiError(type(exc).__name__) from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            error_type = TransientAiError if status == 429 or status >= 500 else PermanentAiError
+            raise error_type(f"gemini_http_{status}") from exc
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise MalformedAiResponse("invalid_growth_diary_json") from exc
+        if not isinstance(parsed, dict) or set(parsed) != {
+            "mood",
+            "adopter_reply",
+            "staff_summary",
+        }:
+            raise MalformedAiResponse("invalid_growth_diary_schema")
+        mood = parsed["mood"]
+        adopter_reply = parsed["adopter_reply"]
+        staff_summary = parsed["staff_summary"]
+        if not isinstance(mood, str) or mood not in _VALID_GROWTH_DIARY_MOODS:
+            raise MalformedAiResponse("invalid_growth_diary_mood")
+        if (
+            not isinstance(adopter_reply, str)
+            or not adopter_reply.strip()
+            or len(adopter_reply) > 1000
+        ):
+            raise MalformedAiResponse("invalid_growth_diary_adopter_reply")
+        if (
+            not isinstance(staff_summary, str)
+            or not staff_summary.strip()
+            or len(staff_summary) > 1000
+        ):
+            raise MalformedAiResponse("invalid_growth_diary_staff_summary")
+        return GeminiGrowthDiaryAnalysis(
+            mood=mood,
+            adopter_reply=adopter_reply.strip(),
+            staff_summary=staff_summary.strip(),
             raw_output=text,
         )

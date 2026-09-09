@@ -5,6 +5,29 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 MODE="${1:-serve}"
+reveal_demo_password=0
+for argument in "$@"; do
+  case "$argument" in
+    check|refresh|serve) MODE="$argument" ;;
+    --reveal-demo-password) reveal_demo_password=1 ;;
+    --help|-h)
+      echo "用法：$0 [check|refresh|serve] [--reveal-demo-password]"
+      echo "正常 demo：FurKids 5、新店犬最多 60、五股犬最多 60；不建立 ORG-A／ORG-B。"
+      echo "serve（預設）沿用已驗證的 PostgreSQL／MinIO 資料並啟動服務。"
+      echo "check 沿用已驗證資料，只 bootstrap／驗證，不啟動服務。"
+      echo "refresh 強制同步最新 MOA 資料、驗證後再啟動服務；同步失敗會以非零結束。"
+      echo "預設不輸出密碼；互動模式可加 --reveal-demo-password 確認後顯示一次。"
+      echo "非互動執行須設定 STRAYHUB_DEMO_PASSWORD。"
+      echo "舊 fixtures 請先預覽：uv run python -m scripts.cleanup_legacy_demo_fixtures；--yes 才刪除。"
+      echo "測試 fixtures 請使用獨立 DB：uv run python -m scripts.seed_test_fixtures"
+      exit 0
+      ;;
+    *)
+      echo "用法：$0 [check|refresh|serve] [--reveal-demo-password]" >&2
+      exit 2
+      ;;
+  esac
+done
 UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/strayhub-uv-cache}"
 export UV_CACHE_DIR
 export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://strayhub:strayhub@127.0.0.1:65432/strayhub}"
@@ -14,24 +37,6 @@ export API_PORT="${API_PORT:-8001}"
 export API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"
 export WEB_HOST="${WEB_HOST:-127.0.0.1}"
 export WEB_PORT="${WEB_PORT:-3001}"
-
-case "$MODE" in
-  check|refresh|serve) ;;
-  --help|-h)
-    echo "用法：$0 [check|refresh|serve]"
-    echo "正常 demo：FurKids 5、新店犬最多 60、五股犬最多 60；不建立 ORG-A／ORG-B。"
-    echo "serve（預設）沿用已驗證的 PostgreSQL／MinIO 資料並啟動服務。"
-    echo "check 沿用已驗證資料，只 bootstrap／驗證，不啟動服務。"
-    echo "refresh 強制同步最新 MOA 資料、驗證後再啟動服務；同步失敗會以非零結束。"
-    echo "舊 fixtures 請先預覽：uv run python -m scripts.cleanup_legacy_demo_fixtures；--yes 才刪除。"
-    echo "測試 fixtures 請使用獨立 DB：uv run python -m scripts.seed_test_fixtures"
-    exit 0
-    ;;
-  *)
-    echo "用法：$0 [check|refresh|serve]" >&2
-    exit 2
-    ;;
-esac
 
 require_command() {
   command -v "$1" >/dev/null || {
@@ -51,6 +56,28 @@ require_port_available() {
 
 require_command uv
 require_command npm
+
+demo_password_generated=0
+demo_password_reveal_confirmed=0
+if [[ -z "${STRAYHUB_DEMO_PASSWORD:-}" ]]; then
+  require_command openssl
+  if [[ ! -t 1 ]]; then
+    echo "非互動執行必須明確設定 STRAYHUB_DEMO_PASSWORD。" >&2
+    exit 1
+  fi
+  export STRAYHUB_DEMO_PASSWORD="$(openssl rand -hex 18)"
+  demo_password_generated=1
+fi
+if [[ "$demo_password_generated" == "1" && "$reveal_demo_password" == "1" ]]; then
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    echo "--reveal-demo-password 只允許互動式 terminal。" >&2
+    exit 2
+  fi
+  read -r -p "輸入 REVEAL 以顯示一次新 demo 密碼（注意 terminal capture 風險）：" confirmation
+  if [[ "$confirmation" == "REVEAL" ]]; then
+    demo_password_reveal_confirmed=1
+  fi
+fi
 
 # Check .env-aware settings before migrations, grants, data or storage writes.
 uv run python -m scripts.local_demo
@@ -90,11 +117,18 @@ else
 fi
 
 echo "[Demo] PASS"
-echo "Three-shelter manager: demo-furkids-admin / local-only-password"
-echo "Platform: demo-platform-admin / local-only-password"
-echo "FurKids volunteer: demo-furkids-volunteer / local-only-password"
-echo "Xindian volunteer: demo-xindian-volunteer / local-only-password"
-echo "Wugu volunteer: demo-wugu-volunteer / local-only-password"
+echo "Three-shelter manager: demo-furkids-admin"
+echo "Platform: demo-platform-admin"
+echo "FurKids volunteer: demo-furkids-volunteer"
+echo "Xindian volunteer: demo-xindian-volunteer"
+echo "Wugu volunteer: demo-wugu-volunteer"
+if [[ "$demo_password_reveal_confirmed" == "1" ]]; then
+  echo "Demo password (shown once; never place it in a URL): ${STRAYHUB_DEMO_PASSWORD}"
+elif [[ "$demo_password_generated" == "1" ]]; then
+  echo "Generated demo password withheld. Supply STRAYHUB_DEMO_PASSWORD or use --reveal-demo-password interactively."
+else
+  echo "Demo password supplied via STRAYHUB_DEMO_PASSWORD (not echoed)."
+fi
 echo "API:          http://${API_HOST}:${API_PORT}/healthz"
 echo "Web:          http://${WEB_HOST}:${WEB_PORT}"
 

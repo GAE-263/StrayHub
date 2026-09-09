@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import MethodType
 from uuid import UUID, uuid4
 
@@ -283,29 +283,14 @@ async def test_real_postgres_cross_shelter_summary_and_restoration() -> None:
                         fixture.reviewer_a, fixture.organization_a, "SHELTER_ADMIN"
                     ),
                     purpose_code=SUMMARY_PURPOSE,
-                    cursor=None,
-                    cursor_secret="real-rls-test-secret",
-                    limit=100,
+                    as_of=date(2026, 8, 24),
                 )
-                assert {item.organization_id for item in page.items} == {
-                    fixture.organization_a,
-                    fixture.organization_b,
-                }
-                assert fixture.organization_c not in {item.organization_id for item in page.items}
-                assert all(
-                    set(item.__dict__)
-                    == {
-                        "organization_id",
-                        "organization_name",
-                        "service_date",
-                        "service_status",
-                        "record_count",
-                        "source",
-                    }
-                    for item in page.items
-                )
-                assert "synthetic-answer" not in repr(page.items)
-                assert "synthetic-care-note" not in repr(page.items)
+                assert page.statistics.total_strayhub_visits == 2
+                assert page.statistics.current_shelter_visits == 1
+                assert page.has_active_platform_restriction is False
+                assert not hasattr(page, "items")
+                assert "synthetic-answer" not in repr(page)
+                assert "synthetic-care-note" not in repr(page)
 
                 assert await access_repository.application(fixture.application_x) is not None
                 assert (
@@ -362,7 +347,7 @@ async def test_real_postgres_summary_restores_scope_after_exception() -> None:
 
                 session.execute = MethodType(fail_select, session)  # type: ignore[method-assign]
                 with pytest.raises(RuntimeError, match="forced summary query failure"):
-                    await repository.list_for_subject(fixture.volunteer_x)
+                    await repository.list_visit_records(fixture.volunteer_x)
                 session.execute = original_execute  # type: ignore[method-assign]
 
                 assert (
@@ -537,9 +522,7 @@ async def test_real_postgres_summary_denies_unauthorized_callers() -> None:
                             fixture.application_x,
                             tenant_context=context,
                             purpose_code=SUMMARY_PURPOSE,
-                            cursor=None,
-                            cursor_secret="real-rls-test-secret",
-                            limit=100,
+                            as_of=date(2026, 8, 24),
                         )
                     assert error.value.status_code == 403
     finally:

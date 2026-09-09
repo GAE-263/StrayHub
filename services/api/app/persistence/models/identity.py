@@ -1,7 +1,18 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Uuid, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.api.app.persistence.database.base import AuditMixin, Base, IdentityMixin, utc_now
@@ -40,6 +51,7 @@ class User(IdentityMixin, AuditMixin, Base):
 class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     __tablename__ = "organization_memberships"
     __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_organization_memberships_org_id"),
         CheckConstraint(
             "role <> 'VOLUNTEER' OR "
             "(valid_from IS NOT NULL AND expires_at IS NOT NULL AND expires_at > valid_from)",
@@ -51,6 +63,10 @@ class OrganizationMembership(IdentityMixin, AuditMixin, Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
+    volunteer_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    can_assist_new_volunteers: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     archived_from_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -66,13 +82,34 @@ class OrganizationMembership(IdentityMixin, AuditMixin, Base):
 
 class SessionRecord(IdentityMixin, AuditMixin, Base):
     __tablename__ = "session_records"
+    __table_args__ = (
+        CheckConstraint(
+            "session_origin IN ('legacy', 'local_web', 'liff', 'remote_management_demo')",
+            name="ck_session_records_origin",
+        ),
+        CheckConstraint(
+            "(session_origin = 'remote_management_demo' AND "
+            "public_profile IN ('shared-demo-production', 'shared-demo-dev')) OR "
+            "(session_origin IN ('legacy', 'local_web', 'liff') AND "
+            "public_profile IS NULL)",
+            name="ck_session_records_origin_profile",
+        ),
+        Index("ix_session_records_origin_status", "session_origin", "status"),
+    )
 
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    account_access_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     active_organization_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("organizations.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    session_origin: Mapped[str] = mapped_column(
+        String(40), default="legacy", server_default="legacy", nullable=False
+    )
+    public_profile: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class RefreshTokenRecord(IdentityMixin, AuditMixin, Base):
@@ -85,9 +122,104 @@ class RefreshTokenRecord(IdentityMixin, AuditMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class LoginAccountAbuseState(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "login_account_abuse_states"
+    __table_args__ = (
+        CheckConstraint(
+            "consecutive_failures >= 0 AND consecutive_failures <= 5",
+            name="ck_login_account_abuse_failure_range",
+        ),
+    )
+
+    subject_digest: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LoginIpAttempt(IdentityMixin, Base):
+    __tablename__ = "login_ip_attempts"
+    __table_args__ = (Index("ix_login_ip_attempt_source_time", "source_digest", "attempted_at"),)
+
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GoogleUserBinding(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "google_user_bindings"
+
+    google_sub: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+
+
+class GoogleAuthTransaction(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "google_auth_transactions"
+
+    purpose: Mapped[str] = mapped_column(String(20), nullable=False)
+    browser_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    csrf_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    nonce_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    session_id: Mapped[UUID | None] = mapped_column(ForeignKey("session_records.id"), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class OrganizationInvitation(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "organization_invitations"
+    __table_args__ = (
+        CheckConstraint("role IN ('STAFF', 'SHELTER_ADMIN')", name="ck_invitation_role"),
+        CheckConstraint(
+            "status IN ('open', 'claimed', 'approved', 'revoked')", name="ck_invitation_status"
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
+    organization_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    token_digest: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    claimed_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class OrganizationJoinApplication(IdentityMixin, AuditMixin, Base):
+    __tablename__ = "organization_join_applications"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','approved','rejected')", name="ck_join_status"),
+        CheckConstraint("role IS NULL OR role IN ('STAFF','SHELTER_ADMIN')", name="ck_join_role"),
+        Index("ix_join_user", "user_id"),
+        Index("ix_join_org", "organization_id"),
+        Index(
+            "uq_join_pending",
+            "organization_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"))
+    organization_name: Mapped[str] = mapped_column(String(200))
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    role: Mapped[str | None] = mapped_column(String(30))
+    reviewed_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class LineUserBinding(IdentityMixin, AuditMixin, Base):
     __tablename__ = "line_user_bindings"
 
+    # Conversation preference only; never grants shelter access. NULL is legacy.
+    current_flow: Mapped[str | None] = mapped_column(String(30), nullable=True)
     line_user_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)

@@ -15,7 +15,6 @@ import { statusLabel } from "../components/management/ui-status";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Table } from "../components/ui/table";
 
 type Dashboard = {
   organization_id: string;
@@ -30,9 +29,29 @@ type Dashboard = {
   recent_reports: Array<{
     id: string;
     animal_id: string;
+    animal_name: string;
+    animal_shelter_number: string | null;
     submitted_at: string;
     status: string;
     ai_job_status: string;
+  }>;
+  recent_anomalies: Array<{
+    animal_id: string;
+    animal_name: string;
+    animal_shelter_number: string | null;
+    report_id: string;
+    attention_level: string;
+    submitted_at: string;
+  }>;
+  today_special_care: Array<{
+    occurrence_id: string;
+    animal_id: string;
+    animal_name: string;
+    shelter_number: string | null;
+    reminder_type: string;
+    title: string;
+    scheduled_at: string;
+    status: string;
   }>;
 };
 
@@ -42,6 +61,45 @@ const metrics = [
   ["active_draft_count", "未完成 Draft"],
   ["pending_ai_count", "待處理 AI"],
 ] as const;
+
+const REPORT_STATUS_LABELS: Record<string, string> = {
+  saved: "回報已送出",
+  amended: "已修正回報",
+};
+
+const AI_JOB_STATUS_LABELS: Record<string, string> = {
+  not_required: "不需要 AI 覆核",
+  pending: "等待 AI 處理",
+  pending_enqueue: "等待 AI 處理",
+  enqueue_failed: "AI 派工失敗",
+  retry_wait: "等待重試",
+  running: "AI 處理中",
+  succeeded: "AI 已完成，待覆核",
+  failed: "AI 處理失敗",
+  invalid: "AI 結果無效",
+};
+
+function reportStatusLabel(value: string) {
+  return REPORT_STATUS_LABELS[value] ?? statusLabel(value);
+}
+
+function aiJobStatusLabel(value: string) {
+  return AI_JOB_STATUS_LABELS[value] ?? statusLabel(value);
+}
+
+const ATTENTION_LEVEL_LABELS: Record<string, string> = {
+  urgent: "緊急",
+  review: "需複核",
+};
+
+const REMINDER_TYPE_LABELS: Record<string, string> = {
+  medication: "吃藥",
+  follow_up: "回診",
+  weight: "量體重",
+  vaccination: "疫苗",
+  examination: "檢查",
+  other: "其他",
+};
 
 export default function ManagementHome() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -115,6 +173,44 @@ export default function ManagementHome() {
               </Card>
             ))}
           </div>
+          <Card
+            className="ui-card-padded today-special-care-panel"
+            aria-labelledby="today-special-care-title"
+          >
+            <div className="panel-heading">
+              <h2 id="today-special-care-title">今日特別照護</h2>
+              <Link className="text-link" href="/care-calendar">
+                開啟照護行事曆 →
+              </Link>
+            </div>
+            {dashboard.today_special_care.length === 0 ? (
+              <EmptyState title="今日沒有待處理的特別照護" />
+            ) : (
+              <div className="care-scroll">
+                {dashboard.today_special_care.map((item) => (
+                  <Link
+                    className="care-scroll-item"
+                    key={item.occurrence_id}
+                    href={`/animals/${item.animal_id}`}
+                  >
+                    <Badge>
+                      {REMINDER_TYPE_LABELS[item.reminder_type] ?? "其他"}
+                    </Badge>
+                    <strong>{item.animal_name}</strong>
+                    {item.shelter_number ? (
+                      <span className="recent-report-shelter-no">
+                        {item.shelter_number}
+                      </span>
+                    ) : null}
+                    <p>{item.title}</p>
+                    <span className="muted">
+                      {new Date(item.scheduled_at).toLocaleString("zh-TW")}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
           <div className="content-grid">
             <Card
               className="ui-card-padded"
@@ -134,39 +230,89 @@ export default function ManagementHome() {
                   }
                 />
               ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>提交時間</th>
-                      <th>Animal ID</th>
-                      <th>狀態</th>
-                      <th>AI</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div className="recent-reports-table">
+                  <div className="recent-report-row recent-report-header">
+                    <span>動物</span>
+                    <span>回報狀態</span>
+                    <span>AI 處理</span>
+                    <span>提交時間</span>
+                  </div>
+                  <ul className="recent-reports-list">
                     {dashboard.recent_reports.map((report) => (
-                      <tr key={report.id}>
-                        <td>
-                          {new Date(report.submitted_at).toLocaleString(
+                      <li key={report.id}>
+                        <Link
+                          className="recent-report-row"
+                          href={`/animals/${report.animal_id}`}
+                        >
+                          <div className="recent-report-animal">
+                            <strong>{report.animal_name}</strong>
+                            {report.animal_shelter_number ? (
+                              <span className="recent-report-shelter-no">
+                                {report.animal_shelter_number}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="recent-report-badges">
+                            <Badge>{reportStatusLabel(report.status)}</Badge>
+                          </div>
+                          <div className="recent-report-badges">
+                            <Badge>
+                              {aiJobStatusLabel(report.ai_job_status)}
+                            </Badge>
+                          </div>
+                          <span className="recent-report-time muted">
+                            {new Date(report.submitted_at).toLocaleString(
+                              "zh-TW",
+                            )}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+            <Card
+              className="ui-card-padded"
+              aria-labelledby="recent-anomalies-title"
+            >
+              <div className="panel-heading">
+                <h2 id="recent-anomalies-title">2 週內異常動物</h2>
+                <Link className="text-link" href="/reports">
+                  開啟回報收件匣 →
+                </Link>
+              </div>
+              {dashboard.recent_anomalies.length === 0 ? (
+                <EmptyState title="近 2 週沒有異常回報" />
+              ) : (
+                <ul className="anomaly-list">
+                  {dashboard.recent_anomalies.map((anomaly) => (
+                    <li key={anomaly.report_id}>
+                      <Link
+                        className="anomaly-item"
+                        href={`/animals/${anomaly.animal_id}`}
+                      >
+                        <div className="anomaly-item-heading">
+                          <strong>{anomaly.animal_name}</strong>
+                          <Badge>
+                            {ATTENTION_LEVEL_LABELS[anomaly.attention_level] ??
+                              anomaly.attention_level}
+                          </Badge>
+                        </div>
+                        {anomaly.animal_shelter_number ? (
+                          <span className="recent-report-shelter-no">
+                            {anomaly.animal_shelter_number}
+                          </span>
+                        ) : null}
+                        <span className="muted">
+                          {new Date(anomaly.submitted_at).toLocaleString(
                             "zh-TW",
                           )}
-                        </td>
-                        <td>
-                          <Link
-                            className="text-link"
-                            href={`/animals/${report.animal_id}`}
-                          >
-                            {report.animal_id.slice(0, 8)}…
-                          </Link>
-                        </td>
-                        <td>
-                          <Badge>{statusLabel(report.status)}</Badge>
-                        </td>
-                        <td>{statusLabel(report.ai_job_status)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               )}
             </Card>
             <Card

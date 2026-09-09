@@ -96,11 +96,16 @@ endpoint_code() {
 runtime_ready() {
   container_ready postgres true || return 1
   container_ready minio true || return 1
+  container_ready redis true || return 1
   container_ready api true || return 1
   container_ready web true || return 1
   container_ready worker false || return 1
+  container_ready celery-worker true || return 1
+  container_ready celery-beat false || return 1
   verify_exact_image api STRAYHUB_API_IMAGE || return 1
   verify_exact_image worker STRAYHUB_WORKER_IMAGE || return 1
+  verify_exact_image celery-worker STRAYHUB_WORKER_IMAGE || return 1
+  verify_exact_image celery-beat STRAYHUB_WORKER_IMAGE || return 1
   verify_exact_image web STRAYHUB_WEB_IMAGE || return 1
   [[ "$(endpoint_code "$api_port" /healthz)" == "200" ]] || return 1
   [[ "$(endpoint_code "$web_port" /)" == "200" ]] || return 1
@@ -118,4 +123,4 @@ until runtime_ready; do
   sleep 3
 done
 
-printf '[Systemd runtime health] PASS: direct API/Web upstreams, Worker, PostgreSQL, and MinIO\n'
+printf '[Systemd runtime health] PASS: API/Web, PostgreSQL, MinIO, Redis, legacy Worker, Celery Worker, and singleton Beat\n'

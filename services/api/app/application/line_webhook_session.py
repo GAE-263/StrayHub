@@ -28,6 +28,11 @@ class LineWebhookSessionService:
         if user is None or user.status != "active":
             raise DomainError("line_binding_invalid", "LINE 身分綁定無效", 403)
 
+        # The verified LINE binding is the only authority used to establish this
+        # transaction-local pre-tenant scope.  Without it, the runtime role's RLS
+        # correctly hides memberships and webhook sessions, making a user with one
+        # effective membership look unaffiliated.
+        await self.authentication.set_authentication_user_scope(user.id)
         memberships = await self.authentication.memberships(user.id, active_only=True)
         sessions = await self.identity.sessions(user.id)
         if len(sessions) > 1:
@@ -49,6 +54,10 @@ class LineWebhookSessionService:
         if organization is None or organization.status != "active":
             raise DomainError("organization_disabled", "收容所目前停用", 403)
 
+        # Narrow the scope before returning an existing session or creating the
+        # inferred single-membership session.  The webhook_sessions RLS write
+        # predicate requires this exact user/organization pair.
+        await self.authentication.set_authentication_context_scope(user.id, organization.id)
         if session is not None:
             return session
 

@@ -5,6 +5,56 @@ import { CareAgenda } from "./CareAgenda";
 import { CareAgendaFilters } from "./CareAgendaFilters";
 
 describe("CareAgenda", () => {
+  it("hides care mutation controls in a shared public profile", () => {
+    const markup = renderToStaticMarkup(
+      <CareAgenda
+        loading={false}
+        error=""
+        readOnly
+        data={{
+          timezone: "Asia/Taipei",
+          timezone_version: 1,
+          local_today: "2026-08-16",
+          buckets: {
+            today_pending: [
+              {
+                occurrence_id: "occurrence-1",
+                animal_id: "animal-1",
+                animal_name: "小白",
+                shelter_number: "A-001",
+                reminder_type: "medication",
+                title: "吃藥",
+                instructions: "依指示",
+                scheduled_at: "2026-08-16T09:00:00+08:00",
+                status: "pending",
+                version: 0,
+                is_virtual: true,
+                assignee_membership_id: null,
+              },
+            ],
+            overdue: [],
+            today_resolved: [],
+            next_seven_days: [],
+          },
+          totals: {
+            today_pending: 1,
+            overdue: 0,
+            today_resolved: 0,
+            next_seven_days: 0,
+          },
+          pages: {
+            today_pending: { items: [], total_count: 1, next_cursor: null },
+            overdue: { items: [], total_count: 0, next_cursor: null },
+            today_resolved: { items: [], total_count: 0, next_cursor: null },
+            next_seven_days: { items: [], total_count: 0, next_cursor: null },
+          },
+        }}
+      />,
+    );
+    expect(markup).not.toContain(">處理<");
+    expect(markup).toContain("查看動物");
+  });
+
   it("keeps four visible sections and distinguishes empty sections", () => {
     const markup = renderToStaticMarkup(
       <CareAgenda

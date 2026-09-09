@@ -1,0 +1,22 @@
+{
+  "pages": {
+    "/layout": ["static/chunks/layout-fixture.js", "static/css/shared-fixture.css", "static/chunks/layout-fixture.js.map"],
+    "/(management)/layout": ["static/chunks/management-layout-fixture.js"],
+    "/(management)/page": ["static/chunks/home-fixture.js"],
+    "/(management)/animals/page": ["static/chunks/animals-fixture.js"],
+    "/(management)/animals/[animalId]/page": ["static/chunks/animal-detail-fixture.js"],
+    "/(management)/animals/[animalId]/timeline/page": ["static/chunks/timeline-fixture.js"],
+    "/(management)/reports/page": ["static/chunks/reports-fixture.js"],
+    "/(management)/reports/[reportId]/page": ["static/chunks/report-detail-fixture.js"],
+    "/(management)/ai-review/page": ["static/chunks/ai-review-fixture.js"],
+    "/(management)/care-calendar/page": ["static/chunks/care-calendar-fixture.js"],
+    "/login/page": ["static/chunks/login-fixture.js"],
+    "/(volunteer)/layout": ["static/chunks/volunteer-layout-fixture.js"],
+    "/(volunteer)/volunteer-entry/page": ["static/chunks/volunteer-entry-fixture.js"],
+    "/(volunteer)/animal-confirmation/page": ["static/chunks/animal-confirmation-fixture.js"],
+    "/(volunteer)/care-report/page": ["static/chunks/care-report-fixture.js"],
+    "/(volunteer-onboarding)/layout": ["static/chunks/onboarding-layout-fixture.js"],
+    "/(volunteer-onboarding)/volunteer-application/page": ["static/chunks/volunteer-application-fixture.js"],
+    "/(management)/unlisted/page": ["static/chunks/unlisted-fixture.js"]
+  }
+}

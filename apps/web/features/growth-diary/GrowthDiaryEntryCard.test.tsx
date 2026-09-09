@@ -99,7 +99,9 @@ describe("GrowthDiaryEntryCard", () => {
     expect(fetchDetail).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("detail-only-secret");
 
-    const button = container.querySelector("button");
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent?.includes("查看 AI 來源"),
+    );
     expect(button?.textContent).toContain("查看 AI 來源");
     await act(async () => button?.click());
 
@@ -122,7 +124,11 @@ describe("GrowthDiaryEntryCard", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(<GrowthDiaryEntryCard entry={legacy} />));
-    await act(async () => container.querySelector("button")?.click());
+    const provenanceButton = () =>
+      Array.from(container.querySelectorAll("button")).find((candidate) =>
+        candidate.textContent?.includes("AI 來源"),
+      );
+    await act(async () => provenanceButton()?.click());
 
     expect(container.textContent).toContain("AI 來源資訊暫時無法載入");
     expect(container.textContent).toContain("這兩天米糕吃得比較少");
@@ -140,8 +146,8 @@ describe("GrowthDiaryEntryCard", () => {
       },
       ai_raw_output: null,
     });
-    await act(async () => container.querySelector("button")?.click());
-    await act(async () => container.querySelector("button")?.click());
+    await act(async () => provenanceButton()?.click());
+    await act(async () => provenanceButton()?.click());
     expect(container.textContent).toContain("來源資訊未留存");
     await act(async () => root.unmount());
   });

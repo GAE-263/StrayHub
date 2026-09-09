@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.app.observability.logging import mask_sensitive
 from services.api.app.persistence.database.base import model_dump_for_audit
 from services.api.app.persistence.models.audit import AuditRecord
 
@@ -31,7 +32,11 @@ class AuditService:
     ) -> AuditRecord:
         if not action or not resource_type or not source_channel:
             raise ValueError("audit action, resource_type and source_channel are required")
-        if organization_id is None and resource_type not in {"organization", "platform"}:
+        if resource_type == "account" and (
+            organization_id is not None or actor_user_id is None or resource_id != actor_user_id
+        ):
+            raise ValueError("account audit must reference the authenticated actor")
+        if organization_id is None and resource_type not in {"organization", "platform", "account"}:
             raise ValueError("tenant business audit records require an organization scope")
         if actor_user_id is None and not (actor_reference or "").strip():
             raise ValueError("system audit records require actor_reference")
@@ -47,9 +52,11 @@ class AuditService:
             resource_type=resource_type,
             resource_id=resource_id,
             source_channel=source_channel,
-            before_data=model_dump_for_audit(before) if before is not None else None,
-            after_data=model_dump_for_audit(after) if after is not None else None,
-            reason=reason,
+            before_data=(
+                mask_sensitive(model_dump_for_audit(before)) if before is not None else None
+            ),
+            after_data=(mask_sensitive(model_dump_for_audit(after)) if after is not None else None),
+            reason=mask_sensitive(reason) if reason is not None else None,
             result=result,
         )
         self.session.add(record)

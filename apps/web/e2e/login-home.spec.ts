@@ -1,12 +1,27 @@
 import { test, expect } from "@playwright/test";
 import { mockLoginApi, mockManagementApi } from "./fixtures";
 
+// Password regression stays independent of local Google configuration.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/v1/auth/google/config", (route) =>
+    route.fulfill({ json: { enabled: false } }),
+  );
+});
+
 const viewports = [
   { width: 360, height: 800 },
   { width: 768, height: 1024 },
   { width: 1024, height: 768 },
   { width: 1440, height: 900 },
 ];
+
+const loginUsername = "synthetic-login-user";
+const loginPassword = "synthetic-login-password";
+
+async function fillLogin(page: import("@playwright/test").Page) {
+  await page.getByLabel("帳號").fill(loginUsername);
+  await page.getByLabel("密碼").fill(loginPassword);
+}
 
 for (const viewport of viewports) {
   test(`/login 在 ${viewport.width}x${viewport.height} 可完成登入`, async ({
@@ -16,9 +31,11 @@ for (const viewport of viewports) {
     await mockLoginApi(page);
     await page.goto("/login");
     await expect(
-      page.getByRole("heading", { name: "浪浪森友會管理入口" }),
+      page.getByRole("heading", { name: "歡迎回到森友會" }),
     ).toBeVisible();
-    await expect(page.getByLabel("帳號")).toHaveValue("demo-furkids-admin");
+    await expect(page.getByLabel("帳號")).toHaveValue("");
+    await expect(page.getByLabel("密碼")).toHaveValue("");
+    await fillLogin(page);
     await page.getByRole("button", { name: "登入" }).click();
     await expect(page).toHaveURL(/\/$/);
   });
@@ -64,6 +81,7 @@ test("登入後可選擇多收容所 Active Shelter Context", async ({ page }) =
     },
   ]);
   await page.goto("/login");
+  await fillLogin(page);
   await page.getByRole("button", { name: "登入" }).click();
   await expect(
     page.getByRole("heading", { name: "確認目前收容所" }),
@@ -79,6 +97,7 @@ test("tenantless PLATFORM_ADMIN 可登入平台治理", async ({ page }) => {
     platformRole: "PLATFORM_ADMIN",
   });
   await page.goto("/login");
+  await fillLogin(page);
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page).toHaveURL(/\/platform-admins$/);
 });

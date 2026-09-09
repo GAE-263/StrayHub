@@ -1,0 +1,346 @@
+version: 1
+status: authoritative
+guarantee: partial_static_plus_runtime
+classifications:
+  A:
+    name: Forbidden in URL
+    authorization_effect: bearer_or_authentication_secret
+  B:
+    name: Restricted URL Capability
+    authorization_effect: narrowly_scoped_capability
+  C:
+    name: Public Identifier
+    authorization_effect: none_server_must_reauthorize
+  D:
+    name: Ordinary Query
+    authorization_effect: none
+
+entries:
+  - name: login_password
+    parameter: password
+    class: A
+    owner: apps/web/app/login
+    purpose: interactive login request body only
+    routes: ["/login", "/v1/auth/login"]
+    ttl: forbidden
+    reusable: false
+    revocable: false
+    tenant_scope: none
+    resource_scope: none
+    logging_policy: redact_value
+    referer_policy: no_referrer
+    analytics_policy: omit
+    exposure: forbidden
+    scrub: reject_and_replace_url
+    mitigation: JSON POST body and login URL canonicalization
+    tests: ["apps/web/e2e/login-url-safety.spec.ts"]
+    review_trigger: login transport or authentication contract change
+
+  - name: temporary_password
+    parameter: temporary_password
+    aliases: ["temporary-password"]
+    class: A
+    owner: services/api/app/application/authentication
+    purpose: one-time credential exchange outside URLs
+    routes: ["*"]
+    ttl: forbidden
+    reusable: false
+    revocable: true
+    tenant_scope: user
+    resource_scope: session
+    logging_policy: redact_value
+    referer_policy: never_in_url
+    analytics_policy: omit
+    exposure: forbidden
+    scrub: reject
+    mitigation: body-only transport and centralized redaction
+    tests: ["tests/security/test_observability_logging.py"]
+    review_trigger: credential bootstrap or reset flow change
+
+  - name: access_token
+    parameter: access_token
+    class: A
+    owner: services/api/app/application/authentication
+    purpose: authenticated API access via Authorization header
+    routes: ["*"]
+    ttl: configured_session_policy
+    reusable: true
+    revocable: true
+    tenant_scope: active_organization_context
+    resource_scope: session
+    logging_policy: redact_value
+    referer_policy: never_in_url
+    analytics_policy: omit
+    exposure: forbidden_in_url
+    scrub: reject
+    mitigation: Authorization header or response body only
+    tests: ["tests/security/test_observability_logging.py"]
+    review_trigger: access-token transport or session architecture change
+
+  - name: refresh_token
+    parameter: refresh_token
+    class: A
+    owner: services/api/app/application/authentication
+    purpose: session renewal request body only
+    routes: ["/v1/auth/refresh"]
+    ttl: configured_session_policy
+    reusable: true
+    revocable: true
+    tenant_scope: session
+    resource_scope: session
+    logging_policy: redact_value
+    referer_policy: never_in_url
+    analytics_policy: omit
+    exposure: forbidden_in_url
+    scrub: reject
+    mitigation: JSON POST body only
+    tests: ["tests/security/test_observability_logging.py"]
+    review_trigger: refresh flow change
+
+  - name: line_id_token
+    parameter: id_token
+    class: A
+    owner: apps/web/app/(volunteer)/volunteer-entry/liffUrl.ts
+    purpose: LINE identity assertion in request body only
+    routes: ["/volunteer-entry", "/volunteer-application", "/v1/auth/liff/exchange"]
+    ttl: provider_defined
+    reusable: false
+    revocable: provider_defined
+    tenant_scope: candidate_then_server_verified
+    resource_scope: LINE identity
+    logging_policy: redact_value
+    referer_policy: no_referrer
+    analytics_policy: omit
+    exposure: forbidden_in_url
+    scrub: replace_before_exchange
+    mitigation: legacy query scrub and body-only exchange
+    tests: ["apps/web/app/(volunteer)/volunteer-entry/page.test.tsx"]
+    review_trigger: LIFF exchange or recovery change
+
+  - name: authorization
+    parameter: authorization
+    class: A
+    owner: services/api/app/api/dependencies.py
+    purpose: HTTP authentication header
+    routes: ["*"]
+    ttl: credential_defined
+    reusable: true
+    revocable: true
+    tenant_scope: active_organization_context
+    resource_scope: session
+    logging_policy: redact_value
+    referer_policy: never_in_url
+    analytics_policy: omit
+    exposure: forbidden_in_url
+    scrub: reject
+    mitigation: header-only transport and centralized redaction
+    tests: ["tests/security/test_observability_logging.py"]
+    review_trigger: authentication middleware change
+
+  - name: provider_secret
+    parameter: provider_secret
+    aliases: ["api_secret", "api_key", "client_secret", "line_channel_secret"]
+    class: A
+    owner: services/api/app/config/settings.py
+    purpose: server-side provider authentication
+    routes: ["*"]
+    ttl: provider_defined
+    reusable: true
+    revocable: true
+    tenant_scope: deployment
+    resource_scope: provider account
+    logging_policy: redact_value
+    referer_policy: never_in_url
+    analytics_policy: omit
+    exposure: server_only
+    scrub: reject
+    mitigation: environment configuration and centralized redaction
+    tests: ["tests/security/test_observability_logging.py"]
+    review_trigger: provider integration or settings change
+
+  - name: volunteer_walk_photo_capability
+    parameter: token
+    class: B
+    owner: services/api/app/application/media_access.py
+    purpose: volunteer_walk_photo
+    routes: ["/v1/public/animals/{animal_id}/photo"]
+    ttl: 300_seconds
+    reusable: true
+    revocable: false
+    tenant_scope: signed_organization_id
+    resource_scope: signed_animal_id_and_object_key
+    logging_policy: query_free_sensitive_route
+    referer_policy: no_referrer
+    analytics_policy: path_only
+    exposure: public_https_for_LINE_fetch
+    scrub: expires_naturally
+    mitigation: HMAC signature, purpose and exact tenant/resource binding
+    tests: ["tests/integration/test_public_adoption_photo.py"]
+    review_trigger: photo URL, signing key, purpose, binding, or TTL change
+
+  - name: public_adoption_photo_capability
+    parameter: token
+    class: B
+    owner: services/api/app/application/media_access.py
+    purpose: public_adoption_photo
+    routes: ["/v1/public/adoption/animals/{animal_id}/photo"]
+    ttl: 300_seconds
+    reusable: true
+    revocable: false
+    tenant_scope: signed_organization_id
+    resource_scope: signed_animal_id_and_object_key
+    logging_policy: query_free_sensitive_route
+    referer_policy: no_referrer
+    analytics_policy: path_only
+    exposure: public_https
+    scrub: expires_naturally
+    mitigation: HMAC signature, purpose and exact tenant/resource binding
+    tests: ["tests/integration/test_public_adoption_photo.py"]
+    review_trigger: adoption policy, photo URL, signing key, binding, or TTL change
+
+  - name: volunteer_entry_reference
+    parameter: entry
+    aliases: ["shelter_entry_reference"]
+    class: B
+    owner: services/api/app/application/volunteer_access_service.py
+    purpose: shelter_volunteer_entry
+    routes: ["/volunteer-entry", "/volunteer-application"]
+    ttl: 90_days
+    reusable: true
+    revocable: true
+    tenant_scope: database_organization_id
+    resource_scope: entry_reference_record
+    logging_policy: query_free_sensitive_route
+    referer_policy: no_referrer
+    analytics_policy: path_only
+    exposure: public_LIFF_entry
+    scrub: after_exchange_or_terminal_recovery
+    mitigation: digest storage, expiry, revoke and rotation
+    tests: ["tests/isolation/test_liff_entry_isolation.py", "apps/web/app/(volunteer)/volunteer-entry/page.test.tsx"]
+    review_trigger: LIFF entry issue, exchange, recovery, expiry, revoke, or rotate change
+    implementation_status: discrepancy_missing_route_specific_referrer_header
+
+  - name: animal_qr_locator
+    parameter: qr_token
+    aliases: ["token"]
+    class: B
+    owner: services/api/app/application/qr_token_service.py
+    purpose: animal_confirmation_locator
+    routes: ["/animal-confirmation"]
+    ttl: no_fixed_ttl
+    reusable: true
+    revocable: true
+    tenant_scope: database_organization_id
+    resource_scope: animal_id_and_qr_record
+    logging_policy: query_free_sensitive_route
+    referer_policy: no_referrer
+    analytics_policy: path_only
+    exposure: printable_QR_and_LIFF
+    scrub: capture_then_replace
+    mitigation: digest storage, server tenant check, revoke and regenerate
+    tests: ["tests/unit/test_qr_management.py", "apps/web/e2e/animal-confirmation-qr.spec.ts"]
+    review_trigger: QR issue, resolve, revoke, regenerate, or deep-link change
+    implementation_status: discrepancy_missing_route_specific_referrer_header
+
+  - name: staff_signed_media_url
+    parameter: signed_url
+    class: B
+    owner: services/api/app/application/media_access.py
+    purpose: authenticated_staff_media_download
+    routes: ["/v1/media/{media_id}/download-url", "/v1/animals/selection"]
+    ttl: 300_seconds
+    reusable: true
+    revocable: false
+    tenant_scope: authenticated_current_organization
+    resource_scope: storage_object_key
+    logging_policy: redact_response_value
+    referer_policy: no_referrer
+    analytics_policy: omit_value
+    exposure: authenticated_response_only
+    scrub: expires_naturally
+    mitigation: role and current-tenant authorization before storage signing
+    tests: ["tests/isolation/test_timeline_and_media_isolation.py"]
+    review_trigger: media authorization, response logging, signer, or TTL change
+
+  - name: application_status_url_token
+    parameter: application_status_token
+    class: B
+    owner: not_found
+    purpose: requested_inventory_check
+    routes: []
+    ttl: not_found
+    reusable: not_found
+    revocable: not_found
+    tenant_scope: not_found
+    resource_scope: not_found
+    logging_policy: forbidden_until_registered
+    referer_policy: no_referrer
+    analytics_policy: omit
+    exposure: not_found
+    scrub: not_found
+    mitigation: do not introduce without registry review
+    tests: ["tests/security/test_sensitive_url_registry.py"]
+    review_trigger: any application-status capability proposal
+
+  - name: organization_hint
+    parameter: organization_id
+    aliases: ["organization"]
+    class: C
+    owner: services/api/app/api/dependencies.py
+    purpose: candidate tenant routing hint only
+    routes: ["/volunteer-application", "/animal-confirmation"]
+    ttl: none
+    reusable: true
+    revocable: false
+    tenant_scope: candidate_only_server_reauthorizes
+    resource_scope: organization_identifier
+    logging_policy: standard_or_path_only_when_route_sensitive
+    referer_policy: route_policy
+    analytics_policy: allowed_when_route_policy_allows
+    exposure: public_identifier
+    scrub: optional_after_resolution
+    mitigation: never use client value as authorization
+    tests: ["tests/isolation/test_liff_entry_isolation.py"]
+    review_trigger: any authorization use of client organization ID
+
+  - name: public_resource_identifier
+    parameter: resource_id
+    aliases: ["animal_id", "media_id"]
+    class: C
+    owner: services/api/app/api
+    purpose: identify resource subject to server authorization
+    routes: ["*"]
+    ttl: none
+    reusable: true
+    revocable: false
+    tenant_scope: server_reauthorizes
+    resource_scope: route_resource
+    logging_policy: path_allowed
+    referer_policy: route_policy
+    analytics_policy: allowed
+    exposure: public_identifier
+    scrub: none
+    mitigation: server-side tenant and role checks
+    tests: ["tests/isolation"]
+    review_trigger: route authorization change
+
+  - name: search_query
+    parameter: search
+    aliases: ["query", "q", "page", "page_size", "cursor", "date", "date_from", "date_to", "sort", "status", "v", "view", "recovery"]
+    class: D
+    owner: route_owner
+    purpose: filtering, pagination, presentation, recovery state, or cache version
+    routes: ["*"]
+    ttl: none
+    reusable: true
+    revocable: false
+    tenant_scope: none
+    resource_scope: none
+    logging_policy: retain_on_ordinary_routes
+    referer_policy: route_policy
+    analytics_policy: allowed_subject_to_data_minimization
+    exposure: ordinary_query
+    scrub: none
+    mitigation: route validation; never reinterpret as authorization
+    tests: ["tests/security/test_sensitive_url_registry.py", "tests/security/test_observability_logging.py"]
+    review_trigger: query becomes credential, capability, or sensitive personal data

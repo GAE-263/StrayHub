@@ -27,6 +27,9 @@ REQUIRED_SCALARS = {
     "LINE_CHANNEL_SECRET",
     "LINE_CHANNEL_ACCESS_TOKEN",
     "ANIMAL_CONFIRMATION_SECRET",
+    "LOGIN_ABUSE_HMAC_SECRET",
+    "REDIS_PASSWORD",
+    "CELERY_BROKER_URL",
 }
 REQUIRED_FILES = {
     "AUTH_JWT_ACTIVE_PRIVATE_KEY": "jwt-private.pem",
@@ -61,6 +64,9 @@ def _write_source(source: Path, *, database_suffix: str = "one") -> dict[str, st
         "LINE_CHANNEL_SECRET": "d1synthetic-line-secret-6Tp9Qm3Vs8Kn4Rx7",
         "LINE_CHANNEL_ACCESS_TOKEN": "d1synthetic-line-token-7Qm9Vt4Kp2Hs6Nx8",
         "ANIMAL_CONFIRMATION_SECRET": "d1synthetic-confirmation-6Tp9Qm3Vs8Kn4Rx7",
+        "LOGIN_ABUSE_HMAC_SECRET": "d1synthetic-login-abuse-9Rx4Kn6Vp2Hs7Qm3",
+        "REDIS_PASSWORD": "D1SyntheticRedis-4Qm8Vs2Kn7Tp",
+        "CELERY_BROKER_URL": ("redis://:D1SyntheticRedis-4Qm8Vs2Kn7Tp@redis:6379/0"),
     }
     suffixes = {runtime_name: suffix for _, runtime_name, suffix, _, _ in _mapping()}
     for runtime_name, value in values.items():
@@ -115,6 +121,8 @@ def test_required_inventory_and_secret_id_suffixes_are_declarative() -> None:
     assert required_env == REQUIRED_SCALARS
     assert required_files == REQUIRED_FILES
     assert ("env", "AI_API_KEY", "ai-api-key", "-", "optional") in entries
+    assert ("env", "GEMINI_API_KEY", "gemini-api-key", "-", "optional") in entries
+    assert ("env", "STOOL_API_KEY", "stool-api-key", "-", "optional") in entries
     for _, _, suffix, _, _ in entries:
         assert suffix.startswith("strayhub-") is False
         assert "project" not in suffix
@@ -129,7 +137,7 @@ def test_production_template_is_nonsecret_and_distinct_from_b1_verification() ->
     assert "verification/generated" not in template
     assert "/var/lib/strayhub/secrets/current/jwt-private.pem" in template
     assert "/var/lib/strayhub/secrets/current/jwt-public.pem" in template
-    for secret_name in REQUIRED_SCALARS | {"AI_API_KEY"}:
+    for secret_name in REQUIRED_SCALARS | {"AI_API_KEY", "GEMINI_API_KEY", "STOOL_API_KEY"}:
         assert f"{secret_name}=" not in template
 
 
@@ -179,6 +187,19 @@ def test_missing_required_secret_does_not_replace_current_generation(tmp_path: P
     assert (output / "current").resolve() == active_before
 
 
+def test_login_abuse_hmac_secret_is_required_end_to_end(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    output = tmp_path / "staged"
+    _write_source(source)
+    (source / "strayhub-prod-login-abuse-hmac-secret").unlink()
+
+    failed = _fetch(source, output)
+
+    assert failed.returncode != 0
+    assert "strayhub-prod-login-abuse-hmac-secret" in failed.stderr
+    assert not (output / "current").exists()
+
+
 def test_fetch_is_read_only_and_never_places_secret_values_on_arguments() -> None:
     script = FETCH_SCRIPT.read_text(encoding="utf-8")
 
@@ -212,6 +233,7 @@ def test_compose_uses_generic_selected_jwt_files_and_scalar_secret_inputs() -> N
         "${AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE:"
     )
     assert api["environment"]["AI_API_KEY"] == "${AI_API_KEY:-}"
+    assert api["environment"]["LOGIN_ABUSE_HMAC_SECRET"].startswith("${LOGIN_ABUSE_HMAC_SECRET:")
     assert api["environment"]["LINE_ROLE_MENU_FEATURES_ENABLED"] == (
         "${LINE_ROLE_MENU_FEATURES_ENABLED:-false}"
     )
@@ -242,6 +264,7 @@ def test_production_preflight_enforces_mode_separation_and_consumption_checks() 
     assert 'validate_runtime_safety(process="migration")' in preflight
     assert "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false" in preflight
     assert "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify" in preflight
+    assert "LOGIN_ABUSE_HMAC_SECRET" in preflight
     assert preflight.index('line_features_enabled" == "true"') < preflight.index(
         'LINE_ROLE_MENU_SMOKE_EVIDENCE)"'
     )

@@ -7,6 +7,21 @@ from uuid import uuid4
 import pytest
 from services.api.app.api import dependencies
 from services.api.app.api.errors import DomainError
+from starlette.requests import Request
+
+
+def _request() -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/v1/test",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
 
 
 class _AuthRepository:
@@ -25,6 +40,8 @@ class _AuthRepository:
             status="active",
             active_organization_id=None if platform else self.organization_id,
             expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            session_origin="local_web",
+            public_profile=None,
         )
         self.membership = SimpleNamespace(
             id=uuid4(),
@@ -62,7 +79,7 @@ async def test_request_context_uses_server_session_membership(monkeypatch) -> No
     monkeypatch.setattr(dependencies, "set_organization_scope", _noop_scope)
 
     context = await dependencies._load_request_context(
-        object(), authorization=None, session_id=repository.session_id
+        object(), request=_request(), authorization=None, session_id=repository.session_id
     )
 
     assert context.user_id == repository.user_id
@@ -82,7 +99,7 @@ async def test_platform_admin_does_not_need_membership(monkeypatch) -> None:
 
     monkeypatch.setattr(dependencies, "set_platform_scope", set_platform)
     context = await dependencies._load_request_context(
-        object(), authorization=None, session_id=repository.session_id
+        object(), request=_request(), authorization=None, session_id=repository.session_id
     )
 
     assert context.role == "PLATFORM_ADMIN"
@@ -99,6 +116,7 @@ async def test_unscoped_authenticated_context_allows_initial_shelter_switch(monk
 
     context = await dependencies._load_request_context(
         object(),
+        request=_request(),
         authorization=None,
         session_id=repository.session_id,
         require_organization=False,
@@ -119,7 +137,7 @@ async def test_disabled_membership_is_rejected_immediately(monkeypatch) -> None:
 
     with pytest.raises(DomainError, match="無法存取此收容所資料"):
         await dependencies._load_request_context(
-            object(), authorization=None, session_id=repository.session_id
+            object(), request=_request(), authorization=None, session_id=repository.session_id
         )
 
 

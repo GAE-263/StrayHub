@@ -8,8 +8,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.async_job_types import CELERY_JOB_TYPES, LEGACY_POLLING_JOB_TYPES
 from services.api.app.persistence.database.scope import set_organization_scope
 from services.api.app.persistence.models.ai_job import AIProcessingJob
+from services.api.app.persistence.models.care_report import CareReport
 
 CLAIMABLE_STATUSES = ("pending", "pending_enqueue", "enqueue_failed", "retry_wait")
 
@@ -29,6 +31,8 @@ class WorkerJobRepository:
             select(AIProcessingJob)
             .where(
                 AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.execution_backend == "legacy_polling",
+                AIProcessingJob.job_type.in_(LEGACY_POLLING_JOB_TYPES),
                 AIProcessingJob.status.in_(CLAIMABLE_STATUSES),
                 or_(
                     AIProcessingJob.available_at.is_(None),
@@ -51,12 +55,41 @@ class WorkerJobRepository:
         await self.session.flush()
         return job, token
 
+    async def claim_celery(self, job_id: UUID, *, claim_token: str) -> bool:
+        await set_organization_scope(self.session, self.organization_id)
+        now = datetime.now(timezone.utc)
+        job = await self.session.scalar(
+            select(AIProcessingJob)
+            .where(
+                AIProcessingJob.id == job_id,
+                AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.execution_backend == "celery",
+                AIProcessingJob.job_type.in_(CELERY_JOB_TYPES),
+                AIProcessingJob.status.in_(
+                    ("queued", "pending_enqueue", "enqueue_failed", "retry_wait")
+                ),
+                or_(AIProcessingJob.available_at.is_(None), AIProcessingJob.available_at <= now),
+            )
+            .with_for_update(skip_locked=True)
+        )
+        if job is None:
+            return False
+        job.status = "running"
+        job.claim_token = claim_token
+        job.claimed_at = now
+        job.claimed_by = self.worker_id
+        job.started_at = job.started_at or now
+        await self.session.flush()
+        return True
+
     async def reclaim_stale(self, *, timeout_seconds: int, max_retries: int = 3) -> int:
         await set_organization_scope(self.session, self.organization_id)
         threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
         result = await self.session.execute(
             select(AIProcessingJob).where(
                 AIProcessingJob.organization_id == self.organization_id,
+                AIProcessingJob.execution_backend == "legacy_polling",
+                AIProcessingJob.job_type.in_(LEGACY_POLLING_JOB_TYPES),
                 AIProcessingJob.status == "running",
                 AIProcessingJob.claimed_at < threshold,
             )
@@ -73,6 +106,15 @@ class WorkerJobRepository:
             job.claim_token = None
             job.claimed_at = None
             job.claimed_by = None
+            if getattr(job, "job_type", None) == "care_report_summary":
+                report = await self.session.scalar(
+                    select(CareReport).where(
+                        CareReport.id == job.target_id,
+                        CareReport.organization_id == self.organization_id,
+                    )
+                )
+                if report is not None:
+                    report.summary_status = "failed" if terminal else "pending"
         await self.session.flush()
         return len(jobs)
 

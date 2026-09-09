@@ -25,7 +25,20 @@ services:
       - "9001:9001"
     volumes:
       - minio-data:/data
+  redis:
+    image: mirror.gcr.io/library/redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres-data:
   minio-data:
+  redis-data:

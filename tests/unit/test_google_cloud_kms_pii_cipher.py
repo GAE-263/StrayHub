@@ -349,6 +349,7 @@ def test_volunteer_pii_service_round_trip_uses_kms_cipher(kms_key_name: str) -> 
 
     assert profile.encryption_algorithm == "GOOGLE-CLOUD-KMS"
     assert profile.encryption_key_version.endswith("/cryptoKeyVersions/1")
+    assert len(profile.encryption_key_version) > 80
     assert revealed.applicant_name == "Synthetic Applicant"
     assert "Synthetic Applicant" not in repr(revealed)
 

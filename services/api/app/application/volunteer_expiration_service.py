@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 
 from services.api.app.application.audit_service import AuditService
@@ -10,6 +9,7 @@ from services.api.app.application.line_rich_menu_routing import RichMenuRoutingS
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
 )
@@ -17,7 +17,7 @@ from services.api.app.persistence.repositories.volunteer_access_repository impor
     VolunteerAccessRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class VolunteerExpirationService:

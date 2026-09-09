@@ -22,6 +22,7 @@ def safe_non_local_settings(**overrides) -> Settings:
         "auth_jwt_active_public_key_reference": "active-public-v1",
         "auth_jwt_active_private_key": "synthetic-private-key-material",
         "auth_jwt_active_public_key": "synthetic-public-key-material",
+        "login_abuse_hmac_secret": "synthetic-login-abuse-hmac-secret-material",
         "pii_encryption_provider": "gcp-kms",
         "pii_allow_local_provider": False,
         "pii_kms_key_name": (
@@ -42,6 +43,43 @@ def test_local_and_test_modes_allow_repository_defaults(app_env: str) -> None:
 
 def test_safe_non_local_configuration_passes_with_optional_ai_disabled() -> None:
     assert safe_non_local_settings().validate_runtime_safety().app_env == "production"
+
+
+def test_acceptance_runtime_requires_isolated_celery_and_controlled_line_identities() -> None:
+    settings = safe_non_local_settings(
+        app_env="acceptance",
+        celery_broker_url="redis://:synthetic@redis:6379/0",
+        celery_queue_ai="acceptance-ai",
+        celery_queue_system="acceptance-system",
+        celery_worker_concurrency=1,
+        line_notification_recipient_allowlist_sha256=f"{'a' * 64},{'b' * 64}",
+    )
+
+    assert settings.validate_runtime_safety() is settings
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"line_notification_recipient_allowlist_sha256": ""}, "LINE_NOTIFICATION"),
+        ({"celery_ai_enabled": True}, "CELERY_AI_ENABLED"),
+        ({"celery_worker_concurrency": 2}, "CELERY_WORKER_CONCURRENCY"),
+        ({"celery_queue_system": "system"}, "CELERY_QUEUE_SYSTEM"),
+    ],
+)
+def test_acceptance_runtime_fails_closed_when_isolation_is_relaxed(overrides, expected) -> None:
+    values = {
+        "app_env": "acceptance",
+        "celery_broker_url": "redis://:synthetic@redis:6379/0",
+        "celery_queue_ai": "acceptance-ai",
+        "celery_queue_system": "acceptance-system",
+        "celery_worker_concurrency": 1,
+        "line_notification_recipient_allowlist_sha256": f"{'a' * 64},{'b' * 64}",
+    }
+    values.update(overrides)
+
+    with pytest.raises(UnsafeRuntimeConfigurationError, match=expected):
+        safe_non_local_settings(**values).validate_runtime_safety()
 
 
 def test_line_role_menu_features_are_local_by_default_and_fail_closed_nonlocal() -> None:
@@ -90,6 +128,9 @@ def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
         line_role_menu_features_enabled=True,
         line_channel_access_token="production-line-access-token",
         line_rich_menu_default_id="richmenu-default-production",
@@ -99,15 +140,58 @@ def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
     assert settings.validate_runtime_safety(process="worker") is settings
 
 
-@pytest.mark.parametrize("process", ["worker", "migration"])
-def test_non_api_process_policy_requires_only_its_database(process: str) -> None:
+def test_acceptance_volunteer_menu_does_not_require_staff_liff():
+    settings = safe_non_local_settings(
+        app_env="acceptance",
+        celery_broker_url="redis://:synthetic@redis:6379/0",
+        celery_queue_ai="acceptance-ai",
+        celery_queue_system="acceptance-system",
+        celery_worker_concurrency=1,
+        line_notification_recipient_allowlist_sha256=f"{'a' * 64},{'b' * 64}",
+        line_role_menu_features_enabled=True,
+        web_public_base_url="https://acceptance.strayhub.net",
+        line_rich_menu_default_id="richmenu-acceptance-default",
+        line_rich_menu_volunteer_id="richmenu-acceptance-volunteer",
+        line_role_menu_smoke_evidence=f"verified-20260909-{'a' * 40}",
+    )
+    assert settings.validate_runtime_safety() is settings
+
+
+def test_migration_process_policy_requires_only_its_database() -> None:
     settings = Settings(
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
     )
 
-    assert settings.validate_runtime_safety(process=process).app_env == "production"
+    assert settings.validate_runtime_safety(process="migration").app_env == "production"
+
+
+def test_worker_process_requires_database_and_object_storage() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
+        minio_bucket="strayhub-private",
+    )
+
+    assert settings.validate_runtime_safety(process="worker").app_env == "production"
+
+
+def test_worker_process_rejects_unsafe_object_storage_defaults() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+    )
+
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        settings.validate_runtime_safety(process="worker")
+
+    assert "MINIO_ENDPOINT" in str(caught.value)
 
 
 @pytest.mark.parametrize("process", ["worker", "migration"])
@@ -126,6 +210,12 @@ def test_non_api_process_rejects_unsafe_database(process: str) -> None:
         ({"database_url": ""}, "DATABASE_URL"),
         ({"auth_jwt_active_private_key": None}, "AUTH_JWT_ACTIVE_PRIVATE_KEY"),
         ({"auth_jwt_active_public_key": "fake-jwt-key"}, "AUTH_JWT_ACTIVE_PUBLIC_KEY"),
+        (
+            {"login_abuse_hmac_secret": "local-only-login-abuse-hmac-secret-material"},
+            "LOGIN_ABUSE_HMAC_SECRET",
+        ),
+        ({"login_abuse_hmac_secret": "short-secret"}, "LOGIN_ABUSE_HMAC_SECRET"),
+        ({"login_abuse_hmac_secret": ""}, "LOGIN_ABUSE_HMAC_SECRET"),
         ({"pii_kms_key_name": None}, "PII_KMS_KEY_NAME"),
         (
             {"pii_kms_key_name": "projects/synthetic/locations/global/keyRings/pii"},
@@ -179,6 +269,9 @@ def test_worker_stool_provider_requires_complete_nonlocal_secret_pair() -> None:
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
         stool_api_url="https://stool.internal/analyze",
         stool_api_key=None,
     )
@@ -194,8 +287,33 @@ def test_worker_stool_provider_accepts_safe_url_and_secret_without_leaking_it() 
         _env_file=None,
         app_env="production",
         database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
         stool_api_url="https://stool.internal/analyze",
         stool_api_key="synthetic-provider-credential",
     )
 
     assert settings.validate_runtime_safety(process="worker") is settings
+
+
+def test_enabled_celery_worker_requires_broker_line_and_gemini_credentials() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        database_url="postgresql+asyncpg://worker:synthetic@database.internal/strayhub",
+        minio_endpoint="https://objects.internal",
+        minio_access_key="synthetic-access-credential",
+        minio_secret_key="synthetic-secret-credential",
+        celery_ai_enabled=True,
+        celery_broker_url="redis://redis.internal:6379/0",
+        line_channel_access_token="",
+        gemini_api_key=None,
+    )
+
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        settings.validate_runtime_safety(process="worker")
+
+    message = str(caught.value)
+    assert "LINE_CHANNEL_ACCESS_TOKEN" in message
+    assert "GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH" in message

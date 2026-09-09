@@ -46,19 +46,35 @@ test.describe("LIFF 志工入口 route isolation", () => {
     const protectedRequests: string[] = [];
     page.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
-      if (pathname.startsWith("/v1/")) protectedRequests.push(pathname);
+      if (
+        pathname.startsWith("/v1/auth/") ||
+        pathname.startsWith("/v1/organizations") ||
+        pathname.startsWith("/v1/management/")
+      ) {
+        protectedRequests.push(pathname);
+      }
     });
+    await page.route("**/v1/public/volunteer-organizations", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ regions: [] }),
+      }),
+    );
 
     await page.goto(
       "/volunteer-application?organization_id=client-controlled-invalid",
     );
 
     await expect(
-      page.getByRole("heading", { name: "目前無法使用" }),
+      page.getByRole("heading", { name: "此收容所目前無法報名" }),
     ).toBeVisible();
     await expect(
-      page.getByText("此收容所目前無法接受志工申請，請回到 LINE 重新選擇。"),
-    ).toContainText("請回到 LINE 重新選擇");
+      page.getByText("連結已失效，或該收容所目前未開放志工申請。"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "重新選擇地區與收容所" }),
+    ).toBeVisible();
     expect(protectedRequests).toEqual([]);
   });
 

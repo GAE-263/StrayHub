@@ -9,20 +9,28 @@ FEATURE_CONTRACT = Path(
 LIST_PATH = "/v1/management/growth-diary-entries"
 DETAIL_PATH = "/v1/management/growth-diary-entries/{entryId}"
 PHOTO_PATH = "/v1/management/growth-diary-entries/{entryId}/photo"
+PHOTOS_PATH = "/v1/management/growth-diary-entries/{entryId}/photos/{index}"
+STATUS_PATH = "/v1/management/growth-diary-entries/{entryId}/status"
 
 
 def _contract() -> dict:
     return yaml.safe_load(FEATURE_CONTRACT.read_text(encoding="utf-8"))
 
 
-def test_growth_diary_feature_contract_declares_read_only_paths() -> None:
+def test_growth_diary_feature_contract_declares_scoped_read_and_status_paths() -> None:
     document = _contract()
 
     assert document["openapi"].startswith("3.")
-    assert set(document["paths"]) == {LIST_PATH, DETAIL_PATH, PHOTO_PATH}
+    assert set(document["paths"]) == {
+        LIST_PATH,
+        DETAIL_PATH,
+        PHOTO_PATH,
+        PHOTOS_PATH,
+        STATUS_PATH,
+    }
     for path_item in document["paths"].values():
-        assert set(path_item) == {"get"}
-        assert path_item["get"]["security"] == [{"bearerAuth": []}]
+        operation = next(iter(path_item.values()))
+        assert operation["security"] == [{"bearerAuth": []}]
 
 
 def test_list_query_bounds_and_response_shape_are_explicit() -> None:
@@ -38,6 +46,9 @@ def test_list_query_bounds_and_response_shape_are_explicit() -> None:
         "neutral",
         "unanalyzed",
     ]
+    assert parameters["status"]["enum"] == ["all", "new", "reviewed"]
+    assert parameters["from_date"]["format"] == "date"
+    assert parameters["to_date"]["format"] == "date"
     assert parameters["page"] == {"type": "integer", "minimum": 1, "default": 1}
     assert parameters["page_size"] == {
         "type": "integer",
@@ -114,9 +125,9 @@ def test_runtime_openapi_exposes_list_detail_and_webp_photo_contracts() -> None:
     runtime = app.openapi()
     feature = _contract()
 
-    for path in (LIST_PATH, DETAIL_PATH, PHOTO_PATH):
+    for path in (LIST_PATH, DETAIL_PATH, PHOTO_PATH, PHOTOS_PATH, STATUS_PATH):
         assert path in runtime["paths"]
-        assert set(runtime["paths"][path]) == {"get"}
+    assert set(runtime["paths"][STATUS_PATH]) == {"patch"}
 
     list_schema = runtime["paths"][LIST_PATH]["get"]["responses"]["200"]["content"][
         "application/json"

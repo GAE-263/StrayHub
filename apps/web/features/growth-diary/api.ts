@@ -30,6 +30,10 @@ export async function fetchGrowthDiaryEntries(
   const normalizedQuery = query.query?.trim();
   if (normalizedQuery) params.set("query", normalizedQuery);
   if (query.mood && query.mood !== "all") params.set("mood", query.mood);
+  if (query.status && query.status !== "all")
+    params.set("status", query.status);
+  if (query.fromDate) params.set("from_date", query.fromDate);
+  if (query.toDate) params.set("to_date", query.toDate);
   params.set("page", String(query.page ?? 1));
   params.set("page_size", String(query.pageSize ?? 50));
 
@@ -57,13 +61,35 @@ export async function fetchGrowthDiaryDetail(
 export async function fetchGrowthDiaryPhoto(
   entryId: string,
   signal?: AbortSignal,
+  photoIndex?: number,
 ): Promise<Blob> {
+  const photoPath =
+    photoIndex === undefined
+      ? "photo"
+      : `photos/${encodeURIComponent(photoIndex)}`;
   const response = await authFetch(
-    `/v1/management/growth-diary-entries/${encodeURIComponent(entryId)}/photo`,
+    `/v1/management/growth-diary-entries/${encodeURIComponent(entryId)}/${photoPath}`,
     { signal },
   );
   if (!response.ok) {
     throw new GrowthDiaryApiError("日記照片載入失敗", response.status);
   }
   return response.blob();
+}
+
+export async function updateGrowthDiaryStatus(
+  entryId: string,
+  status: "new" | "reviewed",
+): Promise<GrowthDiaryDetail> {
+  return expectJson(
+    await authFetch(
+      `/v1/management/growth-diary-entries/${encodeURIComponent(entryId)}/status`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      },
+    ),
+    "日記狀態更新失敗",
+  );
 }

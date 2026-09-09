@@ -13,7 +13,11 @@ const item: GrowthDiaryFixtureItem = {
   shelter_number: "A-102",
   has_photo: false,
   photo_endpoint: null,
+  photo_endpoints: [],
   note: "今天願意吃晚餐。",
+  status: "new",
+  status_updated_at: null,
+  entry_date: "2026-09-01",
   ai_analysis: {
     status: "succeeded",
     provenance_status: "available",
@@ -41,7 +45,7 @@ test("list keeps raw output lazy and loads authenticated WebP with safe headers"
       .endsWith("/v1/management/growth-diary-entries?page=1&page_size=20"),
   );
   const photoResponse = page.waitForResponse((response) =>
-    response.url().endsWith("/photo"),
+    response.url().endsWith("/photos/0"),
   );
 
   await page.goto("/growth-diary");
@@ -75,6 +79,7 @@ test("search, mood filter, filtered empty, clear, and pagination stay server-sid
         page: Number(params.get("page") ?? 1),
         page_size: Number(params.get("page_size") ?? 20),
         total: filtered ? 0 : 21,
+        timezone: "Asia/Taipei",
       };
     },
   });
@@ -169,11 +174,11 @@ test("network failure remains empty and retry creates a new request", async ({
   await authorize(page);
   let attempts = 0;
   await mockManagementApi(page, {
-    growthDiaryStatus: () => (++attempts <= 2 ? "network" : 200),
+    growthDiaryStatus: () => (++attempts === 1 ? "network" : 200),
   });
   await page.goto("/growth-diary");
   await expect(page.getByText("目前無法載入毛孩日記")).toBeVisible();
   await page.getByRole("button", { name: "重新載入" }).click();
   await expect(page.getByText("org-a 的近況文字")).toBeVisible();
-  expect(attempts).toBeGreaterThanOrEqual(2);
+  expect(attempts).toBe(2);
 });

@@ -2,10 +2,20 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 from fastapi.routing import APIRoute
 from pydantic import TypeAdapter, ValidationError
-from services.api.app.api.authentication import CurrentUserResponse, LiffExchangeResponse, router
+from services.api.app.api.authentication import (
+    CurrentUserResponse,
+    LiffExchangeResponse,
+    RefreshRequest,
+    current_user,
+    refresh,
+    router,
+)
+from services.api.app.api.dependencies import RequestContext
+from services.api.app.api.errors import DomainError
+from starlette.requests import Request
 
 
 def test_authentication_contract_exposes_required_operations() -> None:
@@ -32,6 +42,94 @@ def test_current_user_route_serves_membership_grant_validity_schema() -> None:
     route = next(route for route in router.routes if route.path == "/v1/auth/me")
 
     assert route.response_model is CurrentUserResponse
+
+
+def test_current_user_contract_has_server_derived_nullable_exposure_hint() -> None:
+    schema = CurrentUserResponse.model_json_schema()
+    assert "public_exposure_profile" in schema["properties"]
+    assert schema["properties"]["public_exposure_profile"]["default"] is None
+
+    with pytest.raises(ValidationError):
+        RefreshRequest.model_validate(
+            {
+                "refresh_token": "body-token",
+                "public_exposure_profile": "shared-demo-production",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_refresh_commits_security_revocation_before_returning_error() -> None:
+    class Service:
+        async def refresh(self, *, refresh_token, public_exposure_profile=None):
+            raise DomainError("invalid_session", "Session 無效", 401)
+
+    class Session:
+        commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/auth/refresh",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+    session = Session()
+    with pytest.raises(DomainError, match="Session 無效"):
+        await refresh(
+            request=request,
+            payload=RefreshRequest(refresh_token="a" * 64),
+            service=Service(),
+            session=session,
+        )
+    assert session.commits == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("profile", "expected"),
+    [
+        (None, None),
+        ("shared-demo-production", "shared-demo-production"),
+        ("shared-demo-dev", "shared-demo-dev"),
+    ],
+)
+async def test_current_user_hint_comes_from_request_context(profile, expected) -> None:
+    session_id = uuid4()
+
+    class Service:
+        async def current_user(self, *, session_id, public_exposure_profile=None):
+            return {
+                "user": {
+                    "id": uuid4(),
+                    "username": "staff",
+                    "display_name": "Staff",
+                    "platform_role": None,
+                    "status": "active",
+                },
+                "memberships": [],
+                "public_exposure_profile": public_exposure_profile,
+            }
+
+    response = await current_user(
+        context=RequestContext(
+            user_id=uuid4(),
+            organization_id=uuid4(),
+            membership_id=uuid4(),
+            role="STAFF",
+            session_id=session_id,
+            public_exposure_profile=profile,
+        ),
+        service=Service(),
+    )
+    assert response.public_exposure_profile == expected
 
 
 def test_authentication_contract_declares_all_session_operations() -> None:

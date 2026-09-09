@@ -20,6 +20,17 @@ def test_readme_documents_the_local_quality_and_demo_boundaries() -> None:
         assert required in readme
 
 
+def test_sensitive_transport_policy_is_a_fast_local_and_ci_gate() -> None:
+    verify = (ROOT / "scripts/verify_local.sh").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    command = "uv run python scripts/check_sensitive_transport_policy.py"
+
+    assert command in verify
+    assert verify.index(command) < verify.index('echo "[T224] Migration"')
+    assert command in workflow
+    assert workflow.index(command) < workflow.index("uv run alembic upgrade head")
+
+
 def test_demo_script_is_executable_and_separates_demo_from_test_fixtures() -> None:
     script = ROOT / "scripts/demo.sh"
     assert script.exists()
@@ -33,7 +44,19 @@ def test_demo_script_is_executable_and_separates_demo_from_test_fixtures() -> No
     assert 'API_BASE_URL="${API_BASE_URL:-http://${API_HOST}:${API_PORT}}"' in text
 
 
-def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
+def test_demo_scripts_require_explicit_interactive_secret_reveal() -> None:
+    demo = (ROOT / "scripts/demo.sh").read_text(encoding="utf-8")
+    line_demo = (ROOT / "scripts/demo-line.sh").read_text(encoding="utf-8")
+
+    assert "--reveal-demo-password" in demo
+    assert "demo_password_reveal_confirmed" in demo
+    assert "Generated demo password (shown once" not in demo
+    assert "--reveal-entry-reference" in line_demo
+    assert "entry_reference_reveal_confirmed" in line_demo
+    assert 'echo "  ${LIFF_ENDPOINT_URL}"' not in line_demo
+
+
+def test_line_demo_script_exposes_only_default_deny_gateway_and_keeps_upstreams_local() -> None:
     script = ROOT / "scripts/demo-line.sh"
     assert script.exists()
     assert os.access(script, os.X_OK)
@@ -45,10 +68,11 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
         "API_BASE_URL",
         "ngrok",
         'ngrok http "$port" --url "$NGROK_URL"',
+        'start_tunnel "Gateway" "$NGINX_PORT"',
+        'NGINX_TEMPLATE="infra/local/nginx/line-local.conf.template"',
         "volunteer-entry?entry=",
         "trap cleanup EXIT INT TERM",
         'API_BASE_URL="http://${API_HOST}:${API_PORT}"',
-        'start_tunnel "Web"',
         "wait_for_tunnel_http",
         "Could not reach tunnel",
         "@1.1.1.1",
@@ -64,6 +88,7 @@ def test_line_demo_script_exposes_only_web_and_keeps_api_local() -> None:
     assert "TUNNEL_PROVIDER" not in text
     assert "cloudflared" not in text
     assert 'start_tunnel "API"' not in text
+    assert 'start_tunnel "Web" "$WEB_PORT"' not in text
     assert "API tunnel:" not in text
     assert 'LIFF_URL="https://liff.line.me/${LIFF_ID}"' in text
     assert (
@@ -94,7 +119,7 @@ def test_line_demo_allows_the_generated_web_tunnel_dev_origin() -> None:
 
     assert "LINE_DEMO_WEB_ORIGIN_HOST" in script
     assert "LINE_DEMO_WEB_ORIGIN_HOST" in next_config
-    assert script.index('start_tunnel "Web"') < script.index("npm --prefix apps/web run dev")
+    assert script.index("npm --prefix apps/web run dev") < script.index('start_tunnel "Gateway"')
 
 
 def test_line_demo_provides_session_keys_before_starting_api() -> None:

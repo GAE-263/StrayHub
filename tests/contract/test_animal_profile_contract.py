@@ -81,7 +81,11 @@ def test_management_animal_photo_contract_is_authenticated_binary_and_private():
 
     operation = canonical["paths"][canonical_path]["get"]
     assert operation["security"] == [{"bearerAuth": []}]
-    assert set(operation["responses"]) == {"200", "401", "403", "404", "409"}
+    assert set(operation["responses"]) == {"200", "304", "401", "403", "404", "409"}
+    assert {parameter.get("name") for parameter in operation["parameters"]} >= {
+        "v",
+        "If-None-Match",
+    }
     assert set(operation["responses"]["200"]["content"]) == {
         "image/jpeg",
         "image/png",
@@ -89,7 +93,12 @@ def test_management_animal_photo_contract_is_authenticated_binary_and_private():
     }
     assert (
         operation["responses"]["200"]["headers"]["Cache-Control"]["schema"]["const"]
-        == "private, no-store"
+        == "private, max-age=300, must-revalidate"
+    )
+    assert "ETag" in operation["responses"]["200"]["headers"]
+    assert (
+        operation["responses"]["200"]["headers"]["Vary"]["schema"]["const"]
+        == "Authorization, X-Session-ID"
     )
     assert (
         operation["responses"]["200"]["headers"]["X-Content-Type-Options"]["schema"]["const"]
@@ -98,6 +107,7 @@ def test_management_animal_photo_contract_is_authenticated_binary_and_private():
 
     runtime_operation = runtime["paths"][runtime_path]["get"]
     assert runtime_operation["operationId"] == operation["operationId"]
+    assert "304" in runtime_operation["responses"]
     assert set(runtime_operation["responses"]["200"]["content"]) == set(
         operation["responses"]["200"]["content"]
     )

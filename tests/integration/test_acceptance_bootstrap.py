@@ -15,7 +15,9 @@ from scripts.bootstrap_acceptance import (
     PASSWORD_ENV,
     PASSWORD_FILE_ENV,
     TENANT_A_CODE,
+    TENANT_A_SERVICE_AREA,
     TENANT_B_CODE,
+    TENANT_B_SERVICE_AREA,
     VOLUNTEER_A_USERNAME,
     bootstrap_acceptance,
     read_bootstrap_password,
@@ -33,6 +35,7 @@ from services.api.app.application.volunteer_reporting_authorization import (
     VolunteerReportingAuthorizationService,
 )
 from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS
+from services.api.app.domain.taiwan_region import canonical_taiwan_region
 from services.api.app.infrastructure.auth.access_token_adapter import JwtAccessTokenAdapter
 from services.api.app.infrastructure.auth.password_hasher import Argon2PasswordHasher
 from services.api.app.persistence.database.engine import engine, session_factory
@@ -41,7 +44,10 @@ from services.api.app.persistence.models.animal import Animal
 from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
 from services.api.app.persistence.models.qr_code import AnimalQrCode
 from services.api.app.persistence.models.reportable_scope import DailyReportableScope
-from services.api.app.persistence.models.volunteer_access import VolunteerAccessGrant
+from services.api.app.persistence.models.volunteer_access import (
+    OrganizationVolunteerAccessPolicy,
+    VolunteerAccessGrant,
+)
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 from services.api.app.persistence.repositories.authentication_repository import (
     AuthenticationRepository,
@@ -129,7 +135,9 @@ def test_acceptance_bootstrap_password_sources_are_protected(tmp_path: Path) -> 
 async def test_acceptance_bootstrap_is_idempotent_and_auth_tenant_volunteer_compatible(
     isolated_application_database_pool: None,
 ) -> None:
-    clock = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+    # Access grants are intentionally time-bounded. Use the current clock so this
+    # acceptance fixture does not become invalid merely because the calendar moved.
+    clock = datetime.now(timezone.utc)
     async with session_factory() as session:
         first = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
         second = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
@@ -314,5 +322,86 @@ async def test_acceptance_bootstrap_is_idempotent_and_auth_tenant_volunteer_comp
                 membership_id=first.volunteer_membership_a.id,
                 role="VOLUNTEER",
             )
+
+        await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_acceptance_bootstrap_repairs_legacy_regions_and_populates_public_directory(
+    isolated_application_database_pool: None,
+) -> None:
+    from services.api.app.api.volunteer_access import list_public_volunteer_organizations
+
+    clock = datetime.now(timezone.utc)
+    async with session_factory() as session:
+        first = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
+
+        await set_platform_scope(session)
+        organizations = list(
+            (
+                await session.scalars(
+                    select(Organization).where(
+                        Organization.code.in_([TENANT_A_CODE, TENANT_B_CODE])
+                    )
+                )
+            ).all()
+        )
+        assert len(organizations) == 2
+        for organization in organizations:
+            organization.service_area = "Acceptance"
+        await session.flush()
+
+        repaired = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
+        repeated = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
+
+        assert repaired.tenant_a.status == "updated"
+        assert repaired.tenant_b.status == "updated"
+        assert {
+            fixture.status
+            for name, fixture in repaired.__dict__.items()
+            if name not in {"tenant_a", "tenant_b"}
+        } == {"reused"}
+        assert {fixture.status for fixture in repeated.__dict__.values()} == {"reused"}
+        assert first.tenant_a.id == repaired.tenant_a.id == repeated.tenant_a.id
+        assert first.tenant_b.id == repaired.tenant_b.id == repeated.tenant_b.id
+
+        await set_platform_scope(session)
+        organizations = list(
+            (
+                await session.scalars(
+                    select(Organization).where(
+                        Organization.code.in_([TENANT_A_CODE, TENANT_B_CODE])
+                    )
+                )
+            ).all()
+        )
+        by_code = {organization.code: organization for organization in organizations}
+        assert by_code[TENANT_A_CODE].status == "active"
+        assert by_code[TENANT_A_CODE].service_area == TENANT_A_SERVICE_AREA
+        assert by_code[TENANT_B_CODE].status == "active"
+        assert by_code[TENANT_B_CODE].service_area == TENANT_B_SERVICE_AREA
+        assert canonical_taiwan_region(by_code[TENANT_A_CODE].service_area) == "臺北市"
+        assert canonical_taiwan_region(by_code[TENANT_B_CODE].service_area) == "新北市"
+
+        policies = list(
+            (
+                await session.scalars(
+                    select(OrganizationVolunteerAccessPolicy).where(
+                        OrganizationVolunteerAccessPolicy.organization_id.in_(
+                            [first.tenant_a.id, first.tenant_b.id]
+                        )
+                    )
+                )
+            ).all()
+        )
+        assert len(policies) == 2
+        assert all(policy.applications_enabled for policy in policies)
+
+        directory = await list_public_volunteer_organizations(session)
+        assert [region.name for region in directory.regions] == ["臺北市", "新北市"]
+        listed_ids = {
+            organization.id for region in directory.regions for organization in region.organizations
+        }
+        assert listed_ids == {first.tenant_a.id, first.tenant_b.id}
 
         await session.rollback()

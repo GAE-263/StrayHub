@@ -8,7 +8,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from services.api.app.api.errors import DomainError
-from services.api.app.domain.line_care_report_state import DraftState
+from services.api.app.domain.line_care_report_state import REQUIRED_ANSWER_KEYS, DraftState
 from services.api.app.persistence.models.care_report_draft import CareReportDraft
 from services.api.app.persistence.repositories.care_report_draft_repository import (
     CareReportDraftRepository,
@@ -250,6 +250,30 @@ class LineDraftService:
         draft = await self._active(draft_id)
         if draft.volunteer_user_id != volunteer_user_id:
             raise DomainError("draft_access_denied", "草稿不存在或無法存取", 404)
+        self._restore_handoff_switch(draft)
+        if draft.animal_id is not None and draft.current_step in {
+            DraftState.SELECTING_ANIMAL.value,
+            DraftState.CONFIRMING_ANIMAL.value,
+        }:
+            # Continuing the existing animal is an explicit confirmation. Recover
+            # the first unanswered question without clearing this animal's data.
+            question_states = (
+                DraftState.ANSWERING_WALK_COMPLETION,
+                DraftState.ANSWERING_ACTIVITY,
+                DraftState.ANSWERING_GAIT,
+                DraftState.ANSWERING_DEFECATION,
+                DraftState.ANSWERING_ANIMAL_INTERACTION,
+                DraftState.ANSWERING_SPECIAL_STATUS,
+            )
+            draft.current_step = next(
+                (
+                    state.value
+                    for key, state in zip(REQUIRED_ANSWER_KEYS, question_states, strict=True)
+                    if key not in draft.answers or key in (draft.reconfirmation_keys or [])
+                ),
+                DraftState.AWAITING_NOTE.value,
+            )
+        draft.last_interaction_at = datetime.now(timezone.utc)
         return draft
 
     async def cancel(self, draft_id: UUID) -> CareReportDraft:

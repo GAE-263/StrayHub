@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -16,6 +15,7 @@ from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
+from services.api.app.domain.personal_name import surname_of
 from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import (
     effective_grant_duration_hours,
@@ -26,6 +26,7 @@ from services.api.app.domain.volunteer_access import (
     validate_grant_period,
     validate_service_date_selection,
 )
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     OrganizationMembership,
@@ -43,8 +44,11 @@ from services.api.app.persistence.repositories.authentication_repository import 
 from services.api.app.persistence.repositories.volunteer_access_repository import (
     VolunteerAccessRepository,
 )
+from services.api.app.persistence.repositories.volunteer_service_summary_repository import (
+    VolunteerServiceSummaryRepository,
+)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -123,6 +127,7 @@ class VolunteerAccessService:
         notifications: VolunteerNotificationService | None = None,
         pii_service: VolunteerPiiService | None = None,
         rich_menu_router: RichMenuRoutingService | None = None,
+        summary_repository: VolunteerServiceSummaryRepository | None = None,
     ) -> None:
         self.repository = repository
         self.identities = identities
@@ -131,6 +136,7 @@ class VolunteerAccessService:
         self.notifications = notifications
         self.pii_service = pii_service
         self.rich_menu_router = rich_menu_router
+        self.summary_repository = summary_repository
 
     async def application_detail(
         self,
@@ -396,6 +402,10 @@ class VolunteerAccessService:
             user_id=user_id,
             status="pending",
             source_channel="liff",
+            # The surname is captured here because this is the only point the
+            # plaintext name exists; afterwards it lives encrypted on the
+            # profile and reading it back would require an audited reveal.
+            applicant_surname=surname_of(applicant_name),
             client_request_id=client_request_id,
             previous_application_id=previous_application_id,
             submitted_at=submitted_at,
@@ -479,6 +489,7 @@ class VolunteerAccessService:
         transition_application(application.status, "withdraw")
         application.status = "withdrawn"
         application.withdrawn_at = now or datetime.now(timezone.utc)
+        application.applicant_surname = None
         application.version += 1
         if self.audit is not None:
             await self.audit.record(
@@ -607,8 +618,12 @@ class VolunteerAccessService:
             raise DomainError("application_version_conflict", "申請狀態已更新", 409)
         if decision not in {"approve", "reject"}:
             raise DomainError("invalid_batch_decision", "決策無效", 422)
+        before = {"status": application.status, "version": application.version}
         service_date_status = "approved" if decision == "approve" else "rejected"
         service_date_item = None
+        membership = None
+        grant = None
+        reuse_existing_grant = False
         if service_date is not None:
             getter = getattr(self.repository, "service_date_for_application", None)
             if getter is None:
@@ -618,31 +633,25 @@ class VolunteerAccessService:
                 raise DomainError("service_date_version_conflict", "服務日期已更新", 409)
             existing_grant = await self.repository.grant_for_application(application.id)
             if existing_grant is not None:
-                service_date_item.status = service_date_status
-                service_date_item.decided_at = clock
-                service_date_item.decided_by_user_id = actor_user_id
-                service_date_item.decision_reason = normalize_reason(
-                    reason, required=decision == "reject"
-                )
-                service_date_item.version += 1
-                pending_count = await self.repository.pending_service_date_count(application.id)
-                application.status = "pending" if pending_count else "approved"
-                application.decided_at = clock
-                application.decided_by_user_id = actor_user_id
-                application.version += 1
+                grant = existing_grant
                 membership = await self.identities.get_membership(
                     application.user_id, self.repository.organization_id
                 )
-                return application, membership, existing_grant
-        before = {"status": application.status, "version": application.version}
-        membership = None
-        grant = None
-        if decision == "reject":
+                reuse_existing_grant = True
+        if not reuse_existing_grant and decision == "reject":
             decision_reason = normalize_reason(reason, required=True)
             transition_application(application.status, "reject")
             application.status = "rejected"
             application.decision_reason = decision_reason
-        elif decision == "approve":
+        elif not reuse_existing_grant and decision == "approve":
+            if self.summary_repository is not None and (
+                await self.summary_repository.has_active_platform_restriction(application.user_id)
+            ):
+                raise DomainError(
+                    "active_platform_restriction",
+                    "此志工目前有有效的平台服務限制，無法直接核准",
+                    409,
+                )
             transition_application(application.status, "approve")
             policy = await self.repository.policy()
             effective_duration_hours = effective_grant_duration_hours(policy)
@@ -677,6 +686,12 @@ class VolunteerAccessService:
             if membership is not None and membership.role != "VOLUNTEER":
                 raise DomainError("role_conflict", "既有管理角色不可轉為志工", 409)
             if membership is None:
+                number_allocator = getattr(self.identities, "allocate_volunteer_no", None)
+                volunteer_no = (
+                    await number_allocator(self.repository.organization_id)
+                    if number_allocator is not None
+                    else None
+                )
                 membership = await self.identities.add(
                     OrganizationMembership(
                         organization_id=self.repository.organization_id,
@@ -686,6 +701,7 @@ class VolunteerAccessService:
                         valid_from=start,
                         expires_at=end,
                         access_version=1,
+                        volunteer_no=volunteer_no,
                     )
                 )
             else:
@@ -693,6 +709,12 @@ class VolunteerAccessService:
                 membership.valid_from = start
                 membership.expires_at = end
                 membership.access_version += 1
+            profile_upserter = getattr(self.identities, "upsert_volunteer_profile", None)
+            if profile_upserter is not None:
+                await profile_upserter(
+                    application.user_id,
+                    surname=application.applicant_surname,
+                )
             grant = await self.repository.add(
                 VolunteerAccessGrant(
                     organization_id=self.repository.organization_id,
@@ -718,10 +740,20 @@ class VolunteerAccessService:
             service_date_item.status = service_date_status
             service_date_item.decided_at = clock
             service_date_item.decided_by_user_id = actor_user_id
-            service_date_item.decision_reason = normalize_reason(reason)
+            service_date_item.decision_reason = normalize_reason(
+                reason, required=decision == "reject"
+            )
             service_date_item.version += 1
-            if await self.repository.pending_service_date_count(application.id):
+            pending_service_dates = await self.repository.pending_service_date_count(application.id)
+            if pending_service_dates:
                 application.status = "pending"
+            elif grant is not None:
+                # Once any requested date has produced an access grant, finishing
+                # the remaining dates leaves the application approved even when
+                # the final per-date decision is a rejection.
+                application.status = "approved"
+        if application.status != "pending":
+            application.applicant_surname = None
         if self.audit is not None:
             await self.audit.record(
                 organization_id=self.repository.organization_id,
@@ -735,7 +767,10 @@ class VolunteerAccessService:
                 after={"status": application.status, "version": application.version},
                 reason=application.decision_reason,
             )
-        if self.notifications is not None:
+        notification_event_type = (
+            application.status if application.status in {"approved", "rejected"} else None
+        )
+        if self.notifications is not None and notification_event_type is not None:
             line_binding_getter = getattr(self.identities, "get_line_binding_for_user", None)
             line_binding = (
                 None
@@ -745,7 +780,7 @@ class VolunteerAccessService:
             await self.notifications.enqueue(
                 user_id=application.user_id,
                 line_binding_id=None if line_binding is None else line_binding.id,
-                event_type="approved" if application.status == "approved" else "rejected",
+                event_type=notification_event_type,
                 resource_type="volunteer_application",
                 resource_id=application.id,
                 resource_version=application.version,

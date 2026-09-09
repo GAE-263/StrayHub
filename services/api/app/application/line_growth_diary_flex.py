@@ -27,6 +27,35 @@ class AdoptedAnimalOption:
     shelter_number: str | None
 
 
+def growth_diary_quick_reply_items() -> list[dict]:
+    """Standing "新增一篇"/"日記回顧" quick-reply chips — attached to every
+    growth-diary message that isn't itself the entry-choice card (the
+    reminder push, the AI analysis reply, the history carousel), so the
+    adopter can jump straight into either action from wherever they are in
+    the conversation instead of having to re-open the 毛孩日記 menu (typing
+    the command or switching back to the rich menu) each time."""
+    return [
+        {
+            "type": "action",
+            "action": {
+                "type": "postback",
+                "label": "新增一篇",
+                "data": urlencode({"action": "start_growth_diary_entry", "flow": "growth_diary"}),
+                "displayText": "新增一篇",
+            },
+        },
+        {
+            "type": "action",
+            "action": {
+                "type": "postback",
+                "label": "日記回顧",
+                "data": urlencode({"action": "view_growth_diary_history", "flow": "growth_diary"}),
+                "displayText": "日記回顧",
+            },
+        },
+    ]
+
+
 def build_animal_picker(options: list[AdoptedAnimalOption]) -> dict:
     bubbles = [_bubble(option) for option in options[:12]]
     contents = bubbles[0] if len(bubbles) == 1 else {"type": "carousel", "contents": bubbles}
@@ -156,7 +185,12 @@ def build_growth_diary_reminder_card(*, inquiry_id: str, animal_name: str, since
             ],
         },
     }
-    return {"type": "flex", "altText": f"好奇「{animal_name}」最近過得如何呀？", "contents": bubble}
+    return {
+        "type": "flex",
+        "altText": f"好奇「{animal_name}」最近過得如何呀？",
+        "contents": bubble,
+        "quickReply": {"items": growth_diary_quick_reply_items()},
+    }
 
 
 _MOOD_HEADLINE = {
@@ -208,7 +242,12 @@ def build_growth_diary_ai_reply_card(*, mood: str, reply_text: str) -> dict:
             ],
         },
     }
-    return {"type": "flex", "altText": "AI 小幫手回覆了你的毛孩日記", "contents": bubble}
+    return {
+        "type": "flex",
+        "altText": "AI 小幫手回覆了你的毛孩日記",
+        "contents": bubble,
+        "quickReply": {"items": growth_diary_quick_reply_items()},
+    }
 
 
 @dataclass(frozen=True)
@@ -225,7 +264,12 @@ class GrowthDiaryHistoryEntry:
 def build_growth_diary_history_carousel(entries: list[GrowthDiaryHistoryEntry]) -> dict:
     bubbles = [_history_bubble(entry) for entry in entries[:10]]
     contents = bubbles[0] if len(bubbles) == 1 else {"type": "carousel", "contents": bubbles}
-    return {"type": "flex", "altText": "毛孩日記回顧", "contents": contents}
+    return {
+        "type": "flex",
+        "altText": "毛孩日記回顧",
+        "contents": contents,
+        "quickReply": {"items": growth_diary_quick_reply_items()},
+    }
 
 
 def _history_bubble(entry: GrowthDiaryHistoryEntry) -> dict:

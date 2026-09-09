@@ -2,6 +2,12 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mockManagementApi } from "./fixtures";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/v1/auth/google/config", (route) =>
+    route.fulfill({ json: { enabled: false } }),
+  );
+});
+
 const viewports = [
   { width: 360, height: 800 },
   { width: 768, height: 1024 },

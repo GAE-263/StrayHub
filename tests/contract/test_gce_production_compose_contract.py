@@ -42,6 +42,9 @@ def test_canonical_compose_has_runtime_services_and_bounded_helpers() -> None:
         "api",
         "migration",
         "worker",
+        "redis",
+        "celery-worker",
+        "celery-beat",
         "web",
     }
     assert services["minio-bootstrap"]["restart"] == "no"
@@ -71,6 +74,7 @@ def test_phase_b1_uses_internal_database_and_minio_dns_with_persistence() -> Non
     assert services["web"]["environment"]["API_BASE_URL"] == "http://api:8080"
     assert "ports" not in services["postgres"]
     assert "ports" not in services["minio"]
+    assert "ports" not in services["redis"]
     assert services["web"]["ports"] == [
         {
             "target": 8080,
@@ -85,9 +89,13 @@ def test_phase_b1_uses_internal_database_and_minio_dns_with_persistence() -> Non
             "protocol": "tcp",
         }
     ]
+    assert services["api"]["environment"]["LOGIN_ABUSE_HMAC_SECRET"] == (
+        "${LOGIN_ABUSE_HMAC_SECRET:?LOGIN_ABUSE_HMAC_SECRET is required}"
+    )
     assert "postgres_data:/var/lib/postgresql/data" in services["postgres"]["volumes"]
     assert services["minio"]["volumes"] == ["minio_data:/data"]
-    assert {"postgres_data", "minio_data"} == compose["volumes"].keys()
+    assert services["redis"]["volumes"] == ["redis_data:/data"]
+    assert {"postgres_data", "minio_data", "redis_data"} == compose["volumes"].keys()
 
 
 def test_phase_b1_dependencies_wait_for_health_and_bucket_bootstrap() -> None:
@@ -101,7 +109,37 @@ def test_phase_b1_dependencies_wait_for_health_and_bucket_bootstrap() -> None:
         == "service_completed_successfully"
     )
     assert services["worker"]["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert (
+        services["worker"]["depends_on"]["minio-bootstrap"]["condition"]
+        == "service_completed_successfully"
+    )
+    assert services["celery-worker"]["depends_on"]["redis"]["condition"] == "service_healthy"
+    assert services["celery-beat"]["depends_on"]["celery-worker"]["condition"] == "service_healthy"
     assert services["web"]["depends_on"]["api"]["condition"] == "service_healthy"
+
+
+def test_celery_and_redis_runtime_are_bounded_and_use_one_configured_topology() -> None:
+    services = _compose()["services"]
+    redis = services["redis"]
+    api = services["api"]
+    worker = services["celery-worker"]
+    beat = services["celery-beat"]
+
+    assert "--appendonly yes" in redis["command"][-1]
+    assert "--appendfsync everysec" in redis["command"][-1]
+    assert "--maxmemory" in redis["command"][-1]
+    assert "--maxmemory-policy noeviction" in redis["command"][-1]
+    assert "--requirepass" in redis["command"][-1]
+    redis_healthcheck = redis["healthcheck"]["test"]
+    assert redis_healthcheck[0] == "CMD-SHELL"
+    assert "REDISCLI_AUTH=$${REDIS_PASSWORD}" in redis_healthcheck[1]
+    assert "redis-cli -a" not in redis_healthcheck[1]
+    assert "ports" not in redis
+    assert api["environment"]["CELERY_QUEUE_AI"] == "${CELERY_QUEUE_AI:-ai}"
+    assert api["environment"]["CELERY_QUEUE_SYSTEM"] == "${CELERY_QUEUE_SYSTEM:-system}"
+    assert "--queues=${CELERY_QUEUE_AI:-ai},${CELERY_QUEUE_SYSTEM:-system}" in worker["command"]
+    assert "--concurrency=${CELERY_WORKER_CONCURRENCY:-2}" in worker["command"]
+    assert "--pidfile=/tmp/celerybeat.pid" in beat["command"]
 
 
 def test_postgres_bootstrap_separates_migration_and_rls_runtime_roles() -> None:

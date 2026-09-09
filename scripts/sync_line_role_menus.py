@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-VALID_ROLES = {"default", "volunteer", "adopter", "staff"}
+VALID_ROLES = {"default", "volunteer", "adopter", "staff", "adoption_hub"}
 CONFIG_GLOB = "infra/local/line-rich-menu-*.yaml"
 IMAGE_CONTENT_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
@@ -147,6 +147,7 @@ ENV_KEYS = {
     "volunteer": "LINE_RICH_MENU_VOLUNTEER_ID",
     "adopter": "LINE_RICH_MENU_ADOPTER_ID",
     "staff": "LINE_RICH_MENU_STAFF_ID",
+    "adoption_hub": "LINE_RICH_MENU_ADOPTION_HUB_ID",
 }
 
 

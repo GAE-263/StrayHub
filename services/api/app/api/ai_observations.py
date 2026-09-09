@@ -14,9 +14,11 @@ from services.api.app.api.errors import DomainError
 from services.api.app.api.management_access import require_staff_or_admin
 from services.api.app.application.ai_review import AIReviewService
 from services.api.app.application.audit_service import AuditService
+from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.ai_observation_repository import (
     AIObservationRepository,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["AI Observations"])
@@ -29,6 +31,9 @@ class AIObservationResponse(BaseModel):
     job_id: UUID
     source_type: str
     source_id: UUID | None
+    animal_name: str | None
+    shelter_number: str | None
+    report_submitted_at: datetime | None
     status: str
     provider: str
     model_name: str
@@ -51,13 +56,16 @@ class AIReviewRequest(BaseModel):
     corrected_observation: dict | None = None
 
 
-def _response(observation) -> AIObservationResponse:
+def _response(observation, report: CareReport | None = None) -> AIObservationResponse:
     job = observation.job
     return AIObservationResponse(
         id=observation.id,
         job_id=observation.job_id,
         source_type=observation.source_type,
         source_id=observation.source_id,
+        animal_name=report.animal_name_snapshot if report else None,
+        shelter_number=report.shelter_number_snapshot if report else None,
+        report_submitted_at=report.submitted_at if report else None,
         status=observation.status,
         provider=job.provider,
         model_name=job.model_name,
@@ -90,7 +98,21 @@ async def list_management_ai_review_queue(
         status=observation_status,
         limit=limit,
     )
-    return {"items": [_response(item) for item in items]}
+    report_ids = {
+        item.source_id
+        for item in items
+        if item.source_type == "care_report_summary" and item.source_id is not None
+    }
+    reports_by_id: dict[UUID, CareReport] = {}
+    if report_ids:
+        result = await session.execute(
+            select(CareReport).where(
+                CareReport.organization_id == organization_id,
+                CareReport.id.in_(report_ids),
+            )
+        )
+        reports_by_id = {report.id: report for report in result.scalars()}
+    return {"items": [_response(item, reports_by_id.get(item.source_id)) for item in items]}
 
 
 @router.get("/v1/ai-observations/{observationId}", response_model=AIObservationResponse)

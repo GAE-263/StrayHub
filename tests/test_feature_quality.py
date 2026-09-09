@@ -20,6 +20,7 @@ QUALITY_TARGETS = (
 EXPLAINED_OPT_IN_SKIPS = {
     "tests/integration/test_moa_import_migration.py": "STRAYHUB_MOA_MIGRATION_TEST_URL",
     "tests/isolation/test_moa_three_shelter_rls.py": "MOA_THREE_SHELTER_TEST",
+    "tests/e2e/test_remote_management_tunnel_boundary.py": "nginx is not installed",
 }
 
 

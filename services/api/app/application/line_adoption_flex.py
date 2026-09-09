@@ -376,6 +376,8 @@ class QuestionOption:
 
 def build_question_card(
     *,
+    question_key: str,
+    interaction_version: int,
     step: int,
     total: int,
     prompt: str,
@@ -395,7 +397,15 @@ def build_question_card(
             {
                 "type": "postback",
                 "label": option.label[:20],
-                "data": urlencode({"action": "answer", "flow": "adoption", "value": option.code}),
+                "data": urlencode(
+                    {
+                        "action": "answer",
+                        "flow": "adoption",
+                        "question": question_key,
+                        "version": interaction_version,
+                        "value": option.code,
+                    }
+                ),
                 "displayText": option.label,
             },
             emoji=option.emoji,

@@ -4,6 +4,7 @@ import asyncio
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -11,7 +12,12 @@ import asyncpg
 import pytest
 from scripts import cleanup_legacy_demo_fixtures as cleanup_module
 from services.api.app.persistence.models.animal import Animal
-from services.api.app.persistence.models.identity import Organization, OrganizationMembership, User
+from services.api.app.persistence.models.identity import (
+    Organization,
+    OrganizationMembership,
+    SessionRecord,
+    User,
+)
 from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -153,18 +159,36 @@ async def test_demo_accounts_are_idempotent_and_volunteers_are_single_tenant(
             session.add(org)
             await session.flush()
             if code == "FURKIDS-ASIA":
-                await _seed_identity(session, org)
-    await seed_demo_accounts.seed()
+                await _seed_identity(session, org, "integration-synthetic-password")
+    await seed_demo_accounts.seed(password="integration-synthetic-password")
     async with factory() as session:
         before = set(
             (await session.scalars(select(User.id).where(User.username.like("demo-%")))).all()
         )
-    await seed_demo_accounts.seed()
+    async with factory() as session, session.begin():
+        furkids_volunteer_id = await session.scalar(
+            select(User.id).where(User.username == "demo-furkids-volunteer")
+        )
+        assert furkids_volunteer_id is not None
+        session.add(
+            SessionRecord(
+                user_id=furkids_volunteer_id,
+                status="active",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            )
+        )
+    await seed_demo_accounts.seed(password="integration-synthetic-password")
     async with factory() as session:
         after = set(
             (await session.scalars(select(User.id).where(User.username.like("demo-%")))).all()
         )
         assert before == after and len(after) == 5
+        assert (
+            await session.scalar(
+                select(SessionRecord.status).where(SessionRecord.user_id.in_(after))
+            )
+            == "expired"
+        )
         counts = dict(
             (
                 await session.execute(

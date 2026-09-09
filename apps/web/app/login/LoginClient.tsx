@@ -1,0 +1,256 @@
+"use client";
+
+import React from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { LogIn } from "lucide-react";
+import {
+  clearAuth,
+  storeActiveOrganization,
+  storeSession,
+  type AuthOrganization,
+} from "../../lib/auth";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
+import { LOGIN_STATE_COPY } from "../../components/management/route-state";
+import { hasForbiddenLoginQuery } from "./login-url-policy";
+import { GoogleSignIn } from "../../components/auth/GoogleSignIn";
+import { joinAccountPath } from "../../lib/google-auth";
+import { IdentityShell } from "../../components/auth/IdentityShell";
+import styles from "../../components/auth/identity.module.css";
+
+type LoginResponse = {
+  access_token: string;
+  refresh_token: string;
+  session_id: string;
+  platform_role?: "PLATFORM_ADMIN" | null;
+  organizations?: AuthOrganization[];
+};
+
+async function readError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { message?: string };
+    return body.message ?? `登入失敗（HTTP ${response.status}）`;
+  } catch {
+    return `登入失敗（HTTP ${response.status}）`;
+  }
+}
+
+function safeLoginError(
+  error: unknown,
+  username: string,
+  password: string,
+): string {
+  if (!(error instanceof Error)) return "登入失敗";
+  if (
+    (username && error.message.includes(username)) ||
+    (password && error.message.includes(password))
+  ) {
+    return "登入失敗";
+  }
+  if (error.message === "Failed to fetch") return "登入失敗，請稍後再試";
+  return error.message;
+}
+
+export default function LoginClient() {
+  const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [organizations, setOrganizations] = useState<AuthOrganization[]>([]);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("");
+  const [pendingLogin, setPendingLogin] = useState<LoginResponse | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const currentUrl = new URL(window.location.href);
+    if (hasForbiddenLoginQuery(currentUrl.searchParams)) {
+      window.history.replaceState(window.history.state, "", "/login");
+    }
+    setHydrated(true);
+  }, []);
+
+  const activateContext = async (
+    login: LoginResponse,
+    organization: AuthOrganization,
+  ) => {
+    storeSession(login);
+    const contextResponse = await fetch("/v1/auth/active-shelter-context", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${login.access_token}`,
+      },
+      body: JSON.stringify({ organization_id: organization.id }),
+    });
+    if (!contextResponse.ok) throw new Error(await readError(contextResponse));
+    storeActiveOrganization(organization);
+    router.replace(joinAccountPath() ?? "/");
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!hydrated) return;
+    setSubmitting(true);
+    setError("");
+    clearAuth();
+    try {
+      const loginResponse = await fetch("/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!loginResponse.ok) {
+        throw new Error(`登入失敗（HTTP ${loginResponse.status}）`);
+      }
+      const login = (await loginResponse.json()) as LoginResponse;
+      const availableOrganizations = login.organizations ?? [];
+      setOrganizations(availableOrganizations);
+      const organization = availableOrganizations[0];
+      if (!organization) {
+        if (login.platform_role === "PLATFORM_ADMIN") {
+          storeSession(login);
+          router.replace(joinAccountPath() ?? "/platform-admins");
+          return;
+        }
+        throw new Error(
+          `${LOGIN_STATE_COPY.noShelterAccess.label}：${LOGIN_STATE_COPY.noShelterAccess.nextStep}`,
+        );
+      }
+      storeSession(login);
+      if (availableOrganizations.length > 1) {
+        setPendingLogin(login);
+        setSelectedOrganizationId(organization.id);
+        return;
+      }
+      await activateContext(login, organization);
+    } catch (submitError) {
+      clearAuth();
+      setError(safeLoginError(submitError, username, password));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmContext = async () => {
+    const organization = organizations.find(
+      (item) => item.id === selectedOrganizationId,
+    );
+    if (!pendingLogin || !organization) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await activateContext(pendingLogin, organization);
+    } catch (contextError) {
+      clearAuth();
+      setPendingLogin(null);
+      setError(
+        contextError instanceof Error
+          ? contextError.message
+          : `${LOGIN_STATE_COPY.contextFailure.label}：${LOGIN_STATE_COPY.contextFailure.nextStep}`,
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <IdentityShell
+      login
+      title="歡迎回到森友會"
+      eyebrow="登入，接續今天的照顧"
+      description="選擇登入方式，回到你與團隊一起工作的地方。"
+    >
+      {!pendingLogin && <GoogleSignIn onAvailability={setGoogleEnabled} />}
+      <details
+        className={styles.passwordDetails}
+        open={!googleEnabled || Boolean(pendingLogin)}
+      >
+        <summary>使用原帳號密碼登入</summary>
+        <p className={styles.helper}>
+          已有 StrayHub 帳號？先以原帳密登入，即可在「登入設定」連結
+          Google，保留原有紀錄。
+        </p>
+        <form
+          className={styles.form}
+          method="post"
+          action="/login"
+          onSubmit={submit}
+          aria-describedby={error ? "login-error" : undefined}
+        >
+          <Label htmlFor="username">帳號</Label>
+          <Input
+            id="username"
+            name="username"
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+          />
+          <Label htmlFor="password">密碼</Label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+          {error ? (
+            <p id="login-error" className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <Button
+            type="submit"
+            disabled={!hydrated || submitting || Boolean(pendingLogin)}
+          >
+            <LogIn size={16} aria-hidden="true" />
+            {submitting ? `${LOGIN_STATE_COPY.saving.label}…` : "登入"}
+          </Button>
+        </form>
+      </details>
+      {pendingLogin && organizations.length > 1 ? (
+        <section
+          className={`${styles.card} ${styles.form}`}
+          aria-labelledby="context-title"
+        >
+          <h2 id="context-title">確認目前收容所</h2>
+          <Label htmlFor="organization">目前收容所</Label>
+          <Select
+            id="organization"
+            value={selectedOrganizationId || organizations[0]?.id}
+            onChange={(event) => setSelectedOrganizationId(event.target.value)}
+            required
+          >
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}（{organization.code}）
+              </option>
+            ))}
+          </Select>
+          <p className="muted">請選擇這次工作的目前收容所。</p>
+          <Button
+            type="button"
+            disabled={submitting}
+            onClick={() => void confirmContext()}
+          >
+            {submitting
+              ? `${LOGIN_STATE_COPY.saving.label}…`
+              : "進入管理工作台"}
+          </Button>
+        </section>
+      ) : null}
+      {submitting ? (
+        <p className="sr-only" role="status" aria-live="polite">
+          {LOGIN_STATE_COPY.saving.nextStep}
+        </p>
+      ) : null}
+    </IdentityShell>
+  );
+}

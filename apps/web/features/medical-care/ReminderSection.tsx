@@ -22,7 +22,7 @@ export function ReminderSection({
   title: string;
   items: AgendaItem[];
   timezone: string;
-  onProcess: (item: AgendaItem) => void;
+  onProcess?: (item: AgendaItem) => void;
   total: number;
   nextCursor: string | null;
   loadingMore?: boolean;
@@ -49,7 +49,7 @@ export function ReminderSection({
                 key={item.occurrence_id}
                 item={item}
                 timezone={timezone}
-                onProcess={() => onProcess(item)}
+                onProcess={onProcess ? () => onProcess(item) : undefined}
               />
             ))}
           </div>

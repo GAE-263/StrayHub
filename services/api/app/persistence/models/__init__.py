@@ -19,6 +19,8 @@ from services.api.app.persistence.models.care_report_handoff import CareReportHa
 from services.api.app.persistence.models.identity import (
     LineUserBinding,
     LineWebhookEvent,
+    LoginAccountAbuseState,
+    LoginIpAttempt,
     Organization,
     OrganizationMembership,
     RefreshTokenRecord,
@@ -51,6 +53,13 @@ from services.api.app.persistence.models.volunteer_access import (
     VolunteerNotificationRetryBatch,
     VolunteerNotificationRetryBatchItem,
 )
+from services.api.app.persistence.models.volunteer_management import (
+    OrganizationVolunteerNumberCounter,
+    VolunteerIncident,
+    VolunteerNote,
+    VolunteerProfile,
+    VolunteerRestriction,
+)
 
 __all__ = [
     "AdoptionDraft",
@@ -72,6 +81,8 @@ __all__ = [
     "MediaAsset",
     "LineUserBinding",
     "LineWebhookEvent",
+    "LoginAccountAbuseState",
+    "LoginIpAttempt",
     "ObservationCategory",
     "ObservationOption",
     "ObservationOptionUsage",
@@ -94,6 +105,11 @@ __all__ = [
     "VolunteerNotificationDelivery",
     "VolunteerNotificationRetryBatch",
     "VolunteerNotificationRetryBatchItem",
+    "VolunteerProfile",
+    "OrganizationVolunteerNumberCounter",
+    "VolunteerNote",
+    "VolunteerIncident",
+    "VolunteerRestriction",
     "MedicalRecord",
     "MedicalRecordMedia",
     "CareReminderSeries",

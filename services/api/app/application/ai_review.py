@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
+
 from services.api.app.api.errors import DomainError
 from services.api.app.application.audit_service import AuditService
+from services.api.app.domain.report_summary import fingerprint, rule_summary, validate_summary
+from services.api.app.persistence.models.care_report import CareReport
 from services.api.app.persistence.repositories.ai_observation_repository import (
     AIObservationRepository,
 )
@@ -35,6 +40,33 @@ class AIReviewService:
             raise DomainError("observation_not_found", "AI Observation 不存在或無法存取", 404)
         if observation.status in {"failed", "invalid"}:
             raise DomainError("ai_review_unavailable", "目前 AI 結果不可覆核", 409)
+        if getattr(observation, "source_type", None) == "care_report_summary":
+            report = await self.repository.session.scalar(
+                select(CareReport)
+                .where(
+                    CareReport.id == observation.source_id,
+                    CareReport.organization_id == self.repository.organization_id,
+                )
+                .with_for_update()
+            )
+            if report is None or report.summary_fingerprint != fingerprint(report):
+                raise DomainError("summary_stale", "回報已更正，不能覆核舊摘要", 409)
+            if action == "correct":
+                try:
+                    result = validate_summary(json.dumps(result, ensure_ascii=False), report)
+                except ValueError as exc:
+                    raise DomainError("invalid_summary", "摘要格式或原文依據不符", 422) from exc
+                report.summary_data = result
+                report.attention_level = result["attention_level"]
+                report.summary_status = "succeeded"
+            elif action == "reject":
+                report.summary_data = None
+                report.summary_status = "rejected"
+                report.attention_level = rule_summary(report)["attention_level"]
+            elif action == "confirm":
+                report.summary_data = observation.validated_ai_observation
+                report.summary_status = "succeeded"
+                report.attention_level = report.summary_data["attention_level"]
         before = {
             "status": observation.status,
             "raw_ai_output": observation.raw_ai_output,

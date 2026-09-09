@@ -7,6 +7,13 @@ import { Sidebar } from "../ui/sidebar";
 import { canReviewVolunteerApplications } from "../../lib/management-capabilities";
 
 type Item = { href: string; label: string; roles?: string[]; icon?: IconName };
+const PUBLIC_CORE_PATHS = new Set([
+  "/",
+  "/animals",
+  "/reports",
+  "/care-calendar",
+  "/ai-review",
+]);
 
 export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
   {
@@ -15,6 +22,12 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
       { href: "/", label: "總覽", icon: "view" },
       { href: "/animals", label: "動物檔案", icon: "search" },
       { href: "/reports", label: "回報收件匣", icon: "audit" },
+      {
+        href: "/adoption-inquiries",
+        label: "領養意願",
+        roles: ["STAFF", "SHELTER_ADMIN", "PLATFORM_ADMIN"],
+        icon: "access",
+      },
       { href: "/care-calendar", label: "照護行事曆", icon: "calendar" },
       {
         href: "/growth-diary",
@@ -82,66 +95,91 @@ export const navigationGroups: Array<{ heading: string; links: Item[] }> = [
         roles: ["PLATFORM_ADMIN"],
         icon: "settings",
       },
+      {
+        href: "/platform-volunteer-restrictions",
+        label: "志工平台限制",
+        roles: ["PLATFORM_ADMIN"],
+        icon: "audit",
+      },
     ],
   },
 ];
 
+export function visibleNavigationGroups(
+  role: string,
+  publicManagement = false,
+) {
+  return navigationGroups
+    .map((group) => ({
+      ...group,
+      links: group.links.filter(
+        (link) =>
+          (!publicManagement || PUBLIC_CORE_PATHS.has(link.href)) &&
+          (!link.roles ||
+            (link.href === "/volunteers/applications"
+              ? canReviewVolunteerApplications(role)
+              : link.roles.includes(role))),
+      ),
+    }))
+    .filter((group) => group.links.length > 0);
+}
+
 export function NavigationLinks({
   role,
+  publicManagement = false,
   onNavigate,
 }: {
   role: string;
+  publicManagement?: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   return (
     <nav aria-label="管理工作台導航">
-      {navigationGroups.map((group) => (
+      {visibleNavigationGroups(role, publicManagement).map((group) => (
         <div className="nav-group" key={group.heading}>
           <span className="nav-heading">{group.heading}</span>
-          {group.links
-            .filter(
-              (link) =>
-                !link.roles ||
-                (link.href === "/volunteers/applications"
-                  ? canReviewVolunteerApplications(role)
-                  : link.roles.includes(role)),
-            )
-            .map((link) => (
-              <Link
-                className={
-                  pathname === link.href ||
-                  (link.href !== "/" && pathname.startsWith(`${link.href}/`))
-                    ? "nav-link active"
-                    : "nav-link"
-                }
-                href={link.href}
-                key={link.href}
-                onClick={onNavigate}
-              >
-                {link.icon
-                  ? (() => {
-                      const Icon = iconMap[link.icon];
-                      return <Icon size={16} aria-hidden="true" />;
-                    })()
-                  : null}
-                {link.label}
-              </Link>
-            ))}
+          {group.links.map((link) => (
+            <Link
+              className={
+                pathname === link.href ||
+                (link.href !== "/" && pathname.startsWith(`${link.href}/`))
+                  ? "nav-link active"
+                  : "nav-link"
+              }
+              href={link.href}
+              key={link.href}
+              onClick={onNavigate}
+            >
+              {link.icon
+                ? (() => {
+                    const Icon = iconMap[link.icon];
+                    return <Icon size={16} aria-hidden="true" />;
+                  })()
+                : null}
+              {link.label}
+            </Link>
+          ))}
         </div>
       ))}
     </nav>
   );
 }
 
-export function AppSidebar({ role }: { role: string }) {
+export function AppSidebar({
+  role,
+  publicManagement = false,
+}: {
+  role: string;
+  publicManagement?: boolean;
+}) {
   return (
     <Sidebar className="app-sidebar" aria-label="管理工作台導航">
       <div className="sidebar-intro">
         <span className="eyebrow">ACTIVE WORKSPACE</span>
         <p>以動物為中心，串起回報、審核與照護決策。</p>
       </div>
-      <NavigationLinks role={role} />
+      <NavigationLinks role={role} publicManagement={publicManagement} />
     </Sidebar>
   );
 }

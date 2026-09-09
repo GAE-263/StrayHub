@@ -28,6 +28,7 @@ COMPATIBILITY_VALUES = {
 REQUIRED_IMAGES = ("api", "worker", "web")
 FORBIDDEN_KEY_PARTS = ("password", "secret", "token", "private_key", "credential")
 ALLOWED_ENV_FILE = "image-digests.env"
+ALLOWED_NONSECRET_ENV_TEMPLATES = {"infra/gce/.env.acceptance.template"}
 
 
 class ReleaseError(ValueError):
@@ -114,9 +115,15 @@ def _safe_payload_files(payload_dir: Path) -> list[Path]:
         if not path.is_file():
             raise ReleaseError(f"release payload contains unsupported entry: {relative}")
         lowered = relative.name.lower()
+        relative_name = relative.as_posix()
         if lowered.endswith((".pem", ".key", ".tfstate", ".tfplan")):
             raise ReleaseError(f"sensitive/generated file forbidden in release: {relative}")
-        if lowered.startswith(".env") or (lowered.endswith(".env") and lowered != ALLOWED_ENV_FILE):
+        allowed_environment_file = (
+            lowered == ALLOWED_ENV_FILE or relative_name in ALLOWED_NONSECRET_ENV_TEMPLATES
+        )
+        if (lowered.startswith(".env") or lowered.endswith(".env")) and not (
+            allowed_environment_file
+        ):
             raise ReleaseError(f"environment file forbidden in release: {relative}")
         files.append(path)
     if not files:

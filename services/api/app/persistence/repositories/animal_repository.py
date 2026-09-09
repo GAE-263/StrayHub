@@ -46,6 +46,54 @@ class AnimalRepository:
         )
         return list(result.scalars())
 
+    async def list_adoptable_excluding(
+        self, excluded_animal_id: UUID, *, limit: int
+    ) -> list[Animal]:
+        bounded_limit = max(1, min(limit, 100))
+        result = await self.session.execute(
+            select(Animal)
+            .where(
+                Animal.organization_id == self.organization_id,
+                Animal.status == "active",
+                Animal.is_adoptable.is_(True),
+                Animal.id != excluded_animal_id,
+            )
+            .order_by(Animal.name, Animal.shelter_number, Animal.id)
+            .limit(bounded_limit)
+        )
+        return list(result.scalars())
+
+    async def list_adoptable_page(
+        self, *, page: int = 1, query: str = "", limit: int = 12
+    ) -> tuple[list[Animal], int]:
+        predicates = [
+            Animal.organization_id == self.organization_id,
+            Animal.status == "active",
+            Animal.is_adoptable.is_(True),
+        ]
+        if query:
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            predicates.append(
+                or_(
+                    Animal.name.ilike(pattern, escape="\\"),
+                    Animal.shelter_number.ilike(pattern, escape="\\"),
+                )
+            )
+        total = int(
+            await self.session.scalar(select(func.count(Animal.id)).where(*predicates)) or 0
+        )
+        last_page = max(1, (total + limit - 1) // limit)
+        page = max(1, min(page, last_page))
+        result = await self.session.execute(
+            select(Animal)
+            .where(*predicates)
+            .order_by(Animal.name, Animal.shelter_number, Animal.id)
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
+        return list(result.scalars()), total
+
     async def list_active(self) -> list[Animal]:
         result = await self.session.execute(
             select(Animal)

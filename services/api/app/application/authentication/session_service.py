@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import secrets
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from services.api.app.api.errors import DomainError
+from services.api.app.application.authentication.login_abuse import LoginAbuseKeys
 from services.api.app.application.line_rich_menu_routing import RichMenuRoutingService
 from services.api.app.application.ports.authentication import (
     AccessTokenPort,
@@ -14,6 +16,7 @@ from services.api.app.application.ports.authentication import (
     PasswordHasherPort,
     VolunteerEntryResolverPort,
 )
+from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.models.identity import (
     OrganizationMembership,
     RefreshTokenRecord,
@@ -24,11 +27,49 @@ from services.api.app.persistence.repositories.authentication_repository import 
     AuthenticationRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+REMOTE_MANAGEMENT_SESSION_ORIGIN = "remote_management_demo"
+REMOTE_MANAGEMENT_ROLLBACK_REASON = "remote_management_rollback"
+
+_DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=19456,t=2,p=1$WA91Jkye+IIpn+07soNWRg$"
+    "C2cae1Wk/9IAl1MSZSdA02XcCY2habmqSjKQJ+5zZ8s"
+)
 
 
 def _refresh_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class RemoteSessionRollbackResult:
+    sessions_revoked: int
+    refresh_tokens_revoked: int
+    reason: str = REMOTE_MANAGEMENT_ROLLBACK_REASON
+
+
+class RemoteSessionRollbackService:
+    """Revoke only sessions issued through the shared remote-management profile."""
+
+    def __init__(self, repository: AuthenticationRepository) -> None:
+        self.repository = repository
+
+    async def revoke_remote_management_sessions(self) -> RemoteSessionRollbackResult:
+        (
+            sessions_revoked,
+            refresh_tokens_revoked,
+        ) = await self.repository.revoke_remote_management_sessions()
+        logger.info(
+            "remote management sessions revoked reason=%s sessions=%s refresh_tokens=%s",
+            REMOTE_MANAGEMENT_ROLLBACK_REASON,
+            sessions_revoked,
+            refresh_tokens_revoked,
+        )
+        return RemoteSessionRollbackResult(
+            sessions_revoked=sessions_revoked,
+            refresh_tokens_revoked=refresh_tokens_revoked,
+        )
 
 
 class SessionService:
@@ -43,6 +84,8 @@ class SessionService:
         rich_menu_router: RichMenuRoutingService | None = None,
         refresh_ttl_seconds: int = 604800,
         access_ttl_seconds: int = 900,
+        abuse_keys: LoginAbuseKeys | None = None,
+        now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.repository = repository
         self.password_hasher = password_hasher
@@ -52,24 +95,94 @@ class SessionService:
         self.rich_menu_router = rich_menu_router
         self.refresh_ttl_seconds = refresh_ttl_seconds
         self.access_ttl_seconds = access_ttl_seconds
+        self.abuse_keys = abuse_keys
+        self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
-    async def login(self, *, username: str, password: str) -> dict:
+    @staticmethod
+    def _rate_limited(retry_after: int) -> DomainError:
+        return DomainError(
+            "login_rate_limited",
+            "登入暫時無法處理，請稍後再試",
+            429,
+            headers={"Retry-After": str(max(1, retry_after))},
+        )
+
+    async def login(
+        self,
+        *,
+        username: str,
+        password: str,
+        client_ip: str | None = None,
+        public_exposure_profile: str | None = None,
+    ) -> dict:
+        now = self.now_provider()
+        subject_digest: str | None = None
+        account_state = None
+        if self.abuse_keys is not None:
+            if client_ip is None:
+                raise DomainError("login_source_unavailable", "登入暫時無法處理", 503)
+            ip_decision = await self.repository.consume_login_ip_attempt(
+                self.abuse_keys.ip_digest(client_ip), now=now
+            )
+            subject_digest = self.abuse_keys.account_digest(username)
+            account_state = await self.repository.lock_login_account_state(subject_digest, now=now)
+            account_retry_after = self.repository.account_retry_after(account_state, now=now)
+            if not ip_decision.allowed or account_retry_after is not None:
+                raise self._rate_limited(
+                    max(ip_decision.retry_after or 0, account_retry_after or 0, 1)
+                )
+
         user = await self.repository.find_user_by_username(username)
-        if user is None or user.status != "active" or not user.password_hash:
-            raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
-        if not self.password_hasher.verify(password, user.password_hash):
+        usable_user = user is not None and user.status == "active" and bool(user.password_hash)
+        encoded_hash = (
+            user.password_hash if usable_user and user is not None else _DUMMY_PASSWORD_HASH
+        )
+        password_valid = self.password_hasher.verify(password, encoded_hash or _DUMMY_PASSWORD_HASH)
+        if not usable_user or not password_valid or user is None:
+            if subject_digest is not None:
+                retry_after = await self.repository.record_login_failure(
+                    subject_digest, state=account_state, now=now
+                )
+                if retry_after is not None:
+                    raise self._rate_limited(retry_after)
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
         await self.repository.set_authentication_user_scope(user.id)
-        if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
-            user.id
+        available_access = (
+            []
+            if user.platform_role == "PLATFORM_ADMIN"
+            else await self.repository.effective_organization_access(user.id)
+        )
+        public_role_allowed = public_exposure_profile is None or (
+            user.platform_role != "PLATFORM_ADMIN"
+            and any(
+                membership.role in {"STAFF", "SHELTER_ADMIN"}
+                for membership, _organization in available_access
+            )
+        )
+        if not public_role_allowed or (
+            user.platform_role != "PLATFORM_ADMIN" and not available_access
         ):
+            if subject_digest is not None:
+                retry_after = await self.repository.record_login_failure(
+                    subject_digest, state=account_state, now=now
+                )
+                if retry_after is not None:
+                    raise self._rate_limited(retry_after)
             raise DomainError("invalid_credentials", "帳號或密碼錯誤", 401)
+        if subject_digest is not None:
+            await self.repository.clear_login_account_state(subject_digest)
         if self.password_hasher.needs_rehash(user.password_hash):
             user.password_hash = self.password_hasher.hash(password)
         session = SessionRecord(
             user_id=user.id,
             status="active",
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            session_origin=(
+                REMOTE_MANAGEMENT_SESSION_ORIGIN
+                if public_exposure_profile is not None
+                else "local_web"
+            ),
+            public_profile=public_exposure_profile,
         )
         await self.repository.add(session)
         result = await self._issue_session(user.id, session)
@@ -79,27 +192,83 @@ class SessionService:
             # into platform RLS scope before listing organizations; auth-user
             # discovery scope intentionally cannot see tenantless admin data.
             await self.repository.set_platform_scope()
-        result["organizations"] = await self._available_organizations(
+        organizations = await self._available_organizations(
             user.id, platform_scope=user.platform_role == "PLATFORM_ADMIN"
+        )
+        result["organizations"] = (
+            [
+                organization
+                for organization in organizations
+                if organization["role"] in {"STAFF", "SHELTER_ADMIN"}
+            ]
+            if public_exposure_profile is not None
+            else organizations
         )
         return result
 
-    async def refresh(self, *, refresh_token: str) -> dict:
+    async def refresh(
+        self, *, refresh_token: str, public_exposure_profile: str | None = None
+    ) -> dict:
         record = await self.repository.get_refresh_token(_refresh_digest(refresh_token))
         now = datetime.now(timezone.utc)
         if record is None or record.status != "active" or record.expires_at <= now:
             if record is not None:
                 await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_refresh_token", "Refresh Token 無效", 401)
-        session = await self.repository.get_session(record.session_id)
+        session = await self.repository.lock_session(record.session_id)
         user = session and await self.repository.get_user(session.user_id)
-        if session is None or user is None or session.status != "active" or user.status != "active":
+        if (
+            session is None
+            or user is None
+            or session.status != "active"
+            or session.expires_at <= now
+            or user.status != "active"
+        ):
+            if session is not None and session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN:
+                session.status = "revoked"
+                await self.repository.revoke_refresh_family(record.family_id)
+            raise DomainError("invalid_session", "Session 無效", 401)
+        if (
+            session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN
+            and public_exposure_profile != session.public_profile
+        ):
+            session.status = "revoked"
+            await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_session", "Session 無效", 401)
         await self.repository.set_authentication_user_scope(user.id)
-        if user.platform_role != "PLATFORM_ADMIN" and not await self._has_active_shelter_access(
-            user.id
+        available_access = (
+            []
+            if user.platform_role == "PLATFORM_ADMIN"
+            else await self.repository.effective_organization_access(user.id)
+        )
+        public_role_allowed = public_exposure_profile is None or (
+            user.platform_role != "PLATFORM_ADMIN"
+            and any(
+                membership.role in {"STAFF", "SHELTER_ADMIN"}
+                for membership, _organization in available_access
+            )
+        )
+        account_access = bool(getattr(session, "account_access_enabled", False))
+        if (
+            (account_access and public_exposure_profile is not None)
+            or not public_role_allowed
+            or (
+                user.platform_role != "PLATFORM_ADMIN"
+                and not available_access
+                and not account_access
+            )
         ):
+            if session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN:
+                session.status = "revoked"
+                await self.repository.revoke_refresh_family(record.family_id)
             raise DomainError("invalid_session", "Session 無效", 401)
+        if (
+            account_access
+            and session.active_organization_id
+            not in {organization.id for _membership, organization in available_access}
+            and user.platform_role != "PLATFORM_ADMIN"
+        ):
+            session.active_organization_id = None
         record.status = "rotated"
         return await self._issue_session(user.id, session, family_id=record.family_id)
 
@@ -134,7 +303,7 @@ class SessionService:
         return organizations
 
     async def logout(self, *, session_id: UUID) -> None:
-        session = await self.repository.get_session(session_id)
+        session = await self.repository.lock_session(session_id)
         if session:
             session.status = "revoked"
             # Revoking the server-side session must also invalidate every refresh
@@ -144,12 +313,19 @@ class SessionService:
             for record in records:
                 record.status = "revoked"
 
-    async def current_user(self, *, session_id: UUID) -> dict:
+    async def current_user(
+        self, *, session_id: UUID, public_exposure_profile: str | None = None
+    ) -> dict:
         session = await self.repository.get_session(session_id)
         if (
             session is None
             or session.status != "active"
             or session.expires_at <= datetime.now(timezone.utc)
+        ):
+            raise DomainError("invalid_session", "Session 無效", 401)
+        if (
+            session.session_origin == REMOTE_MANAGEMENT_SESSION_ORIGIN
+            and public_exposure_profile != session.public_profile
         ):
             raise DomainError("invalid_session", "Session 無效", 401)
         user = await self.repository.get_user(session.user_id)
@@ -208,6 +384,8 @@ class SessionService:
                 "status": user.status,
             },
             "memberships": [serialize_membership(membership) for membership in memberships],
+            "account_access_enabled": bool(getattr(session, "account_access_enabled", False)),
+            "public_exposure_profile": public_exposure_profile,
         }
 
     async def bind_line_identity(
@@ -259,6 +437,8 @@ class SessionService:
             active_organization_id=organization.id,
             status="active",
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            session_origin="liff",
+            public_profile=None,
         )
         await self.repository.add(session)
         await self.repository.revoke_active_webhook_sessions(user.id)
@@ -375,6 +555,8 @@ class SessionService:
             active_organization_id=organization_id,
             status="active",
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.refresh_ttl_seconds),
+            session_origin="liff",
+            public_profile=None,
         )
         await self.repository.add(session)
         issued = await self._issue_session(user.id, session)

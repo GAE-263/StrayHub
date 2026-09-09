@@ -35,9 +35,9 @@ from services.api.app.application.volunteer_notification_service import (
 from services.api.app.application.volunteer_pii_service import VolunteerPiiService
 from services.api.app.application.volunteer_service_summary import (
     VolunteerServiceSummaryService,
-    encode_summary_cursor,
 )
 from services.api.app.config.settings import get_settings
+from services.api.app.domain.organization_timezone import local_today
 from services.api.app.domain.taiwan_region import TAIWAN_REGIONS, canonical_taiwan_region
 from services.api.app.domain.tenant_context import TenantContext
 from services.api.app.domain.volunteer_access import validate_service_date_selection
@@ -341,22 +341,25 @@ class VolunteerApplicationDetailResponse(BaseModel):
     service_dates: list[VolunteerApplicationServiceDate]
 
 
-class VolunteerServiceSummaryItemResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    organization_id: UUID
-    organization_name: str
-    service_date: date
-    service_status: Literal["recorded", "archived"]
-    record_count: int = Field(ge=1)
-    source: Literal["care_report"]
-
-
 class VolunteerServiceSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    items: list[VolunteerServiceSummaryItemResponse]
-    next_cursor: str | None
+    current_shelter_visits: int = Field(ge=0)
+    total_strayhub_visits: int = Field(ge=0)
+    visits_last_180_days: int = Field(ge=0)
+    visits_last_90_days: int = Field(ge=0)
+    visits_last_30_days: int = Field(ge=0)
+    last_visit_at: datetime | None
+    active_months_last_6_months: int = Field(ge=0, le=6)
+    recent_status: Literal[
+        "new",
+        "consistently_active",
+        "recently_active",
+        "less_recently_active",
+        "active",
+    ]
+    has_active_platform_restriction: bool
+    approval_blocked: bool
 
 
 class VolunteerPiiRevealRequest(BaseModel):
@@ -378,6 +381,7 @@ class VolunteerAccessGrant(BaseModel):
     organization_id: UUID
     user_id: UUID
     membership_id: UUID
+    volunteer_no: str | None = None
     application_id: UUID
     display_name: str
     status: GrantStatus
@@ -973,7 +977,7 @@ async def submit_volunteer_application(
         response_body = _response(result.status)
         await session.commit()
     except SQLAlchemyError as exc:
-        raise DomainError("dependency_unavailable", "志工申請暫時無法使用", 503) from exc
+        raise DomainError("internal_error", "系統暫時無法完成申請，請稍後再試", 503) from exc
     response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
     return response_body
 
@@ -1066,6 +1070,7 @@ def _management_service(
         get_line_identity_verifier(),
         audit=AuditService(session),
         notifications=VolunteerNotificationService(repository),
+        summary_repository=VolunteerServiceSummaryRepository(session, repository.organization_id),
     )
 
 
@@ -1074,10 +1079,11 @@ def _policy_response(policy) -> VolunteerAccessPolicyResponse:
 
 
 def _application_dict(application) -> dict:
+    applicant_surname = getattr(application, "applicant_surname", None)
     return {
         "id": application.id,
         "organization_id": application.organization_id,
-        "display_name": "LINE 志工",
+        "display_name": (f"{applicant_surname}・新申請" if applicant_surname else "LINE 志工"),
         "status": application.status,
         "submitted_at": application.submitted_at,
         "decided_at": application.decided_at,
@@ -1138,12 +1144,13 @@ def _encode_grant_cursor(grant) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def _grant_dict(grant, *, display_name: str = "LINE 志工") -> dict:
+def _grant_dict(grant, *, display_name: str = "LINE 志工", volunteer_no: str | None = None) -> dict:
     return {
         "id": grant.id,
         "organization_id": grant.organization_id,
         "user_id": grant.user_id,
         "membership_id": grant.membership_id,
+        "volunteer_no": volunteer_no,
         "application_id": grant.application_id,
         "display_name": display_name,
         "status": grant.status,
@@ -1355,8 +1362,6 @@ async def get_volunteer_application_service_summary(
     organizationId: UUID,  # noqa: N803
     applicationId: UUID,  # noqa: N803
     purpose_code: Literal["volunteer_service_history_review"] = Query(...),
-    cursor: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=100),
     context: RequestContext = Depends(current_request_context),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
     support_reason: str | None = Header(default=None, alias="X-Platform-Support-Reason"),
@@ -1370,7 +1375,10 @@ async def get_volunteer_application_service_summary(
     ):
         access_repository = VolunteerAccessRepository(session, organizationId)
         summary_repository = VolunteerServiceSummaryRepository(session, organizationId)
-        page = await VolunteerServiceSummaryService(
+        organization = await AuthenticationRepository(session).get_organization(organizationId)
+        if organization is None:
+            raise DomainError("organization_not_found", "找不到收容所", 404)
+        result = await VolunteerServiceSummaryService(
             access_repository,
             summary_repository,
             audit=AuditService(session),
@@ -1378,9 +1386,7 @@ async def get_volunteer_application_service_summary(
             applicationId,
             tenant_context=_tenant_context(context),
             purpose_code=purpose_code,
-            cursor=cursor,
-            cursor_secret=get_settings().animal_confirmation_secret,
-            limit=limit,
+            as_of=local_today(organization.timezone),
         )
     try:
         await session.commit()
@@ -1388,31 +1394,10 @@ async def get_volunteer_application_service_summary(
         await session.rollback()
         await set_organization_scope(session, organizationId)
         raise DomainError("service_summary_audit_unavailable", "服務紀錄暫時無法使用", 503) from exc
-    last_item = page.items[-1] if page.has_more else None
-    next_cursor = (
-        encode_summary_cursor(
-            get_settings().animal_confirmation_secret,
-            application_id=applicationId,
-            subject_user_id=page.subject_user_id,
-            service_date=last_item.service_date,
-            organization_id=last_item.organization_id,
-        )
-        if last_item is not None
-        else None
-    )
     return VolunteerServiceSummaryResponse(
-        items=[
-            VolunteerServiceSummaryItemResponse(
-                organization_id=item.organization_id,
-                organization_name=item.organization_name,
-                service_date=item.service_date,
-                service_status=item.service_status,
-                record_count=item.record_count,
-                source=item.source,
-            )
-            for item in page.items
-        ],
-        next_cursor=next_cursor,
+        **result.statistics.__dict__,
+        has_active_platform_restriction=result.has_active_platform_restriction,
+        approval_blocked=result.has_active_platform_restriction,
     )
 
 
@@ -1473,6 +1458,7 @@ async def reveal_volunteer_application_pii(
 async def list_volunteer_access_grants(
     organizationId: UUID,  # noqa: N803
     grant_status: GrantStatus | None = Query(default=None, alias="status"),  # noqa: B008
+    user_id: UUID | None = Query(default=None),  # noqa: B008
     cursor: str | None = None,
     limit: int = Query(default=100, ge=1, le=200),
     context: RequestContext = Depends(current_request_context),  # noqa: B008
@@ -1489,6 +1475,7 @@ async def list_volunteer_access_grants(
         repository = VolunteerAccessRepository(session, organizationId)
         grants = await repository.list_grants(
             status=grant_status,
+            user_id=user_id,
             cursor=_decode_application_cursor(cursor),
             limit=limit + 1,
         )
@@ -1496,11 +1483,15 @@ async def list_volunteer_access_grants(
         page_grants = grants[:limit]
         items = []
         for grant in page_grants:
-            user = await identities.get_user(grant.user_id)
+            profile = await identities.get_volunteer_profile(grant.user_id)
+            membership = await identities.get_membership(grant.user_id, organizationId)
+            volunteer_no = None if membership is None else membership.volunteer_no
+            identity = profile.surname if profile is not None and profile.surname else "志工"
             items.append(
                 _grant_dict(
                     grant,
-                    display_name="LINE 志工" if user is None else user.display_name,
+                    display_name=(f"{identity}・{volunteer_no}" if volunteer_no else identity),
+                    volunteer_no=volunteer_no,
                 )
             )
     await session.commit()

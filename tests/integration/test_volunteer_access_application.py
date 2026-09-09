@@ -285,7 +285,9 @@ async def test_withdraw_then_reapply_preserves_history_without_membership() -> N
         entry_reference_id=uuid4(),
         client_request_id=uuid4(),
         consent_acknowledged=True,
+        applicant_name="黃志工",
     )
+    assert first.status.application.applicant_surname == "黃"
     first.status.application.version = 1
 
     withdrawn = await service.withdraw(
@@ -302,6 +304,7 @@ async def test_withdraw_then_reapply_preserves_history_without_membership() -> N
     )
 
     assert withdrawn.effective_status == "withdrawn"
+    assert withdrawn.application.applicant_surname is None
     assert reapplied.created is True
     assert len(repository.values) == 2
     assert repository.values[1].previous_application_id == repository.values[0].id

@@ -4,17 +4,23 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from services.api.app.api.dependencies import (
     RequestContext,
     authenticated_request_context,
     current_request_context,
+    identity_request_context,
     request_session,
 )
 from services.api.app.api.errors import DomainError
+from services.api.app.api.management_access import (
+    resolve_public_exposure_profile,
+    resolve_trusted_client_ip,
+)
 from services.api.app.application.audit_service import AuditService
 from services.api.app.application.authentication.context_service import ActiveShelterContextService
+from services.api.app.application.authentication.login_abuse import LoginAbuseKeys
 from services.api.app.application.authentication.session_service import SessionService
 from services.api.app.application.line_rich_menu_routing import (
     RichMenuRoutingService,
@@ -38,11 +44,15 @@ router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str
     password: str
 
 
 class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     refresh_token: str
 
 
@@ -162,7 +172,9 @@ class CurrentUserResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user: CurrentUserProfile
+    account_access_enabled: bool = False
     memberships: list[CurrentUserMembership]
+    public_exposure_profile: Literal["shared-demo-production", "shared-demo-dev"] | None = None
 
 
 def get_session_service(_session: AsyncSession = Depends(request_session)) -> SessionService:  # noqa: B008
@@ -210,39 +222,83 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
         rich_menu_router=rich_menu_router,
         refresh_ttl_seconds=settings.session_refresh_token_ttl_seconds,
         access_ttl_seconds=settings.session_access_token_ttl_seconds,
+        abuse_keys=LoginAbuseKeys(settings.login_abuse_hmac_secret),
     )
 
 
 @router.post("/login", status_code=status.HTTP_200_OK, openapi_extra={"security": []})
 async def login(
+    request: Request,
     payload: LoginRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:  # noqa: B008
-    result = await service.login(username=payload.username, password=payload.password)
+    settings = get_settings()
+    try:
+        client_ip = resolve_trusted_client_ip(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+            allow_local_test_peer=settings.app_env.strip().lower() in {"local", "test", "testing"},
+        )
+        public_exposure_profile = resolve_public_exposure_profile(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+        )
+    except ValueError as exc:
+        raise DomainError("login_source_unavailable", "登入暫時無法處理", 503) from exc
+    try:
+        result = await service.login(
+            username=payload.username,
+            password=payload.password,
+            client_ip=client_ip,
+            public_exposure_profile=public_exposure_profile,
+        )
+    except DomainError:
+        await session.commit()
+        raise
     await session.commit()
     return result
 
 
 @router.post("/refresh", status_code=status.HTTP_200_OK, openapi_extra={"security": []})
 async def refresh(
+    request: Request,
     payload: RefreshRequest,
     service: SessionService = Depends(get_session_service),  # noqa: B008
     session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> dict:  # noqa: B008
-    result = await service.refresh(refresh_token=payload.refresh_token)
+    settings = get_settings()
+    try:
+        public_exposure_profile = resolve_public_exposure_profile(
+            request,
+            trusted_proxy_enabled=settings.login_trusted_proxy_enabled,
+        )
+    except ValueError as exc:
+        raise DomainError("public_exposure_invalid", "公開存取來源無效", 403) from exc
+    try:
+        result = await service.refresh(
+            refresh_token=payload.refresh_token,
+            public_exposure_profile=public_exposure_profile,
+        )
+    except DomainError:
+        # Invalid remote refresh may revoke the session and its family. Preserve
+        # that security state even though the HTTP request returns an error.
+        await session.commit()
+        raise
     await session.commit()
     return result
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
-    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    context: RequestContext = Depends(identity_request_context),  # noqa: B008
     service: SessionService = Depends(get_session_service),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
 ) -> Response:
     if context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
     await service.logout(session_id=context.session_id)
+    await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -275,13 +331,16 @@ async def liff_exchange(
 
 @router.get("/me", response_model=CurrentUserResponse)
 async def current_user(
-    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    context: RequestContext = Depends(authenticated_request_context),  # noqa: B008
     service: SessionService = Depends(get_session_service),  # noqa: B008
 ) -> CurrentUserResponse:
     if context.session_id is None:
         raise DomainError("invalid_session", "Session 無效", 401)
     return CurrentUserResponse.model_validate(
-        await service.current_user(session_id=context.session_id)
+        await service.current_user(
+            session_id=context.session_id,
+            public_exposure_profile=context.public_exposure_profile,
+        )
     )
 
 

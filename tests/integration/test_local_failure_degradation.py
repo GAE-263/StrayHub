@@ -86,7 +86,7 @@ async def test_network_media_and_ai_failures_keep_core_data_safe(monkeypatch) ->
         raise RuntimeError("queue offline")
 
     monkeypatch.setattr("services.api.app.application.report_job_dispatch.create_ai_job", fail_job)
-    service = ReportJobDispatchService(lambda: Session())
+    service = ReportJobDispatchService(lambda: Session(), ai_enabled=True)
     assert (
         await service.dispatch(organization_id=report.organization_id, report_id=report.id) is False
     )

@@ -8,15 +8,24 @@ from services.api.app.config.settings import get_settings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-IDENTITY_TABLES = ("users", "session_records", "refresh_token_records")
+IDENTITY_TABLES = (
+    "users",
+    "session_records",
+    "refresh_token_records",
+    "google_user_bindings",
+    "google_auth_transactions",
+)
 TENANT_TABLES = (
     "organizations",
     "organization_memberships",
+    "webhook_sessions",
     "audit_records",
     "animals",
     "animal_external_sources",
     "media_assets",
     "animal_qr_codes",
+    "organization_invitations",
+    "organization_join_applications",
 )
 
 
@@ -47,18 +56,32 @@ async def configure(database_url: str, *, apply: bool = False) -> dict:
             if owner:
                 raise RuntimeError("Runtime role must not own application schema objects")
             missing = []
+            if not await connection.scalar(
+                text(
+                    "SELECT has_function_privilege('strayhub_runtime', "
+                    "'public.join_organization(uuid)', 'EXECUTE')"
+                )
+            ):
+                raise RuntimeError(
+                    "Missing join_organization function EXECUTE grant; apply migration"
+                )
             for table in IDENTITY_TABLES:
-                for permission in ("SELECT", "INSERT", "UPDATE"):
+                permissions = ("SELECT", "INSERT", "UPDATE")
+                if table == "google_auth_transactions":
+                    permissions += ("DELETE",)
+                for permission in permissions:
                     if not await connection.scalar(
                         text("SELECT has_table_privilege('strayhub_runtime',:table,:permission)"),
                         {"table": f"public.{table}", "permission": permission},
                     ):
                         missing.append(f"{table}:{permission}")
                 if apply:
-                    # These three tables predate 0003's default privileges. No
-                    # DELETE, ownership, role membership or schema grants needed.
+                    # Only expired login transactions need DELETE for cleanup.
+                    # Never grant ownership, role membership or schema privileges.
                     await connection.execute(
-                        text(f"GRANT SELECT, INSERT, UPDATE ON public.{table} TO strayhub_runtime")
+                        text(
+                            f"GRANT {', '.join(permissions)} ON public.{table} TO strayhub_runtime"
+                        )
                     )
             for table in TENANT_TABLES:
                 protected = await connection.scalar(
@@ -73,6 +96,8 @@ async def configure(database_url: str, *, apply: bool = False) -> dict:
                 permissions = (
                     ("SELECT", "INSERT")
                     if table == "audit_records"
+                    else ("SELECT", "INSERT", "UPDATE")
+                    if table in {"organization_invitations", "organization_join_applications"}
                     else ("SELECT", "INSERT", "UPDATE", "DELETE")
                 )
                 for permission in permissions:

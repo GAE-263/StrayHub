@@ -28,6 +28,7 @@ export type AuthOrganization = {
 };
 
 export type CurrentUser = {
+  account_access_enabled?: boolean;
   user: {
     id: string;
     username?: string | null;
@@ -51,6 +52,7 @@ export type CurrentUser = {
       expires_at: string;
     } | null;
   }>;
+  public_exposure_profile?: "shared-demo-production" | "shared-demo-dev" | null;
 };
 
 export type AuthenticatedRouteContext = {

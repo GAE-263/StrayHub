@@ -94,11 +94,15 @@ async def _cleanup(organization_id: UUID, line_user_ids: tuple[str, ...]) -> Non
         )
         if user_ids:
             ids = [row["user_id"] for row in user_ids]
-            await connection.execute(
-                "DELETE FROM growth_diary_entries WHERE adopter_user_id = ANY($1::uuid[])", ids
-            )
+            # Drafts before entries — a draft's current_entry_id now stays
+            # pointed at its day's entry instead of being cleared once saved
+            # (see the daily-thread redesign), so deleting entries first
+            # would violate that foreign key.
             await connection.execute(
                 "DELETE FROM growth_diary_drafts WHERE adopter_user_id = ANY($1::uuid[])", ids
+            )
+            await connection.execute(
+                "DELETE FROM growth_diary_entries WHERE adopter_user_id = ANY($1::uuid[])", ids
             )
         await connection.execute(
             "DELETE FROM adoption_inquiries WHERE organization_id = $1", organization_id
@@ -130,18 +134,22 @@ def _submit_adoption_inquiry(
         "action=choose_path&flow=adoption&value=specific_animal",
         f"action=select_target_animal&flow=adoption&value={animal_id}",
         "action=confirm_target_animal&flow=adoption",
+        # Skip the free-text self-introduction step (方向 D) and fall back
+        # to the one-by-one questions below — same escape hatch a real
+        # adopter gets from the "還是想一題一題回答" quick reply.
+        "action=finish_freetext_profile&flow=adoption",
     ]
     actions.extend(
-        f"action=answer&flow=adoption&value={value}"
-        for value in (
-            "apartment_small",
-            "first_time",
-            "none",
-            "adults_only",
-            "work_from_home",
-            "structured",
-            "high_patience",
-            "companionship",
+        f"action=answer&flow=adoption&question={question}&value={value}"
+        for question, value in (
+            ("housing_type", "apartment_small"),
+            ("dog_experience", "first_time"),
+            ("other_pets", "none"),
+            ("household_members", "adults_only"),
+            ("work_schedule", "work_from_home"),
+            ("parenting_style", "structured"),
+            ("patience_level", "high_patience"),
+            ("adoption_motivation", "companionship"),
         )
     )
     actions.append("action=confirm_answers&flow=adoption")
@@ -203,7 +211,7 @@ def test_growth_diary_entry_records_note_and_resets_reminder_clock(monkeypatch) 
                 )
                 assert entry is not None
                 assert entry["note"] == "今天精神很好，吃了兩碗飯！"
-                assert entry["photo_key"] is None
+                assert json.loads(entry["photo_keys"]) == []
 
                 inquiry = await connection.fetchrow(
                     "SELECT last_growth_diary_prompted_at FROM adoption_inquiries "
@@ -213,13 +221,109 @@ def test_growth_diary_entry_records_note_and_resets_reminder_clock(monkeypatch) 
                 assert inquiry["last_growth_diary_prompted_at"] is not None
 
                 draft = await connection.fetchrow(
-                    "SELECT 1 FROM growth_diary_drafts WHERE organization_id = $1",
+                    "SELECT current_entry_id, entry_date FROM growth_diary_drafts "
+                    "WHERE organization_id = $1",
                     organization_id,
                 )
-                # Cleared once the entry was saved — no pending draft left.
-                assert draft is None
+                # No longer cleared once the entry is saved — it now stays
+                # around as "today's open thread" so a same-day follow-up
+                # message merges onto this same entry (see
+                # _handle_growth_diary_message / append_to_entry).
+                assert draft is not None
+                assert draft["current_entry_id"] == entry["id"]
+                assert draft["entry_date"] is not None
             finally:
                 await connection.close()
+
+        asyncio.run(verify())
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        get_settings.cache_clear()
+
+
+def test_same_day_messages_merge_onto_one_entry_without_retriggering(monkeypatch) -> None:
+    """The point of the daily-thread redesign: once a thread is open, the
+    adopter can keep sending messages the same calendar day without tapping
+    "新增一篇"/"毛孩日記" again — each one merges onto the SAME entry (note
+    appended, photo added to photo_keys) rather than needing a fresh
+    trigger, and rather than getting the "不太確定這句話的意思" fallback."""
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-growth-diary-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id = uuid4(), uuid4()
+    line_user_id = f"Udiary{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+    try:
+        client = TestClient(app)
+        _submit_adoption_inquiry(client, line_user_id, organization_id, animal_id)
+
+        _post(client, [_text_event(line_user_id, "毛孩日記")])
+        _post(client, [_event(line_user_id, "action=start_growth_diary_entry&flow=growth_diary")])
+        first = _post(client, [_text_event(line_user_id, "早上吃了一碗飯")]).json()[
+            "event_results"
+        ][0]
+        assert first["status"] == "processed", first
+
+        # No re-trigger here — straight to another plain text message, the
+        # same way a real follow-up would arrive later the same day.
+        second = _post(client, [_text_event(line_user_id, "下午出去散步一小時")]).json()[
+            "event_results"
+        ][0]
+        assert second["status"] == "processed", second
+
+        async def verify() -> None:
+            connection = await asyncpg.connect(_database_url())
+            try:
+                entries = await connection.fetch(
+                    "SELECT note FROM growth_diary_entries WHERE organization_id = $1",
+                    organization_id,
+                )
+                # Still exactly one entry — the second message merged onto
+                # the first rather than forking a second row.
+                assert len(entries) == 1
+                assert entries[0]["note"] == "早上吃了一碗飯\n\n下午出去散步一小時"
+            finally:
+                await connection.close()
+
+        asyncio.run(verify())
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        get_settings.cache_clear()
+
+
+def test_is_adopter_only_line_user_distinguishes_bound_adopters_from_unbound_and_staff(
+    monkeypatch,
+) -> None:
+    """Regression test for _is_adopter_only_line_user: a stray text message
+    from an adopter (e.g. right after a growth-diary entry clears its
+    pending draft — see test_growth_diary_entry_records_note_and_resets_
+    reminder_clock) used to fall through to the staff-only _resolve_context
+    path and get the confusing "請先開啟 LIFF 完成身分綁定" reply, even though
+    the adopter is already bound — just not as staff. This checks the
+    predicate the fix (_adopter_lost_message) is gated on: True only for a
+    LINE user who IS bound but holds no organization membership anywhere;
+    False for a genuinely unbound LINE user."""
+    from services.api.app.api.line_webhook import _is_adopter_only_line_user
+    from services.api.app.persistence.database.engine import engine, session_factory
+
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-growth-diary-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id = uuid4(), uuid4()
+    line_user_id = f"Udiary{uuid4().hex}"
+    unbound_line_user_id = f"Udiary{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+    try:
+        client = TestClient(app)
+        _submit_adoption_inquiry(client, line_user_id, organization_id, animal_id)
+
+        async def verify() -> None:
+            # Dispose pooled connections from the TestClient's event loop
+            # first — session_factory's engine can't reuse them under the
+            # fresh loop asyncio.run() spins up here (see _post's identical
+            # dispose call for the same reason).
+            await engine.dispose(close=False)
+            async with session_factory() as session:
+                assert await _is_adopter_only_line_user(session, line_user_id) is True
+                assert await _is_adopter_only_line_user(session, unbound_line_user_id) is False
 
         asyncio.run(verify())
     finally:
@@ -307,7 +411,7 @@ class _AiTestSession:
         return self
 
     async def execute(self, _statement, *_args, **_kwargs):
-        return None
+        return _AiScalarResult(self.entry)
 
     async def get(self, _model, _entry_id):
         return self.entry
@@ -321,6 +425,19 @@ class _AiTestLine:
         self.pushes.append(payload)
 
 
+class _AiScalarResult:
+    def __init__(self, entry) -> None:
+        self.entry = entry
+
+    def scalar_one_or_none(self):
+        return self.entry
+
+
+class _AiTestStorage:
+    async def get_with_content_type(self, **_kwargs):
+        return b"test-webp", "image/webp"
+
+
 class _AiClient:
     model_name = "gemini-test"
 
@@ -328,7 +445,7 @@ class _AiClient:
         self.result = result
         self.calls = 0
 
-    async def analyze_growth_diary_entry(self, _prompt):
+    async def analyze_growth_diary_entry(self, _prompt, **_kwargs):
         self.calls += 1
         return self.result
 
@@ -346,8 +463,12 @@ def _analysis_entry(**overrides):
         "ai_output_schema_version": None,
         "ai_raw_output": None,
         "ai_analyzed_at": None,
+        "ai_content_version": None,
+        "content_version": 1,
         "note": "original note",
         "photo_key": "original-photo.webp",
+        "photo_keys": ["original-photo.webp"],
+        "photo_content_type": "image/webp",
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -358,6 +479,7 @@ async def _run_analysis(monkeypatch, *, entry, gemini, note, has_photo):
     line = _AiTestLine()
     monkeypatch.setattr(line_webhook, "session_factory", lambda: session)
     monkeypatch.setattr(line_webhook, "_build_gemini_client", lambda _settings: gemini)
+    monkeypatch.setattr(line_webhook, "MinioStorageAdapter", _AiTestStorage)
     await line_webhook._run_growth_diary_ai_analysis(
         line,
         line_user_id="U-ai-test",
@@ -396,7 +518,7 @@ async def test_growth_diary_ai_success_persists_status_and_complete_provenance(m
     assert entry.ai_provider == "google_gemini"
     assert entry.ai_model_name == "gemini-test"
     assert entry.ai_model_version == "gemini-test"
-    assert entry.ai_prompt_version == "growth-diary-v1"
+    assert entry.ai_prompt_version == "growth-diary-v2-multimodal"
     assert entry.ai_output_schema_version == "growth-diary-analysis-v1"
     assert entry.ai_raw_output == raw_output
     assert entry.ai_analyzed_at is not None
@@ -409,7 +531,7 @@ async def test_growth_diary_ai_success_persists_status_and_complete_provenance(m
     [
         (_AiClient(None), "分析會失敗", False, "failed"),
         (None, "未設定模型", False, "unconfigured"),
-        (_AiClient(None), None, True, "not_applicable"),
+        (_AiClient(None), None, True, "failed"),
     ],
 )
 async def test_growth_diary_ai_terminal_states_preserve_original_entry(
