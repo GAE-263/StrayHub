@@ -533,7 +533,7 @@ async def test_followup_reconciliation_discovers_recoverable_status(status: str)
                 job.claimed_at = datetime.now(timezone.utc) - timedelta(days=1)
                 job.claim_token = "dead-worker"
         assert (result.ai_job_id, organization_id) in await pending_celery_dispatches(
-            session_factory
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
         )
     finally:
         await _cleanup(organization_id, adopter_id)

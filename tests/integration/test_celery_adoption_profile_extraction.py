@@ -617,7 +617,9 @@ async def test_profile_reconciliation_discovers_each_recoverable_status(
             if status == "running":
                 job.claimed_at = datetime.now(timezone.utc) - timedelta(days=1)
                 job.claim_token = "dead-worker"
-        pending = await pending_celery_dispatches(session_factory)
+        pending = await pending_celery_dispatches(
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
+        )
         assert (command.ai_job_id, organization_id) in pending
     finally:
         await _cleanup(organization_id, adopter_id)

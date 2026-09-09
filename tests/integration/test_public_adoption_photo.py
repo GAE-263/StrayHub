@@ -147,6 +147,7 @@ def test_public_adoption_photo_streams_private_media_only_while_adoptable(monkey
         asyncio.run(engine.dispose(close=False))
         client = TestClient(app)
         token = issue_adoption_photo_token(
+            signing_secret=media_access.get_settings().animal_confirmation_secret,
             organization_id=organization_id,
             animal_id=animal_id,
             object_key=object_key,
@@ -173,6 +174,7 @@ def test_walk_photo_capability_keeps_300_second_ttl_and_purpose_binding(monkeypa
     animal_id = uuid4()
     monkeypatch.setattr(media_access.time, "time", lambda: 1_000)
     token = issue_animal_photo_token(
+        signing_secret=media_access.get_settings().animal_confirmation_secret,
         purpose=VOLUNTEER_WALK_PHOTO,
         organization_id=organization_id,
         animal_id=animal_id,
@@ -213,6 +215,7 @@ def test_public_walk_photo_allows_active_non_adoptable_animal(monkeypatch) -> No
     try:
         asyncio.run(engine.dispose(close=False))
         token = issue_animal_photo_token(
+            signing_secret=media_access.get_settings().animal_confirmation_secret,
             purpose=VOLUNTEER_WALK_PHOTO,
             organization_id=organization_id,
             animal_id=animal_id,
@@ -269,6 +272,7 @@ def test_public_walk_photo_rejects_unsafe_media(
     try:
         asyncio.run(engine.dispose(close=False))
         token = issue_animal_photo_token(
+            signing_secret=media_access.get_settings().animal_confirmation_secret,
             purpose=VOLUNTEER_WALK_PHOTO,
             organization_id=organization_id,
             animal_id=animal_id,
@@ -294,6 +298,7 @@ def test_public_walk_photo_rejects_replaced_photo(monkeypatch) -> None:
     monkeypatch.setattr(media_api, "MinioStorageAdapter", Storage)
     asyncio.run(_seed(organization_id, animal_id, media_id, old_key))
     token = issue_animal_photo_token(
+        signing_secret=media_access.get_settings().animal_confirmation_secret,
         purpose=VOLUNTEER_WALK_PHOTO,
         organization_id=organization_id,
         animal_id=animal_id,
@@ -326,6 +331,7 @@ def test_public_walk_photo_capability_cannot_cross_shelters(monkeypatch) -> None
     try:
         asyncio.run(engine.dispose(close=False))
         token = issue_animal_photo_token(
+            signing_secret=media_access.get_settings().animal_confirmation_secret,
             purpose=VOLUNTEER_WALK_PHOTO,
             organization_id=organization_a,
             animal_id=animal_b,

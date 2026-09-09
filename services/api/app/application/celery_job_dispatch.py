@@ -7,10 +7,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.api.app.application.async_job_types import CELERY_TASK_BY_JOB_TYPE
-from services.api.app.config.settings import get_settings
 from services.api.app.infrastructure.celery_app import celery_app
 from services.api.app.observability.logging import get_logger
-from services.api.app.persistence.database.engine import session_factory
 from services.api.app.persistence.database.scope import set_organization_scope, set_platform_scope
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 
@@ -27,9 +25,11 @@ def _payload(job: AIProcessingJob) -> dict[str, str | int]:
     }
 
 
-async def dispatch_ai_job(job_id: UUID, organization_id: UUID) -> bool:
+async def dispatch_ai_job(
+    job_id: UUID, organization_id: UUID, *, factory: async_sessionmaker[AsyncSession]
+) -> bool:
     """Best-effort post-commit publish; the persisted job remains recoverable."""
-    async with session_factory() as session:
+    async with factory() as session:
         async with session.begin():
             await set_organization_scope(session, organization_id)
             job = await session.scalar(
@@ -54,11 +54,14 @@ async def dispatch_ai_job(job_id: UUID, organization_id: UUID) -> bool:
             "celery_job_publish_failed",
             extra={"job_id": str(job_id), "organization_id": str(organization_id)},
         )
-        await _mark_dispatch_status(job_id, organization_id, status="enqueue_failed")
+        await _mark_dispatch_status(
+            job_id, organization_id, factory=factory, status="enqueue_failed"
+        )
         return False
     await _mark_dispatch_status(
         job_id,
         organization_id,
+        factory=factory,
         status="queued",
         celery_task_id=result.id,
     )
@@ -69,10 +72,11 @@ async def _mark_dispatch_status(
     job_id: UUID,
     organization_id: UUID,
     *,
+    factory: async_sessionmaker[AsyncSession],
     status: str,
     celery_task_id: str | None = None,
 ) -> None:
-    async with session_factory() as session:
+    async with factory() as session:
         async with session.begin():
             await set_organization_scope(session, organization_id)
             job = await session.scalar(
@@ -93,11 +97,14 @@ async def _mark_dispatch_status(
 
 
 async def pending_celery_dispatches(
-    factory: async_sessionmaker[AsyncSession], *, limit: int = RECONCILE_BATCH_SIZE
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    visibility_timeout: int,
+    limit: int = RECONCILE_BATCH_SIZE,
 ) -> list[tuple[UUID, UUID]]:
     bounded_limit = max(1, min(limit, RECONCILE_BATCH_SIZE))
     now = datetime.now(timezone.utc)
-    stale_before = now - timedelta(seconds=get_settings().celery_visibility_timeout)
+    stale_before = now - timedelta(seconds=visibility_timeout)
     async with factory() as session:
         async with session.begin():
             await set_platform_scope(session)
