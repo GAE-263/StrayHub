@@ -385,7 +385,7 @@ export default function AnimalConfirmationPage() {
     setPhase("resolving-animal");
     try {
       const data = await request<{ items: AnimalCandidate[] }>(
-        `/v1/animals/search?query=${encodeURIComponent(normalized)}&page_size=100`,
+        `/v1/animals/search?query=${encodeURIComponent(normalized)}&page_size=50`,
       );
       if (!isCurrent(epoch)) return;
       const exact = data.items.filter(
@@ -404,8 +404,14 @@ export default function AnimalConfirmationPage() {
       });
       setPhase("idle");
     } catch (error) {
-      if (isCurrent(epoch))
-        showSafeError(error, "找不到這個完整收容編號，請確認後再試。");
+      if (isCurrent(epoch)) {
+        showSafeError(
+          error,
+          error instanceof ApiResponseError && error.status === 422
+            ? "目前無法查詢完整收容編號，請稍後再試。"
+            : "找不到這個完整收容編號，請確認後再試。",
+        );
+      }
     }
   };
 
