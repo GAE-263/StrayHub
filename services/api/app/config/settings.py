@@ -336,8 +336,11 @@ class Settings(BaseSettings):
                     problems.append("WEB_PUBLIC_BASE_URL uses a reserved placeholder host")
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
-            placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
-            placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
+            # Volunteer acceptance does not exercise the separate staff entry.
+            # Its handler remains fail-closed when no staff LIFF is configured.
+            if environment != "acceptance":
+                placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
+                placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
             if not _LINE_SMOKE_EVIDENCE_PATTERN.fullmatch(
                 self.line_role_menu_smoke_evidence.strip()
             ):

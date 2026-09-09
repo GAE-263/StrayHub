@@ -290,6 +290,32 @@ async def test_new_line_identity_returns_new_without_creating_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_repeated_liff_exchange_allows_parallel_sessions_without_new_authority():
+    repository = FakeRepository()
+    original = (repository.binding, repository.effective_membership, repository.effective_grant)
+    for _ in range(7):
+        result = await service(repository).exchange_line_identity(
+            id_token="valid-line-id-token", shelter_entry_reference="valid-entry-reference"
+        )
+        assert result["state"] == "ACTIVE"
+    sessions = [value for value in repository.values if isinstance(value, SessionRecord)]
+    assert len(sessions) == 7
+    assert all(value.status == "active" for value in sessions)
+    assert all(value.user_id == repository.user.id for value in sessions)
+    assert all(
+        value.active_organization_id == repository.target_organization.id for value in sessions
+    )
+    assert all(
+        isinstance(value, (SessionRecord, RefreshTokenRecord)) for value in repository.values
+    )
+    assert original == (
+        repository.binding,
+        repository.effective_membership,
+        repository.effective_grant,
+    )
+
+
+@pytest.mark.asyncio
 async def test_pending_application_returns_pending_without_creating_session() -> None:
     repository = FakeRepository()
     repository.effective_membership = None

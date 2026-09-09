@@ -140,6 +140,23 @@ def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
     assert settings.validate_runtime_safety(process="worker") is settings
 
 
+def test_acceptance_volunteer_menu_does_not_require_staff_liff():
+    settings = safe_non_local_settings(
+        app_env="acceptance",
+        celery_broker_url="redis://:synthetic@redis:6379/0",
+        celery_queue_ai="acceptance-ai",
+        celery_queue_system="acceptance-system",
+        celery_worker_concurrency=1,
+        line_notification_recipient_allowlist_sha256=f"{'a' * 64},{'b' * 64}",
+        line_role_menu_features_enabled=True,
+        web_public_base_url="https://acceptance.strayhub.net",
+        line_rich_menu_default_id="richmenu-acceptance-default",
+        line_rich_menu_volunteer_id="richmenu-acceptance-volunteer",
+        line_role_menu_smoke_evidence=f"verified-20260909-{'a' * 40}",
+    )
+    assert settings.validate_runtime_safety() is settings
+
+
 def test_migration_process_policy_requires_only_its_database() -> None:
     settings = Settings(
         _env_file=None,

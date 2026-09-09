@@ -327,8 +327,6 @@ def test_acceptance_preflight_rejects_disabled_role_menu_verification() -> None:
     for key in (
         "LINE_RICH_MENU_DEFAULT_ID",
         "LINE_RICH_MENU_VOLUNTEER_ID",
-        "LINE_RICH_MENU_STAFF_ID",
-        "LINE_STAFF_LIFF_ID",
         "LINE_ROLE_MENU_SMOKE_EVIDENCE",
     ):
         assert key in source
