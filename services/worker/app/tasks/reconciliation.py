@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from services.api.app.application.async_job_types import CELERY_TASK_BY_JOB_TYPE
 from services.api.app.application.celery_job_dispatch import pending_celery_dispatches
+from services.api.app.config.settings import get_worker_settings
 from services.api.app.infrastructure.celery_app import celery_app
 from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.database.scope import set_organization_scope
@@ -15,7 +16,10 @@ logger = get_logger(__name__)
 
 @celery_app.task(name="system.reconcile_ai_dispatch")
 def reconcile_ai_dispatch() -> int:
-    pending = runtime.run(lambda factory: pending_celery_dispatches(factory))
+    visibility_timeout = get_worker_settings().celery_visibility_timeout
+    pending = runtime.run(
+        lambda factory: pending_celery_dispatches(factory, visibility_timeout=visibility_timeout)
+    )
     dispatched = 0
     for job_id, organization_id in pending:
         try:

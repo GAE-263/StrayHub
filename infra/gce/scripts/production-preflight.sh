@@ -199,6 +199,13 @@ cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not 
 import json, sys
 from urllib.parse import unquote, urlsplit
 services = json.load(sys.stdin)["services"]
+signing_keys = [services[name]["environment"].get("ANIMAL_CONFIRMATION_SECRET")
+                for name in ("api", "celery-worker")]
+if not signing_keys[0] or any(key != signing_keys[0] for key in signing_keys):
+    sys.exit("[Production secret preflight] FAIL: inconsistent photo signing configuration")
+if any(services[name]["environment"].get("ANIMAL_CONFIRMATION_SECRET")
+       for name in ("worker", "celery-beat")):
+    sys.exit("[Production secret preflight] FAIL: signing key exposed to non-signing service")
 # Legacy worker is a database-backed process, validated separately below.
 environments = [services[name]["environment"] for name in ("api", "celery-worker", "celery-beat")]
 for key in ("CELERY_BROKER_URL", "CELERY_AI_ENABLED"):
@@ -224,11 +231,15 @@ if not valid:
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
   >/dev/null
 "${compose[@]}" run --rm --no-deps --entrypoint python celery-worker -c \
-  'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
+  'from services.api.app.config.settings import get_worker_photo_signing_secret; get_worker_photo_signing_secret()' \
   >/dev/null
 "${compose[@]}" run --rm --no-deps --entrypoint python celery-beat -c \
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
   >/dev/null
+for task_service in celery-worker celery-beat; do
+  "${compose[@]}" run --rm --no-deps --entrypoint python "$task_service" \
+    -m services.worker.app.import_smoke || fail "$task_service task registry import failed"
+done
 "${compose[@]}" --profile tools run --rm --no-deps --entrypoint python migration -c \
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="migration")' \
   >/dev/null

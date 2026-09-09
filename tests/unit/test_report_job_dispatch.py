@@ -63,7 +63,8 @@ async def test_report_job_dispatch_commits_after_report_exists(monkeypatch) -> N
 
     monkeypatch.setattr(module, "create_ai_job", fake_create)
 
-    async def fake_dispatch(job_id, dispatched_organization_id):
+    async def fake_dispatch(job_id, dispatched_organization_id, *, factory):
+        assert factory is service.session_factory
         dispatched.append((job_id, dispatched_organization_id))
         return True
 

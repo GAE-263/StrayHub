@@ -55,7 +55,10 @@ class ReportJobDispatchService:
                     )
                     job_ids.append(observation.id)
                     report.ai_job_status = "enqueued"
-            results = [await dispatch_ai_job(job_id, organization_id) for job_id in job_ids]
+            results = [
+                await dispatch_ai_job(job_id, organization_id, factory=self.session_factory)
+                for job_id in job_ids
+            ]
             return bool(results) and all(results)
         except Exception:
             await self._mark_failed(organization_id=organization_id, report_id=report_id)

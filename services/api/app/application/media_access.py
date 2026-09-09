@@ -108,6 +108,7 @@ def public_https_url_or_none(value: str | None, *, origin_only: bool = False) ->
 
 def issue_animal_photo_token(
     *,
+    signing_secret: str,
     purpose: str,
     organization_id: UUID,
     animal_id: UUID,
@@ -116,6 +117,8 @@ def issue_animal_photo_token(
 ) -> str:
     if purpose not in ANIMAL_PHOTO_PURPOSES:
         raise ValueError("unsupported animal photo purpose")
+    if not signing_secret.strip():
+        raise ValueError("animal photo signing secret is required")
     payload = {
         "purpose": purpose,
         "organization_id": str(organization_id),
@@ -124,17 +127,21 @@ def issue_animal_photo_token(
         "expires_at": int(time.time()) + max(1, ttl_seconds),
     }
     encoded = _encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
-    signature = hmac.new(
-        get_settings().animal_confirmation_secret.encode(), encoded.encode(), hashlib.sha256
-    ).digest()
+    signature = hmac.new(signing_secret.encode(), encoded.encode(), hashlib.sha256).digest()
     return f"{encoded}.{_encode(signature)}"
 
 
 def issue_adoption_photo_token(
-    *, organization_id: UUID, animal_id: UUID, object_key: str, ttl_seconds: int = 300
+    *,
+    signing_secret: str,
+    organization_id: UUID,
+    animal_id: UUID,
+    object_key: str,
+    ttl_seconds: int = 300,
 ) -> str:
     """Issue a short-lived capability for one adoptable animal's current photo."""
     return issue_animal_photo_token(
+        signing_secret=signing_secret,
         purpose=PUBLIC_ADOPTION_PHOTO,
         organization_id=organization_id,
         animal_id=animal_id,
@@ -269,6 +276,7 @@ class ExternalAnimalPhotoService:
         if photo is None:
             return None
         token = issue_animal_photo_token(
+            signing_secret=get_settings().animal_confirmation_secret,
             purpose=purpose,
             organization_id=organization_id,
             animal_id=animal.id,

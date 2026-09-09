@@ -234,7 +234,10 @@ async def test_suitability_job_is_transactional_tenant_scoped_and_idempotent(
             raise ConnectionError("redis unavailable")
 
         monkeypatch.setattr(celery_app, "send_task", fail_publish)
-        assert await dispatch_ai_job(result.ai_job_id, organization_id) is False
+        assert (
+            await dispatch_ai_job(result.ai_job_id, organization_id, factory=session_factory)
+            is False
+        )
         async with session_factory() as session:
             async with session.begin():
                 await set_organization_scope(session, organization_id)
@@ -251,7 +254,10 @@ async def test_suitability_job_is_transactional_tenant_scoped_and_idempotent(
             "send_task",
             lambda *_args, **_kwargs: SimpleNamespace(id=str(result.ai_job_id)),
         )
-        assert await dispatch_ai_job(result.ai_job_id, organization_id) is True
+        assert (
+            await dispatch_ai_job(result.ai_job_id, organization_id, factory=session_factory)
+            is True
+        )
 
         assert (
             await claim_suitability_job(
@@ -896,7 +902,11 @@ async def test_reconciliation_is_bounded_idempotent_and_excludes_legacy_jobs(
             "send_task",
             lambda *_args, **kwargs: published.append(kwargs) or SimpleNamespace(id=str(job_id)),
         )
-        pending = await pending_celery_dispatches(session_factory, limit=1000)
+        pending = await pending_celery_dispatches(
+            session_factory,
+            visibility_timeout=get_worker_settings().celery_visibility_timeout,
+            limit=1000,
+        )
         assert len(pending) <= 100
         assert (job_id, organization_id) in pending
         assert await _publish(session_factory, job_id=job_id, organization_id=organization_id)
@@ -912,7 +922,9 @@ async def test_reconciliation_is_bounded_idempotent_and_excludes_legacy_jobs(
                 assert job is not None
                 job.status = "pending_enqueue"
                 job.execution_backend = "legacy_polling"
-        pending = await pending_celery_dispatches(session_factory)
+        pending = await pending_celery_dispatches(
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
+        )
         assert (job_id, organization_id) not in pending
         assert not await _publish(session_factory, job_id=job_id, organization_id=organization_id)
     finally:
