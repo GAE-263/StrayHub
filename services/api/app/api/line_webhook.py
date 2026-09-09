@@ -530,6 +530,8 @@ async def _switch_menu_to_volunteer_if_active(session, line_user_id: str | None)
     binding = await identities.get_line_binding(line_user_id)
     if binding is None:
         return False
+    # Signed webhook identity is resolved; RLS may now expose this actor's access.
+    await identities.set_authentication_user_scope(binding.user_id)
     memberships = await identities.memberships(binding.user_id, active_only=True)
     for membership in memberships:
         if membership.role != "VOLUNTEER":

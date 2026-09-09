@@ -258,6 +258,37 @@ async def test_webhook_runtime_role_rls_matrix_and_handoff(
             connection.autocommit = False
 
         sessions = async_sessionmaker(engine, expire_on_commit=False)
+        # Exercise the real menu qualification query under RLS, mocking only LINE I/O.
+        menu_calls = []
+
+        async def switch_menu(line_user_id, role):
+            menu_calls.append((line_user_id, role))
+            return True
+
+        with monkeypatch.context() as menu_patch:
+            menu_patch.setattr(line_webhook, "_switch_rich_menu", switch_menu)
+            async with sessions() as session, session.begin():
+                assert await AuthenticationRepository(session).memberships(ids.one) == []
+                assert await line_webhook._switch_menu_to_volunteer_if_active(
+                    session, ids.line_ids["one"]
+                )
+                assert await AuthenticationRepository(session).memberships(ids.other) == []
+                assert (
+                    await AuthenticationRepository(session).get_membership(ids.one, ids.org_b)
+                    is None
+                )
+            assert menu_calls == [(ids.line_ids["one"], "VOLUNTEER")]
+            async with sessions() as session, session.begin():
+                # Reused pooled connections must not retain the previous actor scope.
+                assert await AuthenticationRepository(session).memberships(ids.one) == []
+                assert not await line_webhook._switch_menu_to_volunteer_if_active(
+                    session, ids.line_ids["zero"]
+                )
+                assert not await line_webhook._switch_menu_to_volunteer_if_active(
+                    session, "U-unbound-runtime-menu-test"
+                )
+            assert len(menu_calls) == 1
+
         replies = []
 
         async def reply_next(*_args, **kwargs):
