@@ -195,6 +195,26 @@ openssl pkey -in "$private_key" -pubout -out "$derived_public" >/dev/null 2>&1 |
 cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not match"
 
 "${compose[@]}" config --quiet
+"${compose[@]}" config --format json | python3 -c '
+import json, sys
+from urllib.parse import unquote, urlsplit
+services = json.load(sys.stdin)["services"]
+# Legacy worker is a database-backed process, validated separately below.
+environments = [services[name]["environment"] for name in ("api", "celery-worker", "celery-beat")]
+for key in ("CELERY_BROKER_URL", "CELERY_AI_ENABLED"):
+    values = [env.get(key) for env in environments]
+    if not values[0] or any(value != values[0] for value in values):
+        sys.exit("[Production secret preflight] FAIL: inconsistent " + key)
+try:
+    broker = urlsplit(environments[0]["CELERY_BROKER_URL"])
+    valid = (broker.scheme == "redis" and broker.hostname == "redis"
+             and broker.port == 6379 and broker.password
+             and unquote(broker.password) == services["redis"]["environment"]["REDIS_PASSWORD"])
+except (ValueError, KeyError):
+    valid = False
+if not valid:
+    sys.exit("[Production secret preflight] FAIL: Redis credential/origin mismatch")
+'
 "${compose[@]}" run --rm --no-deps --entrypoint /bin/sh api -ec '
   export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(cat /run/secrets/runtime_jwt_private_key)"
   export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(cat /run/secrets/runtime_jwt_public_key)"
@@ -204,6 +224,9 @@ cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not 
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
   >/dev/null
 "${compose[@]}" run --rm --no-deps --entrypoint python celery-worker -c \
+  'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
+  >/dev/null
+"${compose[@]}" run --rm --no-deps --entrypoint python celery-beat -c \
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
   >/dev/null
 "${compose[@]}" --profile tools run --rm --no-deps --entrypoint python migration -c \

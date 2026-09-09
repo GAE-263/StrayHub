@@ -72,7 +72,15 @@ runtime_env="$SECRETS_ROOT/current/runtime.env"
 compose_file="$release_dir/infra/gce/docker-compose.production.yml"
 [[ -f "$compose_file" && -f "$image_env" ]] || fail "extracted release is incomplete"
 
-systemctl restart strayhub-secrets.service
+# Materialize the candidate inventory, not the still-active release's inventory.
+# Restarting the secrets unit here can also stop dependent production units.
+systemctl daemon-reload
+"$release_dir/infra/gce/scripts/fetch-secrets.sh" \
+  --project canvas-primacy-502703-k1 \
+  --environment prod \
+  --output-root "$SECRETS_ROOT" \
+  --secret-map "$release_dir/infra/gce/secrets/production-secret-map.tsv"
+chown -R strayhub:strayhub "$SECRETS_ROOT"
 runtime_env="$SECRETS_ROOT/current/runtime.env"
 [[ -s "$runtime_env" ]] || fail "fresh secret generation is incomplete"
 

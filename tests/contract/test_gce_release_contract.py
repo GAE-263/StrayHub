@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,6 +25,149 @@ DIGESTS = {
 }
 RELEASE_ID = f"20260831T120000Z-{GIT_SHA[:12]}"
 PREVIOUS_RELEASE = f"20260830T120000Z-{'b' * 12}"
+
+
+@pytest.mark.parametrize("fetch_status", [0, 1])
+def test_candidate_secrets_are_materialized_without_restarting_runtime(
+    tmp_path: Path, fetch_status: int
+) -> None:
+    deploy = (ROOT / "infra/gce/scripts/deploy-release.sh").read_text(encoding="utf-8")
+    start = deploy.index("systemctl daemon-reload")
+    end = deploy.index("\ncompose=(", start)
+    assert "systemctl restart strayhub-secrets.service" not in deploy
+    assert (
+        end
+        < deploy.index("production-preflight.sh")
+        < deploy.index("systemctl stop strayhub.service")
+    )
+    candidate = tmp_path / "candidate"
+    fetch = candidate / "infra/gce/scripts/fetch-secrets.sh"
+    fetch.parent.mkdir(parents=True)
+    fetch.write_text(
+        f'#!/bin/bash\nprintf "fetch %s\\n" "$*" >> "$TRACE"\nexit {fetch_status}\n',
+        encoding="utf-8",
+    )
+    fetch.chmod(0o755)
+    secrets = tmp_path / "secrets"
+    (secrets / "current").mkdir(parents=True)
+    (secrets / "current/runtime.env").write_text("SYNTHETIC=1\n", encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for command in ("systemctl", "chown"):
+        stub = bin_dir / command
+        stub.write_text(
+            f'#!/bin/bash\nprintf "{command} %s\\n" "$*" >> "$TRACE"\n',
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+    trace = tmp_path / "trace"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'set -eu\nrelease_dir="$1"\nSECRETS_ROOT="$2"\n' + deploy[start:end],
+            "--",
+            str(candidate),
+            str(secrets),
+        ],
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "TRACE": str(trace)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == fetch_status
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    assert calls[0] == "systemctl daemon-reload"
+    assert f"--secret-map {candidate}/infra/gce/secrets/production-secret-map.tsv" in calls[1]
+    assert "--environment prod" in calls[1]
+    assert "--source-dir" not in calls[1]
+    assert len(calls) == (3 if fetch_status == 0 else 2)
+
+
+def test_ci_bootstrap_uses_root_owned_validated_candidate_before_execution() -> None:
+    script = (ROOT / "infra/gce/scripts/deploy-release-ci.sh").read_text(encoding="utf-8")
+    bootstrap = script.split("<<'BOOTSTRAP'\n", 1)[1].split("\nBOOTSTRAP", 1)[0]
+    assert "/opt/strayhub/current/infra/gce/scripts/deploy-release.sh" not in script
+    assert "mktemp -d /var/lib/strayhub/releases/.deploy-bootstrap.XXXXXX" in bootstrap
+    steps = [
+        "install -o root -g root -m 0444",
+        '"$validator" validate-artifact',
+        '[[ "$actual_sha" == "$expected_sha" ]]',
+        '"$validator" extract-artifact',
+        'chmod -R a-w "$bootstrap_dir"',
+        'exec "$bootstrap_dir/payload/infra/gce/scripts/deploy-release.sh"',
+    ]
+    assert [bootstrap.index(step) for step in steps] == sorted(
+        bootstrap.index(step) for step in steps
+    )
+
+
+@pytest.mark.parametrize("mismatch", [None, "beat", "redis"])
+def test_production_preflight_rejects_inconsistent_broker_without_leaking_values(
+    mismatch: str | None,
+) -> None:
+    script = (ROOT / "infra/gce/scripts/production-preflight.sh").read_text(encoding="utf-8")
+    validator = script.split("config --format json | python3 -c '\n", 1)[1].split("\n'", 1)[0]
+    services = {
+        service: {
+            "environment": {
+                "CELERY_BROKER_URL": "redis://:synthetic-secret@redis:6379/0",
+                "CELERY_AI_ENABLED": "false",
+            }
+        }
+        for service in ("api", "celery-worker", "celery-beat")
+    }
+    services["worker"] = {"environment": {"DATABASE_URL": "synthetic"}}
+    services["redis"] = {"environment": {"REDIS_PASSWORD": "synthetic-secret"}}
+    if mismatch == "beat":
+        services["celery-beat"]["environment"]["CELERY_AI_ENABLED"] = "true"
+    if mismatch == "redis":
+        services["redis"]["environment"]["REDIS_PASSWORD"] = "different-secret"
+    result = subprocess.run(
+        [sys.executable, "-c", validator],
+        input=json.dumps({"services": services}),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == (0 if mismatch is None else 1)
+    assert "synthetic-secret" not in result.stdout + result.stderr
+    assert "different-secret" not in result.stdout + result.stderr
+    assert "--entrypoint python celery-beat" in script
+
+
+def test_preflight_accepts_actual_rendered_production_compose() -> None:
+    script = (ROOT / "infra/gce/scripts/production-preflight.sh").read_text(encoding="utf-8")
+    validator = script.split("config --format json | python3 -c '\n", 1)[1].split("\n'", 1)[0]
+    # Use only committed synthetic configuration; never inherit operator .env values.
+    rendered = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            "infra/gce/.env.production.example",
+            "-f",
+            "infra/gce/docker-compose.production.yml",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        env={"PATH": os.environ["PATH"]},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    services = json.loads(rendered.stdout)["services"]
+    assert "CELERY_BROKER_URL" not in services["worker"]["environment"]
+    checked = subprocess.run(
+        [sys.executable, "-c", validator],
+        input=rendered.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert checked.returncode == 0, checked.stderr
 
 
 def build_artifact(tmp_path: Path, *, compatibility: str = "unknown") -> Path:
@@ -293,7 +438,7 @@ def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> No
     assert "--tunnel-through-iap" in ci_deploy
     assert "validate-artifact" in ci_deploy
     assert ci_deploy.index("validate-artifact") < ci_deploy.index("gcloud compute scp")
-    assert "/opt/strayhub/current/infra/gce/scripts/deploy-release.sh" in ci_deploy
+    assert 'exec "$bootstrap_dir/payload/infra/gce/scripts/deploy-release.sh"' in ci_deploy
     assert "DEPLOY_STRAYHUB_PRODUCTION" in ci_deploy
     assert "alembic downgrade" not in ci_deploy.lower()
     assert "/opt/strayhub/current" in receipt_verify
