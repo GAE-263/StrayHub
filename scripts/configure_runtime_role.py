@@ -18,6 +18,7 @@ IDENTITY_TABLES = (
 TENANT_TABLES = (
     "organizations",
     "organization_memberships",
+    "webhook_sessions",
     "audit_records",
     "animals",
     "animal_external_sources",

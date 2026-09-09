@@ -411,6 +411,10 @@ def _adopter_lost_message() -> dict:
     }
 
 
+def _care_report_context_message() -> dict:
+    return _text("目前無法確認你的服務收容所，請重新進入志工流程或重新選擇服務收容所。")
+
+
 async def _is_adopter_only_line_user(session, line_user_id: str) -> bool:
     binding = await LineWebhookRepository(session).binding(line_user_id)
     if binding is None:
@@ -4122,7 +4126,9 @@ async def webhook(
                         stored_event, status="failed", error_code=error.code
                     )
                     reply_message: dict
-                    if error.code in {"line_binding_required", "shelter_context_required"}:
+                    if error.code == "shelter_context_required" and _is_walk_report_command(event):
+                        reply_message = _care_report_context_message()
+                    elif error.code in {"line_binding_required", "shelter_context_required"}:
                         if (
                             error.code == "shelter_context_required"
                             and await _is_adopter_only_line_user(session, line_user_id)

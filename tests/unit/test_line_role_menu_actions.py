@@ -57,6 +57,24 @@ def test_walk_report_command_rejects_legacy_and_near_matches(text: str) -> None:
     )
 
 
+def test_walk_report_context_failure_uses_volunteer_guidance() -> None:
+    message = line_webhook._care_report_context_message()
+
+    assert "服務收容所" in message["text"]
+    assert "志工流程" in message["text"]
+    assert "領養媒合" not in message["text"]
+
+
+def test_walk_report_context_mapping_precedes_adopter_fallback() -> None:
+    source = inspect.getsource(line_webhook.webhook)
+
+    volunteer_mapping = source.index(
+        'error.code == "shelter_context_required" and _is_walk_report_command(event)'
+    )
+    adopter_fallback = source.index("await _is_adopter_only_line_user(session, line_user_id)")
+    assert volunteer_mapping < adopter_fallback
+
+
 def test_walk_command_routing_precedes_active_adoption_free_text() -> None:
     source = inspect.getsource(line_webhook.webhook)
 
