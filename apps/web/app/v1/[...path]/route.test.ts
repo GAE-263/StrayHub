@@ -5,6 +5,79 @@ import { GET, POST } from "./route";
 
 const originalApiBaseUrl = process.env.API_BASE_URL;
 
+describe("API origin trust boundary", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (originalApiBaseUrl === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = originalApiBaseUrl;
+  });
+
+  it.each([
+    ["internal Compose API", "http://api:8080", "http://api:8080/v1/healthz"],
+    [
+      "localhost development API",
+      "http://localhost:8080",
+      "http://localhost:8080/v1/healthz",
+    ],
+    [
+      "loopback development API",
+      "http://127.0.0.1:8080",
+      "http://127.0.0.1:8080/v1/healthz",
+    ],
+    [
+      "HTTPS API with a base path",
+      "https://api.example.test/base",
+      "https://api.example.test/base/v1/healthz",
+    ],
+  ])("allows the %s", async (_label, configuredOrigin, expectedTarget) => {
+    process.env.API_BASE_URL = configuredOrigin;
+    const upstream = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await GET(
+      new NextRequest("https://web.example.test/v1/healthz"),
+      { params: Promise.resolve({ path: ["healthz"] }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+    expect(String(upstream.mock.calls[0][0])).toBe(expectedTarget);
+  });
+
+  it.each([
+    "http://evil.example",
+    "http://api",
+    "http://api:9999",
+    "http://api.evil.example:8080",
+    "http://api:8080.evil.example",
+    "http://api:8080@evil.example",
+    "http://user:pass@api:8080",
+    "http://api:8080/unexpected-path",
+    "http://api:8080?unexpected=query",
+    "http://api:8080#unexpected-fragment",
+    "ftp://api:8080",
+    "file://api",
+    "javascript:alert(1)",
+  ])("rejects untrusted or malformed origin %s", async (configuredOrigin) => {
+    process.env.API_BASE_URL = configuredOrigin;
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+
+    const response = await GET(
+      new NextRequest("https://web.example.test/v1/healthz"),
+      { params: Promise.resolve({ path: ["healthz"] }) },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      detail: "API proxy is not configured",
+    });
+    expect(upstream).not.toHaveBeenCalled();
+  });
+});
+
 it("preserves account transaction headers and independent HttpOnly cookies", async () => {
   process.env.API_BASE_URL = "http://127.0.0.1:8001";
   const headers = new Headers();

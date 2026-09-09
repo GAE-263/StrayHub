@@ -256,7 +256,9 @@ export default function ManagementHome() {
                             <Badge>{reportStatusLabel(report.status)}</Badge>
                           </div>
                           <div className="recent-report-badges">
-                            <Badge>{aiJobStatusLabel(report.ai_job_status)}</Badge>
+                            <Badge>
+                              {aiJobStatusLabel(report.ai_job_status)}
+                            </Badge>
                           </div>
                           <span className="recent-report-time muted">
                             {new Date(report.submitted_at).toLocaleString(

@@ -17,10 +17,14 @@ from services.api.app.application.media_access import (
     MediaAccessService,
     verify_adoption_photo_token,
     verify_animal_photo_token,
+    verify_growth_diary_photo_token,
 )
 from services.api.app.infrastructure.storage.minio import MinioStorageAdapter
 from services.api.app.infrastructure.storage.ports import ObjectScope
+from services.api.app.persistence.database.scope import set_organization_scope
+from services.api.app.persistence.models.growth_diary import GrowthDiaryEntry
 from services.api.app.persistence.repositories.media_repository import MediaRepository
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Media"])
@@ -84,6 +88,50 @@ async def public_adoption_animal_photo(
         return await _public_animal_photo_response(claims=claims, session=session)
     except DomainError as exc:
         raise DomainError("adoption_photo_not_found", "照片不存在或連結已失效", 404) from exc
+
+
+@router.get(
+    "/v1/public/growth-diary/entries/{entryId}/photo",
+    response_class=Response,
+    responses={404: {"model": ErrorResponse, "description": "照片不存在或連結已失效"}},
+    openapi_extra={"security": []},
+)
+async def public_growth_diary_entry_photo(
+    entryId: UUID,  # noqa: N803
+    token: str,
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> Response:
+    """Serve one purpose-bound diary photo after tenant and row validation."""
+    claims = verify_growth_diary_photo_token(token, entry_id=entryId)
+    await set_organization_scope(session, claims.organization_id)
+    result = await session.execute(
+        select(GrowthDiaryEntry).where(
+            GrowthDiaryEntry.id == claims.entry_id,
+            GrowthDiaryEntry.organization_id == claims.organization_id,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    keys = (
+        list(entry.photo_keys or ([] if entry.photo_key is None else [entry.photo_key]))
+        if entry is not None
+        else []
+    )
+    if claims.object_key not in keys or entry.photo_content_type != "image/webp":
+        raise DomainError("growth_diary_photo_not_found", "照片不存在或連結已失效", 404)
+    try:
+        content = await MinioStorageAdapter().get(
+            scope=ObjectScope(claims.organization_id), key=claims.object_key
+        )
+    except Exception as exc:
+        raise DomainError("growth_diary_photo_not_found", "照片不存在或連結已失效", 404) from exc
+    return Response(
+        content=content,
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/v1/media/{mediaId}/download-url", response_model=SignedUrlResponse)

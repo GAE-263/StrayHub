@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: StrayHub Growth Diary Management Contract
-  version: 1.0.0
+  version: 2.0.0
 paths:
   /v1/management/growth-diary-entries:
     get:
@@ -12,6 +12,11 @@ paths:
         - in: query
           name: mood
           schema: { type: string, enum: [all, concern, positive, neutral, unanalyzed], default: all }
+        - in: query
+          name: status
+          schema: { type: string, enum: [all, new, reviewed], default: all }
+        - { in: query, name: from_date, schema: { type: [string, "null"], format: date } }
+        - { in: query, name: to_date, schema: { type: [string, "null"], format: date } }
         - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
         - { in: query, name: page_size, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
       responses:
@@ -53,6 +58,41 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /v1/management/growth-diary-entries/{entryId}/photos/{index}:
+    get:
+      summary: Read one normalized private diary photo by zero-based index
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/EntryId" }
+        - { in: path, name: index, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Buffered final WebP, authenticated and scoped to the active shelter
+          content:
+            image/webp: { schema: { type: string, contentEncoding: binary } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/management/growth-diary-entries/{entryId}/status:
+    patch:
+      summary: Mark one active-shelter diary entry as new or reviewed
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/EntryId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GrowthDiaryStatusUpdate" }
+      responses:
+        "200":
+          description: Updated active-shelter-scoped diary detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GrowthDiaryDetail" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -81,7 +121,7 @@ components:
       properties:
         status:
           type: string
-          enum: [pending, succeeded, failed, unconfigured, not_applicable, legacy, unavailable]
+          enum: [pending, processing, succeeded, failed, unconfigured, not_applicable, legacy, unavailable]
         provenance_status: { type: string, enum: [available, legacy_missing, unavailable] }
         mood: { type: [string, "null"], enum: [positive, neutral, concern, null] }
         adopter_reply: { type: [string, "null"] }
@@ -99,7 +139,7 @@ components:
         analyzed_at: { type: [string, "null"], format: date-time }
     GrowthDiaryListItem:
       type: object
-      required: [id, inquiry_id, animal_id, animal_name, shelter_number, has_photo, photo_endpoint, note, ai_analysis, created_at]
+      required: [id, inquiry_id, animal_id, animal_name, shelter_number, has_photo, photo_endpoint, photo_endpoints, note, status, status_updated_at, entry_date, ai_analysis, created_at]
       properties:
         id: { type: string, format: uuid }
         inquiry_id: { type: string, format: uuid }
@@ -108,7 +148,13 @@ components:
         shelter_number: { type: [string, "null"] }
         has_photo: { type: boolean }
         photo_endpoint: { type: [string, "null"] }
+        photo_endpoints:
+          type: array
+          items: { type: string }
         note: { type: [string, "null"], maxLength: 2000 }
+        status: { type: string, enum: [new, reviewed] }
+        status_updated_at: { type: [string, "null"], format: date-time }
+        entry_date: { type: string, format: date }
         ai_analysis: { $ref: "#/components/schemas/GrowthDiaryAiSummary" }
         created_at: { type: string, format: date-time }
     GrowthDiaryDetail:
@@ -125,7 +171,7 @@ components:
                 - { type: "null" }
     GrowthDiaryListResponse:
       type: object
-      required: [items, page, page_size, total]
+      required: [items, page, page_size, total, timezone]
       properties:
         items:
           type: array
@@ -133,3 +179,9 @@ components:
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+    GrowthDiaryStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [new, reviewed] }

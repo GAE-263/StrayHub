@@ -23,6 +23,12 @@ class AdoptionDraftState(StrEnum):
     CHOOSING_PATH = "choosing_path"
     SELECTING_TARGET_ANIMAL = "selecting_target_animal"
     CONFIRMING_TARGET_ANIMAL = "confirming_target_animal"
+    # One free-text self-introduction (either path) replaces the first ask of
+    # each preference question — see AdoptionDraftStateMachine.skip_prefilled_questions.
+    # Up to AWAITING_FREETEXT_PROFILE_MAX_ROUNDS rounds of supplementing by
+    # free text are allowed before whatever's still missing falls back to the
+    # existing one-question-at-a-time flow.
+    AWAITING_FREETEXT_PROFILE = "awaiting_freetext_profile"
     ANSWERING_PREFERENCE_HOUSING = "answering_preference_housing"
     ANSWERING_PREFERENCE_EXPERIENCE = "answering_preference_experience"
     ANSWERING_PREFERENCE_OTHER_PETS = "answering_preference_other_pets"
@@ -90,15 +96,22 @@ REQUIRED_KEYS_BY_PATH: dict[AdoptionPath, tuple[str, ...]] = {
     _P.RECOMMEND_ME: MATCH_PREFERENCE_KEYS + CONTACT_INFO_KEYS,
 }
 
+# How many rounds of free-text supplementing AWAITING_FREETEXT_PROFILE allows
+# before whatever's still missing is handed off to the one-question-at-a-time
+# fallback regardless of how much more the adopter offers to type.
+AWAITING_FREETEXT_PROFILE_MAX_ROUNDS = 2
+
 # Transitions that do not depend on which path was chosen are keyed with path=None.
 # Transitions out of a path-specific state are keyed with that state's concrete path.
 _NEXT_STATES: dict[tuple[AdoptionDraftState, AdoptionPath | None], AdoptionDraftState] = {
     (_S.SELECTING_ORGANIZATION, None): _S.CHOOSING_PATH,
     (_S.CHOOSING_PATH, _P.SPECIFIC_ANIMAL): _S.SELECTING_TARGET_ANIMAL,
-    (_S.CHOOSING_PATH, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_HOUSING,
+    (_S.CHOOSING_PATH, _P.RECOMMEND_ME): _S.AWAITING_FREETEXT_PROFILE,
     (_S.SELECTING_TARGET_ANIMAL, _P.SPECIFIC_ANIMAL): _S.CONFIRMING_TARGET_ANIMAL,
-    (_S.CONFIRMING_TARGET_ANIMAL, _P.SPECIFIC_ANIMAL): _S.ANSWERING_HOUSING,
+    (_S.CONFIRMING_TARGET_ANIMAL, _P.SPECIFIC_ANIMAL): _S.AWAITING_FREETEXT_PROFILE,
     (_S.CONFIRMING_TARGET_ANIMAL, _P.RECOMMEND_ME): _S.AWAITING_ADOPTER_NAME,
+    (_S.AWAITING_FREETEXT_PROFILE, _P.SPECIFIC_ANIMAL): _S.ANSWERING_HOUSING,
+    (_S.AWAITING_FREETEXT_PROFILE, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_HOUSING,
     (_S.ANSWERING_HOUSING, _P.SPECIFIC_ANIMAL): _S.ANSWERING_EXPERIENCE,
     (_S.ANSWERING_EXPERIENCE, _P.SPECIFIC_ANIMAL): _S.ANSWERING_OTHER_PETS,
     (_S.ANSWERING_OTHER_PETS, _P.SPECIFIC_ANIMAL): _S.ANSWERING_HOUSEHOLD,
@@ -128,9 +141,9 @@ _NEXT_STATES: dict[tuple[AdoptionDraftState, AdoptionPath | None], AdoptionDraft
     (_S.ANSWERING_PREFERENCE_ADOPTION_MOTIVATION, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_SIZE,
     (_S.ANSWERING_PREFERENCE_SIZE, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_ENERGY,
     (_S.ANSWERING_PREFERENCE_ENERGY, _P.RECOMMEND_ME): _S.PRESENTING_MATCHES,
-    # 規則式先篩出候選池後不直接揭曉，先進 AWAITING_AI_RECOMMENDATIONS 讓 AI
-    # 背景任務重新評分排序（見 _run_adoption_ai_recommendation_curation），
-    # 完成後才由該任務直接寫入 current_step 到 SELECTING_MATCHED_ANIMAL。
+    # 規則式先篩出候選池後不直接揭曉，先進 AWAITING_AI_RECOMMENDATIONS，
+    # 由 durable Celery job 重新評分排序；完成後才以 conditional write 將
+    # current_step 更新為 SELECTING_MATCHED_ANIMAL。
     (_S.PRESENTING_MATCHES, _P.RECOMMEND_ME): _S.AWAITING_AI_RECOMMENDATIONS,
     (_S.AWAITING_AI_RECOMMENDATIONS, _P.RECOMMEND_ME): _S.SELECTING_MATCHED_ANIMAL,
     (_S.SELECTING_MATCHED_ANIMAL, _P.RECOMMEND_ME): _S.CONFIRMING_TARGET_ANIMAL,
@@ -145,7 +158,9 @@ _PREVIOUS_STATE: dict[tuple[AdoptionDraftState, AdoptionPath | None], AdoptionDr
     (_S.CHOOSING_PATH, None): _S.SELECTING_ORGANIZATION,
     (_S.SELECTING_TARGET_ANIMAL, _P.SPECIFIC_ANIMAL): _S.CHOOSING_PATH,
     (_S.CONFIRMING_TARGET_ANIMAL, _P.SPECIFIC_ANIMAL): _S.SELECTING_TARGET_ANIMAL,
-    (_S.ANSWERING_HOUSING, _P.SPECIFIC_ANIMAL): _S.CONFIRMING_TARGET_ANIMAL,
+    (_S.AWAITING_FREETEXT_PROFILE, _P.SPECIFIC_ANIMAL): _S.CONFIRMING_TARGET_ANIMAL,
+    (_S.AWAITING_FREETEXT_PROFILE, _P.RECOMMEND_ME): _S.CHOOSING_PATH,
+    (_S.ANSWERING_HOUSING, _P.SPECIFIC_ANIMAL): _S.AWAITING_FREETEXT_PROFILE,
     (_S.ANSWERING_EXPERIENCE, _P.SPECIFIC_ANIMAL): _S.ANSWERING_HOUSING,
     (_S.ANSWERING_OTHER_PETS, _P.SPECIFIC_ANIMAL): _S.ANSWERING_EXPERIENCE,
     (_S.ANSWERING_HOUSEHOLD, _P.SPECIFIC_ANIMAL): _S.ANSWERING_OTHER_PETS,
@@ -158,7 +173,7 @@ _PREVIOUS_STATE: dict[tuple[AdoptionDraftState, AdoptionPath | None], AdoptionDr
     (_S.SELECTING_ALTERNATIVE_ANIMAL, _P.SPECIFIC_ANIMAL): _S.AWAITING_AI_SUITABILITY,
     (_S.CONFIRMING_ALTERNATIVE_ANIMAL, _P.SPECIFIC_ANIMAL): _S.SELECTING_ALTERNATIVE_ANIMAL,
     (_S.AWAITING_ADOPTER_NAME, _P.SPECIFIC_ANIMAL): _S.AWAITING_AI_SUITABILITY,
-    (_S.ANSWERING_PREFERENCE_HOUSING, _P.RECOMMEND_ME): _S.CHOOSING_PATH,
+    (_S.ANSWERING_PREFERENCE_HOUSING, _P.RECOMMEND_ME): _S.AWAITING_FREETEXT_PROFILE,
     (_S.ANSWERING_PREFERENCE_EXPERIENCE, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_HOUSING,
     (_S.ANSWERING_PREFERENCE_OTHER_PETS, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_EXPERIENCE,
     (_S.ANSWERING_PREFERENCE_HOUSEHOLD, _P.RECOMMEND_ME): _S.ANSWERING_PREFERENCE_OTHER_PETS,
@@ -211,6 +226,7 @@ _STATE_QUESTIONS: dict[AdoptionDraftState, tuple[str, ...]] = {
 # Used by back() to know which subsequent answers to purge, per path.
 _STATE_ORDER_BY_PATH: dict[AdoptionPath, tuple[AdoptionDraftState, ...]] = {
     _P.SPECIFIC_ANIMAL: (
+        _S.AWAITING_FREETEXT_PROFILE,
         _S.ANSWERING_HOUSING,
         _S.ANSWERING_EXPERIENCE,
         _S.ANSWERING_OTHER_PETS,
@@ -226,6 +242,7 @@ _STATE_ORDER_BY_PATH: dict[AdoptionPath, tuple[AdoptionDraftState, ...]] = {
         _S.AWAITING_PHONE_NUMBER,
     ),
     _P.RECOMMEND_ME: (
+        _S.AWAITING_FREETEXT_PROFILE,
         _S.ANSWERING_PREFERENCE_HOUSING,
         _S.ANSWERING_PREFERENCE_EXPERIENCE,
         _S.ANSWERING_PREFERENCE_OTHER_PETS,
@@ -251,6 +268,15 @@ def _resolve(
     if path is not None and (state, path) in table:
         return table[(state, path)]
     return table.get((state, None))
+
+
+def can_go_back(state: AdoptionDraftState, path: AdoptionPath | None) -> bool:
+    """Whether `AdoptionDraftStateMachine(state=state, path=path).back()`
+    would succeed from here — lets a caller (line_webhook.py deciding
+    whether to offer a "回到上一頁" quick-reply) check this without
+    triggering back()'s own DomainError as a control-flow signal. Only
+    SELECTING_ORGANIZATION (the very first step) has no previous state."""
+    return _resolve(_PREVIOUS_STATE, state, path) is not None
 
 
 def _validate_phone_number(value: Any) -> None:
@@ -305,6 +331,9 @@ class AdoptionDraftStateMachine:
     answers: AdoptionDraftAnswers = field(default_factory=AdoptionDraftAnswers)
     reconfirmation_keys: set[str] = field(default_factory=set)
     last_interaction_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # How many AWAITING_FREETEXT_PROFILE rounds have been consumed — see
+    # AWAITING_FREETEXT_PROFILE_MAX_ROUNDS.
+    freetext_profile_rounds: int = 0
 
     def transition(self, target: AdoptionDraftState, *, path: AdoptionPath | None = None) -> None:
         if target in {AdoptionDraftState.CANCELLED, AdoptionDraftState.EXPIRED}:
@@ -356,6 +385,28 @@ class AdoptionDraftStateMachine:
             raise DomainError("invalid_state_transition", "不允許的草稿狀態轉移", 409)
         self.transition(next_state)
         return self.state
+
+    def skip_prefilled_questions(self) -> AdoptionDraftState:
+        """Auto-advances through any question-bearing state (ANSWERING_*)
+        whose answer(s) already exist — e.g. pre-filled by extracting a
+        free-text self-introduction via AWAITING_FREETEXT_PROFILE — landing
+        on the first state that still genuinely needs an answer, or on
+        whatever non-question state the walk naturally reaches (CONFIRMING_
+        ANSWERS, PRESENTING_MATCHES) once everything is filled. Stops at any
+        state outside `_STATE_QUESTIONS` without crossing it, since those
+        (PRESENTING_MATCHES in particular) carry their own side effects the
+        caller is responsible for triggering, not a plain answer to skip
+        past."""
+        while True:
+            expected = _STATE_QUESTIONS.get(self.state)
+            if expected is None:
+                return self.state
+            if not all(item in self.answers.values for item in expected):
+                return self.state
+            next_state = _resolve(_NEXT_STATES, self.state, self.path)
+            if next_state is None:
+                return self.state
+            self.transition(next_state)
 
     def answer(self, key: str, value: Any) -> None:
         self.answers.set(key, value)

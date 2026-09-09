@@ -10,9 +10,17 @@ from services.api.app.application.adoption_inquiry_submission import (
     AdoptionInquirySubmissionService,
 )
 from services.api.app.application.adoption_matching_service import AdoptionMatchingService
+from services.api.app.application.ai_job_dispatch import (
+    create_adoption_followup_recommendations_job,
+    create_adoption_profile_extraction_job,
+    create_adoption_recommendation_curation_job,
+    create_adoption_suitability_job,
+)
 from services.api.app.application.audit_service import AuditService
+from services.api.app.config.settings import get_settings
 from services.api.app.domain.adoption_matching import AdopterPreferences, MatchScore
 from services.api.app.domain.line_adoption_state import (
+    AWAITING_FREETEXT_PROFILE_MAX_ROUNDS,
     BASE_PREFERENCE_KEYS,
     MATCH_PREFERENCE_KEYS,
     REQUIRED_KEYS_BY_PATH,
@@ -27,6 +35,7 @@ from services.api.app.persistence.repositories.adoption_draft_repository import 
 from services.api.app.persistence.repositories.adoption_inquiry_repository import (
     AdoptionInquiryRepository,
 )
+from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
 from services.api.app.persistence.repositories.animal_repository import AnimalRepository
 
 
@@ -44,6 +53,8 @@ class AdoptionConversationResult:
     # Same idea, for the recommend_me path's AI-curated recommendation list.
     entered_awaiting_ai_recommendations: bool = False
     repaired_missing_key: str | None = None
+    ai_job_id: UUID | None = None
+    ai_job_version: int | None = None
 
 
 class LineAdoptionConversationService:
@@ -92,6 +103,7 @@ class LineAdoptionConversationService:
             path=AdoptionPath(draft.path) if draft.path else None,
             answers=AdoptionDraftAnswers(dict(draft.answers)),
             reconfirmation_keys=set(draft.reconfirmation_keys or []),
+            freetext_profile_rounds=draft.freetext_profile_rounds or 0,
         )
         inquiry_id: UUID | None = None
         repaired_missing_key: str | None = None
@@ -144,6 +156,10 @@ class LineAdoptionConversationService:
                     "animal_not_adoptable", "這隻動物目前無法領養，請按重新選擇。", 409
                 )
             machine.advance()
+        elif action == "finish_freetext_profile":
+            if machine.state != AdoptionDraftState.AWAITING_FREETEXT_PROFILE:
+                raise DomainError("invalid_state_transition", "目前步驟不接受這個操作", 409)
+            await self._leave_freetext_profile(session, draft, machine)
         elif action == "confirm_answers":
             repaired_missing_key = machine.repair_to_first_missing(BASE_PREFERENCE_KEYS)
             if repaired_missing_key is None:
@@ -176,10 +192,9 @@ class LineAdoptionConversationService:
                 if repaired_missing_key is not None:
                     new_state = machine.state
             if new_state == AdoptionDraftState.PRESENTING_MATCHES:
-                # top_n is wider than the 3-5 finally shown — this is just the
-                # rule-based candidate pool that AI reranks in the background
-                # (see _run_adoption_ai_recommendation_curation) before the
-                # adopter ever sees it.
+                # The bounded rule-based result is the complete candidate
+                # universe.  The durable curation job may only rerank or select
+                # within this set before the adopter sees it.
                 matches = await self._compute_matches(session, draft.organization_id, machine)
                 draft.candidate_match_ids = [str(match.animal_id) for match in matches]
                 draft.match_results = [_match_result(match) for match in matches]
@@ -251,6 +266,11 @@ class LineAdoptionConversationService:
                     animal=animal,
                     answers=answers,
                     match_scores_snapshot=(draft.match_results or None),
+                    ai_recommendation_overridden=(
+                        str(draft.target_animal_id) not in (draft.candidate_match_ids or [])
+                        if machine.path == AdoptionPath.RECOMMEND_ME
+                        else None
+                    ),
                 )
                 inquiry_id = inquiry.id
         elif action in {"cancel", "cancel_current"}:
@@ -258,8 +278,36 @@ class LineAdoptionConversationService:
         else:
             raise DomainError("invalid_postback_action", "目前步驟不允許此操作", 409)
 
+        entered_awaiting_ai_suitability = (
+            initial_state != AdoptionDraftState.AWAITING_AI_SUITABILITY
+            and machine.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
+        )
+        entered_awaiting_ai_recommendations = (
+            initial_state != AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
+            and machine.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
+        )
+        settings = get_settings()
+        celery_ai_enabled = settings.celery_ai_enabled
+        if (
+            entered_awaiting_ai_suitability
+            and not celery_ai_enabled
+            and settings.app_env.strip().lower() not in {"local", "test", "testing"}
+        ):
+            # A production process must never entrust this state transition to
+            # FastAPI BackgroundTasks.  If the durable worker is disabled,
+            # degrade to the contact flow and preserve the user's progress.
+            machine.advance()
+            entered_awaiting_ai_suitability = False
+        if (
+            entered_awaiting_ai_recommendations
+            and not celery_ai_enabled
+            and settings.app_env.strip().lower() not in {"local", "test", "testing"}
+        ):
+            machine.advance()
+            entered_awaiting_ai_recommendations = False
         draft.answers = dict(machine.answers.values)
         draft.reconfirmation_keys = sorted(machine.reconfirmation_keys)
+        draft.freetext_profile_rounds = machine.freetext_profile_rounds
         draft.current_step = machine.state.value
         if machine.state == AdoptionDraftState.SUBMITTED:
             draft.status = "submitted"
@@ -269,21 +317,246 @@ class LineAdoptionConversationService:
             draft.status = "expired"
         draft.last_interaction_at = datetime.now(timezone.utc)
         draft.interaction_version += 1
+        ai_job_id: UUID | None = None
+        if (
+            entered_awaiting_ai_suitability
+            and celery_ai_enabled
+            and draft.organization_id is not None
+        ):
+            job = await create_adoption_suitability_job(
+                AIJobRepository(session, draft.organization_id),
+                draft_id=draft.id,
+                domain_version=draft.interaction_version,
+            )
+            ai_job_id = job.id
+        elif (
+            entered_awaiting_ai_recommendations
+            and celery_ai_enabled
+            and draft.organization_id is not None
+        ):
+            job = await self._create_curation_job(draft)
+            ai_job_id = job.id
         await session.flush()
         return AdoptionConversationResult(
             state=machine.state,
             inquiry_id=inquiry_id,
             candidate_match_ids=tuple(UUID(item) for item in draft.candidate_match_ids or []),
-            entered_awaiting_ai_suitability=(
-                initial_state != AdoptionDraftState.AWAITING_AI_SUITABILITY
-                and machine.state == AdoptionDraftState.AWAITING_AI_SUITABILITY
-            ),
-            entered_awaiting_ai_recommendations=(
-                initial_state != AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
-                and machine.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
-            ),
+            entered_awaiting_ai_suitability=entered_awaiting_ai_suitability,
+            entered_awaiting_ai_recommendations=entered_awaiting_ai_recommendations,
             repaired_missing_key=repaired_missing_key,
+            ai_job_id=ai_job_id,
+            ai_job_version=draft.interaction_version if ai_job_id is not None else None,
         )
+
+    async def apply_freetext_answers(
+        self, *, adopter_user_id: UUID, extracted: dict[str, str]
+    ) -> AdoptionConversationResult:
+        """Apply one AI extraction round while holding the draft row lock."""
+        draft = await self.draft_repository.lock_active_for_adopter(adopter_user_id)
+        if draft is None or draft.status != "active":
+            raise DomainError("draft_access_denied", "對話不存在或無法存取", 404)
+        initial_state = AdoptionDraftState(draft.current_step)
+        if initial_state != AdoptionDraftState.AWAITING_FREETEXT_PROFILE:
+            raise DomainError("invalid_state_transition", "目前步驟不接受這個操作", 409)
+        return await self.apply_freetext_answers_to_locked_draft(
+            draft=draft,
+            extracted=extracted,
+        )
+
+    async def apply_freetext_answers_to_locked_draft(
+        self,
+        *,
+        draft,
+        extracted: dict[str, str],
+    ) -> AdoptionConversationResult:
+        initial_state = AdoptionDraftState(draft.current_step)
+        if initial_state != AdoptionDraftState.AWAITING_FREETEXT_PROFILE:
+            raise DomainError("invalid_state_transition", "目前步驟不接受這個操作", 409)
+        machine = AdoptionDraftStateMachine(
+            state=initial_state,
+            path=AdoptionPath(draft.path) if draft.path else None,
+            answers=AdoptionDraftAnswers(dict(draft.answers)),
+            reconfirmation_keys=set(draft.reconfirmation_keys or []),
+            freetext_profile_rounds=draft.freetext_profile_rounds or 0,
+        )
+        valid_keys = set(REQUIRED_KEYS_BY_PATH[machine.path]) if machine.path else set()
+        for key, value in extracted.items():
+            if key not in valid_keys or not value or key in machine.answers.values:
+                continue
+            try:
+                machine.answers.set(key, value)
+            except DomainError:
+                continue
+        machine.freetext_profile_rounds += 1
+        if (
+            machine.answers.complete(machine.path)
+            or machine.freetext_profile_rounds >= AWAITING_FREETEXT_PROFILE_MAX_ROUNDS
+        ):
+            await self._leave_freetext_profile(self.draft_repository.session, draft, machine)
+        entered_awaiting_ai_recommendations = (
+            machine.state == AdoptionDraftState.AWAITING_AI_RECOMMENDATIONS
+        )
+        settings = get_settings()
+        if (
+            entered_awaiting_ai_recommendations
+            and not settings.celery_ai_enabled
+            and settings.app_env.strip().lower() not in {"local", "test", "testing"}
+        ):
+            machine.advance()
+            entered_awaiting_ai_recommendations = False
+        draft.answers = dict(machine.answers.values)
+        draft.reconfirmation_keys = sorted(machine.reconfirmation_keys)
+        draft.freetext_profile_rounds = machine.freetext_profile_rounds
+        draft.current_step = machine.state.value
+        draft.last_interaction_at = datetime.now(timezone.utc)
+        draft.interaction_version += 1
+        ai_job_id: UUID | None = None
+        if (
+            entered_awaiting_ai_recommendations
+            and settings.celery_ai_enabled
+            and draft.organization_id is not None
+        ):
+            job = await self._create_curation_job(draft)
+            ai_job_id = job.id
+        await self.draft_repository.session.flush()
+        return AdoptionConversationResult(
+            state=machine.state,
+            entered_awaiting_ai_recommendations=entered_awaiting_ai_recommendations,
+            ai_job_id=ai_job_id,
+            ai_job_version=draft.interaction_version if ai_job_id is not None else None,
+        )
+
+    async def submit_freetext_profile(
+        self,
+        *,
+        adopter_user_id: UUID,
+        profile_text: str,
+    ) -> AdoptionConversationResult:
+        clean = profile_text.strip()
+        if not clean or len(clean) > 2000:
+            raise DomainError(
+                "invalid_adoption_profile_text",
+                "請輸入 1 至 2000 字的生活狀況介紹",
+                422,
+            )
+        draft = await self.draft_repository.lock_active_for_adopter(adopter_user_id)
+        if (
+            draft is None
+            or draft.adopter_user_id != adopter_user_id
+            or draft.status != "active"
+            or draft.current_step != AdoptionDraftState.AWAITING_FREETEXT_PROFILE.value
+            or draft.organization_id is None
+        ):
+            raise DomainError("draft_access_denied", "對話不存在或無法存取", 404)
+        draft.last_interaction_at = datetime.now(timezone.utc)
+        draft.interaction_version += 1
+        job = await create_adoption_profile_extraction_job(
+            AIJobRepository(self.draft_repository.session, draft.organization_id),
+            draft_id=draft.id,
+            domain_version=draft.interaction_version,
+            profile_text=clean,
+        )
+        await self.draft_repository.session.flush()
+        return AdoptionConversationResult(
+            state=AdoptionDraftState.AWAITING_FREETEXT_PROFILE,
+            ai_job_id=job.id,
+            ai_job_version=draft.interaction_version,
+        )
+
+    async def submit_followup_request(
+        self,
+        *,
+        adopter_user_id: UUID,
+        special_request: str,
+    ) -> AdoptionConversationResult:
+        clean = special_request.strip()
+        if not clean or len(clean) > 2000:
+            raise DomainError(
+                "invalid_adoption_special_request",
+                "請輸入 1 至 2000 字的特殊需求",
+                422,
+            )
+        draft = await self.draft_repository.lock_active_for_adopter(adopter_user_id)
+        if (
+            draft is None
+            or draft.status != "active"
+            or draft.organization_id is None
+            or draft.path != AdoptionPath.SPECIFIC_ANIMAL.value
+            or draft.current_step != AdoptionDraftState.AWAITING_AI_SUITABILITY.value
+            or draft.ai_followup_target_animal_id is None
+        ):
+            raise DomainError("draft_access_denied", "對話不存在或無法存取", 404)
+        target_animal_id = draft.ai_followup_target_animal_id
+        candidates = await AnimalRepository(
+            self.draft_repository.session, draft.organization_id
+        ).list_adoptable_excluding(target_animal_id, limit=30)
+        draft.last_interaction_at = datetime.now(timezone.utc)
+        draft.interaction_version += 1
+        job = await create_adoption_followup_recommendations_job(
+            AIJobRepository(self.draft_repository.session, draft.organization_id),
+            draft_id=draft.id,
+            domain_version=draft.interaction_version,
+            special_request=clean,
+            target_animal_id=target_animal_id,
+            candidate_ids=[candidate.id for candidate in candidates],
+        )
+        await self.draft_repository.session.flush()
+        return AdoptionConversationResult(
+            state=AdoptionDraftState.AWAITING_AI_SUITABILITY,
+            ai_job_id=job.id,
+            ai_job_version=draft.interaction_version,
+        )
+
+    async def finish_followup_without_ai(
+        self, *, adopter_user_id: UUID
+    ) -> AdoptionConversationResult:
+        draft = await self.draft_repository.lock_active_for_adopter(adopter_user_id)
+        if (
+            draft is None
+            or draft.status != "active"
+            or draft.organization_id is None
+            or draft.current_step != AdoptionDraftState.AWAITING_AI_SUITABILITY.value
+            or draft.ai_followup_target_animal_id is None
+        ):
+            raise DomainError("draft_access_denied", "對話不存在或無法存取", 404)
+        target_id = draft.ai_followup_target_animal_id
+        original = await AnimalRepository(self.draft_repository.session, draft.organization_id).get(
+            target_id
+        )
+        draft.ai_followup_target_animal_id = None
+        if original is not None and original.status == "active" and original.is_adoptable:
+            draft.candidate_match_ids = [str(original.id)]
+            draft.match_results = [{"animal_id": str(original.id), "reasons": ["你原本選定的毛孩"]}]
+            draft.current_step = AdoptionDraftState.SELECTING_ALTERNATIVE_ANIMAL.value
+        else:
+            draft.candidate_match_ids = []
+            draft.match_results = []
+            draft.current_step = AdoptionDraftState.AWAITING_ADOPTER_NAME.value
+        draft.interaction_version += 1
+        draft.last_interaction_at = datetime.now(timezone.utc)
+        await self.draft_repository.session.flush()
+        return AdoptionConversationResult(state=AdoptionDraftState(draft.current_step))
+
+    async def _leave_freetext_profile(
+        self, session, draft, machine: AdoptionDraftStateMachine
+    ) -> None:
+        machine.advance()
+        machine.skip_prefilled_questions()
+        if machine.state == AdoptionDraftState.PRESENTING_MATCHES:
+            matches = await self._compute_matches(session, draft.organization_id, machine)
+            draft.candidate_match_ids = [str(match.animal_id) for match in matches]
+            draft.match_results = [_match_result(match) for match in matches]
+            machine.advance()
+        elif (
+            machine.state == AdoptionDraftState.CONFIRMING_ANSWERS
+            and machine.path == AdoptionPath.SPECIFIC_ANIMAL
+            and draft.target_animal_id is not None
+        ):
+            match = await AdoptionMatchingService(session, draft.organization_id).score_target(
+                draft.target_animal_id,
+                self._preferences_from_answers(machine.answers.values),
+            )
+            draft.match_results = [_match_result(match)] if match is not None else []
 
     async def _compute_matches(
         self, session, organization_id: UUID, machine: AdoptionDraftStateMachine
@@ -291,6 +564,35 @@ class LineAdoptionConversationService:
         preferences = self._preferences_from_answers(machine.answers.values)
         return await AdoptionMatchingService(session, organization_id).recommend(
             preferences, top_n=self.match_top_n
+        )
+
+    async def _create_curation_job(self, draft):
+        candidate_ids = [UUID(value) for value in draft.candidate_match_ids or []]
+        if not candidate_ids or len(candidate_ids) > 5:
+            raise DomainError("invalid_curation_candidates", "推薦候選資料不完整", 409)
+        by_id = {
+            str(item.get("animal_id")): item
+            for item in draft.match_results or []
+            if isinstance(item, dict)
+        }
+        rule_results = [
+            {
+                "animal_id": str(candidate_id),
+                "score": by_id.get(str(candidate_id), {}).get("score"),
+                "reasons": list(by_id.get(str(candidate_id), {}).get("reasons") or []),
+            }
+            for candidate_id in candidate_ids
+        ]
+        preferences = {
+            key: str(draft.answers[key]) for key in MATCH_PREFERENCE_KEYS if key in draft.answers
+        }
+        return await create_adoption_recommendation_curation_job(
+            AIJobRepository(self.draft_repository.session, draft.organization_id),
+            draft_id=draft.id,
+            domain_version=draft.interaction_version,
+            candidate_ids=candidate_ids,
+            rule_results=rule_results,
+            preferences=preferences,
         )
 
     @staticmethod

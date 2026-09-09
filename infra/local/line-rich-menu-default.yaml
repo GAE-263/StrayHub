@@ -4,6 +4,10 @@
 # 綁定不再是獨立按鈕：走志工報名時後端會自動建立 User 與 LineUserBinding
 # （volunteer_access_service 的 get_or_create_line_applicant），
 # 使用者不需要先「綁定」再做事。
+#
+# 「領養流程」只是入口，不直接進領養對話——點下去先切到
+# line-rich-menu-adoption-hub.yaml 那張兩格選單（領養媒合／毛孩日記），
+# 見 line_webhook.py 的 "open_adoption_hub" postback。
 version: 1
 role: default
 name: strayhub-default
@@ -14,4 +18,4 @@ actions:
     data: action=start_volunteer_application
   - label: 領養流程
     type: postback
-    data: action=start_adoption_matching&flow=adoption
+    data: action=open_adoption_hub

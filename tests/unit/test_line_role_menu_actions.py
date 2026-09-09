@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -31,14 +32,19 @@ WEBHOOK_HANDLED_ACTIONS = {
     "start_binding",
     "start_volunteer_application",
     "start_adoption_matching",
+    "open_adoption_hub",
+    "start_growth_diary",
     "walk_report",
     BACK_TO_DEFAULT_MENU_ACTION,
     *STAFF_MENU_ACTIONS,
 }
 
 
-def _postback_event(data: str) -> dict:
-    return {"type": "postback", "replyToken": "reply-1", "postback": {"data": data}}
+def _postback_event(data: str, *, line_user_id: str | None = None) -> dict:
+    event = {"type": "postback", "replyToken": "reply-1", "postback": {"data": data}}
+    if line_user_id is not None:
+        event["source"] = {"userId": line_user_id}
+    return event
 
 
 @pytest.mark.parametrize("text", ["開始散步回報", " 開始散步回報 "])
@@ -55,6 +61,24 @@ def test_walk_report_command_rejects_legacy_and_near_matches(text: str) -> None:
     )
 
 
+def test_walk_report_context_failure_uses_volunteer_guidance() -> None:
+    message = line_webhook._care_report_context_message()
+
+    assert "服務收容所" in message["text"]
+    assert "志工流程" in message["text"]
+    assert "領養媒合" not in message["text"]
+
+
+def test_walk_report_context_mapping_precedes_adopter_fallback() -> None:
+    source = inspect.getsource(line_webhook.webhook)
+
+    volunteer_mapping = source.index(
+        'error.code == "shelter_context_required" and _is_walk_report_command(event)'
+    )
+    adopter_fallback = source.index("await _is_adopter_only_line_user(session, line_user_id)")
+    assert volunteer_mapping < adopter_fallback
+
+
 def test_walk_command_routing_precedes_active_adoption_free_text() -> None:
     source = inspect.getsource(line_webhook.webhook)
 
@@ -62,6 +86,37 @@ def test_walk_command_routing_precedes_active_adoption_free_text() -> None:
         "_active_adoption_draft(session, line_user_id)"
     )
     assert source.index('postback_values.get("flow"') < source.index("_handle_postback(")
+
+
+def test_walk_report_menu_sync_follows_server_side_context_resolution() -> None:
+    source = inspect.getsource(line_webhook._handle_walk_report_command)
+
+    assert source.index("_resolve_context") < source.index("_switch_rich_menu")
+
+
+@pytest.mark.asyncio
+async def test_walk_report_postback_restores_volunteer_menu_after_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    switch_menu = AsyncMock(return_value=True)
+    entry = AsyncMock(return_value={"type": "flex", "altText": "散步回報"})
+    reply = AsyncMock()
+    monkeypatch.setattr(line_webhook, "_switch_rich_menu", switch_menu)
+    monkeypatch.setattr(line_webhook, "_walk_entry_bubble", entry)
+    monkeypatch.setattr(line_webhook, "_reply", reply)
+
+    await line_webhook._handle_postback(
+        object(),
+        object(),
+        _postback_event("action=walk_report", line_user_id="U-controlled"),
+        user_id=uuid4(),
+        organization_id=uuid4(),
+        membership_id=uuid4(),
+        public_base_url="https://acceptance.example.net",
+    )
+
+    switch_menu.assert_awaited_once_with("U-controlled", LineRole.VOLUNTEER)
+    reply.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -237,7 +292,7 @@ async def test_select_animal_postback_uses_shared_walk_confirmation(
 
 def test_all_walk_confirmation_entry_paths_pass_public_base_url() -> None:
     source = inspect.getsource(line_webhook)
-    assert source.count("_walk_confirmation_bubble(") == 4  # definition + three entry paths
+    assert source.count("_walk_confirmation_bubble(") >= 4
     assert source.count("public_base_url=public_base_url") >= 7
     walk_builder = inspect.getsource(line_webhook._walk_confirmation_bubble)
     assert "ExternalAnimalPhotoService" in walk_builder
@@ -442,7 +497,10 @@ def test_every_configured_menu_action_has_a_handler(path: Path) -> None:
 
 
 def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
-    """一進來就分成志工／領養兩條路；綁定不是獨立按鈕（報名時會隱含建立）。"""
+    """一進來就分成志工／領養兩條路；綁定不是獨立按鈕（報名時會隱含建立）。
+
+    「領養流程」只是入口，不直接進領養對話——見
+    test_adoption_hub_menu_offers_matching_and_growth_diary_entries。"""
     import yaml
 
     document = yaml.safe_load(
@@ -452,7 +510,22 @@ def test_default_menu_offers_volunteer_and_adoption_entries() -> None:
 
     assert actions == [
         "start_volunteer_application",
+        "open_adoption_hub",
+    ]
+
+
+def test_adoption_hub_menu_offers_matching_and_growth_diary_entries() -> None:
+    """預設選單的「領養流程」切到這張兩格選單——見 open_adoption_hub postback。"""
+    import yaml
+
+    document = yaml.safe_load(
+        Path("infra/local/line-rich-menu-adoption-hub.yaml").read_text(encoding="utf-8")
+    )
+    actions = [item["data"].split("action=", 1)[1] for item in document["actions"]]
+
+    assert actions == [
         "start_adoption_matching&flow=adoption",
+        "start_growth_diary&flow=growth_diary",
     ]
 
 

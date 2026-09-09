@@ -82,6 +82,10 @@ required_config=(
   APP_ENV POSTGRES_DB POSTGRES_USER POSTGRES_RUNTIME_USER MINIO_ENDPOINT MINIO_BUCKET
   LINE_CHANNEL_ID LIFF_ID AUTH_JWT_ISSUER AUTH_JWT_AUDIENCE
   LINE_ROLE_MENU_FEATURES_ENABLED
+  REDIS_MAXMEMORY CELERY_AI_ENABLED CELERY_QUEUE_AI CELERY_QUEUE_SYSTEM
+  CELERY_TASK_SOFT_TIME_LIMIT CELERY_TASK_TIME_LIMIT CELERY_VISIBILITY_TIMEOUT
+  CELERY_MAX_RETRIES CELERY_RETRY_BACKOFF_MAX CELERY_RECONCILE_INTERVAL_SECONDS
+  CELERY_WORKER_CONCURRENCY
   AUTH_JWT_ACTIVE_PRIVATE_KEY_REFERENCE AUTH_JWT_ACTIVE_PUBLIC_KEY_REFERENCE
   AUTH_JWT_ACTIVE_PRIVATE_KEY_FILE AUTH_JWT_ACTIVE_PUBLIC_KEY_FILE
   PII_ENCRYPTION_PROVIDER PII_KMS_KEY_NAME AI_PROVIDER
@@ -101,6 +105,22 @@ done
   fail "E4_WEB_UPSTREAM_HOST_PORT must be 3000"
 [[ "$(env_value "$CONFIG_ENV" E4_API_UPSTREAM_HOST_PORT)" == "8080" ]] ||
   fail "E4_API_UPSTREAM_HOST_PORT must be 8080"
+
+celery_ai_enabled="$(env_value "$CONFIG_ENV" CELERY_AI_ENABLED)"
+[[ "$celery_ai_enabled" == "true" || "$celery_ai_enabled" == "false" ]] ||
+  fail "CELERY_AI_ENABLED must be exactly true or false"
+[[ "$(env_value "$CONFIG_ENV" REDIS_MAXMEMORY)" =~ ^[1-9][0-9]*(mb|gb)$ ]] ||
+  fail "REDIS_MAXMEMORY must be a positive mb/gb value"
+for numeric_key in CELERY_TASK_SOFT_TIME_LIMIT CELERY_TASK_TIME_LIMIT \
+  CELERY_VISIBILITY_TIMEOUT CELERY_RECONCILE_INTERVAL_SECONDS CELERY_WORKER_CONCURRENCY; do
+  [[ "$(env_value "$CONFIG_ENV" "$numeric_key")" =~ ^[1-9][0-9]*$ ]] ||
+    fail "$numeric_key must be a positive integer"
+done
+[[ "$(env_value "$CONFIG_ENV" CELERY_MAX_RETRIES)" =~ ^[0-9]+$ ]] ||
+  fail "CELERY_MAX_RETRIES must be a non-negative integer"
+soft_limit="$(env_value "$CONFIG_ENV" CELERY_TASK_SOFT_TIME_LIMIT)"
+hard_limit="$(env_value "$CONFIG_ENV" CELERY_TASK_TIME_LIMIT)"
+((soft_limit < hard_limit)) || fail "CELERY_TASK_SOFT_TIME_LIMIT must be below CELERY_TASK_TIME_LIMIT"
 
 line_features_enabled="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED)"
 [[ "$line_features_enabled" == "true" || "$line_features_enabled" == "false" ]] ||
@@ -140,12 +160,23 @@ public_key="$(cd "$(dirname "$public_key")" && pwd -P)/$(basename "$public_key")
 required_runtime=(
   POSTGRES_PASSWORD POSTGRES_RUNTIME_PASSWORD DATABASE_URL DATABASE_MIGRATION_URL
   MINIO_ACCESS_KEY MINIO_SECRET_KEY LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN
-  ANIMAL_CONFIRMATION_SECRET
+  ANIMAL_CONFIRMATION_SECRET LOGIN_ABUSE_HMAC_SECRET REDIS_PASSWORD CELERY_BROKER_URL
 )
 for key in "${required_runtime[@]}"; do
   value="$(env_value "$runtime_env" "$key" 2>/dev/null || true)"
   [[ -n "$value" && "$value" != "''" ]] || fail "$key is missing or empty from runtime.env"
 done
+broker_url="$(env_value "$runtime_env" CELERY_BROKER_URL)"
+[[ "$broker_url" != *localhost* && "$broker_url" != *127.0.0.1* ]] ||
+  fail "CELERY_BROKER_URL must not use a loopback host"
+[[ "$broker_url" == *"redis://:"*"@redis:6379/"* ]] ||
+  fail "CELERY_BROKER_URL must use authenticated private Redis DNS"
+if [[ "$celery_ai_enabled" == "true" ]]; then
+  gemini_key="$(env_value "$runtime_env" GEMINI_API_KEY 2>/dev/null || true)"
+  gemini_path="$(env_value "$CONFIG_ENV" GEMINI_SERVICE_ACCOUNT_PATH 2>/dev/null || true)"
+  [[ -n "$gemini_key" || -n "$gemini_path" ]] ||
+    fail "CELERY_AI_ENABLED=true requires GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH"
+fi
 
 derived_public="$(mktemp "${TMPDIR:-/tmp}/strayhub-d1-public.XXXXXX")"
 compose=(docker compose --project-name "$PROJECT_NAME" --env-file "$CONFIG_ENV" \
@@ -170,6 +201,9 @@ cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not 
   python -c "from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process=\"api\")"
 ' >/dev/null
 "${compose[@]}" run --rm --no-deps --entrypoint python worker -c \
+  'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
+  >/dev/null
+"${compose[@]}" run --rm --no-deps --entrypoint python celery-worker -c \
   'from services.api.app.config.settings import Settings; Settings().validate_runtime_safety(process="worker")' \
   >/dev/null
 "${compose[@]}" --profile tools run --rm --no-deps --entrypoint python migration -c \

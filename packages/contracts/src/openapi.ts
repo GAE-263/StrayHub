@@ -2204,6 +2204,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/management/adoption-inquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAdoptionInquiries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/adoption-inquiries/{inquiry_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateAdoptionInquiryStatus"];
+        trace?: never;
+    };
     "/v1/management/growth-diary-entries": {
         parameters: {
             query?: never;
@@ -2250,6 +2282,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/management/growth-diary-entries/{entryId}/photos/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getGrowthDiaryPhotoAt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/management/growth-diary-entries/{entryId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateGrowthDiaryStatus"];
         trace?: never;
     };
 }
@@ -4167,9 +4231,55 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        AdoptionAnswerDisplay: {
+            key: string;
+            label: string;
+            value: string;
+        };
+        AdoptionInquiryItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            target_animal_id: string;
+            animal_name: string;
+            shelter_number: string | null;
+            /** @enum {string} */
+            path: "specific_animal" | "recommend_me";
+            adopter_name: string;
+            phone_number: string;
+            answers: {
+                [key: string]: string;
+            };
+            answers_display: components["schemas"]["AdoptionAnswerDisplay"][];
+            /** @enum {string} */
+            status: "new" | "contacted";
+            staff_notes: string | null;
+            /** Format: date-time */
+            submitted_at: string;
+            /** Format: date-time */
+            status_updated_at: string | null;
+            ai_suitability_score: number | null;
+            ai_suitability_explanation: string | null;
+            ai_recommendation_overridden: boolean | null;
+        };
+        AdoptionInquiryListResponse: {
+            items: components["schemas"]["AdoptionInquiryItem"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        AdoptionInquiryStatusUpdate: {
+            /** @enum {string} */
+            status: "new" | "contacted";
+        };
+        AdoptionInquiryStatusResponse: {
+            inquiry: components["schemas"]["AdoptionInquiryItem"];
+        };
         GrowthDiaryAiSummary: {
             /** @enum {string} */
-            status: "pending" | "succeeded" | "failed" | "unconfigured" | "not_applicable" | "legacy" | "unavailable";
+            status: "pending" | "processing" | "succeeded" | "failed" | "unconfigured" | "not_applicable" | "legacy" | "unavailable";
             /** @enum {string} */
             provenance_status: "available" | "legacy_missing" | "unavailable";
             /** @enum {string|null} */
@@ -4199,7 +4309,14 @@ export interface components {
             shelter_number: string | null;
             has_photo: boolean;
             photo_endpoint: string | null;
+            photo_endpoints: string[];
             note: string | null;
+            /** @enum {string} */
+            status: "new" | "reviewed";
+            /** Format: date-time */
+            status_updated_at: string | null;
+            /** Format: date */
+            entry_date: string;
             ai_analysis: components["schemas"]["GrowthDiaryAiSummary"];
             /** Format: date-time */
             created_at: string;
@@ -4215,6 +4332,11 @@ export interface components {
             page: number;
             page_size: number;
             total: number;
+            timezone: string;
+        };
+        GrowthDiaryStatusUpdate: {
+            /** @enum {string} */
+            status: "new" | "reviewed";
         };
         /** GoogleConfigurationResponse */
         GoogleConfigurationResponse: {
@@ -10153,11 +10275,77 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    listAdoptionInquiries: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                path?: "specific_animal" | "recommend_me" | null;
+                status?: "new" | "contacted" | null;
+                from_date?: string | null;
+                to_date?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active-shelter-scoped adoption inquiry page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptionInquiryListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    updateAdoptionInquiryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptionInquiryStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated active-shelter adoption inquiry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptionInquiryStatusResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
     listGrowthDiaryEntries: {
         parameters: {
             query?: {
                 query?: string;
                 mood?: "all" | "concern" | "positive" | "neutral" | "unanalyzed";
+                status?: "all" | "new" | "reviewed";
+                from_date?: string | null;
+                to_date?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -10232,6 +10420,62 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    getGrowthDiaryPhotoAt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Indexed buffered WebP scoped to the active shelter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+        };
+    };
+    updateGrowthDiaryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrowthDiaryStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated active-shelter diary detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrowthDiaryDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFoundOrForbidden"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
 }

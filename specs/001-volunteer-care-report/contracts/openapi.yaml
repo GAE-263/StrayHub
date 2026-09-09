@@ -2580,6 +2580,50 @@ paths:
               schema: { $ref: '#/components/schemas/PlatformAdminMutationResponse' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /v1/management/adoption-inquiries:
+    get:
+      tags: [Management Adoption Inquiries]
+      operationId: listAdoptionInquiries
+      parameters:
+        - { in: query, name: search, schema: { type: [string, 'null'], maxLength: 120 } }
+        - { in: query, name: path, schema: { type: [string, 'null'], enum: [specific_animal, recommend_me, null] } }
+        - { in: query, name: status, schema: { type: [string, 'null'], enum: [new, contacted, null] } }
+        - { in: query, name: from_date, schema: { type: [string, 'null'], format: date } }
+        - { in: query, name: to_date, schema: { type: [string, 'null'], format: date } }
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: page_size, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Active-shelter-scoped adoption inquiry page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdoptionInquiryListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+  /v1/management/adoption-inquiries/{inquiry_id}/status:
+    patch:
+      tags: [Management Adoption Inquiries]
+      operationId: updateAdoptionInquiryStatus
+      parameters:
+        - { in: path, name: inquiry_id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdoptionInquiryStatusUpdate' }
+      responses:
+        '200':
+          description: Updated active-shelter adoption inquiry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdoptionInquiryStatusResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
   /v1/management/growth-diary-entries:
     get:
       tags: [Management Growth Diary]
@@ -2589,6 +2633,11 @@ paths:
         - in: query
           name: mood
           schema: { type: string, enum: [all, concern, positive, neutral, unanalyzed], default: all }
+        - in: query
+          name: status
+          schema: { type: string, enum: [all, new, reviewed], default: all }
+        - { in: query, name: from_date, schema: { type: [string, 'null'], format: date } }
+        - { in: query, name: to_date, schema: { type: [string, 'null'], format: date } }
         - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
         - { in: query, name: page_size, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
       responses:
@@ -2633,6 +2682,42 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+  /v1/management/growth-diary-entries/{entryId}/photos/{index}:
+    get:
+      tags: [Management Growth Diary]
+      operationId: getGrowthDiaryPhotoAt
+      parameters:
+        - { in: path, name: entryId, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: index, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Indexed buffered WebP scoped to the active shelter
+          content:
+            image/webp: { schema: { type: string, contentEncoding: binary } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+  /v1/management/growth-diary-entries/{entryId}/status:
+    patch:
+      tags: [Management Growth Diary]
+      operationId: updateGrowthDiaryStatus
+      parameters:
+        - { in: path, name: entryId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrowthDiaryStatusUpdate' }
+      responses:
+        '200':
+          description: Updated active-shelter diary detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrowthDiaryDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFoundOrForbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
 components:
   securitySchemes:
     bearerAuth:
@@ -5535,13 +5620,63 @@ components:
         reason: { type: [string, 'null'] }
         result: { type: string, enum: [success, denied] }
         created_at: { type: string, format: date-time }
+    AdoptionAnswerDisplay:
+      type: object
+      required: [key, label, value]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        value: { type: string }
+    AdoptionInquiryItem:
+      type: object
+      required: [id, organization_id, target_animal_id, animal_name, shelter_number, path, adopter_name, phone_number, answers, answers_display, status, staff_notes, submitted_at, status_updated_at, ai_suitability_score, ai_suitability_explanation, ai_recommendation_overridden]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        target_animal_id: { type: string, format: uuid }
+        animal_name: { type: string }
+        shelter_number: { type: [string, 'null'] }
+        path: { type: string, enum: [specific_animal, recommend_me] }
+        adopter_name: { type: string }
+        phone_number: { type: string }
+        answers: { type: object, additionalProperties: { type: string } }
+        answers_display:
+          type: array
+          items: { $ref: '#/components/schemas/AdoptionAnswerDisplay' }
+        status: { type: string, enum: [new, contacted] }
+        staff_notes: { type: [string, 'null'] }
+        submitted_at: { type: string, format: date-time }
+        status_updated_at: { type: [string, 'null'], format: date-time }
+        ai_suitability_score: { type: [integer, 'null'] }
+        ai_suitability_explanation: { type: [string, 'null'] }
+        ai_recommendation_overridden: { type: [boolean, 'null'] }
+    AdoptionInquiryListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdoptionInquiryItem' }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+    AdoptionInquiryStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [new, contacted] }
+    AdoptionInquiryStatusResponse:
+      type: object
+      required: [inquiry]
+      properties:
+        inquiry: { $ref: '#/components/schemas/AdoptionInquiryItem' }
     GrowthDiaryAiSummary:
       type: object
       required: [status, provenance_status, mood, adopter_reply, staff_summary]
       properties:
         status:
           type: string
-          enum: [pending, succeeded, failed, unconfigured, not_applicable, legacy, unavailable]
+          enum: [pending, processing, succeeded, failed, unconfigured, not_applicable, legacy, unavailable]
         provenance_status: { type: string, enum: [available, legacy_missing, unavailable] }
         mood: { type: [string, 'null'], enum: [positive, neutral, concern, null] }
         adopter_reply: { type: [string, 'null'] }
@@ -5559,7 +5694,7 @@ components:
         analyzed_at: { type: [string, 'null'], format: date-time }
     GrowthDiaryListItem:
       type: object
-      required: [id, inquiry_id, animal_id, animal_name, shelter_number, has_photo, photo_endpoint, note, ai_analysis, created_at]
+      required: [id, inquiry_id, animal_id, animal_name, shelter_number, has_photo, photo_endpoint, photo_endpoints, note, status, status_updated_at, entry_date, ai_analysis, created_at]
       properties:
         id: { type: string, format: uuid }
         inquiry_id: { type: string, format: uuid }
@@ -5568,7 +5703,13 @@ components:
         shelter_number: { type: [string, 'null'] }
         has_photo: { type: boolean }
         photo_endpoint: { type: [string, 'null'] }
+        photo_endpoints:
+          type: array
+          items: { type: string }
         note: { type: [string, 'null'], maxLength: 2000 }
+        status: { type: string, enum: [new, reviewed] }
+        status_updated_at: { type: [string, 'null'], format: date-time }
+        entry_date: { type: string, format: date }
         ai_analysis: { $ref: '#/components/schemas/GrowthDiaryAiSummary' }
         created_at: { type: string, format: date-time }
     GrowthDiaryDetail:
@@ -5585,7 +5726,7 @@ components:
                 - { type: 'null' }
     GrowthDiaryListResponse:
       type: object
-      required: [items, page, page_size, total]
+      required: [items, page, page_size, total, timezone]
       properties:
         items:
           type: array
@@ -5593,3 +5734,9 @@ components:
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+    GrowthDiaryStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [new, reviewed] }

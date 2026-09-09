@@ -484,9 +484,7 @@ async def _seed_identity(
         select(OrganizationVolunteerNumberCounter).where(
             OrganizationVolunteerNumberCounter.organization_id == organization.id
         ),
-        lambda: OrganizationVolunteerNumberCounter(
-            organization_id=organization.id, next_value=2
-        ),
+        lambda: OrganizationVolunteerNumberCounter(organization_id=organization.id, next_value=2),
     )
     counter.next_value = max(counter.next_value, 2)
     profile = await _one_or_create(

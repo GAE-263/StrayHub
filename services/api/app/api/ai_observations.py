@@ -112,12 +112,7 @@ async def list_management_ai_review_queue(
             )
         )
         reports_by_id = {report.id: report for report in result.scalars()}
-    return {
-        "items": [
-            _response(item, reports_by_id.get(item.source_id))
-            for item in items
-        ]
-    }
+    return {"items": [_response(item, reports_by_id.get(item.source_id)) for item in items]}
 
 
 @router.get("/v1/ai-observations/{observationId}", response_model=AIObservationResponse)

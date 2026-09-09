@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -27,6 +27,7 @@ class GrowthDiaryAiSummary(BaseModel):
 
     status: Literal[
         "pending",
+        "processing",
         "succeeded",
         "failed",
         "unconfigured",
@@ -62,7 +63,11 @@ class GrowthDiaryListItem(BaseModel):
     shelter_number: str | None
     has_photo: bool
     photo_endpoint: str | None
+    photo_endpoints: tuple[str, ...]
     note: str | None
+    status: Literal["new", "reviewed"]
+    status_updated_at: datetime | None
+    entry_date: date
     ai_analysis: GrowthDiaryAiSummary
     created_at: datetime
 
@@ -79,12 +84,20 @@ class GrowthDiaryListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+    timezone: str
+
+
+class GrowthDiaryStatusUpdate(BaseModel):
+    status: Literal["new", "reviewed"]
 
 
 @router.get("", response_model=GrowthDiaryListResponse, responses=ERROR_RESPONSES)
 async def list_growth_diary_entries(
     query: str | None = Query(default=None, max_length=120),  # noqa: B008
     mood: Literal["all", "concern", "positive", "neutral", "unanalyzed"] = Query(default="all"),  # noqa: B008
+    status: Literal["all", "new", "reviewed"] = Query(default="all"),  # noqa: B008
+    from_date: date | None = Query(default=None),  # noqa: B008
+    to_date: date | None = Query(default=None),  # noqa: B008
     page: int = Query(default=1, ge=1),  # noqa: B008
     page_size: int = Query(default=50, ge=1, le=100),  # noqa: B008
     context: RequestContext = Depends(current_request_context),  # noqa: B008
@@ -96,6 +109,9 @@ async def list_growth_diary_entries(
         page_size=page_size,
         query=query,
         mood=mood,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
     )
     return GrowthDiaryListResponse.model_validate(result)
 
@@ -108,6 +124,21 @@ async def get_growth_diary_entry(
 ) -> GrowthDiaryDetail:
     organization_id = require_staff_or_admin(context)
     result = await GrowthDiaryManagementService(session, organization_id).detail(entryId)
+    return GrowthDiaryDetail.model_validate(result)
+
+
+@router.patch("/{entryId}/status", response_model=GrowthDiaryDetail, responses=ERROR_RESPONSES)
+async def update_growth_diary_status(
+    entryId: UUID,
+    payload: GrowthDiaryStatusUpdate,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> GrowthDiaryDetail:
+    organization_id = require_staff_or_admin(context)
+    result = await GrowthDiaryManagementService(session, organization_id).set_status(
+        entryId, status=payload.status, actor_user_id=context.user_id
+    )
+    await session.commit()
     return GrowthDiaryDetail.model_validate(result)
 
 
@@ -147,4 +178,30 @@ async def get_growth_diary_photo(
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
         },
+    )
+
+
+@router.get(
+    "/{entryId}/photos/{index}",
+    response_class=Response,
+    responses=ERROR_RESPONSES,
+)
+async def get_growth_diary_photo_at(
+    entryId: UUID,
+    index: int,
+    context: RequestContext = Depends(current_request_context),  # noqa: B008
+    session: AsyncSession = Depends(request_session),  # noqa: B008
+) -> Response:
+    organization_id = require_staff_or_admin(context)
+    photo = await GrowthDiaryManagementService(session, organization_id).photo_at(entryId, index)
+    try:
+        content = await MinioStorageAdapter().get(
+            scope=ObjectScope(organization_id), key=photo.object_key
+        )
+    except Exception as exc:
+        raise DomainError("growth_diary_photo_not_found", "毛孩日記照片不存在", 404) from exc
+    return Response(
+        content=content,
+        media_type="image/webp",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )

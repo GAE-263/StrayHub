@@ -35,7 +35,7 @@ async def test_reconciliation_retries_enqueue_failed_report_without_new_report(m
     monkeypatch.setattr(
         "services.api.app.application.report_job_dispatch.create_ai_job", fake_create
     )
-    service = ReportJobDispatchService(lambda: Session())
+    service = ReportJobDispatchService(lambda: Session(), ai_enabled=True)
     assert await service.reconcile(organization_id=organization_id, report_id=report.id)
     assert report.ai_job_status == "enqueued"
     assert len(calls) == 1

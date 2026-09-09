@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     text,
@@ -244,7 +245,9 @@ class VolunteerApplicationProfile(AuditMixin, Base):
     insurance_identity_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     pii_schema_version: Mapped[str] = mapped_column(String(20), nullable=False)
     encryption_algorithm: Mapped[str] = mapped_column(String(30), nullable=False)
-    encryption_key_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    # GCP KMS returns the complete CryptoKeyVersion resource name here, not a
+    # short numeric version. Keep the external resource identifier intact.
+    encryption_key_version: Mapped[str] = mapped_column(Text, nullable=False)
     retention_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     insurance_identity_delete_after: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

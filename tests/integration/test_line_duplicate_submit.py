@@ -72,7 +72,7 @@ async def test_duplicate_submit_with_same_idempotency_key_returns_one_report() -
     drafts = Drafts()
     reports = Reports()
     animal = Animal(id=animal_id, organization_id=organization_id, name="小黑", status="active")
-    service = ReportSubmissionService(drafts, reports)
+    service = ReportSubmissionService(drafts, reports, ai_enabled=False)
     first = await service.submit(
         draft_id=draft.id,
         volunteer_user_id=volunteer_id,
@@ -87,3 +87,4 @@ async def test_duplicate_submit_with_same_idempotency_key_returns_one_report() -
         idempotency_key="same-event",
     )
     assert second is first
+    assert first.ai_job_status == "not_requested"

@@ -80,7 +80,9 @@ async def test_fifteen_interruptions_resume_saved_draft_without_creating_report(
     assert resumed.answers == {"care_completion": "care_completion.completed"}
     assert resumed.note == "已保存心得"
     assert resumed.photo_processing_status == "processed"
-    assert resumed.last_interaction_at == saved_at
+    # Resume is itself an interaction and must refresh activity without changing
+    # any saved answers, note, media state, or creating a report.
+    assert resumed.last_interaction_at >= saved_at
     assert resumed.last_interaction_at.tzinfo == timezone.utc
     assert repository.report_count == 0
 

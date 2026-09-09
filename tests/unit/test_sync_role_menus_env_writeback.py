@@ -16,6 +16,7 @@ MAPPING = {
     "volunteer": "richmenu-new-volunteer",
     "adopter": "richmenu-new-adopter",
     "staff": "richmenu-new-staff",
+    "adoption_hub": "richmenu-new-adoption-hub",
 }
 
 
@@ -33,7 +34,8 @@ def test_existing_ids_are_replaced_in_place(tmp_path: Path) -> None:
         "LINE_RICH_MENU_DEFAULT_ID=richmenu-old-default\n"
         "LINE_RICH_MENU_VOLUNTEER_ID=richmenu-old-volunteer\n"
         "LINE_RICH_MENU_ADOPTER_ID=richmenu-old-adopter\n"
-        "LINE_RICH_MENU_STAFF_ID=richmenu-old-staff\n",
+        "LINE_RICH_MENU_STAFF_ID=richmenu-old-staff\n"
+        "LINE_RICH_MENU_ADOPTION_HUB_ID=richmenu-old-adoption-hub\n",
         encoding="utf-8",
     )
 
@@ -43,6 +45,7 @@ def test_existing_ids_are_replaced_in_place(tmp_path: Path) -> None:
     values = _read(env)
     assert values["LINE_RICH_MENU_DEFAULT_ID"] == "richmenu-new-default"
     assert values["LINE_RICH_MENU_STAFF_ID"] == "richmenu-new-staff"
+    assert values["LINE_RICH_MENU_ADOPTION_HUB_ID"] == "richmenu-new-adoption-hub"
     assert values["LINE_CHANNEL_ID"] == "123", "其他設定不可被動到"
 
 
@@ -54,6 +57,7 @@ def test_missing_keys_are_appended(tmp_path: Path) -> None:
 
     assert sorted(updated) == sorted(ENV_KEYS.values())
     assert _read(env)["LINE_RICH_MENU_ADOPTER_ID"] == "richmenu-new-adopter"
+    assert _read(env)["LINE_RICH_MENU_ADOPTION_HUB_ID"] == "richmenu-new-adoption-hub"
 
 
 def test_absent_env_file_is_reported_not_created(tmp_path: Path) -> None:
@@ -63,12 +67,14 @@ def test_absent_env_file_is_reported_not_created(tmp_path: Path) -> None:
     assert not env.exists()
 
 
-def test_public_menu_has_only_volunteer_and_formal_adoption_entries() -> None:
+def test_public_menu_has_only_volunteer_and_adoption_hub_entries() -> None:
+    """「領養流程」只是入口，切到領養媒合／毛孩日記共用的兩格選單——見
+    line-rich-menu-adoption-hub.yaml 與 line_webhook.py 的 open_adoption_hub。"""
     document = load_role_definition(Path("infra/local/line-rich-menu-default.yaml"))
 
     assert [action["data"] for action in document["actions"]] == [
         "action=start_volunteer_application",
-        "action=start_adoption_matching&flow=adoption",
+        "action=open_adoption_hub",
     ]
     rich_menu = to_line_rich_menu(document)
     assert sum(area["bounds"]["width"] for area in rich_menu["areas"]) == 2500

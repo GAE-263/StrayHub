@@ -68,7 +68,10 @@ export function safeVolunteerError(code?: string): string {
     entry_unavailable: "此收容所志工入口目前無法使用，請回到 LINE 聯絡收容所。",
     volunteer_applications_disabled: "此收容所目前暫停接受新申請。",
     application_version_conflict: "申請狀態已更新，請重新載入。",
-    dependency_unavailable: "LINE 身分服務暫時無法使用，請稍後再試。",
+    line_identity_provider_unavailable:
+      "LINE 身分服務暫時無法使用，請稍後再試。",
+    dependency_unavailable: "系統暫時無法完成申請，請稍後再試。",
+    internal_error: "系統暫時無法完成申請，請稍後再試。",
   };
   return messages[code ?? ""] ?? "目前無法取得報名狀態，請稍後再試。";
 }

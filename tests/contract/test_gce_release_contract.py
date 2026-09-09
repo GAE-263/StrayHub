@@ -95,6 +95,19 @@ def test_successful_manifest_and_bundle_validation(tmp_path: Path) -> None:
     assert (extracted / "infra/gce/scripts/verify.sh").stat().st_mode & 0o111
 
 
+def test_bundle_allows_only_reviewed_nonsecret_acceptance_template(tmp_path: Path) -> None:
+    payload = tmp_path / "payload"
+    accepted = payload / "infra/gce/.env.acceptance.template"
+    accepted.parent.mkdir(parents=True)
+    accepted.write_text("APP_ENV=acceptance\n", encoding="utf-8")
+    release_manifest.create_bundle(payload, tmp_path / "accepted.tar")
+
+    rejected = payload / ".env.secret"
+    rejected.write_text("SECRET=value\n", encoding="utf-8")
+    with pytest.raises(release_manifest.ReleaseError, match="environment file forbidden"):
+        release_manifest.create_bundle(payload, tmp_path / "rejected.tar")
+
+
 def test_missing_manifest_field_is_rejected(tmp_path: Path) -> None:
     artifact = build_artifact(tmp_path)
     manifest_path = artifact / "release-manifest.json"

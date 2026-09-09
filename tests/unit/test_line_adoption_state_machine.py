@@ -5,6 +5,7 @@ from services.api.app.domain.line_adoption_state import (
     AdoptionDraftStateMachine,
     AdoptionInquiryAnswers,
     AdoptionPath,
+    can_go_back,
 )
 
 
@@ -21,7 +22,7 @@ def test_advance_and_choose_path_convenience_methods_mirror_transition() -> None
     assert machine.state == AdoptionDraftState.CHOOSING_PATH
 
     machine.choose_path(AdoptionPath.RECOMMEND_ME)
-    assert machine.state == AdoptionDraftState.ANSWERING_PREFERENCE_HOUSING
+    assert machine.state == AdoptionDraftState.AWAITING_FREETEXT_PROFILE
     assert machine.path == AdoptionPath.RECOMMEND_ME
 
 
@@ -40,6 +41,7 @@ def test_specific_animal_path_walks_through_shared_questionnaire_and_submits() -
     machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
     assert machine.state == AdoptionDraftState.CONFIRMING_TARGET_ANIMAL
 
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
     machine.transition(AdoptionDraftState.ANSWERING_HOUSING)
     for key, value in [
         ("housing_type", "apartment_small"),
@@ -85,6 +87,7 @@ def test_confirming_answers_back_returns_to_last_question_and_clears_it() -> Non
         AdoptionDraftState.SELECTING_TARGET_ANIMAL, path=AdoptionPath.SPECIFIC_ANIMAL
     )
     machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
     machine.transition(AdoptionDraftState.ANSWERING_HOUSING)
     for key, value in [
         ("housing_type", "apartment_small"),
@@ -108,9 +111,8 @@ def test_confirming_answers_back_returns_to_last_question_and_clears_it() -> Non
 
 def test_recommend_me_path_asks_extra_preferences_and_skips_shared_questionnaire() -> None:
     machine = _advance_to_choosing_path()
-    machine.transition(
-        AdoptionDraftState.ANSWERING_PREFERENCE_HOUSING, path=AdoptionPath.RECOMMEND_ME
-    )
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE, path=AdoptionPath.RECOMMEND_ME)
+    machine.transition(AdoptionDraftState.ANSWERING_PREFERENCE_HOUSING)
     for key, value in [
         ("housing_type", "house"),
         ("dog_experience", "experienced"),
@@ -153,6 +155,7 @@ def test_specific_animal_low_score_alternative_flow_reaches_adopter_name() -> No
         AdoptionDraftState.SELECTING_TARGET_ANIMAL, path=AdoptionPath.SPECIFIC_ANIMAL
     )
     machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
     machine.transition(AdoptionDraftState.ANSWERING_HOUSING)
     for key, value in [
         ("housing_type", "apartment_small"),
@@ -197,6 +200,7 @@ def test_invalid_phone_number_is_rejected() -> None:
         AdoptionDraftState.SELECTING_TARGET_ANIMAL, path=AdoptionPath.SPECIFIC_ANIMAL
     )
     machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
     machine.transition(AdoptionDraftState.ANSWERING_HOUSING)
     for key, value in [
         ("housing_type", "apartment_small"),
@@ -224,6 +228,7 @@ def test_back_from_answering_state_clears_that_and_later_answers() -> None:
         AdoptionDraftState.SELECTING_TARGET_ANIMAL, path=AdoptionPath.SPECIFIC_ANIMAL
     )
     machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
     machine.transition(AdoptionDraftState.ANSWERING_HOUSING)
     machine.answer_question("housing_type", "apartment_small")
     machine.answer_question("dog_experience", "first_time")
@@ -237,9 +242,7 @@ def test_back_from_answering_state_clears_that_and_later_answers() -> None:
 
 def test_back_out_of_choosing_path_resets_selected_path() -> None:
     machine = _advance_to_choosing_path()
-    machine.transition(
-        AdoptionDraftState.ANSWERING_PREFERENCE_HOUSING, path=AdoptionPath.RECOMMEND_ME
-    )
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE, path=AdoptionPath.RECOMMEND_ME)
 
     machine.back()
 
@@ -253,6 +256,7 @@ def test_submit_without_completing_required_answers_is_rejected() -> None:
         AdoptionDraftState.SELECTING_TARGET_ANIMAL, path=AdoptionPath.SPECIFIC_ANIMAL
     )
     machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
     machine.transition(AdoptionDraftState.ANSWERING_HOUSING)
     for key, value in [
         ("housing_type", "apartment_small"),
@@ -273,6 +277,33 @@ def test_submit_without_completing_required_answers_is_rejected() -> None:
 
     with pytest.raises(DomainError, match="領養問卷"):
         machine.transition(AdoptionDraftState.REVIEWING)
+
+
+def test_skip_prefilled_questions_lands_on_first_genuine_gap() -> None:
+    machine = _advance_to_choosing_path()
+    machine.transition(
+        AdoptionDraftState.SELECTING_TARGET_ANIMAL, path=AdoptionPath.SPECIFIC_ANIMAL
+    )
+    machine.transition(AdoptionDraftState.CONFIRMING_TARGET_ANIMAL)
+    machine.transition(AdoptionDraftState.AWAITING_FREETEXT_PROFILE)
+    for key, value in [
+        ("housing_type", "apartment_small"),
+        ("dog_experience", "first_time"),
+        ("other_pets", "none"),
+        ("household_members", "adults_only"),
+    ]:
+        machine.answers.set(key, value)
+
+    machine.advance()
+    machine.skip_prefilled_questions()
+
+    assert machine.state == AdoptionDraftState.ANSWERING_SCHEDULE
+
+
+def test_can_go_back_matches_the_state_graph() -> None:
+    assert can_go_back(AdoptionDraftState.SELECTING_ORGANIZATION, None) is False
+    assert can_go_back(AdoptionDraftState.CHOOSING_PATH, None) is True
+    assert can_go_back(AdoptionDraftState.AWAITING_FREETEXT_PROFILE, AdoptionPath.RECOMMEND_ME)
 
 
 @pytest.mark.parametrize(

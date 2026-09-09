@@ -17,6 +17,7 @@ from services.api.app.application.line_growth_diary_flex import (
     build_growth_diary_reminder_card,
 )
 from services.api.app.application.ports.line_messaging import LineMessagingPort
+from services.api.app.config.settings import get_worker_settings
 from services.api.app.domain.growth_diary_reminder import decide_growth_diary_reminder
 from services.api.app.infrastructure.line.messaging_api_adapter import LineMessagingApiAdapter
 from services.api.app.persistence.models.adoption_inquiry import AdoptionInquiry
@@ -35,7 +36,7 @@ class GrowthDiaryReminderHandler:
         now: datetime | None = None,
     ) -> int:
         now = now or datetime.now(timezone.utc)
-        messenger = messaging or LineMessagingApiAdapter()
+        messenger = messaging or LineMessagingApiAdapter(settings=get_worker_settings())
         inquiries = list(
             (
                 await self.session.execute(

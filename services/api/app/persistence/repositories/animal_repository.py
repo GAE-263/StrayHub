@@ -46,6 +46,23 @@ class AnimalRepository:
         )
         return list(result.scalars())
 
+    async def list_adoptable_excluding(
+        self, excluded_animal_id: UUID, *, limit: int
+    ) -> list[Animal]:
+        bounded_limit = max(1, min(limit, 100))
+        result = await self.session.execute(
+            select(Animal)
+            .where(
+                Animal.organization_id == self.organization_id,
+                Animal.status == "active",
+                Animal.is_adoptable.is_(True),
+                Animal.id != excluded_animal_id,
+            )
+            .order_by(Animal.name, Animal.shelter_number, Animal.id)
+            .limit(bounded_limit)
+        )
+        return list(result.scalars())
+
     async def list_adoptable_page(
         self, *, page: int = 1, query: str = "", limit: int = 12
     ) -> tuple[list[Animal], int]:

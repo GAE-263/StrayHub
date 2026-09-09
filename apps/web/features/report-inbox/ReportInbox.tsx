@@ -123,8 +123,8 @@ export function ReportInbox() {
         .then((result) => {
           if (active) setData(result);
         })
-        .catch((e) => {
-          if (active) setError(e.message);
+        .catch(() => {
+          if (active) setError("無法載入回報收件匣，請稍後重試。");
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -265,7 +265,9 @@ export function ReportInbox() {
                 {report.summary_status === "succeeded" ? (
                   <p>{report.summary?.summary || "查看完整志工回報"}</p>
                 ) : report.summary?.evidence?.length ? (
-                  <ul className={`${styles.evidenceChips} ${styles.evidenceChipsCompact}`}>
+                  <ul
+                    className={`${styles.evidenceChips} ${styles.evidenceChipsCompact}`}
+                  >
                     {report.summary.evidence.map((e, i) => (
                       <li key={i} className={styles.evidenceChip}>
                         <span className={styles.chipKey}>
@@ -380,8 +382,8 @@ export function ReportDetail({ id }: { id: string }) {
           setEditNote(data.report.note || "");
         }
       })
-      .catch((e) => {
-        if (active) setError(e.message);
+      .catch(() => {
+        if (active) setError("無法載入回報詳情，請稍後重試。");
       });
     return () => {
       active = false;
@@ -413,7 +415,9 @@ export function ReportDetail({ id }: { id: string }) {
         {error ? (
           <p role="alert">{error}</p>
         ) : (
-          <p role="status">正在載入回報…</p>
+          <p role="status" aria-live="polite">
+            正在載入回報…
+          </p>
         )}
         <button onClick={() => setRevision((x) => x + 1)}>重新載入</button>
       </section>
@@ -422,6 +426,12 @@ export function ReportDetail({ id }: { id: string }) {
   const status = report.review_status || "pending";
   const observation = report.ai_observations?.find(
     (o) => o.source_type === "care_report_summary",
+  );
+  const pendingObservation = report.ai_observations?.find((o) =>
+    ["pending", "pending_enqueue", "retry_wait", "running"].includes(o.status),
+  );
+  const failedObservation = report.ai_observations?.find(
+    (o) => o.status === "failed",
   );
   return (
     <section className={styles.page}>
@@ -444,12 +454,21 @@ export function ReportDetail({ id }: { id: string }) {
       </div>
       <Link href={`/animals/${report.animal_id}`}>查看動物檔案</Link>
       <button onClick={() => setRevision((x) => x + 1)}>重新載入回報</button>
+      {pendingObservation ? (
+        <p role="status" aria-live="polite">
+          AI 處理中，完成前仍可查看原始回報。
+        </p>
+      ) : failedObservation ? (
+        <p role="status" aria-live="polite">
+          AI 處理失敗；原始回報保留，可稍後重試。
+        </p>
+      ) : null}
       {report.ai_observations?.some(
         (o) =>
           o.source_type !== "care_report_summary" && o.status === "succeeded",
       ) && (
-        <p role="status">
-          其他 AI 結果需要人工覆核。<Link href="/ai-review">前往 AI 覆核</Link>
+        <p role="status" aria-live="polite">
+          AI 結果需要人工覆核。<Link href="/ai-review">前往 AI 覆核</Link>
         </p>
       )}
       {error && <p role="alert">{error}</p>}
@@ -501,9 +520,7 @@ export function ReportDetail({ id }: { id: string }) {
         )}
         <div
           className={
-            report.summary_status === "succeeded"
-              ? styles.columns
-              : undefined
+            report.summary_status === "succeeded" ? styles.columns : undefined
           }
         >
           {report.summary_status === "succeeded" ? (

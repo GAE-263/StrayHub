@@ -618,8 +618,12 @@ class VolunteerAccessService:
             raise DomainError("application_version_conflict", "申請狀態已更新", 409)
         if decision not in {"approve", "reject"}:
             raise DomainError("invalid_batch_decision", "決策無效", 422)
+        before = {"status": application.status, "version": application.version}
         service_date_status = "approved" if decision == "approve" else "rejected"
         service_date_item = None
+        membership = None
+        grant = None
+        reuse_existing_grant = False
         if service_date is not None:
             getter = getattr(self.repository, "service_date_for_application", None)
             if getter is None:
@@ -629,33 +633,17 @@ class VolunteerAccessService:
                 raise DomainError("service_date_version_conflict", "服務日期已更新", 409)
             existing_grant = await self.repository.grant_for_application(application.id)
             if existing_grant is not None:
-                service_date_item.status = service_date_status
-                service_date_item.decided_at = clock
-                service_date_item.decided_by_user_id = actor_user_id
-                service_date_item.decision_reason = normalize_reason(
-                    reason, required=decision == "reject"
-                )
-                service_date_item.version += 1
-                pending_count = await self.repository.pending_service_date_count(application.id)
-                application.status = "pending" if pending_count else "approved"
-                application.decided_at = clock
-                application.decided_by_user_id = actor_user_id
-                application.version += 1
-                if application.status != "pending":
-                    application.applicant_surname = None
+                grant = existing_grant
                 membership = await self.identities.get_membership(
                     application.user_id, self.repository.organization_id
                 )
-                return application, membership, existing_grant
-        before = {"status": application.status, "version": application.version}
-        membership = None
-        grant = None
-        if decision == "reject":
+                reuse_existing_grant = True
+        if not reuse_existing_grant and decision == "reject":
             decision_reason = normalize_reason(reason, required=True)
             transition_application(application.status, "reject")
             application.status = "rejected"
             application.decision_reason = decision_reason
-        elif decision == "approve":
+        elif not reuse_existing_grant and decision == "approve":
             if self.summary_repository is not None and (
                 await self.summary_repository.has_active_platform_restriction(application.user_id)
             ):
@@ -752,10 +740,18 @@ class VolunteerAccessService:
             service_date_item.status = service_date_status
             service_date_item.decided_at = clock
             service_date_item.decided_by_user_id = actor_user_id
-            service_date_item.decision_reason = normalize_reason(reason)
+            service_date_item.decision_reason = normalize_reason(
+                reason, required=decision == "reject"
+            )
             service_date_item.version += 1
-            if await self.repository.pending_service_date_count(application.id):
+            pending_service_dates = await self.repository.pending_service_date_count(application.id)
+            if pending_service_dates:
                 application.status = "pending"
+            elif grant is not None:
+                # Once any requested date has produced an access grant, finishing
+                # the remaining dates leaves the application approved even when
+                # the final per-date decision is a rejection.
+                application.status = "approved"
         if application.status != "pending":
             application.applicant_surname = None
         if self.audit is not None:
@@ -771,7 +767,10 @@ class VolunteerAccessService:
                 after={"status": application.status, "version": application.version},
                 reason=application.decision_reason,
             )
-        if self.notifications is not None:
+        notification_event_type = (
+            application.status if application.status in {"approved", "rejected"} else None
+        )
+        if self.notifications is not None and notification_event_type is not None:
             line_binding_getter = getattr(self.identities, "get_line_binding_for_user", None)
             line_binding = (
                 None
@@ -781,7 +780,7 @@ class VolunteerAccessService:
             await self.notifications.enqueue(
                 user_id=application.user_id,
                 line_binding_id=None if line_binding is None else line_binding.id,
-                event_type="approved" if application.status == "approved" else "rejected",
+                event_type=notification_event_type,
                 resource_type="volunteer_application",
                 resource_id=application.id,
                 resource_version=application.version,

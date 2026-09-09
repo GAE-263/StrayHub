@@ -19,6 +19,7 @@ from services.api.app.application.volunteer_expiration_service import (
 from services.api.app.application.volunteer_notification_service import (
     VolunteerNotificationService,
 )
+from services.api.app.config.settings import get_worker_settings
 from services.api.app.infrastructure.line.identity_verification_adapter import (
     LineIdentityVerifier,
 )
@@ -40,8 +41,6 @@ logger = get_logger(__name__)
 
 def _rich_menu_router() -> RichMenuRoutingService | None:
     """四個 richMenuId 都沒設定時回 None，選單退回即為 no-op。"""
-    from services.api.app.config.settings import get_worker_settings
-
     settings = get_worker_settings()
     if not settings.line_role_menu_features_active():
         return None
@@ -53,7 +52,7 @@ def _rich_menu_router() -> RichMenuRoutingService | None:
     )
     if not registry.menu_ids:
         return None
-    return RichMenuRoutingService(LineMessagingApiAdapter(), registry)
+    return RichMenuRoutingService(LineMessagingApiAdapter(settings=settings), registry)
 
 
 class VolunteerAccessHandler:
@@ -103,7 +102,7 @@ class VolunteerAccessHandler:
         )
         await worker_repository.recover_stale_notification_claims()
         deliveries = await worker_repository.claim_notifications(limit=limit)
-        messenger = messaging or LineMessagingApiAdapter()
+        messenger = messaging or LineMessagingApiAdapter(settings=get_worker_settings())
         for delivery in deliveries:
             line_user_id = await worker_repository.recipient_line_user_id(delivery.line_binding_id)
             if line_user_id is None:

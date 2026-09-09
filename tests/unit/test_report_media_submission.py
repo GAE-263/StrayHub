@@ -17,6 +17,17 @@ class FakeSession:
     async def flush(self) -> None:
         return None
 
+    def begin_nested(self):
+        return FakeTransaction()
+
+
+class FakeTransaction:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
 
 class FakeDrafts:
     def __init__(self, draft) -> None:
@@ -101,6 +112,7 @@ async def test_submit_promotes_draft_media_and_records_audit() -> None:
         drafts,
         reports,
         audit=Audit(),
+        ai_enabled=False,
     ).submit(
         draft_id=draft.id,
         volunteer_user_id=volunteer_id,
@@ -119,6 +131,83 @@ async def test_submit_promotes_draft_media_and_records_audit() -> None:
     assert reports.media == [(report.id, draft.media_asset_ids)]
     assert draft.status == "submitted"
     assert audit_events[0]["action"] == "care_report.submitted"
+
+
+@pytest.mark.asyncio
+async def test_ai_disabled_persists_report_without_creating_durable_job() -> None:
+    organization_id = uuid4()
+    volunteer_id = uuid4()
+    animal_id = uuid4()
+    draft = make_draft(
+        organization_id=organization_id,
+        volunteer_user_id=volunteer_id,
+        animal_id=animal_id,
+    )
+    drafts = FakeDrafts(draft)
+    drafts.draft_media_id = draft.media_asset_ids[0]
+    reports = FakeReports(organization_id)
+    reports.session = drafts.session
+
+    report = await ReportSubmissionService(
+        drafts,
+        reports,
+        ai_enabled=False,
+    ).submit(
+        draft_id=draft.id,
+        volunteer_user_id=volunteer_id,
+        animal=Animal(
+            id=animal_id,
+            organization_id=organization_id,
+            name="Acceptance Animal",
+            status="active",
+        ),
+        idempotency_key="disabled-event",
+    )
+
+    assert report.ai_job_status == "not_requested"
+    assert report.summary_status == "not_requested"
+    assert draft.status == "submitted"
+    assert drafts.session.added == []
+
+
+@pytest.mark.asyncio
+async def test_ai_enabled_persists_report_and_creates_celery_summary_job() -> None:
+    organization_id = uuid4()
+    volunteer_id = uuid4()
+    animal_id = uuid4()
+    draft = make_draft(
+        organization_id=organization_id,
+        volunteer_user_id=volunteer_id,
+        animal_id=animal_id,
+    )
+    drafts = FakeDrafts(draft)
+    drafts.draft_media_id = draft.media_asset_ids[0]
+    reports = FakeReports(organization_id)
+    reports.session = drafts.session
+
+    report = await ReportSubmissionService(
+        drafts,
+        reports,
+        ai_enabled=True,
+    ).submit(
+        draft_id=draft.id,
+        volunteer_user_id=volunteer_id,
+        animal=Animal(
+            id=animal_id,
+            organization_id=organization_id,
+            name="Acceptance Animal",
+            status="active",
+        ),
+        idempotency_key="enabled-event",
+    )
+
+    assert report.ai_job_status == "pending_enqueue"
+    assert report.summary_status == "pending"
+    assert draft.status == "submitted"
+    assert len(drafts.session.added) == 1
+    job = drafts.session.added[0]
+    assert job.job_type == "care_report_summary"
+    assert job.execution_backend == "celery"
 
 
 @pytest.mark.asyncio

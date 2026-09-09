@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
+from services.api.app.config.settings import get_worker_settings
 from services.api.app.observability.logging import get_logger
 from services.api.app.persistence.database.scope import (
     set_organization_scope,
@@ -91,6 +92,8 @@ async def run_volunteer_iteration(factory, *, worker_id: str) -> None:
 
 
 async def run_ai_iteration(factory, *, worker_id: str, client, storage=None) -> None:
+    if not get_worker_settings().celery_ai_enabled:
+        return
     organization_ids = await active_organization_ids(factory)
     for organization_id in organization_ids:
         try:

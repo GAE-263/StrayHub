@@ -510,7 +510,45 @@ describe("QR-first animal confirmation page", () => {
       );
       await flushEffects();
     });
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "/v1/animals/search?query=A-013&page_size=50",
+    );
     expect(container?.textContent).toContain("確認照護動物");
     expect(container?.textContent).toContain("收容編號：A-013");
+  });
+
+  it("does not present a 422 lookup contract error as a missing shelter number", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { code: "invalid_pagination", message: "分頁參數無效" },
+          false,
+          422,
+        ),
+      );
+    await renderPage(fetchMock);
+    await clickButton("輸入完整收容編號");
+    const input = container?.querySelector(
+      "#exact-shelter-number",
+    ) as HTMLInputElement;
+    await act(async () => setInputValue(input, "A-013"));
+    const form = container?.querySelector(
+      'form[aria-label="exact-shelter-number-form"]',
+    );
+    await act(async () => {
+      form?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+      await flushEffects();
+    });
+
+    expect(container?.textContent).toContain(
+      "目前無法查詢完整收容編號，請稍後再試。",
+    );
+    expect(container?.textContent).not.toContain(
+      "找不到這個完整收容編號，請確認後再試。",
+    );
+    expect(container?.textContent).not.toContain("確認照護動物");
   });
 });

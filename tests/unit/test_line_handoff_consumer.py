@@ -148,6 +148,9 @@ def _install_common(monkeypatch, *, handoff_result=None, handoff_error=None, dec
 
     animals = _Animals({animal_id: SimpleNamespace(id=animal_id, name="阿福")})
     monkeypatch.setattr(line_webhook, "_resolve_context", resolve)
+    switch_menu = AsyncMock(return_value=True)
+    monkeypatch.setattr(line_webhook, "_switch_rich_menu", switch_menu)
+    calls["switch_menu"] = switch_menu
     monkeypatch.setattr(line_webhook, "AnimalRepository", lambda *_args: animals)
     monkeypatch.setattr(line_webhook, "AuthenticationRepository", lambda *_args: object())
     monkeypatch.setattr(
@@ -199,6 +202,7 @@ async def test_command_consumes_handoff_and_creates_draft_in_one_savepoint(monke
     }
     assert calls["conversation"]["action"] == "confirm_animal"
     assert calls["conversation"]["token"] == "server-draft-token"
+    calls["switch_menu"].assert_awaited_once_with("line-user", "VOLUNTEER")
     assert replies[0]["draft"] is draft
     assert replies[0]["raw_token"] == "server-draft-token"
 

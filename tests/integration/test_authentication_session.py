@@ -271,9 +271,15 @@ async def test_login_refresh_rotation_and_family_replay() -> None:
     )
 
     first = await service.login(username="staff", password="password")
+    original_session = repository.sessions[first["session_id"]]
+    original_expiry = original_session.expires_at
     assert first["organizations"][0]["code"] == "SHELTER"
     second = await service.refresh(refresh_token=first["refresh_token"])
     assert first["refresh_token"] != second["refresh_token"]
+    assert second["session_id"] == first["session_id"]
+    assert second["user_id"] == first["user_id"]
+    assert original_session.expires_at == original_expiry
+    assert len(repository.sessions) == 1
 
     with pytest.raises(DomainError, match="Refresh Token 無效"):
         await service.refresh(refresh_token=first["refresh_token"])
@@ -458,3 +464,29 @@ async def test_liff_exchange_requires_valid_binding_and_entry_context() -> None:
         id_token="invalid", shelter_entry_reference="valid-entry"
     )
     assert result["state"] == "NEW"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalidity", ["expired", "revoked"])
+async def test_invalid_session_denies_refresh_and_current_user(invalidity):
+    user = User(id=uuid4(), status="active", display_name="Synthetic")
+    repository = FakeAuthRepository(user)
+    service = SessionService(
+        repository, password_hasher=Argon2PasswordHasher(), access_token=token_adapter()
+    )
+    session = SessionRecord(
+        user_id=user.id,
+        status="active",
+        session_origin="liff",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    await repository.add(session)
+    issued = await service._issue_session(user.id, session)
+    if invalidity == "expired":
+        session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    else:
+        session.status = "revoked"
+    with pytest.raises(DomainError, match="Session 無效"):
+        await service.refresh(refresh_token=issued["refresh_token"])
+    with pytest.raises(DomainError, match="Session 無效"):
+        await service.current_user(session_id=session.id)

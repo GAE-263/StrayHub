@@ -48,3 +48,7 @@ class AdoptionDraft(IdentityMixin, AuditMixin, Base):
     ai_followup_target_animal_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("animals.id"), nullable=True
     )
+    # How many AWAITING_FREETEXT_PROFILE rounds have been consumed — see
+    # AdoptionDraftStateMachine.freetext_profile_rounds /
+    # AWAITING_FREETEXT_PROFILE_MAX_ROUNDS.
+    freetext_profile_rounds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

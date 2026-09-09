@@ -21,19 +21,12 @@ from scripts.bootstrap_acceptance import (
 )
 
 ANSWERS = {
-    "care_completion": "care_completion.completed",
     "walk_completion": "walk_completion.not_done",
-    "feeding": "feeding.not_observed",
-    "water": "water.not_observed",
-    "activity": "activity.not_observed",
-    "urination": "urination.not_observed",
-    "defecation": "defecation.not_observed",
-    "resource_guarding": "resource_guarding.not_observed",
-    "human_interaction": "human_interaction.uncertain",
-    "animal_interaction": "animal_interaction.uncertain",
-    "emotion": "emotion.not_observed",
-    "walk_reaction": "walk.not_observed",
-    "appearance_special_status": "appearance.not_observed",
+    "activity": "activity.usual",
+    "gait": "gait.normal",
+    "defecation": "defecation.none",
+    "animal_interaction": "animal_interaction.no_encounter",
+    "appearance_special_status": "appearance.none_found",
 }
 
 
@@ -62,9 +55,13 @@ async def _fixture_inventory() -> dict:
     from services.api.app.persistence.models.identity import Organization
     from services.api.app.persistence.repositories.qr_code_repository import QrCodeRepository
     from sqlalchemy import select, text
+    from sqlalchemy.engine import make_url
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     settings = Settings().validate_runtime_safety(process="api")
+    runtime_role_name = make_url(settings.database_url).username
+    if not runtime_role_name:
+        raise RuntimeError("acceptance_runtime_role_missing_from_database_url")
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
@@ -111,10 +108,13 @@ async def _fixture_inventory() -> dict:
                 await session.execute(
                     text(
                         "SELECT rolname, rolbypassrls, rolsuper FROM pg_roles "
-                        "WHERE rolname = 'strayhub_app'"
-                    )
+                        "WHERE rolname = :runtime_role"
+                    ),
+                    {"runtime_role": runtime_role_name},
                 )
-            ).one()
+            ).one_or_none()
+            if runtime_role is None:
+                raise RuntimeError("acceptance_runtime_role_not_found")
             rls_table_count = await session.scalar(
                 text(
                     "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "

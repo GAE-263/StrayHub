@@ -6,12 +6,16 @@ from services.api.app.main import app
 
 @pytest.mark.e2e
 def test_report_workflow_covers_inbox_detail_and_traceable_mutations() -> None:
-    inbox = Path("apps/web/app/(management)/reports/page.tsx").read_text()
-    detail = Path("apps/web/app/(management)/reports/[reportId]/page.tsx").read_text()
+    route = Path("apps/web/app/(management)/reports/page.tsx").read_text()
+    inbox = Path("apps/web/features/report-inbox/ReportInbox.tsx").read_text()
+    detail_route = Path("apps/web/app/(management)/reports/[reportId]/page.tsx").read_text()
+    detail = inbox
     api = Path("services/api/app/api/report_inbox.py").read_text()
 
     assert "回報收件匣" in inbox
     assert "Report Inbox" not in inbox
+    assert "ReportInbox" in route
+    assert "ReportDetail" in detail_route
     assert "answers" in detail
     assert "media_ids" in detail
     assert "ai_observations" in detail

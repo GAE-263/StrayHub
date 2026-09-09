@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import asyncpg
@@ -84,9 +85,10 @@ async def _seed(fixture: _Fixture, *, subjects: tuple[str | None, ...]) -> InMem
                 "INSERT INTO ai_processing_jobs "
                 "(id, organization_id, job_type, target_type, target_id, status, provider, "
                 "model_name, model_version, prompt_template_id, prompt_version, "
-                "output_schema_version, retry_count, created_at, updated_at) VALUES "
+                "output_schema_version, execution_backend, retry_count, created_at, "
+                "updated_at) VALUES "
                 "($1, $2, 'care_observation', 'care_report', $3, 'pending_enqueue', 'mock', "
-                "'model', 'v1', 'care-observation', 'v1', 'v1', 0, now(), now())",
+                "'model', 'v1', 'care-observation', 'v1', 'v1', 'celery', 0, now(), now())",
                 fixture.job_id,
                 fixture.organization_id,
                 fixture.report_id,
@@ -167,9 +169,10 @@ async def _run(
 ) -> int:
     factory = create_worker_session_factory()
     try:
-        return await AIJobRunner(
+        processed = await AIJobRunner(
             factory, worker_id=worker_id, client=adapter, storage=storage
-        ).run_pending(fixture.organization_id)
+        ).run_celery_job(fixture.organization_id, fixture.job_id, claim_token=worker_id)
+        return int(processed)
     finally:
         await factory.kw["bind"].dispose()
 
@@ -210,6 +213,29 @@ async def test_runner_sends_only_stool_media_and_persists_observation() -> None:
         assert row["claim_token"] is None
         assert json.loads(row["raw_ai_output"]) == {"observations": []}
     finally:
+        await _cleanup(fixture)
+
+
+@pytest.mark.asyncio
+async def test_legacy_polling_runner_ignores_celery_owned_care_job() -> None:
+    fixture = _Fixture()
+    storage = await _seed(fixture, subjects=("stool",))
+    adapter = MockAIAdapter(error=AssertionError("legacy runner must not invoke provider"))
+    factory = create_worker_session_factory()
+    try:
+        processed = await AIJobRunner(
+            factory,
+            worker_id="legacy-worker",
+            client=adapter,
+            storage=storage,
+        ).run_pending(fixture.organization_id)
+        assert processed == 0
+        assert adapter.requests == []
+        row = await _job(fixture)
+        assert row["status"] == "pending_enqueue"
+        assert row["claim_token"] is None
+    finally:
+        await factory.kw["bind"].dispose()
         await _cleanup(fixture)
 
 
@@ -344,6 +370,11 @@ async def test_ai_iteration_continues_after_one_organization_failure(monkeypatch
 
     monkeypatch.setattr(worker, "active_organization_ids", active)
     monkeypatch.setattr(worker, "AIJobRunner", Runner)
+    monkeypatch.setattr(
+        worker,
+        "get_worker_settings",
+        lambda: SimpleNamespace(celery_ai_enabled=True),
+    )
 
     await worker.run_ai_iteration(object(), worker_id="worker", client=object())
 

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from services.api.app.persistence.models.volunteer_access import VolunteerApplicationProfile
-from sqlalchemy import ForeignKeyConstraint, LargeBinary
+from sqlalchemy import ForeignKeyConstraint, LargeBinary, Text
 
 
 def test_volunteer_application_profile_contains_only_encrypted_pii_storage() -> None:
@@ -32,6 +32,7 @@ def test_volunteer_application_profile_contains_only_encrypted_pii_storage() -> 
     assert columns["phone_ciphertext"].nullable is True
     assert columns["application_id"].primary_key is True
     assert columns["pii_schema_version"].nullable is False
+    assert isinstance(columns["encryption_key_version"].type, Text)
     assert isinstance(columns["basic_profile_ciphertext"].type, LargeBinary)
     assert columns["basic_profile_ciphertext"].nullable is True
     assert isinstance(columns["insurance_identity_ciphertext"].type, LargeBinary)

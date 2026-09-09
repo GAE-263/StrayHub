@@ -1,0 +1,229 @@
+.page {
+  color: var(--ink);
+  display: grid;
+  gap: 1.75rem;
+  margin: 0 auto;
+  max-width: 76rem;
+  min-width: 0;
+}
+
+.header,
+.cardHeading,
+.rowActions,
+.filterActions,
+.pagination,
+.phoneLink {
+  align-items: center;
+  display: flex;
+}
+
+.header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.header h1 {
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+  margin: 0.3rem 0 0.65rem;
+}
+
+.header > div > p:last-child,
+.muted,
+.cardHeading p,
+.pagination {
+  color: var(--muted);
+}
+
+.header > div > p:last-child,
+.cardHeading p {
+  margin: 0;
+}
+
+.eyebrow,
+.resultCount {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.headerMark {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 3.25rem;
+  justify-content: center;
+  width: 3.25rem;
+}
+
+.filters {
+  align-items: end;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(14rem, 1fr) repeat(4, minmax(9rem, 0.45fr)) auto;
+  padding: 1rem;
+}
+
+.searchField {
+  min-width: 0;
+}
+
+.filterActions,
+.rowActions,
+.pagination,
+.phoneLink {
+  gap: 0.5rem;
+}
+
+.resultCount {
+  margin-bottom: 0.75rem;
+}
+
+.desktopTable td {
+  vertical-align: middle;
+}
+
+.desktopTable td:first-child,
+.desktopTable td:nth-child(5),
+.desktopTable td:nth-child(6) {
+  white-space: nowrap;
+}
+
+.overrideBadge,
+.newBadge {
+  background: #fff1dd;
+  color: var(--warning);
+}
+
+.overrideBadge {
+  margin-left: 0.35rem;
+}
+
+.contactedBadge {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.actionError {
+  background: #fff1f1;
+  border: 1px solid color-mix(in srgb, var(--danger), transparent 65%);
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  margin: 0;
+  padding: 0.85rem 1rem;
+}
+
+.mobileList {
+  display: none;
+}
+
+.mobileCard {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.cardHeading {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.cardHeading h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.2rem;
+}
+
+.mobileCard dl,
+.answerList {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.mobileCard dl div,
+.answerList > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.mobileCard dt,
+.answerList span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.mobileCard dd {
+  margin: 0;
+}
+
+.phoneLink {
+  color: var(--accent);
+  font-weight: 700;
+  min-height: 2.75rem;
+  width: fit-content;
+}
+
+.pagination {
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+.aiNote {
+  background: #fff8ea;
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.35rem;
+  line-height: 1.6;
+  margin: 0.5rem 0 0;
+  padding: 0.85rem;
+}
+
+@media (max-width: 1100px) {
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .searchField,
+  .filterActions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    gap: 1.25rem;
+  }
+
+  .filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktopTable {
+    display: none;
+  }
+
+  .mobileList {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .rowActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rowActions button {
+    width: 100%;
+  }
+}

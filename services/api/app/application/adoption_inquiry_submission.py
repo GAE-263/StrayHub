@@ -25,6 +25,7 @@ class AdoptionInquirySubmissionService:
         animal: Animal,
         answers: AdoptionInquiryAnswers,
         match_scores_snapshot: list[dict[str, Any]] | None = None,
+        ai_recommendation_overridden: bool | None = None,
     ) -> AdoptionInquiry:
         existing = await self.inquiries.get_by_draft(draft.id)
         if existing is not None:
@@ -51,6 +52,9 @@ class AdoptionInquirySubmissionService:
                 phone_number=answers.values["phone_number"],
                 status="new",
                 submitted_at=datetime.now(timezone.utc),
+                ai_recommendation_overridden=ai_recommendation_overridden,
+                ai_suitability_score=draft.ai_suitability_score,
+                ai_suitability_explanation=draft.ai_suitability_explanation,
             )
         )
         if self.audit is not None:
