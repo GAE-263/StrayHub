@@ -1,8 +1,10 @@
 """Explicit ownership of persisted jobs during the Celery migration."""
 
-LEGACY_POLLING_JOB_TYPES = frozenset({"care_observation", "care_report_summary"})
+LEGACY_POLLING_JOB_TYPES: frozenset[str] = frozenset()
 CELERY_JOB_TYPES = frozenset(
     {
+        "care_observation",
+        "care_report_summary",
         "adoption_suitability",
         "adoption_profile_extraction",
         "adoption_followup_recommendations",
@@ -12,6 +14,8 @@ CELERY_JOB_TYPES = frozenset(
 )
 
 CELERY_TASK_BY_JOB_TYPE = {
+    "care_observation": "care_report.process_ai",
+    "care_report_summary": "care_report.process_ai",
     "adoption_suitability": "adoption.analyze_suitability",
     "adoption_profile_extraction": "adoption.extract_profile",
     "adoption_followup_recommendations": "adoption.generate_followups",

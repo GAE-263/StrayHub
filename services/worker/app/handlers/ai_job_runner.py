@@ -97,6 +97,20 @@ class AIJobRunner:
             processed += 1
         return processed
 
+    async def run_celery_job(
+        self, organization_id: UUID, job_id: UUID, *, claim_token: str
+    ) -> bool:
+        async with self.factory() as session:
+            claimed = await WorkerJobRepository(
+                session, organization_id, worker_id=self.worker_id
+            ).claim_celery(job_id, claim_token=claim_token)
+            if not claimed:
+                await session.rollback()
+                return False
+            await session.commit()
+        await self._process(organization_id, job_id, claim_token)
+        return True
+
     async def _reclaim_stale(self, organization_id: UUID) -> None:
         async with self.factory() as session:
             await WorkerJobRepository(

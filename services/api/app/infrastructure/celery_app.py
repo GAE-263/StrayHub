@@ -9,6 +9,7 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     include=[
         "services.worker.app.tasks.adoption",
+        "services.worker.app.tasks.care_report",
         "services.worker.app.tasks.growth_diary",
         "services.worker.app.tasks.reconciliation",
     ],
@@ -39,6 +40,7 @@ celery_app.conf.update(
     task_routes={
         "adoption.*": {"queue": settings.celery_queue_ai},
         "growth_diary.*": {"queue": settings.celery_queue_ai},
+        "care_report.*": {"queue": settings.celery_queue_ai},
         "system.*": {"queue": settings.celery_queue_system},
     },
     beat_schedule={

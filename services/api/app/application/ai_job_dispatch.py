@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
+from services.api.app.application.async_job_types import CELERY_JOB_TYPES
 from services.api.app.config.settings import get_settings
 from services.api.app.persistence.models.ai_job import AIProcessingJob
 from services.api.app.persistence.repositories.ai_job_repository import AIJobRepository
@@ -57,7 +58,7 @@ async def create_ai_job(
             target_type=target_type,
             target_id=target_id,
             domain_version=0,
-            execution_backend="legacy_polling",
+            execution_backend="celery" if job_type in CELERY_JOB_TYPES else "legacy_polling",
             provider=version.provider,
             model_name=version.model_name,
             model_version=version.model_version,
