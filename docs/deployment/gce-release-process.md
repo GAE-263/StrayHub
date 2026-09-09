@@ -110,20 +110,29 @@ revalidates the manifest and file checksums, and transfers only the bundle files
 TCP 22, static SSH keys, firewall changes, production rebuilds, and Terraform mutation are
 forbidden.
 
-The CI deployer invokes the canonical host-side deployment command with non-interactive sudo:
+The CI deployer copies the artifact into a unique root-owned
+`/var/lib/strayhub/releases/.deploy-bootstrap.*` directory. The currently installed manifest tool
+validates this copy and its expected SHA before extracting it. Only then does CI execute the
+**incoming bundle's** deployment script with non-interactive sudo; the old release's deployment
+logic must not interpret a newer Compose/secret contract. The protected bootstrap remains as evidence.
 
 ```bash
-sudo -n /opt/strayhub/current/infra/gce/scripts/deploy-release.sh \
-  --artifact-dir /tmp/strayhub-ci-release-RUN_ID-GIT_SHA \
+sudo -n /var/lib/strayhub/releases/.deploy-bootstrap.UNIQUE/payload/infra/gce/scripts/deploy-release.sh \
+  --artifact-dir /var/lib/strayhub/releases/.deploy-bootstrap.UNIQUE \
   --deployment-role "GitHub Actions production deployer" \
   --confirm-production DEPLOY_STRAYHUB_PRODUCTION
 ```
 
 Before stopping the application, the script validates the full artifact, canonical destination,
 new/unused release ID, protected configuration, current secret generation and JWT files. It extracts
-the bundle, makes the release root-owned/read-only, refreshes secrets atomically, pulls exact
-digests, and runs the accepted production preflight against those digests. Any failure stops before
-runtime change.
+the bundle, makes the release root-owned/read-only, reloads systemd, and materializes the incoming
+release's explicit production secret map directly from Secret Manager. It does not restart the
+old secrets unit (which would use the old map and affect dependent runtime units). It preserves
+the protected secret ownership, pulls exact digests, and runs production preflight against those
+digests. Preflight checks matching API/Worker/Celery/Beat broker and AI settings, Redis credentials,
+and each process's runtime safety. Failures here precede application stop and migration; a complete
+new secret generation may already have been activated. Candidate units are installed/reloaded by
+the existing activation step after the release pointer changes.
 
 Only after those gates pass does it stop `strayhub.service`, run the accepted migration container
 with migration credentials, and prove the database reached the manifest revision. It never runs a
