@@ -977,7 +977,7 @@ async def submit_volunteer_application(
         response_body = _response(result.status)
         await session.commit()
     except SQLAlchemyError as exc:
-        raise DomainError("dependency_unavailable", "志工申請暫時無法使用", 503) from exc
+        raise DomainError("internal_error", "系統暫時無法完成申請，請稍後再試", 503) from exc
     response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
     return response_body
 
