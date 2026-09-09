@@ -2881,6 +2881,11 @@ async def _handoff_switch_bubble(session, organization_id: UUID, draft) -> dict:
 
 async def _handle_walk_report_command(session, line, event: dict, line_user_id: str) -> None:
     user_id, organization_id, membership_id, _ = await _resolve_context(session, line_user_id)
+    # A user may enter the care-report flow while an adoption sub-menu is still
+    # linked from an earlier interaction. Authorization remains server-side;
+    # after it succeeds, best-effort synchronize the user-facing menu with the
+    # active volunteer workflow.
+    await _switch_rich_menu(line_user_id, LineRole.VOLUNTEER)
     handoff = None
     handoff_error: DomainError | None = None
     decision = None
@@ -3259,6 +3264,10 @@ async def _handle_postback(
     values = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True)
     action = values.get("action", [""])[0]
     if action in {"walk_report", "start_care_report"}:
+        await _switch_rich_menu(
+            event.get("source", {}).get("userId"),
+            LineRole.VOLUNTEER,
+        )
         await _reply(
             line,
             event,

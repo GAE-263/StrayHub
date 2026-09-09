@@ -86,6 +86,11 @@ def _rendered_model() -> dict:
 def test_rendered_acceptance_model_passes_isolation_policy() -> None:
     model = _rendered_model()
     assert model["services"]["web"]["environment"]["API_BASE_URL"] == "http://api:8080"
+    api_environment = model["services"]["api"]["environment"]
+    assert api_environment["LINE_ROLE_MENU_FEATURES_ENABLED"] == "false"
+    assert "LINE_RICH_MENU_DEFAULT_ID" in api_environment
+    assert "LINE_RICH_MENU_VOLUNTEER_ID" in api_environment
+    assert "LINE_RICH_MENU_STAFF_ID" in api_environment
     policy.validate(model)
 
 
@@ -258,6 +263,12 @@ def test_acceptance_secret_materialization_and_static_preflight() -> None:
                 "LIFF_ID": "2000000002-acceptance",
                 "WEB_PUBLIC_BASE_URL": "https://acceptance.strayhub.internal",
                 "LINE_NOTIFICATION_RECIPIENT_ALLOWLIST_SHA256": f"{'a' * 64},{'b' * 64}",
+                "LINE_ROLE_MENU_FEATURES_ENABLED": "true",
+                "LINE_RICH_MENU_DEFAULT_ID": "richmenu-acceptance-default",
+                "LINE_RICH_MENU_VOLUNTEER_ID": "richmenu-acceptance-volunteer",
+                "LINE_RICH_MENU_STAFF_ID": "richmenu-acceptance-staff",
+                "LINE_STAFF_LIFF_ID": "2000000002-acceptance-staff",
+                "LINE_ROLE_MENU_SMOKE_EVIDENCE": f"verified-20260909-{'c' * 40}",
                 "PII_KMS_KEY_NAME": acceptance_kms_key,
             }
         )
@@ -306,3 +317,18 @@ def test_acceptance_secret_materialization_and_static_preflight() -> None:
         )
         assert preflight.returncode == 0, preflight.stdout + preflight.stderr
         assert "static only; no runtime started" in preflight.stdout
+
+
+def test_acceptance_preflight_rejects_disabled_role_menu_verification() -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+
+    assert 'LINE_ROLE_MENU_FEATURES_ENABLED)" == "true"' in source
+    assert "LINE role-menu features must be enabled for acceptance" in source
+    for key in (
+        "LINE_RICH_MENU_DEFAULT_ID",
+        "LINE_RICH_MENU_VOLUNTEER_ID",
+        "LINE_RICH_MENU_STAFF_ID",
+        "LINE_STAFF_LIFF_ID",
+        "LINE_ROLE_MENU_SMOKE_EVIDENCE",
+    ):
+        assert key in source

@@ -87,6 +87,20 @@ liff_id="$(env_value "$CONFIG_ENV" LIFF_ID)"
 [[ "$line_login_channel_id" =~ ^[0-9]+$ && "$line_login_channel_id" != "$line_channel_id" ]] || fail "acceptance LINE Login channel must be dedicated"
 [[ "$liff_id" == "$line_login_channel_id-"* ]] || fail "LIFF ID must belong to the acceptance LINE Login channel"
 
+[[ "$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED)" == "true" ]] ||
+  fail "LINE role-menu features must be enabled for acceptance"
+required_line_menu_config=(
+  LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID LINE_RICH_MENU_STAFF_ID
+  LINE_STAFF_LIFF_ID LINE_ROLE_MENU_SMOKE_EVIDENCE
+)
+for key in "${required_line_menu_config[@]}"; do
+  [[ -n "$(env_value "$CONFIG_ENV" "$key" 2>/dev/null || true)" ]] ||
+    fail "$key is required for acceptance role-menu verification"
+done
+role_menu_evidence="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_SMOKE_EVIDENCE)"
+[[ "$role_menu_evidence" =~ ^verified-[0-9]{8}-[0-9a-f]{40}$ ]] ||
+  fail "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify the date and exact tested commit"
+
 public_url="$(env_value "$CONFIG_ENV" WEB_PUBLIC_BASE_URL)"
 [[ "$public_url" =~ ^https://[^/[:space:]]+(/.*)?$ ]] || fail "WEB_PUBLIC_BASE_URL must be dedicated HTTPS"
 [[ "$public_url" != *strayhub.enadv.quest* ]] || fail "production ingress is forbidden"
