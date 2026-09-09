@@ -115,8 +115,9 @@ def test_production_preflight_rejects_inconsistent_broker_without_leaking_values
                 "CELERY_AI_ENABLED": "false",
             }
         }
-        for service in ("api", "worker", "celery-worker", "celery-beat")
+        for service in ("api", "celery-worker", "celery-beat")
     }
+    services["worker"] = {"environment": {"DATABASE_URL": "synthetic"}}
     services["redis"] = {"environment": {"REDIS_PASSWORD": "synthetic-secret"}}
     if mismatch == "beat":
         services["celery-beat"]["environment"]["CELERY_AI_ENABLED"] = "true"
@@ -133,6 +134,40 @@ def test_production_preflight_rejects_inconsistent_broker_without_leaking_values
     assert "synthetic-secret" not in result.stdout + result.stderr
     assert "different-secret" not in result.stdout + result.stderr
     assert "--entrypoint python celery-beat" in script
+
+
+def test_preflight_accepts_actual_rendered_production_compose() -> None:
+    script = (ROOT / "infra/gce/scripts/production-preflight.sh").read_text(encoding="utf-8")
+    validator = script.split("config --format json | python3 -c '\n", 1)[1].split("\n'", 1)[0]
+    # Use only committed synthetic configuration; never inherit operator .env values.
+    rendered = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            "infra/gce/.env.production.example",
+            "-f",
+            "infra/gce/docker-compose.production.yml",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        env={"PATH": os.environ["PATH"]},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    services = json.loads(rendered.stdout)["services"]
+    assert "CELERY_BROKER_URL" not in services["worker"]["environment"]
+    checked = subprocess.run(
+        [sys.executable, "-c", validator],
+        input=rendered.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert checked.returncode == 0, checked.stderr
 
 
 def build_artifact(tmp_path: Path, *, compatibility: str = "unknown") -> Path:

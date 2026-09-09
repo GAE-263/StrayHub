@@ -129,8 +129,9 @@ the bundle, makes the release root-owned/read-only, reloads systemd, and materia
 release's explicit production secret map directly from Secret Manager. It does not restart the
 old secrets unit (which would use the old map and affect dependent runtime units). It preserves
 the protected secret ownership, pulls exact digests, and runs production preflight against those
-digests. Preflight checks matching API/Worker/Celery/Beat broker and AI settings, Redis credentials,
-and each process's runtime safety. Failures here precede application stop and migration; a complete
+digests. Preflight checks matching API/Celery Worker/Beat broker and AI settings and Redis
+credentials. The database-backed legacy Worker does not consume a Celery broker; its runtime
+safety is validated separately, as is each other process. Failures here precede application stop and migration; a complete
 new secret generation may already have been activated. Candidate units are installed/reloaded by
 the existing activation step after the release pointer changes.
 

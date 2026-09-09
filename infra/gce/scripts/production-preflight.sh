@@ -199,7 +199,8 @@ cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not 
 import json, sys
 from urllib.parse import unquote, urlsplit
 services = json.load(sys.stdin)["services"]
-environments = [services[name]["environment"] for name in ("api", "worker", "celery-worker", "celery-beat")]
+# Legacy worker is a database-backed process, validated separately below.
+environments = [services[name]["environment"] for name in ("api", "celery-worker", "celery-beat")]
 for key in ("CELERY_BROKER_URL", "CELERY_AI_ENABLED"):
     values = [env.get(key) for env in environments]
     if not values[0] or any(value != values[0] for value in values):
