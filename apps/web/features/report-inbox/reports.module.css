@@ -37,6 +37,11 @@
   margin: 0.5rem 0;
 }
 
+.page summary {
+  cursor: pointer;
+  min-height: var(--control-height);
+}
+
 .row {
   align-items: center;
   display: grid;

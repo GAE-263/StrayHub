@@ -382,13 +382,6 @@ summary:focus-visible {
 .state-warning .state-icon {
   color: var(--warning);
 }
-.error-state {
-  border-color: #e7c7c7;
-  color: var(--danger);
-}
-.empty-state {
-  color: var(--muted);
-}
 
 .sr-only {
   clip: rect(0, 0, 0, 0);
@@ -824,26 +817,6 @@ summary:focus-visible {
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.timeline-report-author {
-  color: var(--muted);
-  font-size: 12px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.timeline-report-author:hover {
-  color: var(--primary);
-}
-.volunteer-access-focus {
-  align-items: center;
-  background: var(--surface-soft);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 10px 14px;
-}
 .ui-table-head,
 .ui-table-cell {
   border-bottom: 1px solid var(--border);
@@ -1216,11 +1189,6 @@ dialog.ui-sheet[open] {
   flex-wrap: wrap;
   gap: 8px;
 }
-.button-danger {
-  background: #fff5f4;
-  border: 1px solid #e7c7c7;
-  color: var(--danger);
-}
 .button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -1252,20 +1220,6 @@ dialog.ui-sheet[open] {
   position: fixed;
   z-index: 50;
 }
-.observation-dialog {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  margin: 0;
-  max-height: min(90vh, 760px);
-  max-width: 720px;
-  overflow: auto;
-  padding: 24px;
-  width: min(100%, 720px);
-}
-.observation-dialog::backdrop {
-  background: transparent;
-}
 .dialog-actions {
   display: flex;
   gap: 10px;
@@ -1287,21 +1241,8 @@ dialog.ui-sheet[open] {
   font-weight: 700;
   line-height: 1.5;
 }
-.observation-audit-panel {
-  max-width: 980px;
-}
-.observation-audit-panel pre {
-  max-width: 420px;
-  overflow: auto;
-  white-space: pre-wrap;
-}
 
 /* P1 migration surfaces use the UI foundation without changing API or scope behavior. */
-.p1-page,
-.p1-section {
-  display: grid;
-  gap: 18px;
-}
 .p1-form-grid {
   display: grid;
   gap: 14px;
@@ -1413,10 +1354,6 @@ dialog.ui-sheet[open] {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
-}
-.membership-header-actions .field {
-  margin: 0;
-  min-width: 180px;
 }
 .card-description,
 .dialog-description,
@@ -2891,18 +2828,6 @@ dialog.ui-sheet[open] {
   gap: 10px;
   margin-bottom: 16px;
 }
-.toolbar .field {
-  min-width: 160px;
-}
-.badge {
-  /* Retained for P1 settings/observation pages pending their migration. */
-  background: var(--accent-soft);
-  border-radius: 999px;
-  color: var(--accent);
-  display: inline-block;
-  font-size: 12px;
-  padding: 5px 9px;
-}
 .link-card {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -3098,27 +3023,6 @@ dialog.ui-sheet[open] {
   overflow: auto;
   padding: 14px;
   white-space: pre-wrap;
-}
-.preserved-note {
-  background: var(--surface-soft);
-  border-radius: 10px;
-  line-height: 1.7;
-  padding: 14px;
-}
-.ai-card {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  margin-bottom: 12px;
-  padding: 14px;
-}
-.ai-card > div {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-}
-.mutation-panel {
-  margin-top: 22px;
 }
 .status-banner {
   border-radius: 10px;

@@ -6,7 +6,7 @@ import { usePublicManagementProfile } from "../../components/management/Manageme
 import styles from "./reports.module.css";
 import { AlertDialog } from "../../components/ui/alert-dialog";
 import { Badge } from "../../components/ui/badge";
-import { Breadcrumb } from "../../components/ui/breadcrumb";
+import { Breadcrumbs } from "../../components/management/Breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
@@ -280,7 +280,11 @@ export function ReportInbox() {
                 key={report.id}
               >
                 <div>
-                  <Badge className={attentionTone[report.summary?.attention_level || "normal"]}>
+                  <Badge
+                    className={
+                      attentionTone[report.summary?.attention_level || "normal"]
+                    }
+                  >
                     {attention[report.summary?.attention_level || "normal"]}
                   </Badge>
                   <h2>
@@ -323,12 +327,14 @@ export function ReportInbox() {
                     <p>部分資訊待確認</p>
                   )}
                 </div>
-                <strong>{statuses[report.review_status || "pending"]}　→</strong>
+                <strong>
+                  {statuses[report.review_status || "pending"]}　→
+                </strong>
               </Link>
             ))}
           </div>
         )}
-        <div className="toolbar pagination">
+        <nav className={`toolbar ${styles.pagination}`} aria-label="回報分頁">
           <Button
             type="button"
             variant="secondary"
@@ -348,7 +354,7 @@ export function ReportInbox() {
           >
             下一頁
           </Button>
-        </div>
+        </nav>
       </section>
     </section>
   );
@@ -373,7 +379,11 @@ function ReportPhoto({ id, index }: { id: string; index: number }) {
     };
   }, [id, retry]);
   return error ? (
-    <Button type="button" variant="secondary" onClick={() => setRetry((x) => x + 1)}>
+    <Button
+      type="button"
+      variant="secondary"
+      onClick={() => setRetry((x) => x + 1)}
+    >
       照片 {index + 1} 載入失敗，重新載入
     </Button>
   ) : url ? (
@@ -445,13 +455,17 @@ export function ReportDetail({ id }: { id: string }) {
   };
   if (!report)
     return (
-      <section aria-labelledby="report-detail-loading">
+      <section className={styles.page}>
         {error ? (
           <ErrorState title={error} />
         ) : (
           <LoadingState title="正在載入回報…" />
         )}
-        <Button type="button" variant="secondary" onClick={() => setRevision((x) => x + 1)}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setRevision((x) => x + 1)}
+        >
           重新載入
         </Button>
       </section>
@@ -469,21 +483,27 @@ export function ReportDetail({ id }: { id: string }) {
   );
   return (
     <section className={styles.page}>
-      <Breadcrumb>
-        <Link href="/reports">回報收件匣</Link>
-        <span> ／ 回報詳情</span>
-      </Breadcrumb>
+      <Breadcrumbs
+        items={[
+          { label: "回報收件匣", href: "/reports" },
+          { label: "回報詳情" },
+        ]}
+      />
       <div className="page-heading">
         <div>
           <span className="eyebrow">回報詳情</span>
           <h1>
-            {report.animal_name} <small className="muted">{report.shelter_number_snapshot}</small>
+            {report.animal_name}{" "}
+            <small className="muted">{report.shelter_number_snapshot}</small>
           </h1>
           <p>
             {report.volunteer_label || "志工"} · {time(report.submitted_at)}
           </p>
         </div>
-        <Link className="text-link" href={`/animals/${report.animal_id}/timeline`}>
+        <Link
+          className="text-link"
+          href={`/animals/${report.animal_id}/timeline`}
+        >
           查看動物近期歷程 →
         </Link>
       </div>
@@ -491,7 +511,11 @@ export function ReportDetail({ id }: { id: string }) {
         <Link className="text-link" href={`/animals/${report.animal_id}`}>
           查看動物檔案
         </Link>
-        <Button type="button" variant="secondary" onClick={() => setRevision((x) => x + 1)}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setRevision((x) => x + 1)}
+        >
           重新載入回報
         </Button>
       </div>
@@ -532,7 +556,9 @@ export function ReportDetail({ id }: { id: string }) {
               ? "AI 初步整理"
               : "固定回答整理"}
           </h2>
-          <Badge className={attentionTone[summary?.attention_level || "normal"]}>
+          <Badge
+            className={attentionTone[summary?.attention_level || "normal"]}
+          >
             {attention[summary?.attention_level || "normal"]}
           </Badge>
         </div>
@@ -870,7 +896,11 @@ export function ReportDetail({ id }: { id: string }) {
       >
         <p>封存會保留回報與歷程，之後無法更新處理狀態。</p>
         <div className="dialog-actions">
-          <Button type="button" variant="secondary" onClick={() => setArchiveOpen(false)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setArchiveOpen(false)}
+          >
             取消
           </Button>
           <Button
@@ -886,7 +916,7 @@ export function ReportDetail({ id }: { id: string }) {
               );
             }}
           >
-            {busy ? "封存中…" : "確認封存"}
+            確認封存
           </Button>
         </div>
       </AlertDialog>
