@@ -28,6 +28,21 @@ fail() {
   exit 1
 }
 
+stage=validation
+last_completed=none
+report_deployment_exit() {
+  local status=$?
+  trap - EXIT
+  if [[ "$status" -ne 0 ]]; then
+    # A failing command may already have changed DB, pointer, runtime or receipt
+    # state. Report acknowledgements, not an assumption that those changes rolled back.
+    printf '[GCE release] deployment failed: exit=%s stage=%s last_completed=%s; state requires read-only verification; no automatic recovery attempted\n' \
+      "$status" "$stage" "$last_completed" >&2 || :
+  fi
+  exit "$status"
+}
+trap report_deployment_exit EXIT
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --artifact-dir) ARTIFACT_DIR="${2:-}"; shift 2 ;;
@@ -62,6 +77,8 @@ for protected_file in runtime.env jwt-private.pem jwt-public.pem; do
   [[ -s "$SECRETS_ROOT/current/$protected_file" ]] || fail "required protected runtime material is missing"
 done
 
+last_completed=validation
+stage=release_preparation
 install -d -o root -g root -m 0755 "$RELEASE_ROOT" "$STATE_DIR"
 "$MANIFEST_TOOL" extract-artifact --artifact-dir "$ARTIFACT_DIR" --destination "$release_dir"
 chown -R root:root "$release_dir"
@@ -72,6 +89,8 @@ runtime_env="$SECRETS_ROOT/current/runtime.env"
 compose_file="$release_dir/infra/gce/docker-compose.production.yml"
 [[ -f "$compose_file" && -f "$image_env" ]] || fail "extracted release is incomplete"
 
+last_completed=release_preparation
+stage=secret_materialization
 # Materialize the candidate inventory, not the still-active release's inventory.
 # Restarting the secrets unit here can also stop dependent production units.
 systemctl daemon-reload
@@ -83,6 +102,7 @@ systemctl daemon-reload
 chown -R strayhub:strayhub "$SECRETS_ROOT"
 runtime_env="$SECRETS_ROOT/current/runtime.env"
 [[ -s "$runtime_env" ]] || fail "fresh secret generation is incomplete"
+last_completed=secret_materialization
 
 compose=(
   docker compose
@@ -94,13 +114,18 @@ compose=(
 )
 
 # Exact registry digests are pulled before production preflight; no image is built on the host.
+stage=image_pull
 "${compose[@]}" pull api worker web
+last_completed=image_pull
+stage=preflight
 "$release_dir/infra/gce/scripts/production-preflight.sh" \
   --config-env "$CONFIG_ENV" \
   --secrets-root "$SECRETS_ROOT" \
   --project-name "strayhub-d1-preflight-release" \
   --image-env "$image_env"
 
+last_completed=preflight
+stage=previous_pointer_read
 previous_release=""
 previous_target=""
 if [[ -L "$CURRENT_LINK" ]]; then
@@ -110,51 +135,54 @@ if [[ -L "$CURRENT_LINK" ]]; then
   fi
 fi
 
-runtime_stopped=false
-pointer_switched=false
-recover_before_switch() {
-  local status=$?
-  if [[ "$status" -ne 0 && "$runtime_stopped" == true && "$pointer_switched" == false ]]; then
-    systemctl start strayhub.service >/dev/null 2>&1 || true
-  fi
-  if [[ "$status" -ne 0 ]]; then
-    printf '[GCE release] deployment did not complete; no success receipt was written\n' >&2
-  fi
-  return "$status"
-}
-trap recover_before_switch EXIT
-
+last_completed=previous_pointer_read
+stage=runtime_stop
 systemctl stop strayhub.service
-runtime_stopped=true
+last_completed=runtime_stop
 
 # Reuse the accepted one-shot migration service definition with migration-only credentials.
+stage=migration
 "${compose[@]}" --profile tools run --rm migration
+last_completed=migration
+stage=migration_head
 current_output="$("${compose[@]}" --profile tools run --rm --no-deps migration \
   alembic -c services/api/alembic.ini current 2>&1)"
 grep -Fq "$migration_revision" <<<"$current_output" || fail "database did not reach manifest migration revision"
+last_completed=migration_head
 
+stage=pointer_prepare
 temporary_link="/opt/strayhub/.current-${release_id}"
 [[ ! -e "$temporary_link" && ! -L "$temporary_link" ]] || fail "temporary current pointer already exists"
 ln -s "$release_dir" "$temporary_link"
+last_completed=pointer_prepare
+stage=pointer_switch
 mv -Tf "$temporary_link" "$CURRENT_LINK"
-pointer_switched=true
+last_completed=pointer_switch
 
+stage=unit_install
 "$release_dir/infra/gce/scripts/install-systemd-units.sh"
 systemctl reset-failed strayhub.service strayhub-migrate.service || true
+last_completed=unit_install
+stage=runtime_start
 systemctl restart strayhub.service
-runtime_stopped=false
+last_completed=runtime_start
 
+stage=runtime_verification
 "$release_dir/infra/gce/scripts/verify-systemd-runtime.sh" \
   --config-env "$CONFIG_ENV" \
   --secrets-env "$runtime_env" \
   --image-env "$image_env" \
   --timeout 180
+last_completed=runtime_verification
 
+stage=public_verification
 canonical_hostname="$(awk -F= '$1 == "E4_CANONICAL_HOSTNAME" {sub(/^[^=]*=/, ""); print; found = 1} END {exit !found}' "$CONFIG_ENV")"
 [[ "$canonical_hostname" == "strayhub.enadv.quest" ]] || fail "canonical public hostname is invalid"
 curl --fail --silent --show-error --max-time 15 "https://$canonical_hostname/" >/dev/null
 curl --fail --silent --show-error --max-time 15 "https://$canonical_hostname/healthz" >/dev/null
+last_completed=public_verification
 
+stage=receipt_write
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 receipt="$STATE_DIR/$release_id.json"
 "$release_dir/infra/gce/scripts/release-manifest.py" write-receipt \
@@ -164,9 +192,12 @@ receipt="$STATE_DIR/$release_id.json"
   --actor "$DEPLOYMENT_ROLE" \
   --output "$receipt"
 chmod 0444 "$receipt"
+last_completed=receipt_write
+stage=receipt_activation
 current_receipt="$STATE_DIR/.current.json.tmp"
 ln -s "$receipt" "$current_receipt"
 mv -Tf "$current_receipt" "$STATE_DIR/current.json"
+last_completed=receipt_activation
 
 trap - EXIT
 printf '[GCE release] PASS: %s (previous: %s)\n' "$release_id" "${previous_release:-none}"

@@ -235,10 +235,20 @@ release.
 
 ## Failure and security rules
 
-- A migration failure prevents pointer activation; the script attempts to restart the unchanged
-  current release without a database downgrade.
-- A failure after pointer activation writes no success receipt and requires incident review. The
-  deploy script does not silently claim success or invent an automatic schema rollback.
+- A deployment failure never automatically starts/restarts either release or restores a pointer.
+  If the runtime was stopped, it may remain stopped until an operator reviews the evidence and
+  explicitly authorizes recovery. Migration failure does not prove that the database is unchanged.
+- The EXIT trap preserves the original exit code even if diagnostic output fails. Its `stage` and
+  `last_completed` fields describe command acknowledgements, not authoritative runtime/DB state.
+  A pointer replacement can take effect before an error is reported; inspect the actual pointer
+  read-only. Do not infer that the previous release is safe to start or downgrade the schema.
+- No recovery or receipt-writing runs in the trap. A failure during receipt creation/activation
+  may leave a receipt or temporary symlink; inspect it rather than assuming no receipt exists.
+  Release directories, old receipts, bootstrap/staging and temporary pointer evidence are retained.
+  The CI wrapper cleans its exact staging files only after deployment succeeds. The deploy script
+  owns no host file lock; workflow concurrency serializes normal CI deployments, not manual invocations.
+- The separate, explicitly authorized rollback/reactivation tools retain their own behavior;
+  they are not called by this deploy failure path and must never be invoked as an implicit retry.
 - Normal stop/restart never uses `docker compose down -v`; named volumes and backups remain intact.
 - Release files and receipts contain provenance only. Secret values, environment dumps, JWT keys,
   authentication cookies, database URLs, and credentials must never be logged or archived.
