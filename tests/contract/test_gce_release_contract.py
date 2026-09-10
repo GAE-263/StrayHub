@@ -18,6 +18,19 @@ release_manifest = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release_manifest)
 
 GIT_SHA = "a" * 40
+
+
+def test_task_registry_smoke_is_offline_and_before_production_stop() -> None:
+    preflight = (ROOT / "infra/gce/scripts/production-preflight.sh").read_text()
+    deploy = (ROOT / "infra/gce/scripts/deploy-release.sh").read_text()
+    assert "for task_service in celery-worker celery-beat; do" in preflight
+    assert 'run --rm --no-deps --entrypoint python "$task_service"' in preflight
+    assert "-m services.worker.app.import_smoke || fail" in preflight
+    assert "get_worker_photo_signing_secret()" in preflight
+    assert deploy.index("production-preflight.sh") < deploy.index("systemctl stop strayhub.service")
+    assert deploy.index("production-preflight.sh") < deploy.index("temporary_link=")
+
+
 DIGESTS = {
     "api": f"asia-east1-docker.pkg.dev/project/strayhub/api@sha256:{'1' * 64}",
     "worker": f"asia-east1-docker.pkg.dev/project/strayhub/worker@sha256:{'2' * 64}",
@@ -102,7 +115,7 @@ def test_ci_bootstrap_uses_root_owned_validated_candidate_before_execution() -> 
     )
 
 
-@pytest.mark.parametrize("mismatch", [None, "beat", "redis"])
+@pytest.mark.parametrize("mismatch", [None, "beat", "redis", "signing", "key-exposure"])
 def test_production_preflight_rejects_inconsistent_broker_without_leaking_values(
     mismatch: str | None,
 ) -> None:
@@ -113,11 +126,17 @@ def test_production_preflight_rejects_inconsistent_broker_without_leaking_values
             "environment": {
                 "CELERY_BROKER_URL": "redis://:synthetic-secret@redis:6379/0",
                 "CELERY_AI_ENABLED": "false",
+                "ANIMAL_CONFIRMATION_SECRET": "synthetic-signing-key",
             }
         }
         for service in ("api", "celery-worker", "celery-beat")
     }
     services["worker"] = {"environment": {"DATABASE_URL": "synthetic"}}
+    del services["celery-beat"]["environment"]["ANIMAL_CONFIRMATION_SECRET"]
+    if mismatch == "key-exposure":
+        services["worker"]["environment"]["ANIMAL_CONFIRMATION_SECRET"] = "synthetic-signing-key"
+    if mismatch == "signing":
+        services["celery-worker"]["environment"]["ANIMAL_CONFIRMATION_SECRET"] = "different-key"
     services["redis"] = {"environment": {"REDIS_PASSWORD": "synthetic-secret"}}
     if mismatch == "beat":
         services["celery-beat"]["environment"]["CELERY_AI_ENABLED"] = "true"

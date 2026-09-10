@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
+
 from services.api.app.infrastructure.celery_app import celery_app
 from services.worker.app.celery_runtime import CeleryAsyncRuntime
 
@@ -27,3 +31,37 @@ def test_async_runtime_reuses_one_event_loop_and_disposes_cleanly() -> None:
     worker_runtime.close()
 
     assert first == second
+
+
+def test_profile_followup_dispatch_receives_the_worker_runtime_factory(monkeypatch) -> None:
+    from services.worker.app.tasks import adoption
+
+    worker_runtime = CeleryAsyncRuntime()
+    next_job_id, organization_id = uuid4(), uuid4()
+    dispatch = AsyncMock(return_value=True)
+    claim = AsyncMock(return_value=SimpleNamespace(skip_ai_reason="disabled"))
+    apply = AsyncMock(return_value=SimpleNamespace(applied=True, next_job_id=next_job_id))
+    monkeypatch.setattr(adoption, "runtime", worker_runtime)
+    monkeypatch.setattr(adoption, "claim_profile_extraction_job", claim)
+    monkeypatch.setattr(adoption, "apply_profile_extraction_result", apply)
+    monkeypatch.setattr(adoption, "dispatch_ai_job", dispatch)
+    monkeypatch.setattr(
+        adoption, "_deliver_profile_notification", lambda *args, **kwargs: "stubbed"
+    )
+    try:
+        assert (
+            adoption.extract_profile.run(
+                job_id=str(uuid4()),
+                resource_id=str(uuid4()),
+                organization_id=str(organization_id),
+                expected_version=1,
+            )
+            == "stubbed"
+        )
+        dispatch.assert_awaited_once_with(
+            next_job_id, organization_id, factory=worker_runtime._factory
+        )
+        assert claim.await_args.args[0] is worker_runtime._factory
+        assert apply.await_args.args[0] is worker_runtime._factory
+    finally:
+        worker_runtime.close()

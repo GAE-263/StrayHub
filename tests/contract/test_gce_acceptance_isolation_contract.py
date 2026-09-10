@@ -103,7 +103,6 @@ def test_acceptance_celery_services_receive_nonlocal_runtime_safety_config() -> 
         "LINE_CHANNEL_ACCESS_TOKEN",
         "LINE_LOGIN_CHANNEL_ID",
         "LIFF_ID",
-        "ANIMAL_CONFIRMATION_SECRET",
         "LOGIN_ABUSE_HMAC_SECRET",
         "AUTH_JWT_ISSUER",
         "AUTH_JWT_AUDIENCE",
@@ -127,6 +126,10 @@ def test_acceptance_celery_services_receive_nonlocal_runtime_safety_config() -> 
         command = " ".join(service["command"])
         assert "AUTH_JWT_ACTIVE_PRIVATE_KEY" in command
         assert "AUTH_JWT_ACTIVE_PUBLIC_KEY" in command
+
+    assert services["celery-worker"]["environment"]["ANIMAL_CONFIRMATION_SECRET"]
+    for service_name in ("worker", "celery-beat"):
+        assert not services[service_name]["environment"].get("ANIMAL_CONFIRMATION_SECRET")
 
     worker_healthcheck = " ".join(services["celery-worker"]["healthcheck"]["test"])
     assert "AUTH_JWT_ACTIVE_PRIVATE_KEY" in worker_healthcheck

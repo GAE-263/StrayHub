@@ -144,6 +144,8 @@ services:
     mem_limit: 256m
     environment:
       <<: *acceptance-runtime-safety-environment
+      # Override the shared YAML anchor: the scheduler cannot sign capabilities.
+      ANIMAL_CONFIRMATION_SECRET: ""
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       CELERY_AI_ENABLED: "false"
       CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:?CELERY_QUEUE_AI is required}

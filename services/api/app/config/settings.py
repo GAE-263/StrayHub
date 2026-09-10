@@ -409,3 +409,19 @@ def get_settings() -> Settings:
 @lru_cache(maxsize=1)
 def get_worker_settings() -> Settings:
     return Settings().validate_runtime_safety(process="worker")
+
+
+def get_worker_photo_signing_secret() -> str:
+    """Require the signing capability at preflight and every photo issuance.
+
+    Registry loading and scheduling do not require signing authority. Legacy
+    workers and Beat must not receive this key just to validate common settings.
+    """
+    settings = get_worker_settings()
+    secret = settings.animal_confirmation_secret
+    if not secret.strip() or (
+        settings.app_env.strip().lower() not in {"local", "test", "testing"}
+        and is_placeholder_secret(secret)
+    ):
+        raise UnsafeRuntimeConfigurationError("ANIMAL_CONFIRMATION_SECRET is missing or unsafe")
+    return secret

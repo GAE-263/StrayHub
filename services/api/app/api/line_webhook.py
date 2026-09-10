@@ -285,6 +285,7 @@ class _GrowthDiaryEventBoundary:
                     dispatch_ai_job,
                     action.ai_job_id,
                     action.organization_id,
+                    factory=session_factory,
                 )
             except Exception:
                 logger.exception(
@@ -459,6 +460,7 @@ async def _animal_photo_url(
     if not public_base_url or not animal.current_photo_key:
         return None
     token = issue_adoption_photo_token(
+        signing_secret=get_settings().animal_confirmation_secret,
         organization_id=organization_id,
         animal_id=animal.id,
         object_key=animal.current_photo_key,
@@ -2393,6 +2395,7 @@ async def _handle_adoption_postback(
                 dispatch_ai_job,
                 result.ai_job_id,
                 updated.organization_id,
+                factory=session_factory,
             )
         elif (
             result.entered_awaiting_ai_suitability
@@ -2484,6 +2487,7 @@ async def _handle_adoption_text(
                 dispatch_ai_job,
                 result.ai_job_id,
                 draft.organization_id,
+                factory=session_factory,
             )
             await _reply(line, event, [_text("收到了，正在整理問卷內容；完成後會通知你 🤖")])
             return
@@ -2542,6 +2546,7 @@ async def _handle_adoption_text(
                     dispatch_ai_job,
                     result.ai_job_id,
                     draft.organization_id,
+                    factory=session_factory,
                 )
                 await _reply(
                     line,

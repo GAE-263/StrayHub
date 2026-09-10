@@ -12,6 +12,7 @@ def test_adoption_photo_token_is_bound_to_animal_and_current_object_key() -> Non
     organization_id = uuid4()
     animal_id = uuid4()
     token = media_access.issue_adoption_photo_token(
+        signing_secret=media_access.get_settings().animal_confirmation_secret,
         organization_id=organization_id,
         animal_id=animal_id,
         object_key="animals/a/primary.jpg",
@@ -34,6 +35,7 @@ def test_adoption_photo_token_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(media_access.time, "time", lambda: 1000)
     animal_id = uuid4()
     token = media_access.issue_adoption_photo_token(
+        signing_secret=media_access.get_settings().animal_confirmation_secret,
         organization_id=uuid4(),
         animal_id=animal_id,
         object_key="animals/a/primary.jpg",
@@ -50,6 +52,7 @@ def test_shared_photo_capability_preserves_purpose_and_rejects_cross_purpose() -
     organization_id = uuid4()
     animal_id = uuid4()
     token = media_access.issue_animal_photo_token(
+        signing_secret=media_access.get_settings().animal_confirmation_secret,
         purpose=media_access.VOLUNTEER_WALK_PHOTO,
         organization_id=organization_id,
         animal_id=animal_id,
@@ -73,6 +76,7 @@ def test_shared_photo_capability_preserves_purpose_and_rejects_cross_purpose() -
 def test_shared_photo_capability_rejects_unknown_purpose() -> None:
     with pytest.raises(ValueError, match="unsupported animal photo purpose"):
         media_access.issue_animal_photo_token(
+            signing_secret=media_access.get_settings().animal_confirmation_secret,
             purpose="unknown_photo",
             organization_id=uuid4(),
             animal_id=uuid4(),

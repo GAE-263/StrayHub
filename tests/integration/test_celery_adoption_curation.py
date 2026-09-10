@@ -462,7 +462,9 @@ async def test_curation_reconciliation_discovers_recoverable_status(
             if status == "running":
                 job.claimed_at = datetime.now(timezone.utc) - timedelta(days=1)
                 job.claim_token = "dead-worker"
-        assert (job_id, organization_id) in await pending_celery_dispatches(session_factory)
+        assert (job_id, organization_id) in await pending_celery_dispatches(
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
+        )
     finally:
         await _cleanup(organization_id, adopter_id)
 
