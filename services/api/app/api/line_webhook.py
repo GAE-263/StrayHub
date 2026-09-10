@@ -473,14 +473,16 @@ def _volunteer_application_liff_url() -> str:
     return f"https://liff.line.me/{get_settings().liff_id}"
 
 
-def _line_role_menu_features_active() -> bool:
-    return get_settings().line_role_menu_features_active()
+def _line_role_menu_features_active(line_user_id: str | None = None) -> bool:
+    from services.api.app.config.line_menu_smoke import webhook_user_allowed
+
+    return webhook_user_allowed(get_settings(), line_user_id)
 
 
 def _rich_menu_router() -> RichMenuRoutingService | None:
     """四個 richMenuId 都沒設定時回 None，選單切換為 no-op。"""
     settings = get_settings()
-    if not _line_role_menu_features_active():
+    if not settings.line_role_menu_features_active() and not settings.line_role_menu_test_enabled:
         return None
     registry = build_registry(
         default=settings.line_rich_menu_default_id,
@@ -490,7 +492,9 @@ def _rich_menu_router() -> RichMenuRoutingService | None:
     )
     if not registry.menu_ids:
         return None
-    return RichMenuRoutingService(LineMessagingApiAdapter(), registry)
+    return RichMenuRoutingService(
+        LineMessagingApiAdapter(), registry, allowed=_line_role_menu_features_active
+    )
 
 
 async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
@@ -507,7 +511,7 @@ async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
         rich_menu_id = await router.link_for_user(line_user_id=line_user_id, role=role)
         return rich_menu_id is not None
     except Exception:
-        logger.warning("switching rich menu failed (role=%s)", role, exc_info=True)
+        logger.warning("switching rich menu failed (role=%s)", role)
         return False
 
 
@@ -580,7 +584,7 @@ async def _handle_menu_action(
     action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
         "action", [""]
     )[0]
-    if not _line_role_menu_features_active() and (
+    if not _line_role_menu_features_active(event.get("source", {}).get("userId")) and (
         action in MENU_PLACEHOLDER_ACTIONS
         or action in STAFF_MENU_ACTIONS
         or action
@@ -618,7 +622,7 @@ async def _handle_menu_action(
         try:
             await line.link_rich_menu(rich_menu_id=rich_menu_id, user_id=line_user_id)
         except Exception:
-            logger.warning("switching adoption hub menu failed", exc_info=True)
+            logger.warning("switching adoption hub menu failed")
             await _reply(line, event, [_text("目前無法切換選單，請稍後再試。")])
             return True
         message = _text("已切換到領養與毛孩日記選單 🐾")
@@ -733,7 +737,7 @@ async def _handle_public_volunteer_application_entry(
     is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
     if not is_text_command and not is_postback_command:
         return False
-    if not _line_role_menu_features_active():
+    if not _line_role_menu_features_active(event.get("source", {}).get("userId")):
         await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
         return True
     line_user_id = event.get("source", {}).get("userId")
@@ -890,7 +894,7 @@ async def _get_or_create_adopter_identity(session, line_user_id: str) -> UUID:
 
 
 async def _active_adoption_draft(session, line_user_id: str):
-    if not _line_role_menu_features_active():
+    if not _line_role_menu_features_active(line_user_id):
         return None
     binding = await LineWebhookRepository(session).binding(line_user_id)
     if binding is None:
@@ -3676,7 +3680,7 @@ async def _select_line_flow(session, line_user_id: str, event: dict) -> str | No
     flow = values.get("flow", [""])[0]
     binding = await LineWebhookRepository(session).binding(line_user_id)
     entry = None
-    if action == "back_to_default_menu":
+    if action in {"back_to_default_menu", "open_adoption_hub"}:
         entry = "menu"
     elif action == "start_adoption_matching":
         await _get_or_create_adopter_identity(session, line_user_id)
@@ -3772,6 +3776,8 @@ async def webhook(
     line = LineMessagingApiAdapter()
     public_base_url = _line_public_base_url(request)
     results = []
+    from services.api.app.config.line_menu_smoke import verified_menu_request
+
     async with session_factory() as session:
         for event in payload.get("events", []):
             event_id = event.get("webhookEventId")
@@ -3781,11 +3787,16 @@ async def webhook(
                 )
                 continue
             report_id_to_dispatch = None
-            async with _growth_diary_event_transaction(
-                session,
-                event_id=event_id,
-                background_tasks=background_tasks,
-            ) as growth_diary_event_boundary:
+            async with (
+                verified_menu_request(
+                    {"destination": payload.get("destination"), "events": [event]}, settings
+                ),
+                _growth_diary_event_transaction(
+                    session,
+                    event_id=event_id,
+                    background_tasks=background_tasks,
+                ) as growth_diary_event_boundary,
+            ):
                 identity = LineWebhookRepository(session)
                 stored_event, claimed = await identity.claim_event(
                     webhook_event_id=event_id,
@@ -3801,6 +3812,14 @@ async def webhook(
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
                     line.ensure_recipient_allowed(line_user_id)
+                    # Reject gated actions before flow selection creates a binding
+                    # or mutates current_flow for an excluded user.
+                    if not _line_role_menu_features_active(
+                        line_user_id
+                    ) and await _handle_menu_action(line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     current_flow = await _select_line_flow(session, line_user_id, event)
                     if await _handle_menu_action(line, event):
                         await identity.complete_event(stored_event)

@@ -99,7 +99,9 @@ LIFF 身分交換明確傳入要使用的 organization；後端逐一驗證 memb
 
 ## Production 啟用
 
-`LINE_ROLE_MENU_FEATURES_ENABLED=false` 是預設值。完成實機 smoke 後，將同一 release commit
-的 evidence 設為 `verified-YYYYMMDD-<40-char-tested-git-sha>`，由 production preflight 驗證
-全部 conditional config，再透過正常 release/approval 將 gate 設為 `true`。不可直接在 VM
-手改 env，也不可用 local smoke evidence 代替 production-like smoke。
+`LINE_ROLE_MENU_FEATURES_ENABLED=false` 是預設值。先依
+[受限 smoke runbook](line-rich-menu-safe-publication.md#受限-smoke-runbook本地機制不是執行-production-的授權)
+在全域關閉時驗證明確帳號；完整真人報告由 preflight 比對實際 release、映像、資源與必要案例，
+再透過正常 release/approval 啟用全域功能。`verified-YYYYMMDD-<40-char-tested-git-sha>`
+僅為舊版相容標籤，單獨不足以啟用。不可直接在 VM 手改 env，也不可用 local/mock evidence
+代替 production-like 真人 smoke。

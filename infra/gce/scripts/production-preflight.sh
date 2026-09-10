@@ -125,10 +125,14 @@ hard_limit="$(env_value "$CONFIG_ENV" CELERY_TASK_TIME_LIMIT)"
 line_features_enabled="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED)"
 [[ "$line_features_enabled" == "true" || "$line_features_enabled" == "false" ]] ||
   fail "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false"
-if [[ "$line_features_enabled" == "true" ]]; then
+line_test_enabled="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_TEST_ENABLED 2>/dev/null || true)"
+line_test_enabled="${line_test_enabled:-false}"
+[[ "$line_test_enabled" == "true" || "$line_test_enabled" == "false" ]] ||
+  fail "LINE_ROLE_MENU_TEST_ENABLED must be exactly true or false"
+if [[ "$line_features_enabled" == "true" || "$line_test_enabled" == "true" ]]; then
   required_line_config=(
     WEB_PUBLIC_BASE_URL LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID LINE_RICH_MENU_ADOPTION_HUB_ID
-    LINE_RICH_MENU_STAFF_ID LINE_STAFF_LIFF_ID LINE_ROLE_MENU_SMOKE_EVIDENCE
+    LINE_RICH_MENU_STAFF_ID LINE_STAFF_LIFF_ID
   )
   for key in "${required_line_config[@]}"; do
     value="$(env_value "$CONFIG_ENV" "$key" 2>/dev/null || true)"
@@ -139,9 +143,14 @@ if [[ "$line_features_enabled" == "true" ]]; then
   public_url="$(env_value "$CONFIG_ENV" WEB_PUBLIC_BASE_URL)"
   [[ "$public_url" =~ ^https://[^/[:space:]]+(/.*)?$ ]] ||
     fail "WEB_PUBLIC_BASE_URL must be an absolute HTTPS URL"
-  smoke_evidence="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_SMOKE_EVIDENCE)"
-  [[ "$smoke_evidence" =~ ^verified-[0-9]{8}-[0-9a-f]{40}$ ]] ||
-    fail "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify the date and exact tested commit"
+fi
+if [[ "$line_features_enabled" == "true" ]]; then
+  # Never trust a config-supplied candidate SHA. Use this verified release bundle.
+  [[ -f "$ROOT_DIR/release-manifest.json" && -n "$IMAGE_ENV" ]] ||
+    fail "global menu enablement requires the actual release manifest and image env"
+  [[ "$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_RELEASE_MANIFEST 2>/dev/null || true)" == "/opt/strayhub/current/release-manifest.json" ]] ||
+    fail "runtime menu evidence must use the current release manifest"
+  export LINE_ROLE_MENU_RELEASE_MANIFEST="$ROOT_DIR/release-manifest.json"
 fi
 kms_key_name="$(env_value "$CONFIG_ENV" PII_KMS_KEY_NAME)"
 [[ "$kms_key_name" =~ ^projects/[^/[:space:]]+/locations/[^/[:space:]]+/keyRings/[^/[:space:]]+/cryptoKeys/[^/[:space:]]+$ ]] ||
@@ -199,6 +208,22 @@ cmp -s "$derived_public" "$public_key" || fail "staged JWT active pair does not 
 import json, sys
 from urllib.parse import unquote, urlsplit
 services = json.load(sys.stdin)["services"]
+menu_keys = ("LINE_ROLE_MENU_FEATURES_ENABLED", "LINE_ROLE_MENU_TEST_ENABLED",
+             "LINE_ROLE_MENU_TEST_CHANNEL_ID", "LINE_ROLE_MENU_BOT_SHA256",
+             "LINE_ROLE_MENU_TEST_USER_SHA256", "LINE_ROLE_MENU_TEST_EXPIRES_AT",
+             "LINE_CHANNEL_ID", "LINE_CHANNEL_ACCESS_TOKEN",
+             "LINE_RICH_MENU_DEFAULT_ID", "LINE_RICH_MENU_VOLUNTEER_ID")
+for key in menu_keys:
+    if services["api"]["environment"].get(key) != services["worker"]["environment"].get(key):
+        sys.exit("[Production secret preflight] FAIL: inconsistent menu scope configuration")
+if services["api"]["environment"].get("LINE_ROLE_MENU_FEATURES_ENABLED") == "true":
+    import os
+    with open(os.environ["LINE_ROLE_MENU_RELEASE_MANIFEST"]) as stream:
+        release = json.load(stream)
+    for service, image_name in (("api", "api"), ("worker", "worker"), ("web", "web")):
+        entry = release["images"][image_name]
+        if services[service]["image"] != entry["repository"] + "@" + entry["digest"]:
+            sys.exit("[Production secret preflight] FAIL: menu release/image identity mismatch")
 signing_keys = [services[name]["environment"].get("ANIMAL_CONFIRMATION_SECRET")
                 for name in ("api", "celery-worker")]
 if not signing_keys[0] or any(key != signing_keys[0] for key in signing_keys):

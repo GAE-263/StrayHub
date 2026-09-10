@@ -110,7 +110,7 @@ def test_enabled_line_role_menu_features_require_complete_release_evidence() -> 
         assert field in message
 
 
-def test_enabled_line_role_menu_features_accept_complete_safe_contract() -> None:
+def test_enabled_line_role_menu_features_accept_complete_safe_contract(tmp_path) -> None:
     settings = safe_non_local_settings(
         line_role_menu_features_enabled=True,
         web_public_base_url="https://strayhub.enadv.quest",
@@ -122,6 +122,9 @@ def test_enabled_line_role_menu_features_accept_complete_safe_contract() -> None
         line_role_menu_smoke_evidence=f"verified-20260901-{'a' * 40}",
     )
 
+    from tests.support.line_menu_smoke import simulated_report
+
+    simulated_report(settings, tmp_path)
     assert settings.validate_runtime_safety() is settings
 
 
@@ -142,7 +145,7 @@ def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:
     assert settings.validate_runtime_safety(process="worker") is settings
 
 
-def test_acceptance_volunteer_menu_does_not_require_staff_liff():
+def test_acceptance_volunteer_menu_does_not_require_staff_liff(tmp_path):
     settings = safe_non_local_settings(
         app_env="acceptance",
         celery_broker_url="redis://:synthetic@redis:6379/0",
@@ -157,6 +160,9 @@ def test_acceptance_volunteer_menu_does_not_require_staff_liff():
         line_rich_menu_adoption_hub_id="richmenu-acceptance-hub",
         line_role_menu_smoke_evidence=f"verified-20260909-{'a' * 40}",
     )
+    from tests.support.line_menu_smoke import simulated_report
+
+    simulated_report(settings, tmp_path)
     assert settings.validate_runtime_safety() is settings
 
 

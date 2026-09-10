@@ -42,7 +42,7 @@ logger = get_logger(__name__)
 def _rich_menu_router() -> RichMenuRoutingService | None:
     """四個 richMenuId 都沒設定時回 None，選單退回即為 no-op。"""
     settings = get_worker_settings()
-    if not settings.line_role_menu_features_active():
+    if not settings.line_role_menu_features_active() and not settings.line_role_menu_test_enabled:
         return None
     registry = build_registry(
         default=settings.line_rich_menu_default_id,
@@ -52,7 +52,11 @@ def _rich_menu_router() -> RichMenuRoutingService | None:
     )
     if not registry.menu_ids:
         return None
-    return RichMenuRoutingService(LineMessagingApiAdapter(settings=settings), registry)
+    return RichMenuRoutingService(
+        LineMessagingApiAdapter(settings=settings),
+        registry,
+        allowed=settings.line_role_menu_allowed,
+    )
 
 
 class VolunteerAccessHandler:
@@ -150,7 +154,6 @@ class VolunteerAccessHandler:
                             # self-heal on the user's next public-menu entry.
                             logger.warning(
                                 "linking volunteer menu after committed approval failed",
-                                exc_info=True,
                             )
                 await worker_repository.complete_notification(delivery, sent=True)
         await self.session.commit()

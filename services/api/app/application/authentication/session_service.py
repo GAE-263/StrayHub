@@ -482,7 +482,6 @@ class SessionService:
             logger.warning(
                 "linking rich menu failed; menu unchanged (role=%s)",
                 role,
-                exc_info=True,
             )
             return
 

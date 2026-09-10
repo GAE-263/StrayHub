@@ -34,7 +34,6 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _KMS_CRYPTO_KEY_PATTERN = re.compile(
     r"^projects/[^/\s]+/locations/[^/\s]+/keyRings/[^/\s]+/cryptoKeys/[^/\s]+$"
 )
-_LINE_SMOKE_EVIDENCE_PATTERN = re.compile(r"^verified-[0-9]{8}-[0-9a-f]{40}$")
 _SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -111,6 +110,15 @@ class Settings(BaseSettings):
     line_role_menu_features_enabled: bool = False
     line_staff_liff_id: str = ""
     line_role_menu_smoke_evidence: str = ""
+    line_role_menu_test_enabled: bool = False
+    line_role_menu_test_channel_id: str = ""
+    line_role_menu_bot_sha256: str = ""
+    line_role_menu_test_user_sha256: SecretStr = SecretStr("")
+    line_role_menu_test_expires_at: str = ""
+    line_role_menu_report_file: str = ""
+    line_role_menu_report_sha256: str = ""
+    line_role_menu_release_file: str = ""
+    line_role_menu_resources_file: str = ""
     animal_confirmation_secret: str = "local-animal-confirmation-secret"
     auth_jwt_issuer: str = "strayhub-local"
     auth_jwt_audience: str = "strayhub-api"
@@ -184,6 +192,14 @@ class Settings(BaseSettings):
     def line_role_menu_features_active(self) -> bool:
         environment = self.app_env.strip().lower()
         return environment in {"local", "test", "testing"} or (self.line_role_menu_features_enabled)
+
+    def line_role_menu_allowed(self, line_user_id: str | None) -> bool:
+        """For authenticated/bound identities, never caller-supplied authorization."""
+        from services.api.app.config.line_menu_smoke import scoped_user
+
+        return bool(line_user_id) and (
+            self.line_role_menu_features_active() or scoped_user(self, line_user_id)
+        )
 
     def validate_runtime_safety(self, *, process: str = "api") -> "Settings":
         """Reject unsafe defaults before a non-local process starts work."""
@@ -293,6 +309,15 @@ class Settings(BaseSettings):
                 placeholder("AI_API_KEY", self.ai_api_key)
                 missing("AI_MODEL_NAME", self.ai_model_name)
 
+        if process in {"api", "worker"} and self.line_role_menu_test_enabled:
+            from services.api.app.config.line_menu_smoke import scope_valid
+
+            if not scope_valid(self):
+                problems.append("LINE role-menu test scope is invalid, missing or expired")
+            placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
+            placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
+            placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
+
         if process in {"worker", "migration"}:
             if problems:
                 details = "\n".join(f"- {problem}" for problem in problems)
@@ -315,7 +340,7 @@ class Settings(BaseSettings):
         if self.liff_id.strip().lower() == "gcp-demo-liff":
             problems.append("LIFF_ID uses a deployment placeholder")
 
-        if self.line_role_menu_features_enabled:
+        if self.line_role_menu_features_enabled or self.line_role_menu_test_enabled:
             missing("WEB_PUBLIC_BASE_URL", self.web_public_base_url)
             if self.web_public_base_url:
                 parsed_public_url = urlparse(self.web_public_base_url)
@@ -342,12 +367,13 @@ class Settings(BaseSettings):
             if environment != "acceptance":
                 placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
                 placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
-            if not _LINE_SMOKE_EVIDENCE_PATTERN.fullmatch(
-                self.line_role_menu_smoke_evidence.strip()
-            ):
-                problems.append(
-                    "LINE_ROLE_MENU_SMOKE_EVIDENCE must be verified-YYYYMMDD-<40-char-git-sha>"
-                )
+            if self.line_role_menu_features_enabled:
+                from services.api.app.config.line_menu_smoke import validate_report
+
+                try:
+                    validate_report(self)
+                except ValueError as exc:
+                    problems.append(str(exc))
 
         placeholder("ANIMAL_CONFIRMATION_SECRET", self.animal_confirmation_secret)
 

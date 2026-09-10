@@ -76,7 +76,18 @@ unless the flag is explicitly true.
 | `LINE_RICH_MENU_STAFF_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
 | `LINE_RICH_MENU_ADOPTION_HUB_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; verified hub resource; not needed by Legacy Worker/Celery |
 | `LINE_STAFF_LIFF_ID` | API / release preflight | Non-secret staff LIFF ID | Empty | Required only when enabled; Compose config, non-placeholder |
-| `LINE_ROLE_MENU_SMOKE_EVIDENCE` | API / release preflight | Non-secret release evidence | Empty | Required only when enabled; `verified-YYYYMMDD-<40-char-tested-git-sha>` |
+| `LINE_ROLE_MENU_SMOKE_EVIDENCE` | API | Legacy compatibility label | Empty | `verified-YYYYMMDD-<40-char-tested-git-sha>` alone no longer authorizes enablement |
+| `LINE_ROLE_MENU_TEST_ENABLED` | API / Legacy Worker | Protected operator config | false | Explicit bounded account mode; never enables all users |
+| `LINE_ROLE_MENU_TEST_CHANNEL_ID`, `LINE_ROLE_MENU_BOT_SHA256` | API / Legacy Worker | Protected verified identity | Empty | Channel equals configured Messaging Channel; signed webhook destination matches Bot hash |
+| `LINE_ROLE_MENU_TEST_USER_SHA256`, `LINE_ROLE_MENU_TEST_EXPIRES_AT` | API / Legacy Worker | Protected scope, no raw UID | Empty | 1–10 unique hashes, no wildcard; timezone-aware expiry within 7 days |
+| `LINE_ROLE_MENU_REPORT_PATH`, `LINE_ROLE_MENU_REPORT_SHA256`, `LINE_ROLE_MENU_RESOURCES_PATH` | API / preflight | Protected readonly evidence | /dev/null, empty, /dev/null | Global enablement requires real-line report, current immutable identity and resource readback; mock rejected |
+| `LINE_ROLE_MENU_RELEASE_MANIFEST` | API / preflight | Actual verified release manifest | /dev/null | Global mode requires `/opt/strayhub/current/release-manifest.json`; preflight substitutes candidate bundle manifest before switch |
+
+The bounded mode retains the production HTTPS, staff LIFF and resource gates; only the prior-human-
+evidence requirement is deferred until global enablement. Neither mode grants business/tenant access.
+See [executable operator sequence and invalidation rules](../line-rich-menu-safe-publication.md).
+Legacy label-only global deployments must migrate their evidence before their next startup; both flags
+false remain compatible without evidence. No Rich Menu settings are added to Celery Worker/Beat.
 
 `LINE_RICH_MENU_ADOPTER_ID` is intentionally not a production requirement: the approved public
 menu enters the adoption conversation directly, and there is no completed-adoption lifecycle that

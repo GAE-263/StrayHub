@@ -111,6 +111,15 @@ services:
       LINE_RICH_MENU_ADOPTION_HUB_ID: ${LINE_RICH_MENU_ADOPTION_HUB_ID:-}
       LINE_STAFF_LIFF_ID: ${LINE_STAFF_LIFF_ID:-}
       LINE_ROLE_MENU_SMOKE_EVIDENCE: ${LINE_ROLE_MENU_SMOKE_EVIDENCE:-}
+      LINE_ROLE_MENU_TEST_ENABLED: ${LINE_ROLE_MENU_TEST_ENABLED:-false}
+      LINE_ROLE_MENU_TEST_CHANNEL_ID: ${LINE_ROLE_MENU_TEST_CHANNEL_ID:-}
+      LINE_ROLE_MENU_BOT_SHA256: ${LINE_ROLE_MENU_BOT_SHA256:-}
+      LINE_ROLE_MENU_TEST_USER_SHA256: ${LINE_ROLE_MENU_TEST_USER_SHA256:-}
+      LINE_ROLE_MENU_TEST_EXPIRES_AT: ${LINE_ROLE_MENU_TEST_EXPIRES_AT:-}
+      LINE_ROLE_MENU_REPORT_FILE: /run/line-menu/report.json
+      LINE_ROLE_MENU_REPORT_SHA256: ${LINE_ROLE_MENU_REPORT_SHA256:-}
+      LINE_ROLE_MENU_RELEASE_FILE: /run/line-menu/release.json
+      LINE_ROLE_MENU_RESOURCES_FILE: /run/line-menu/resources.json
       ANIMAL_CONFIRMATION_SECRET: ${ANIMAL_CONFIRMATION_SECRET:?ANIMAL_CONFIRMATION_SECRET is required}
       LOGIN_ABUSE_HMAC_SECRET: ${LOGIN_ABUSE_HMAC_SECRET:?LOGIN_ABUSE_HMAC_SECRET is required}
       AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:?AUTH_JWT_ISSUER is required}
@@ -133,6 +142,25 @@ services:
       CELERY_MAX_RETRIES: ${CELERY_MAX_RETRIES:-3}
       CELERY_RETRY_BACKOFF_MAX: ${CELERY_RETRY_BACKOFF_MAX:-120}
       CELERY_RECONCILE_INTERVAL_SECONDS: ${CELERY_RECONCILE_INTERVAL_SECONDS:-30}
+    volumes:
+      - type: bind
+        source: ${LINE_ROLE_MENU_REPORT_PATH:-/dev/null}
+        target: /run/line-menu/report.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LINE_ROLE_MENU_RELEASE_MANIFEST:-/dev/null}
+        target: /run/line-menu/release.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LINE_ROLE_MENU_RESOURCES_PATH:-/dev/null}
+        target: /run/line-menu/resources.json
+        read_only: true
+        bind:
+          create_host_path: false
     secrets:
       # The selected env file supplies either ignored verification paths or protected D1 staged
       # production paths. No verification or production key path is hard-coded here.
@@ -207,6 +235,12 @@ services:
       STOOL_TIMEOUT_SECONDS: ${STOOL_TIMEOUT_SECONDS:-30}
       LINE_ROLE_MENU_FEATURES_ENABLED: ${LINE_ROLE_MENU_FEATURES_ENABLED:-false}
       LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:?LINE_CHANNEL_ID is required}
+      LINE_ROLE_MENU_TEST_ENABLED: ${LINE_ROLE_MENU_TEST_ENABLED:-false}
+      LINE_ROLE_MENU_TEST_CHANNEL_ID: ${LINE_ROLE_MENU_TEST_CHANNEL_ID:-}
+      LINE_ROLE_MENU_BOT_SHA256: ${LINE_ROLE_MENU_BOT_SHA256:-}
+      LINE_ROLE_MENU_TEST_USER_SHA256: ${LINE_ROLE_MENU_TEST_USER_SHA256:-}
+      LINE_ROLE_MENU_TEST_EXPIRES_AT: ${LINE_ROLE_MENU_TEST_EXPIRES_AT:-}
       LINE_RICH_MENU_DEFAULT_ID: ${LINE_RICH_MENU_DEFAULT_ID:-}
       LINE_RICH_MENU_VOLUNTEER_ID: ${LINE_RICH_MENU_VOLUNTEER_ID:-}
     networks:

@@ -263,10 +263,10 @@ def test_production_preflight_enforces_mode_separation_and_consumption_checks() 
     assert 'validate_runtime_safety(process="worker")' in preflight
     assert 'validate_runtime_safety(process="migration")' in preflight
     assert "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false" in preflight
-    assert "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify" in preflight
+    assert "global menu enablement requires the actual release manifest" in preflight
     assert "LOGIN_ABUSE_HMAC_SECRET" in preflight
     assert preflight.index('line_features_enabled" == "true"') < preflight.index(
-        'LINE_ROLE_MENU_SMOKE_EVIDENCE)"'
+        "menu release/image identity mismatch"
     )
     assert '--env-file "$CONFIG_ENV"' in preflight
     assert '--env-file "$runtime_env"' in preflight
