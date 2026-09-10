@@ -74,6 +74,7 @@ unless the flag is explicitly true.
 | `LINE_RICH_MENU_DEFAULT_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
 | `LINE_RICH_MENU_VOLUNTEER_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
 | `LINE_RICH_MENU_STAFF_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
+| `LINE_RICH_MENU_ADOPTION_HUB_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; verified hub resource; not needed by Legacy Worker/Celery |
 | `LINE_STAFF_LIFF_ID` | API / release preflight | Non-secret staff LIFF ID | Empty | Required only when enabled; Compose config, non-placeholder |
 | `LINE_ROLE_MENU_SMOKE_EVIDENCE` | API / release preflight | Non-secret release evidence | Empty | Required only when enabled; `verified-YYYYMMDD-<40-char-tested-git-sha>` |
 

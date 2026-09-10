@@ -90,7 +90,7 @@ liff_id="$(env_value "$CONFIG_ENV" LIFF_ID)"
 [[ "$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED)" == "true" ]] ||
   fail "LINE role-menu features must be enabled for acceptance"
 required_line_menu_config=(
-  LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID
+  LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID LINE_RICH_MENU_ADOPTION_HUB_ID
   LINE_ROLE_MENU_SMOKE_EVIDENCE
 )
 for key in "${required_line_menu_config[@]}"; do

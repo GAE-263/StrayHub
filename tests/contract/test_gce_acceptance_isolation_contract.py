@@ -90,6 +90,7 @@ def test_rendered_acceptance_model_passes_isolation_policy() -> None:
     assert api_environment["LINE_ROLE_MENU_FEATURES_ENABLED"] == "false"
     assert "LINE_RICH_MENU_DEFAULT_ID" in api_environment
     assert "LINE_RICH_MENU_VOLUNTEER_ID" in api_environment
+    assert "LINE_RICH_MENU_ADOPTION_HUB_ID" in api_environment
     assert "LINE_RICH_MENU_STAFF_ID" in api_environment
     policy.validate(model)
 
@@ -269,6 +270,7 @@ def test_acceptance_secret_materialization_and_static_preflight() -> None:
                 "LINE_ROLE_MENU_FEATURES_ENABLED": "true",
                 "LINE_RICH_MENU_DEFAULT_ID": "richmenu-acceptance-default",
                 "LINE_RICH_MENU_VOLUNTEER_ID": "richmenu-acceptance-volunteer",
+                "LINE_RICH_MENU_ADOPTION_HUB_ID": "richmenu-acceptance-hub",
                 "LINE_RICH_MENU_STAFF_ID": "richmenu-acceptance-staff",
                 "LINE_STAFF_LIFF_ID": "2000000002-acceptance-staff",
                 "LINE_ROLE_MENU_SMOKE_EVIDENCE": f"verified-20260909-{'c' * 40}",
@@ -330,6 +332,7 @@ def test_acceptance_preflight_rejects_disabled_role_menu_verification() -> None:
     for key in (
         "LINE_RICH_MENU_DEFAULT_ID",
         "LINE_RICH_MENU_VOLUNTEER_ID",
+        "LINE_RICH_MENU_ADOPTION_HUB_ID",
         "LINE_ROLE_MENU_SMOKE_EVIDENCE",
     ):
         assert key in source

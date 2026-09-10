@@ -621,7 +621,20 @@ async def _handle_menu_action(
             logger.warning("switching adoption hub menu failed", exc_info=True)
             await _reply(line, event, [_text("目前無法切換選單，請稍後再試。")])
             return True
-        await _reply(line, event, [_text("已切換到領養與毛孩日記選單 🐾")])
+        message = _text("已切換到領養與毛孩日記選單 🐾")
+        message["quickReply"] = {
+            "items": [
+                {
+                    "type": "action",
+                    "action": {
+                        "type": "postback",
+                        "label": "返回主選單",
+                        "data": "action=back_to_default_menu",
+                    },
+                }
+            ]
+        }
+        await _reply(line, event, [message])
         return True
     if action in STAFF_MENU_ACTIONS:
         # Staff action 必須先經過 server-side binding/membership/shelter resolution。

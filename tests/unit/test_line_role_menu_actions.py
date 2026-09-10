@@ -412,6 +412,35 @@ async def test_back_to_default_menu_switches_when_configured(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "enabled,hub,fails",
+    [
+        (True, "richmenu-hub", False),
+        (True, "", False),
+        (True, "richmenu-hub", True),
+        (False, "richmenu-hub", False),
+    ],
+)
+async def test_hub_entry_and_return_fail_closed(monkeypatch, enabled, hub, fails):
+    settings = SimpleNamespace(
+        line_rich_menu_adoption_hub_id=hub, line_role_menu_features_active=lambda: enabled
+    )
+    monkeypatch.setattr(line_webhook, "get_settings", lambda: settings)
+    line = MockLineAdapter()
+    line.link_rich_menu = AsyncMock(side_effect=RuntimeError("synthetic") if fails else None)
+    event = _postback_event("action=open_adoption_hub", line_user_id="U-synthetic")
+    assert await line_webhook._handle_menu_action(line, event)
+    message = line.replies[0][1][0]
+    if enabled and hub and not fails:
+        line.link_rich_menu.assert_awaited_once_with(rich_menu_id=hub, user_id="U-synthetic")
+        assert message["quickReply"]["items"][0]["action"]["data"] == "action=back_to_default_menu"
+    else:
+        assert "已切換" not in message["text"]
+        if not enabled or not hub:
+            line.link_rich_menu.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_back_to_default_menu_reports_unavailable_when_not_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

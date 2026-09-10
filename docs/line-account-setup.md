@@ -58,15 +58,19 @@ helper 以 nginx 將 `/v1/*` 送 FastAPI、其他路徑送 Next.js，再用一�
 single HTTPS origin。它不修改 `.env`、LINE Developers 或 Rich Menu。將輸出的 webhook URL
 與 LIFF Endpoint 手動填入受控 channel；結束後執行 `./scripts/test_line_local.sh stop`。
 
-發佈測試 Rich Menu 前先 dry-run，再明確執行：
+發佈測試 Rich Menu 前先 dry-run；寫入需另外批准並確認 Bot 身分：
 
 ```bash
 uv run python -m scripts.sync_line_role_menus
 uv run python -m scripts.sync_line_role_menus --apply \
-  --image-dir infra/local/rich-menu-images
+  --image-dir infra/local/rich-menu-images \
+  --expected-bot '@APPROVED_TEST_BOT' --manifest /approved/operator-directory/menus.json
 ```
 
-將輸出的 menu IDs 注入目前測試 process 並重新啟動服務。實機至少驗證：
+工具只建立／驗證資源，不刪除、不切 default、不綁定、不回寫 env。
+設定載入、單帳號綁定與全域切換需分別批准；詳見
+[安全發布與 gate 順序](line-rich-menu-safe-publication.md)。
+取得完整 ready IDs 及合法 gate 後，另行批准注入測試 process 與重新啟動。實機至少驗證：
 
 - 公開 menu 只有志工服務與領養流程。
 - 志工申請核准後切 volunteer menu；返回 default 不改權限。

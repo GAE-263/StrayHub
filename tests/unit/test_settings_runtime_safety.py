@@ -102,6 +102,7 @@ def test_enabled_line_role_menu_features_require_complete_release_evidence() -> 
         "WEB_PUBLIC_BASE_URL",
         "LINE_RICH_MENU_DEFAULT_ID",
         "LINE_RICH_MENU_VOLUNTEER_ID",
+        "LINE_RICH_MENU_ADOPTION_HUB_ID",
         "LINE_RICH_MENU_STAFF_ID",
         "LINE_STAFF_LIFF_ID",
         "LINE_ROLE_MENU_SMOKE_EVIDENCE",
@@ -116,6 +117,7 @@ def test_enabled_line_role_menu_features_accept_complete_safe_contract() -> None
         line_rich_menu_default_id="richmenu-default-production",
         line_rich_menu_volunteer_id="richmenu-volunteer-production",
         line_rich_menu_staff_id="richmenu-staff-production",
+        line_rich_menu_adoption_hub_id="richmenu-hub-production",
         line_staff_liff_id="1234567890-StaffLiff",
         line_role_menu_smoke_evidence=f"verified-20260901-{'a' * 40}",
     )
@@ -152,6 +154,7 @@ def test_acceptance_volunteer_menu_does_not_require_staff_liff():
         web_public_base_url="https://acceptance.strayhub.net",
         line_rich_menu_default_id="richmenu-acceptance-default",
         line_rich_menu_volunteer_id="richmenu-acceptance-volunteer",
+        line_rich_menu_adoption_hub_id="richmenu-acceptance-hub",
         line_role_menu_smoke_evidence=f"verified-20260909-{'a' * 40}",
     )
     assert settings.validate_runtime_safety() is settings

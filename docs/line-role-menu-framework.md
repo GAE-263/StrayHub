@@ -44,7 +44,7 @@ membership、grant、session 或 shelter context；權限仍以後端為準。�
 
 ## 設定與安全失敗
 
-四份 menu 定義在 `infra/local/line-rich-menu-{default,volunteer,adopter,staff}.yaml`，
+五份 menu 定義在 `infra/local/line-rich-menu-{default,volunteer,adopter,staff,adoption-hub}.yaml`，
 以 `scripts/sync_line_role_menus.py` 驗證或發佈。角色 ID 由下列環境變數提供：
 
 ```dotenv
@@ -52,9 +52,11 @@ LINE_RICH_MENU_DEFAULT_ID=
 LINE_RICH_MENU_VOLUNTEER_ID=
 LINE_RICH_MENU_ADOPTER_ID=
 LINE_RICH_MENU_STAFF_ID=
+LINE_RICH_MENU_ADOPTION_HUB_ID=
 ```
 
-全部缺少或只缺目標角色 ID 時，routing 是 no-op；不影響 webhook、身分綁定、核准或
+本機或功能未啟用時，缺目標角色 ID 的 routing 是 no-op；非本機啟用時必要 ID
+缺漏會由 settings/preflight 拒絕（含 API adoption hub）。不影響身分綁定、核准或
 資料 transaction。LINE Messaging API timeout、5xx 或 reply token 失效會記錄警告並安全
 失敗，不會回滾已提交的 CRM mutation。Webhook signature 驗證及 duplicate-event
 idempotency 不可關閉。
@@ -63,6 +65,9 @@ Production 另受 `LINE_ROLE_MENU_FEATURES_ENABLED` fail-closed gate 保護，�
 只有全部必要 menu ID、公開 HTTPS origin、staff LIFF ID、LINE credential，以及格式為
 `verified-YYYYMMDD-<40-char-tested-git-sha>` 的真實 smoke evidence 都通過 preflight，才可對
 該已測 commit 設為 `true`。目前不要求 adopter menu ID，因為沒有完成領養 lifecycle。
+
+資源發布與啟用必須分開；`--apply` 不再刪舊選單或自動設定 default／回寫 env。
+操作與尚未解決的 smoke bootstrap gate 見 [安全發布計畫](line-rich-menu-safe-publication.md)。
 
 ## 權限與資料邊界
 

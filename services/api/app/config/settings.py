@@ -336,6 +336,7 @@ class Settings(BaseSettings):
                     problems.append("WEB_PUBLIC_BASE_URL uses a reserved placeholder host")
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
+            placeholder("LINE_RICH_MENU_ADOPTION_HUB_ID", self.line_rich_menu_adoption_hub_id)
             # Volunteer acceptance does not exercise the separate staff entry.
             # Its handler remains fail-closed when no staff LIFF is configured.
             if environment != "acceptance":

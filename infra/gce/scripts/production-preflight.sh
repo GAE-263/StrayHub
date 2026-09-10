@@ -127,7 +127,7 @@ line_features_enabled="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED
   fail "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false"
 if [[ "$line_features_enabled" == "true" ]]; then
   required_line_config=(
-    WEB_PUBLIC_BASE_URL LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID
+    WEB_PUBLIC_BASE_URL LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID LINE_RICH_MENU_ADOPTION_HUB_ID
     LINE_RICH_MENU_STAFF_ID LINE_STAFF_LIFF_ID LINE_ROLE_MENU_SMOKE_EVIDENCE
   )
   for key in "${required_line_config[@]}"; do
