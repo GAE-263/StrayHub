@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 from services.api.app.application.line_adoption_flex import _PALETTE, _accent_bar, _pill_row
+from services.api.app.application.line_menu_actions import back_to_default_menu_quick_reply_item
 
 _BORDER_COLOR = "#716053"
 _CARD_BG = "#FAF6EE"
@@ -27,14 +28,9 @@ class AdoptedAnimalOption:
     shelter_number: str | None
 
 
-def growth_diary_quick_reply_items() -> list[dict]:
-    """Standing "新增一篇"/"日記回顧" quick-reply chips — attached to every
-    growth-diary message that isn't itself the entry-choice card (the
-    reminder push, the AI analysis reply, the history carousel), so the
-    adopter can jump straight into either action from wherever they are in
-    the conversation instead of having to re-open the 毛孩日記 menu (typing
-    the command or switching back to the rich menu) each time."""
-    return [
+def growth_diary_quick_reply_items(*, include_back_to_default: bool = False) -> list[dict]:
+    """Build diary actions, optionally including the canonical flow-exit action."""
+    items = [
         {
             "type": "action",
             "action": {
@@ -54,6 +50,9 @@ def growth_diary_quick_reply_items() -> list[dict]:
             },
         },
     ]
+    if include_back_to_default:
+        items.append(back_to_default_menu_quick_reply_item())
+    return items
 
 
 def build_animal_picker(options: list[AdoptedAnimalOption]) -> dict:
@@ -246,7 +245,7 @@ def build_growth_diary_ai_reply_card(*, mood: str, reply_text: str) -> dict:
         "type": "flex",
         "altText": "AI 小幫手回覆了你的毛孩日記",
         "contents": bubble,
-        "quickReply": {"items": growth_diary_quick_reply_items()},
+        "quickReply": {"items": growth_diary_quick_reply_items(include_back_to_default=True)},
     }
 
 
@@ -268,7 +267,7 @@ def build_growth_diary_history_carousel(entries: list[GrowthDiaryHistoryEntry]) 
         "type": "flex",
         "altText": "毛孩日記回顧",
         "contents": contents,
-        "quickReply": {"items": growth_diary_quick_reply_items()},
+        "quickReply": {"items": growth_diary_quick_reply_items(include_back_to_default=True)},
     }
 
 

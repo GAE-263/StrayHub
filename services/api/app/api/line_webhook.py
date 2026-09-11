@@ -65,6 +65,7 @@ from services.api.app.application.line_menu_actions import (
     MENU_LIFF_ACTIONS,
     MENU_PLACEHOLDER_ACTIONS,
     STAFF_MENU_ACTIONS,
+    add_back_to_default_menu,
 )
 from services.api.app.application.line_message_presenter import (
     BUTTER,
@@ -269,7 +270,9 @@ class _GrowthDiaryEventBoundary:
                                 else ""
                             )
                         ),
-                        "quickReply": {"items": growth_diary_quick_reply_items()},
+                        "quickReply": {
+                            "items": growth_diary_quick_reply_items(include_back_to_default=True)
+                        },
                     }
                 ],
             )
@@ -361,6 +364,14 @@ def _is_growth_diary_command(event: dict) -> bool:
         and event.get("message", {}).get("type") == "text"
         and event.get("message", {}).get("text", "").strip() == GROWTH_DIARY_COMMAND
     )
+
+
+def _postback_flow(event: dict) -> str | None:
+    if event.get("type") != "postback":
+        return None
+    return parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
+        "flow", [None]
+    )[0]
 
 
 async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID, str]:
@@ -1720,7 +1731,13 @@ async def _reply_growth_diary_entry_choice(
     inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
     if not inquiries:
         await _reply(
-            line, event, [_text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")]
+            line,
+            event,
+            [
+                add_back_to_default_menu(
+                    _text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")
+                )
+            ],
         )
         return
     card = build_info_card(
@@ -1772,7 +1789,13 @@ async def _handle_growth_diary_postback(
         inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
         if not inquiries:
             await _reply(
-                line, event, [_text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")]
+                line,
+                event,
+                [
+                    add_back_to_default_menu(
+                        _text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")
+                    )
+                ],
             )
             return
         if len(inquiries) == 1:
@@ -1817,7 +1840,11 @@ async def _handle_growth_diary_postback(
         if inquiry is None:
             raise DomainError("inquiry_not_found", "找不到這筆領養紀錄", 404)
         inquiry.last_growth_diary_prompted_at = datetime.now(timezone.utc)
-        await _reply(line, event, [_text("好的，我們晚點再提醒你 🐾")])
+        await _reply(
+            line,
+            event,
+            [add_back_to_default_menu(_text("好的，我們晚點再提醒你 🐾"))],
+        )
         return
 
     raise DomainError("invalid_postback_action", "目前步驟不允許此操作", 409)
@@ -1840,7 +1867,11 @@ async def _reply_growth_diary_history(
         await _reply(
             line,
             event,
-            [_text("目前還沒有任何毛孩日記紀錄，快去跟毛孩互動然後回來分享第一篇吧 🐾")],
+            [
+                add_back_to_default_menu(
+                    _text("目前還沒有任何毛孩日記紀錄，快去跟毛孩互動然後回來分享第一篇吧 🐾")
+                )
+            ],
         )
         return
     inquiries_by_id = {inquiry.id: inquiry for inquiry in inquiries}
@@ -1929,7 +1960,11 @@ async def _handle_growth_diary_message(
 
     if message_type == "text" and message.get("text", "").strip() == "取消":
         await clear_pending_growth_diary_draft(session, adopter_user_id)
-        await _reply(line, event, [_text("已取消這次成長日記紀錄。")])
+        await _reply(
+            line,
+            event,
+            [add_back_to_default_menu(_text("已取消這次成長日記紀錄。"))],
+        )
         return
 
     photo_key: str | None = None
@@ -2151,7 +2186,9 @@ async def _run_growth_diary_ai_analysis(
         if result is None and photo_keys:
             reply_message = _text(f"謝謝分享{animal_name}的照片！看到牠現在的樣子真替你們開心 🥰")
         if reply_message is not None:
-            reply_message["quickReply"] = {"items": growth_diary_quick_reply_items()}
+            reply_message["quickReply"] = {
+                "items": growth_diary_quick_reply_items(include_back_to_default=True)
+            }
     except Exception:
         logger.exception("growth_diary_ai_analysis_failed")
         return
@@ -2389,14 +2426,22 @@ async def _handle_adoption_postback(
             line,
             event,
             [
-                build_info_card(
-                    "已收到你的領養意願 🎉", accent_index=1, body="收容所工作人員將盡快與你聯絡。"
+                add_back_to_default_menu(
+                    build_info_card(
+                        "已收到你的領養意願 🎉",
+                        accent_index=1,
+                        body="收容所工作人員將盡快與你聯絡。",
+                    )
                 )
             ],
         )
         return
     if result.state in {AdoptionDraftState.CANCELLED, AdoptionDraftState.EXPIRED}:
-        await _reply(line, event, [build_info_card("已取消這次領養媒合對話", accent_index=3)])
+        await _reply(
+            line,
+            event,
+            [add_back_to_default_menu(build_info_card("已取消這次領養媒合對話", accent_index=3))],
+        )
         return
     await set_authentication_user_scope(session, adopter_user_id)
     updated = await AdoptionDraftRepository(session, None).get_active_for_adopter(adopter_user_id)
@@ -4186,6 +4231,13 @@ async def webhook(
                             reply_message = _text(_liff_binding_message())
                     else:
                         reply_message = _text(error.message)
+                    flow = _postback_flow(event)
+                    if (
+                        flow == "adoption"
+                        and error.code
+                        in {"draft_access_denied", "draft_expired", "draft_not_found"}
+                    ) or (flow == "growth_diary" and error.code == "inquiry_not_found"):
+                        add_back_to_default_menu(reply_message)
                     # When the failure came from the LINE API itself the reply
                     # token is already spent or invalid; replying again would
                     # raise a second time, escape this handler and roll back the

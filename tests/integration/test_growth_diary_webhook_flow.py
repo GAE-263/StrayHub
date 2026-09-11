@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -54,6 +55,25 @@ def _post(client: TestClient, events: list[dict]):
         content=body,
         headers={"X-Line-Signature": signature, "Content-Type": "application/json"},
     )
+
+
+def _back_to_default_actions(messages: list[dict]) -> list[dict]:
+    found: list[dict] = []
+
+    def visit(value) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "postback" and value.get("data") == (
+                "action=back_to_default_menu"
+            ):
+                found.append(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(messages)
+    return found
 
 
 async def _seed(organization_id: UUID, animal_id: UUID) -> None:
@@ -120,6 +140,13 @@ async def _cleanup(organization_id: UUID, line_user_ids: tuple[str, ...]) -> Non
         await connection.execute("DELETE FROM organizations WHERE id = $1", organization_id)
     finally:
         await connection.close()
+
+
+@pytest.fixture(autouse=True)
+def isolated_line_transport(monkeypatch):
+    monkeypatch.setattr(line_webhook.LineMessagingApiAdapter, "reply", AsyncMock())
+    monkeypatch.setattr(line_webhook.LineMessagingApiAdapter, "push", AsyncMock())
+    monkeypatch.setattr(line_webhook.LineMessagingApiAdapter, "link_rich_menu", AsyncMock())
 
 
 def _submit_adoption_inquiry(
@@ -197,10 +224,12 @@ def test_growth_diary_entry_records_note_and_resets_reminder_clock(monkeypatch) 
         ).json()["event_results"][0]
         assert result["status"] == "processed", result
 
-        result = _post(client, [_text_event(line_user_id, "今天精神很好，吃了兩碗飯！")]).json()[
-            "event_results"
-        ][0]
+        terminal_event = _text_event(line_user_id, "今天精神很好，吃了兩碗飯！")
+        terminal_event["replyToken"] = "test-reply"
+        result = _post(client, [terminal_event]).json()["event_results"][0]
         assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
 
         async def verify() -> None:
             connection = await asyncpg.connect(_database_url())
@@ -343,8 +372,12 @@ def test_growth_diary_entry_can_be_cancelled_mid_flow(monkeypatch) -> None:
 
         _post(client, [_text_event(line_user_id, "毛孩日記")])
         _post(client, [_event(line_user_id, "action=start_growth_diary_entry&flow=growth_diary")])
-        result = _post(client, [_text_event(line_user_id, "取消")]).json()["event_results"][0]
+        terminal_event = _text_event(line_user_id, "取消")
+        terminal_event["replyToken"] = "test-reply"
+        result = _post(client, [terminal_event]).json()["event_results"][0]
         assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
 
         async def verify() -> None:
             connection = await asyncpg.connect(_database_url())
@@ -379,19 +412,25 @@ def test_growth_diary_history_review_lists_past_entries(monkeypatch) -> None:
         _submit_adoption_inquiry(client, line_user_id, organization_id, animal_id)
 
         # No entries yet — history should say so, not error.
-        result = _post(
-            client, [_event(line_user_id, "action=view_growth_diary_history&flow=growth_diary")]
-        ).json()["event_results"][0]
+        empty_history_event = _event(
+            line_user_id, "action=view_growth_diary_history&flow=growth_diary"
+        )
+        empty_history_event["replyToken"] = "test-reply"
+        result = _post(client, [empty_history_event]).json()["event_results"][0]
         assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
 
         _post(client, [_text_event(line_user_id, "毛孩日記")])
         _post(client, [_event(line_user_id, "action=start_growth_diary_entry&flow=growth_diary")])
         _post(client, [_text_event(line_user_id, "第一篇日記")])
 
-        result = _post(
-            client, [_event(line_user_id, "action=view_growth_diary_history&flow=growth_diary")]
-        ).json()["event_results"][0]
+        history_event = _event(line_user_id, "action=view_growth_diary_history&flow=growth_diary")
+        history_event["replyToken"] = "test-reply"
+        result = _post(client, [history_event]).json()["event_results"][0]
         assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
     finally:
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()
