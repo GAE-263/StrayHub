@@ -602,6 +602,7 @@ async def _handle_menu_action(
         in {
             "start_binding",
             "start_adoption_matching",
+            "start_growth_diary",
             "back_to_default_menu",
             "open_adoption_hub",
         }

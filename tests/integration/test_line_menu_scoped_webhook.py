@@ -182,6 +182,8 @@ def test_scoped_hub_return_and_adoption_entry_keep_domain_checks(monkeypatch):
         send("action=start_growth_diary&flow=growth_diary")
         # Test mode does not manufacture an adoption completion or diary permission.
         assert "完成一次領養意願" in str(line.replies[-1])
+        send("action=start_growth_diary&flow=growth_diary", other_uid)
+        assert "尚未開放" in str(line.replies[-1])
         send("action=start_adoption_matching&flow=adoption", other_uid)
         assert "尚未開放" in str(line.replies[-1])
         send("action=start_adoption_matching&flow=adoption")
