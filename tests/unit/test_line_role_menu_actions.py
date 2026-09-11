@@ -43,7 +43,7 @@ WEBHOOK_HANDLED_ACTIONS = {
 def _postback_event(data: str, *, line_user_id: str | None = None) -> dict:
     event = {"type": "postback", "replyToken": "reply-1", "postback": {"data": data}}
     if line_user_id is not None:
-        event["source"] = {"userId": line_user_id}
+        event["source"] = {"type": "user", "userId": line_user_id}
     return event
 
 
@@ -313,24 +313,102 @@ async def test_every_menu_action_gets_its_placeholder_reply(action: str) -> None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", sorted(MENU_LIFF_ACTIONS))
-async def test_staff_liff_action_waits_for_server_side_context(action: str) -> None:
+async def test_staff_liff_action_waits_for_server_side_context(
+    action: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            line_staff_menu_enabled=True, line_role_menu_features_active=lambda: True
+        ),
+    )
     line = MockLineAdapter()
 
-    handled = await line_webhook._handle_menu_action(line, _postback_event(f"action={action}"))
+    handled = await line_webhook._handle_menu_action(
+        line,
+        _postback_event(f"action={action}", line_user_id="U" + "1" * 32),
+    )
 
     assert handled is False
     assert line.replies == []
 
 
 @pytest.mark.asyncio
-async def test_staff_liff_action_requires_staff_role() -> None:
+async def test_staff_menu_action_is_closed_when_staff_line_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(line_staff_menu_enabled=False),
+    )
+    line = MockLineAdapter()
+
+    handled = await line_webhook._handle_menu_action(
+        line, _postback_event("action=staff_create_animal")
+    )
+
+    assert handled is True
+    assert line.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
+
+
+@pytest.mark.asyncio
+async def test_staff_menu_action_is_closed_when_rollout_denies_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(line_staff_menu_enabled=True),
+    )
+    monkeypatch.setattr(line_webhook, "_line_role_menu_features_active", lambda _uid: False)
+    line = MockLineAdapter()
+
+    handled = await line_webhook._handle_menu_action(
+        line,
+        _postback_event("action=staff_create_animal", line_user_id="U" + "1" * 32),
+    )
+
+    assert handled is True
+    assert line.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
+
+
+@pytest.mark.asyncio
+async def test_staff_menu_action_rejects_non_user_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            line_staff_menu_enabled=True, line_role_menu_features_active=lambda: True
+        ),
+    )
+    event = _postback_event("action=staff_create_animal", line_user_id="U" + "1" * 32)
+    event["source"]["type"] = "group"
+    line = MockLineAdapter()
+
+    assert await line_webhook._handle_menu_action(line, event)
+    assert line.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
+
+
+@pytest.mark.asyncio
+async def test_staff_liff_action_requires_staff_role(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            line_staff_menu_enabled=True, line_role_menu_features_active=lambda: True
+        ),
+    )
     line = MockLineAdapter()
 
     with pytest.raises(DomainError) as caught:
         await line_webhook._handle_staff_menu_action(
             None,
             line,
-            _postback_event("action=staff_create_animal"),
+            _postback_event("action=staff_create_animal", line_user_id="U" + "1" * 32),
             organization_id=uuid4(),
             role=LineRole.VOLUNTEER,
         )
@@ -346,14 +424,18 @@ async def test_staff_liff_action_uses_configured_liff_after_authorization(
     monkeypatch.setattr(
         line_webhook,
         "get_settings",
-        lambda: SimpleNamespace(line_staff_liff_id="staff-liff-id"),
+        lambda: SimpleNamespace(
+            line_staff_menu_enabled=True,
+            line_staff_liff_id="staff-liff-id",
+            line_role_menu_features_active=lambda: True,
+        ),
     )
     line = MockLineAdapter()
 
     handled = await line_webhook._handle_staff_menu_action(
         None,
         line,
-        _postback_event("action=staff_update_health"),
+        _postback_event("action=staff_update_health", line_user_id="U" + "1" * 32),
         organization_id=uuid4(),
         role=LineRole.SHELTER_ADMIN,
     )
@@ -378,12 +460,19 @@ async def test_staff_animal_list_is_scoped_after_authorization(
             return [SimpleNamespace(name="小黑", shelter_number="A-1")]
 
     monkeypatch.setattr(line_webhook, "AnimalRepository", Repository)
+    monkeypatch.setattr(
+        line_webhook,
+        "get_settings",
+        lambda: SimpleNamespace(
+            line_staff_menu_enabled=True, line_role_menu_features_active=lambda: True
+        ),
+    )
     line = MockLineAdapter()
 
     handled = await line_webhook._handle_staff_menu_action(
         "session",
         line,
-        _postback_event("action=staff_animal_list"),
+        _postback_event("action=staff_animal_list", line_user_id="U" + "1" * 32),
         organization_id=organization_id,
         role=LineRole.STAFF,
     )
@@ -598,6 +687,33 @@ async def test_missing_role_menu_id_is_a_noop() -> None:
     assert linked is None
 
 
+@pytest.mark.asyncio
+async def test_staff_router_predicate_does_not_block_non_staff_roles() -> None:
+    line = SimpleNamespace(link_rich_menu=AsyncMock())
+    router = RichMenuRoutingService(
+        line,
+        build_registry(default="default-id", volunteer="volunteer-id", staff="staff-id"),
+        allowed=lambda _uid: True,
+        staff_allowed=lambda _uid: False,
+    )
+
+    assert (
+        await router.link_for_user(
+            line_user_id="U" + "1" * 32,
+            role=LineRole.STAFF,
+            organization_selected=True,
+        )
+        is None
+    )
+    assert (
+        await router.link_for_user(line_user_id="U" + "1" * 32, role=LineRole.VOLUNTEER)
+        == "volunteer-id"
+    )
+    line.link_rich_menu.assert_awaited_once_with(
+        rich_menu_id="volunteer-id", user_id="U" + "1" * 32
+    )
+
+
 def test_all_missing_role_menu_ids_disable_router_without_crashing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -606,6 +722,7 @@ def test_all_missing_role_menu_ids_disable_router_without_crashing(
         line_rich_menu_volunteer_id="",
         line_rich_menu_adopter_id="",
         line_rich_menu_staff_id="",
+        line_staff_menu_enabled=False,
         line_role_menu_features_active=lambda: True,
     )
     monkeypatch.setattr(line_webhook, "get_settings", lambda: settings)

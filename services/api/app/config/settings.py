@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     # New role-menu/adoption behavior is always available to local/test runtimes, but is
     # fail-closed in every non-local runtime until the release contract is explicitly satisfied.
     line_role_menu_features_enabled: bool = False
+    # Shelter staff use the authenticated web console by default.  LINE staff
+    # menus are a separate, opt-in capability and must not be enabled merely
+    # because adopter/volunteer menus are enabled.
+    line_staff_menu_enabled: bool = False
     line_staff_liff_id: str = ""
     line_role_menu_smoke_evidence: str = ""
     line_role_menu_test_enabled: bool = False
@@ -200,6 +204,10 @@ class Settings(BaseSettings):
         return bool(line_user_id) and (
             self.line_role_menu_features_active() or scoped_user(self, line_user_id)
         )
+
+    def line_staff_menu_allowed(self, line_user_id: str | None) -> bool:
+        """Staff LINE entry is independently opt-in and keeps normal role checks."""
+        return self.line_staff_menu_enabled and self.line_role_menu_allowed(line_user_id)
 
     def validate_runtime_safety(self, *, process: str = "api") -> "Settings":
         """Reject unsafe defaults before a non-local process starts work."""
@@ -318,6 +326,15 @@ class Settings(BaseSettings):
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
 
+        if process in {"api", "worker"} and self.line_staff_menu_enabled:
+            if not (self.line_role_menu_features_enabled or self.line_role_menu_test_enabled):
+                problems.append(
+                    "LINE_STAFF_MENU_ENABLED requires LINE role-menu features or test mode"
+                )
+            placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
+            if process == "api":
+                placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
+
         if process in {"worker", "migration"}:
             if problems:
                 details = "\n".join(f"- {problem}" for problem in problems)
@@ -362,11 +379,6 @@ class Settings(BaseSettings):
             placeholder("LINE_RICH_MENU_DEFAULT_ID", self.line_rich_menu_default_id)
             placeholder("LINE_RICH_MENU_VOLUNTEER_ID", self.line_rich_menu_volunteer_id)
             placeholder("LINE_RICH_MENU_ADOPTION_HUB_ID", self.line_rich_menu_adoption_hub_id)
-            # Volunteer acceptance does not exercise the separate staff entry.
-            # Its handler remains fail-closed when no staff LIFF is configured.
-            if environment != "acceptance":
-                placeholder("LINE_RICH_MENU_STAFF_ID", self.line_rich_menu_staff_id)
-                placeholder("LINE_STAFF_LIFF_ID", self.line_staff_liff_id)
             if self.line_role_menu_features_enabled:
                 from services.api.app.config.line_menu_smoke import validate_report
 

@@ -490,8 +490,22 @@ def _line_role_menu_features_active(line_user_id: str | None = None) -> bool:
     return webhook_user_allowed(get_settings(), line_user_id)
 
 
+def _line_staff_menu_features_active(line_user_id: str | None = None) -> bool:
+    """Require both Staff opt-in and a signature-verified rollout identity."""
+    return (
+        bool(line_user_id)
+        and get_settings().line_staff_menu_enabled
+        and (_line_role_menu_features_active(line_user_id))
+    )
+
+
+def _line_staff_menu_event_allowed(event: dict) -> bool:
+    source = event.get("source", {})
+    return source.get("type") == "user" and _line_staff_menu_features_active(source.get("userId"))
+
+
 def _rich_menu_router() -> RichMenuRoutingService | None:
-    """四個 richMenuId 都沒設定時回 None，選單切換為 no-op。"""
+    """沒有可用 role menu ID 時回 None；staff ID 只在獨立開關啟用時載入。"""
     settings = get_settings()
     if not settings.line_role_menu_features_active() and not settings.line_role_menu_test_enabled:
         return None
@@ -499,12 +513,15 @@ def _rich_menu_router() -> RichMenuRoutingService | None:
         default=settings.line_rich_menu_default_id,
         volunteer=settings.line_rich_menu_volunteer_id,
         adopter=settings.line_rich_menu_adopter_id,
-        staff=settings.line_rich_menu_staff_id,
+        staff=(settings.line_rich_menu_staff_id if settings.line_staff_menu_enabled else ""),
     )
     if not registry.menu_ids:
         return None
     return RichMenuRoutingService(
-        LineMessagingApiAdapter(), registry, allowed=_line_role_menu_features_active
+        LineMessagingApiAdapter(),
+        registry,
+        allowed=_line_role_menu_features_active,
+        staff_allowed=_line_staff_menu_features_active,
     )
 
 
@@ -595,9 +612,12 @@ async def _handle_menu_action(
     action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
         "action", [""]
     )[0]
-    if not _line_role_menu_features_active(event.get("source", {}).get("userId")) and (
+    line_user_id = event.get("source", {}).get("userId")
+    if action in STAFF_MENU_ACTIONS and not _line_staff_menu_event_allowed(event):
+        await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
+        return True
+    if not _line_role_menu_features_active(line_user_id) and (
         action in MENU_PLACEHOLDER_ACTIONS
-        or action in STAFF_MENU_ACTIONS
         or action
         in {
             "start_binding",
@@ -687,6 +707,9 @@ async def _handle_staff_menu_action(
     )[0]
     if action not in STAFF_MENU_ACTIONS:
         return False
+    if not _line_staff_menu_event_allowed(event):
+        await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
+        return True
     if role not in {LineRole.STAFF, LineRole.SHELTER_ADMIN}:
         raise DomainError("staff_access_required", "需要目前收容所的工作人員權限", 403)
     if action == "staff_animal_list":

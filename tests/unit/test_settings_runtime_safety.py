@@ -103,8 +103,6 @@ def test_enabled_line_role_menu_features_require_complete_release_evidence() -> 
         "LINE_RICH_MENU_DEFAULT_ID",
         "LINE_RICH_MENU_VOLUNTEER_ID",
         "LINE_RICH_MENU_ADOPTION_HUB_ID",
-        "LINE_RICH_MENU_STAFF_ID",
-        "LINE_STAFF_LIFF_ID",
         "LINE_ROLE_MENU_SMOKE_EVIDENCE",
     ):
         assert field in message
@@ -126,6 +124,41 @@ def test_enabled_line_role_menu_features_accept_complete_safe_contract(tmp_path)
 
     simulated_report(settings, tmp_path)
     assert settings.validate_runtime_safety() is settings
+
+
+def test_staff_line_menu_requires_independent_enablement_and_configuration() -> None:
+    disabled = safe_non_local_settings(
+        line_role_menu_features_enabled=True,
+        line_rich_menu_staff_id="richmenu-staged-but-disabled",
+        line_staff_liff_id="1234567890-StagedButDisabled",
+    )
+    assert disabled.line_staff_menu_allowed("U" + "1" * 32) is False
+    enabled = safe_non_local_settings(
+        line_role_menu_features_enabled=True,
+        line_staff_menu_enabled=True,
+        line_rich_menu_staff_id="richmenu-staff-production",
+        line_staff_liff_id="1234567890-StaffLiff",
+    )
+    assert enabled.line_staff_menu_allowed("U" + "1" * 32) is True
+    assert enabled.line_staff_menu_allowed(None) is False
+
+    with pytest.raises(UnsafeRuntimeConfigurationError) as caught:
+        safe_non_local_settings(line_staff_menu_enabled=True).validate_runtime_safety()
+    message = str(caught.value)
+    assert "LINE role-menu features or test mode" in message
+    assert "LINE_RICH_MENU_STAFF_ID" in message
+    assert "LINE_STAFF_LIFF_ID" in message
+
+    with pytest.raises(UnsafeRuntimeConfigurationError, match="LINE_STAFF_LIFF_ID"):
+        safe_non_local_settings(
+            line_role_menu_features_enabled=True,
+            line_staff_menu_enabled=True,
+            web_public_base_url="https://strayhub.enadv.quest",
+            line_rich_menu_default_id="richmenu-default-production",
+            line_rich_menu_volunteer_id="richmenu-volunteer-production",
+            line_rich_menu_adoption_hub_id="richmenu-hub-production",
+            line_rich_menu_staff_id="richmenu-staff-production",
+        ).validate_runtime_safety()
 
 
 def test_enabled_worker_requires_only_post_commit_line_menu_inputs() -> None:

@@ -111,10 +111,12 @@ class RichMenuRoutingService:
         registry: RichMenuRegistry,
         *,
         allowed: Callable[[str | None], bool] | None = None,
+        staff_allowed: Callable[[str | None], bool] | None = None,
     ) -> None:
         self.line = line
         self.registry = registry
         self.allowed = allowed
+        self.staff_allowed = staff_allowed
 
     async def link_for_user(
         self,
@@ -132,6 +134,12 @@ class RichMenuRoutingService:
             bound=bound,
             organization_selected=organization_selected,
         )
+        if (
+            menu_key == MENU_STAFF
+            and self.staff_allowed is not None
+            and not self.staff_allowed(line_user_id)
+        ):
+            return None
         rich_menu_id = self.registry.get(menu_key)
         if rich_menu_id is None:
             # 尚未建立該角色選單（例如還沒 --apply）；框架階段視為 no-op。
