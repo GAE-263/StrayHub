@@ -316,6 +316,7 @@ async def test_every_menu_action_gets_its_placeholder_reply(action: str) -> None
 async def test_staff_liff_action_waits_for_server_side_context(
     action: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(line_webhook, "_line_staff_menu_event_allowed", lambda _event: True)
     monkeypatch.setattr(
         line_webhook,
         "get_settings",
@@ -395,6 +396,7 @@ async def test_staff_menu_action_rejects_non_user_context(
 
 @pytest.mark.asyncio
 async def test_staff_liff_action_requires_staff_role(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(line_webhook, "_line_staff_menu_event_allowed", lambda _event: True)
     monkeypatch.setattr(
         line_webhook,
         "get_settings",
@@ -421,6 +423,7 @@ async def test_staff_liff_action_requires_staff_role(monkeypatch: pytest.MonkeyP
 async def test_staff_liff_action_uses_configured_liff_after_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(line_webhook, "_line_staff_menu_event_allowed", lambda _event: True)
     monkeypatch.setattr(
         line_webhook,
         "get_settings",
@@ -450,6 +453,7 @@ async def test_staff_animal_list_is_scoped_after_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     organization_id = uuid4()
+    monkeypatch.setattr(line_webhook, "_line_staff_menu_event_allowed", lambda _event: True)
 
     class Repository:
         def __init__(self, session, scoped_organization_id):

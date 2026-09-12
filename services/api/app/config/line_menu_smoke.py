@@ -130,6 +130,11 @@ def webhook_user_allowed(settings: Settings, uid: str | None) -> bool:
     )
 
 
+def webhook_user_verified(uid: str | None) -> bool:
+    """Confirm the user belongs to the current signature-verified LINE request."""
+    return bool(uid and digest(uid.encode()) in _verified_webhook_users.get())
+
+
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 

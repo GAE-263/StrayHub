@@ -491,11 +491,11 @@ def _line_role_menu_features_active(line_user_id: str | None = None) -> bool:
 
 
 def _line_staff_menu_features_active(line_user_id: str | None = None) -> bool:
-    """Require both Staff opt-in and a signature-verified rollout identity."""
-    return (
-        bool(line_user_id)
-        and get_settings().line_staff_menu_enabled
-        and (_line_role_menu_features_active(line_user_id))
+    """Delegate Staff policy only for the current signature-verified user."""
+    from services.api.app.config.line_menu_smoke import webhook_user_verified
+
+    return bool(
+        webhook_user_verified(line_user_id) and get_settings().line_staff_menu_allowed(line_user_id)
     )
 
 

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from services.api.app.config.line_menu_smoke import verified_menu_request
@@ -73,6 +73,98 @@ async def test_scoped_staff_action_requires_opt_in_and_verified_webhook(monkeypa
     async with verified_menu_request({"destination": BOT, "events": [event]}, settings):
         assert await line_webhook._handle_menu_action(disabled, event)
     assert disabled.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
+
+
+@pytest.mark.asyncio
+async def test_webhook_staff_gate_delegates_verified_user_to_authoritative_helper(
+    monkeypatch,
+) -> None:
+    from services.api.app.api import line_webhook
+    from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
+
+    settings = scoped_settings(line_staff_menu_enabled=True)
+    staff_allowed = Mock(return_value=False)
+    role_gate = Mock(side_effect=AssertionError("Staff gate must not recompose role rollout"))
+    monkeypatch.setattr(Settings, "line_staff_menu_allowed", staff_allowed)
+    monkeypatch.setattr(line_webhook, "get_settings", lambda: settings)
+    monkeypatch.setattr(line_webhook, "_line_role_menu_features_active", role_gate)
+    business_handler = AsyncMock()
+    monkeypatch.setattr(line_webhook, "_handle_staff_menu_action", business_handler)
+    event = {
+        "type": "postback",
+        "replyToken": "synthetic",
+        "source": {"type": "user", "userId": UID},
+        "postback": {"data": "action=staff_create_animal"},
+    }
+
+    line = MockLineAdapter()
+    async with verified_menu_request({"destination": BOT, "events": [event]}, settings):
+        assert await line_webhook._handle_menu_action(line, event)
+
+    staff_allowed.assert_called_once_with(UID)
+    role_gate.assert_not_called()
+    business_handler.assert_not_awaited()
+    assert line.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
+
+
+@pytest.mark.asyncio
+async def test_webhook_staff_gate_allows_existing_staff_authorization_after_delegation(
+    monkeypatch,
+) -> None:
+    from services.api.app.api import line_webhook
+    from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
+
+    settings = scoped_settings(line_staff_menu_enabled=True)
+    staff_allowed = Mock(return_value=True)
+    monkeypatch.setattr(Settings, "line_staff_menu_allowed", staff_allowed)
+    monkeypatch.setattr(line_webhook, "get_settings", lambda: settings)
+    event = {
+        "type": "postback",
+        "replyToken": "synthetic",
+        "source": {"type": "user", "userId": UID},
+        "postback": {"data": "action=staff_create_animal"},
+    }
+
+    line = MockLineAdapter()
+    async with verified_menu_request({"destination": BOT, "events": [event]}, settings):
+        assert not await line_webhook._handle_menu_action(line, event)
+
+    staff_allowed.assert_called_once_with(UID)
+    assert line.replies == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source",
+    [
+        {"type": "user", "userId": UID},
+        {"type": "group", "userId": UID, "groupId": "synthetic-group"},
+        {"type": "room", "userId": UID, "roomId": "synthetic-room"},
+    ],
+)
+async def test_webhook_staff_gate_does_not_delegate_unverified_or_non_user_source(
+    monkeypatch,
+    source,
+) -> None:
+    from services.api.app.api import line_webhook
+    from services.api.app.infrastructure.line.mock_adapter import MockLineAdapter
+
+    settings = scoped_settings(line_staff_menu_enabled=True)
+    staff_allowed = Mock(return_value=True)
+    monkeypatch.setattr(Settings, "line_staff_menu_allowed", staff_allowed)
+    monkeypatch.setattr(line_webhook, "get_settings", lambda: settings)
+    event = {
+        "type": "postback",
+        "replyToken": "synthetic",
+        "source": source,
+        "postback": {"data": "action=staff_create_animal"},
+    }
+
+    line = MockLineAdapter()
+    assert await line_webhook._handle_menu_action(line, event)
+
+    staff_allowed.assert_not_called()
+    assert line.replies[0][1][0]["text"] == "此 LINE 功能目前尚未開放。"
 
 
 @pytest.mark.asyncio
