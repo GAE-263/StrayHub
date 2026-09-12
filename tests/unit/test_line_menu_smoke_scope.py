@@ -264,7 +264,21 @@ def test_complete_simulated_contract_is_not_a_real_smoke_claim(tmp_path):
     settings, _ = report_settings(tmp_path)
     validate_report(settings)
     assert settings.validate_runtime_safety() is settings
-    settings.line_staff_liff_id = ""
+
+
+def test_staff_liff_requirement_isolated_from_valid_smoke_contract(tmp_path):
+    settings = safe_non_local_settings(
+        line_role_menu_features_enabled=True,
+        line_staff_menu_enabled=True,
+        web_public_base_url="https://strayhub.enadv.quest",
+        line_rich_menu_default_id="richmenu-default",
+        line_rich_menu_volunteer_id="richmenu-volunteer",
+        line_rich_menu_adoption_hub_id="richmenu-hub",
+        line_rich_menu_staff_id="richmenu-staff",
+        line_staff_liff_id="",
+    )
+    simulated_report(settings, tmp_path)
+    validate_report(settings)
     with pytest.raises(UnsafeRuntimeConfigurationError, match="LINE_STAFF_LIFF_ID"):
         settings.validate_runtime_safety()
 
