@@ -81,18 +81,24 @@ class ResourcePublisher:
             raise PublicationError(f"LINE {method} HTTP {response.status_code}; STOP")
         return response
 
-    async def publish(self, plan: dict, manifest: Path, expected_bot: str) -> dict[str, str]:
+    async def publish(
+        self, plan: dict, manifest: Path, expected_bot: str, git_sha: str
+    ) -> dict[str, str]:
         if not re.fullmatch(r"@[A-Za-z0-9._-]+", expected_bot):
             raise PublicationError("Explicit expected Bot basicId is required")
+        if not re.fullmatch(r"[0-9a-f]{40}", git_sha):
+            raise PublicationError("Explicit full lowercase publication Git SHA is required")
         # Persistent lock inode: never unlink, otherwise another process could bypass it.
         with manifest.with_suffix(manifest.suffix + ".lock").open("a") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise PublicationError("Manifest is locked; STOP") from None
-            return await self._publish(plan, manifest, expected_bot)
+            return await self._publish(plan, manifest, expected_bot, git_sha)
 
-    async def _publish(self, plan: dict, manifest: Path, expected_bot: str) -> dict[str, str]:
+    async def _publish(
+        self, plan: dict, manifest: Path, expected_bot: str, git_sha: str
+    ) -> dict[str, str]:
         bot = (await self.request("GET", "info")).json()
         if bot.get("basicId") != expected_bot or not bot.get("userId"):
             raise PublicationError("Bot identity mismatch; no writes permitted")
@@ -100,10 +106,14 @@ class ResourcePublisher:
         state: dict = (
             json.loads(manifest.read_text())
             if manifest.exists()
-            else {"schema": 1, "bot": identity, "resources": {}}
+            else {"schema": 1, "git_sha": git_sha, "bot": identity, "resources": {}}
         )
-        if state.get("schema") != 1 or state.get("bot") != identity:
-            raise PublicationError("Manifest Bot/schema mismatch; STOP")
+        if (
+            state.get("schema") != 1
+            or state.get("git_sha") != git_sha
+            or state.get("bot") != identity
+        ):
+            raise PublicationError("Manifest Bot/schema/Git identity mismatch; STOP")
         save_manifest(manifest, state)
         result = {}
         for role, item in plan.items():

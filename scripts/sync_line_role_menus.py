@@ -141,11 +141,12 @@ async def apply(
     *,
     manifest: Path,
     expected_bot: str,
+    git_sha: str,
     client: httpx.AsyncClient,
 ) -> dict[str, str]:
     """Resource publication only. No environment writes or menu activation."""
     return await ResourcePublisher(client).publish(
-        publication_plan(by_role, image_dir), manifest, expected_bot
+        publication_plan(by_role, image_dir), manifest, expected_bot, git_sha
     )
 
 
@@ -190,6 +191,7 @@ def main() -> None:
     parser.add_argument("--image-dir", type=Path, default=Path("infra/local/rich-menu-images"))
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--expected-bot", help="Explicit expected Bot basicId, e.g. @approved-bot")
+    parser.add_argument("--git-sha", help="Exact source commit for definitions and images")
     parser.add_argument(
         "--roles",
         nargs="+",
@@ -215,14 +217,16 @@ def main() -> None:
         return
 
     token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-    if not token or not args.manifest or not args.expected_bot:
-        parser.error("--apply requires token env, --manifest and --expected-bot")
+    if not token or not args.manifest or not args.expected_bot or not args.git_sha:
+        parser.error("--apply requires token env, --manifest, --expected-bot and --git-sha")
 
     async def publish():
         async with httpx.AsyncClient(
             timeout=20, trust_env=False, headers={"Authorization": f"Bearer {token}"}
         ) as client:
-            return await ResourcePublisher(client).publish(plan, args.manifest, args.expected_bot)
+            return await ResourcePublisher(client).publish(
+                plan, args.manifest, args.expected_bot, args.git_sha
+            )
 
     try:
         mapping = asyncio.run(publish())

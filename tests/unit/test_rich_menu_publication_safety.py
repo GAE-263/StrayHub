@@ -105,7 +105,7 @@ async def publish(fake, plan, path):
         transport=httpx.MockTransport(fake.handle),
         headers={"Authorization": "Bearer synthetic-secret"},
     ) as client:
-        return await ResourcePublisher(client).publish(plan, path, "@synthetic")
+        return await ResourcePublisher(client).publish(plan, path, "@synthetic", "a" * 40)
 
 
 @pytest.mark.asyncio
@@ -123,8 +123,19 @@ async def test_create_verify_resume_and_no_activation(plan, tmp_path):
     assert "richmenu-old" in fake.resources
     record = next(iter(json.loads(manifest.read_text())["resources"].values()))
     assert record["stage"] == "ready" and record["verified"]
+    assert json.loads(manifest.read_text())["git_sha"] == "a" * 40
     assert "synthetic-secret" not in manifest.read_text()
     assert "synthetic-bot" not in manifest.read_text()
+
+
+@pytest.mark.asyncio
+async def test_publication_requires_immutable_source_identity(plan, tmp_path):
+    fake = FakeLine()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(fake.handle)) as client:
+        publisher = ResourcePublisher(client)
+        with pytest.raises(PublicationError, match="Git SHA"):
+            await publisher.publish(plan, tmp_path / "manifest.json", "@synthetic", "short")
+    assert fake.calls == []
 
 
 @pytest.mark.asyncio
@@ -238,7 +249,7 @@ async def test_partial_batch_keeps_completed_role(plan, tmp_path):
     path = tmp_path / "manifest.json"
     async with httpx.AsyncClient(transport=httpx.MockTransport(fail_second)) as client:
         with pytest.raises(PublicationError):
-            await ResourcePublisher(client).publish(batch, path, "@synthetic")
+            await ResourcePublisher(client).publish(batch, path, "@synthetic", "a" * 40)
     records = json.loads(path.read_text())["resources"]
     assert records[plan["default"]["fingerprint"]]["stage"] == "ready"
     fake.fail_upload = False
@@ -320,6 +331,6 @@ async def test_upload_timeout_after_success_is_not_reuploaded(plan, tmp_path):
     path = tmp_path / "manifest.json"
     async with httpx.AsyncClient(transport=httpx.MockTransport(timeout_after_upload)) as client:
         with pytest.raises(PublicationError, match="unknown"):
-            await ResourcePublisher(client).publish(plan, path, "@synthetic")
+            await ResourcePublisher(client).publish(plan, path, "@synthetic", "a" * 40)
     await publish(fake, plan, path)
     assert sum(method == "POST" and path.endswith("/content") for method, path in fake.calls) == 1
