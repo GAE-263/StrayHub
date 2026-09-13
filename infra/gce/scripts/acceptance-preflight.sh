@@ -37,6 +37,7 @@ command -v openssl >/dev/null || fail "openssl is required"
   fail "PostgreSQL runtime-role initializer is not executable"
 
 mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+owner_of() { stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"; }
 env_value() {
   local file="$1" key="$2"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); gsub(/^\047|\047$/, ""); print; found = 1} END {exit !found}' "$file"
@@ -89,9 +90,12 @@ liff_id="$(env_value "$CONFIG_ENV" LIFF_ID)"
 
 [[ "$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_FEATURES_ENABLED)" == "true" ]] ||
   fail "LINE role-menu features must be enabled for acceptance"
+[[ "$(env_value "$CONFIG_ENV" LINE_STAFF_MENU_ENABLED)" == "false" ]] ||
+  fail "LINE staff menu must remain disabled for adopter/volunteer acceptance"
 required_line_menu_config=(
   LINE_RICH_MENU_DEFAULT_ID LINE_RICH_MENU_VOLUNTEER_ID LINE_RICH_MENU_ADOPTION_HUB_ID
-  LINE_ROLE_MENU_SMOKE_EVIDENCE
+  LINE_ROLE_MENU_SMOKE_EVIDENCE LINE_ROLE_MENU_REPORT_PATH LINE_ROLE_MENU_REPORT_SHA256
+  LINE_ROLE_MENU_RESOURCES_PATH LINE_ROLE_MENU_RELEASE_MANIFEST
 )
 for key in "${required_line_menu_config[@]}"; do
   [[ -n "$(env_value "$CONFIG_ENV" "$key" 2>/dev/null || true)" ]] ||
@@ -100,6 +104,33 @@ done
 role_menu_evidence="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_SMOKE_EVIDENCE)"
 [[ "$role_menu_evidence" =~ ^verified-[0-9]{8}-[0-9a-f]{40}$ ]] ||
   fail "LINE_ROLE_MENU_SMOKE_EVIDENCE must identify the date and exact tested commit"
+
+report_path="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_REPORT_PATH)"
+resources_path="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_RESOURCES_PATH)"
+release_path="$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_RELEASE_MANIFEST)"
+for protected_path in "$report_path" "$resources_path" "$release_path"; do
+  [[ "$protected_path" != "/dev/null" && -s "$protected_path" ]] ||
+    fail "protected LINE role-menu evidence file is unavailable"
+  case "$(mode_of "$protected_path")" in
+    400|440|444|600|640|644) ;;
+    *) fail "protected LINE role-menu evidence file mode is unsafe" ;;
+  esac
+  owner_id="$(owner_of "$protected_path")"
+  [[ "$owner_id" == "0" || "$owner_id" == "$EUID" ]] ||
+    fail "protected LINE role-menu evidence file owner is unsafe"
+done
+report_sha256="$(openssl dgst -sha256 "$report_path" | awk '{print $NF}')"
+[[ "$report_sha256" == "$(env_value "$CONFIG_ENV" LINE_ROLE_MENU_REPORT_SHA256)" ]] ||
+  fail "LINE role-menu report checksum mismatch"
+python3 - "$report_path" <<'PY' || fail "LINE role-menu report must be real production-like evidence"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    report = json.load(stream)
+if report.get("kind") != "real-line" or report.get("environment") != "production-like":
+    raise SystemExit(1)
+PY
 
 public_url="$(env_value "$CONFIG_ENV" WEB_PUBLIC_BASE_URL)"
 [[ "$public_url" =~ ^https://[^/[:space:]]+(/.*)?$ ]] || fail "WEB_PUBLIC_BASE_URL must be dedicated HTTPS"

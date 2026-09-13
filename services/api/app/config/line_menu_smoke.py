@@ -219,6 +219,15 @@ class Report(Contract):
     cases: dict[str, Case]
 
 
+def expected_report_environment(settings: Settings) -> Literal["production", "production-like"]:
+    environment = settings.app_env.strip().lower()
+    if environment == "production":
+        return "production"
+    if environment == "acceptance":
+        return "production-like"
+    raise ValueError("unsupported LINE role-menu evidence environment")
+
+
 def config_digest(settings: Settings) -> str:
     # Test enablement/list/expiry and the global role-menu flag are intentionally excluded:
     # moving from scoped to global is the sole permitted transition without retest. The
@@ -307,10 +316,8 @@ def validate_report(settings: Settings) -> None:
         resources, _ = protected_json(settings.line_role_menu_resources_file)
         requirements = evidence_requirements(settings)
         expected = required_resources(settings, resources)
-        if report.kind != "real-line" or report.environment not in {
-            "production",
-            "production-like",
-        }:
+        expected_environment = expected_report_environment(settings)
+        if report.kind != "real-line" or report.environment != expected_environment:
             raise ValueError("report must contain real LINE evidence")
         age = datetime.now(timezone.utc) - utc(report.observed_at)
         if not timedelta(0) <= age <= MAX_AGE:

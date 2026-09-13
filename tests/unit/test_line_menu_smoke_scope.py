@@ -171,6 +171,28 @@ async def test_legacy_worker_router_applies_identical_recipient_scope(monkeypatc
     line.push.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_legacy_worker_does_not_route_staged_staff_menu_while_disabled(monkeypatch):
+    from services.worker.app.handlers import volunteer_access_handler as worker
+
+    settings = scoped_settings(
+        line_rich_menu_default_id="richmenu-default",
+        line_rich_menu_staff_id="richmenu-staged-staff",
+        line_staff_menu_enabled=False,
+    )
+    line = AsyncMock()
+    monkeypatch.setattr(worker, "get_worker_settings", lambda: settings)
+    monkeypatch.setattr(worker, "LineMessagingApiAdapter", lambda **kwargs: line)
+
+    router = worker._rich_menu_router()
+
+    assert (
+        await router.link_for_user(line_user_id=UID, role="STAFF", organization_selected=True)
+        is None
+    )
+    line.link_rich_menu.assert_not_called()
+
+
 def report_settings(tmp_path, *, staff_enabled: bool = False):
     settings = safe_non_local_settings(
         line_role_menu_features_enabled=True,

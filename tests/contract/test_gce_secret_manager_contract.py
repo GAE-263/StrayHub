@@ -240,6 +240,18 @@ def test_compose_uses_generic_selected_jwt_files_and_scalar_secret_inputs() -> N
     assert api["environment"]["LINE_ROLE_MENU_SMOKE_EVIDENCE"] == (
         "${LINE_ROLE_MENU_SMOKE_EVIDENCE:-}"
     )
+    for key in (
+        "LINE_ROLE_MENU_TEST_ENABLED",
+        "LINE_ROLE_MENU_TEST_CHANNEL_ID",
+        "LINE_ROLE_MENU_BOT_SHA256",
+        "LINE_ROLE_MENU_TEST_USER_SHA256",
+        "LINE_ROLE_MENU_TEST_EXPIRES_AT",
+        "LINE_ROLE_MENU_REPORT_PATH",
+        "LINE_ROLE_MENU_REPORT_SHA256",
+        "LINE_ROLE_MENU_RESOURCES_PATH",
+        "LINE_ROLE_MENU_RELEASE_MANIFEST",
+    ):
+        assert f"{key}=" in TEMPLATE_PATH.read_text(encoding="utf-8")
     assert compose["services"]["worker"]["environment"]["LINE_CHANNEL_ACCESS_TOKEN"] == (
         "${LINE_CHANNEL_ACCESS_TOKEN:-}"
     )
@@ -263,6 +275,9 @@ def test_production_preflight_enforces_mode_separation_and_consumption_checks() 
     assert 'validate_runtime_safety(process="worker")' in preflight
     assert 'validate_runtime_safety(process="migration")' in preflight
     assert "LINE_ROLE_MENU_FEATURES_ENABLED must be exactly true or false" in preflight
+    assert "LINE_STAFF_MENU_ENABLED must be exactly true or false" in preflight
+    assert "LINE_STAFF_MENU_ENABLED requires LINE role-menu features or test mode" in preflight
+    assert "LINE_RICH_MENU_STAFF_ID LINE_STAFF_LIFF_ID" in preflight
     assert "global menu enablement requires the actual release manifest" in preflight
     assert "LOGIN_ABUSE_HMAC_SECRET" in preflight
     assert preflight.index('line_features_enabled" == "true"') < preflight.index(

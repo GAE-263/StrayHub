@@ -18,12 +18,14 @@ def test_production_scope_shared_only_with_legacy_worker():
         "services"
     ]
     keys = (
+        "LINE_STAFF_MENU_ENABLED",
         "LINE_ROLE_MENU_TEST_ENABLED",
         "LINE_ROLE_MENU_TEST_CHANNEL_ID",
         "LINE_ROLE_MENU_BOT_SHA256",
         "LINE_ROLE_MENU_TEST_USER_SHA256",
         "LINE_ROLE_MENU_TEST_EXPIRES_AT",
         "LINE_CHANNEL_ID",
+        "LINE_RICH_MENU_STAFF_ID",
     )
     for key in keys:
         assert services["api"]["environment"][key] == services["worker"]["environment"][key]
@@ -34,6 +36,20 @@ def test_production_scope_shared_only_with_legacy_worker():
     assert len(mounts) == 3
     assert all(item["read_only"] and not item["bind"]["create_host_path"] for item in mounts)
     assert all("/dev/null" in item["source"] for item in mounts)
+
+
+def test_menu_ids_are_wired_only_to_the_services_that_route_them():
+    services = yaml.safe_load((ROOT / "infra/gce/docker-compose.production.yml").read_text())[
+        "services"
+    ]
+
+    assert "LINE_RICH_MENU_ADOPTION_HUB_ID" in services["api"]["environment"]
+    assert "LINE_RICH_MENU_ADOPTION_HUB_ID" not in services["worker"]["environment"]
+    for name in ("celery-worker", "celery-beat", "web"):
+        assert not any(
+            key.startswith("LINE_RICH_MENU_") or key.startswith("LINE_ROLE_MENU_")
+            for key in services[name]["environment"]
+        )
 
 
 def test_preflight_verifies_actual_candidate_before_runtime_stop():

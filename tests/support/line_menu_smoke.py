@@ -44,7 +44,15 @@ def _report_fixture(settings, tmp_path, *, kind: str):
     report = {
         "schema_version": 1,
         "kind": kind,
-        "environment": "production" if kind == "real-line" else "isolated-test",
+        "environment": (
+            "isolated-test"
+            if kind != "real-line"
+            else (
+                "production-like"
+                if settings.app_env.strip().lower() == "acceptance"
+                else "production"
+            )
+        ),
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "candidate": manifest,
         "channel_id": settings.line_channel_id,

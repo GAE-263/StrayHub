@@ -13,6 +13,7 @@ from services.api.app.config.line_menu_smoke import (
     config_digest,
     digest,
     evidence_requirements,
+    expected_report_environment,
     protected_bytes,
     protected_json,
     release_identity,
@@ -39,6 +40,7 @@ def main() -> None:
         # Only menu/public identity settings. Do not source shell or load .env/secrets.
         allowed = {key for key in Settings.model_fields if key.startswith("line_rich_menu_")}
         allowed |= {
+            "app_env",
             "line_channel_id",
             "line_role_menu_bot_sha256",
             "web_public_base_url",
@@ -75,7 +77,11 @@ def main() -> None:
         report = {
             "schema_version": 1,
             "kind": args.kind,
-            "environment": "isolated-test" if args.kind == "automated-fixture" else "production",
+            "environment": (
+                "isolated-test"
+                if args.kind == "automated-fixture"
+                else expected_report_environment(settings)
+            ),
             "observed_at": datetime.now(timezone.utc).isoformat(),
             "candidate": release_identity(manifest).model_dump(),
             "channel_id": settings.line_channel_id,

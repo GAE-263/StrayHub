@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import os
 import shlex
 import shutil
@@ -78,8 +80,6 @@ def _rendered_model() -> dict:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
-    import json
-
     return json.loads(completed.stdout)
 
 
@@ -88,6 +88,7 @@ def test_rendered_acceptance_model_passes_isolation_policy() -> None:
     assert model["services"]["web"]["environment"]["API_BASE_URL"] == "http://api:8080"
     api_environment = model["services"]["api"]["environment"]
     assert api_environment["LINE_ROLE_MENU_FEATURES_ENABLED"] == "false"
+    assert api_environment["LINE_STAFF_MENU_ENABLED"] == "false"
     assert "LINE_RICH_MENU_DEFAULT_ID" in api_environment
     assert "LINE_RICH_MENU_VOLUNTEER_ID" in api_environment
     assert "LINE_RICH_MENU_ADOPTION_HUB_ID" in api_environment
@@ -291,6 +292,31 @@ def test_acceptance_secret_materialization_and_static_preflight() -> None:
         )
         images.chmod(0o600)
 
+        report = temp / "line-menu-report.json"
+        report.write_text(
+            json.dumps({"kind": "real-line", "environment": "production-like"}),
+            encoding="utf-8",
+        )
+        resources = temp / "line-menu-resources.json"
+        resources.write_text("{}\n", encoding="utf-8")
+        release = temp / "line-menu-release.json"
+        release.write_text("{}\n", encoding="utf-8")
+        for protected_file in (report, resources, release):
+            protected_file.chmod(0o600)
+        config_values.update(
+            {
+                "LINE_ROLE_MENU_REPORT_PATH": str(report),
+                "LINE_ROLE_MENU_REPORT_SHA256": hashlib.sha256(report.read_bytes()).hexdigest(),
+                "LINE_ROLE_MENU_RESOURCES_PATH": str(resources),
+                "LINE_ROLE_MENU_RELEASE_MANIFEST": str(release),
+            }
+        )
+        config.write_text(
+            "".join(f"{key}={value}\n" for key, value in config_values.items()),
+            encoding="utf-8",
+        )
+        config.chmod(0o600)
+
         real_docker = shutil.which("docker")
         assert real_docker
         fake_bin = temp / "bin"
@@ -334,5 +360,10 @@ def test_acceptance_preflight_rejects_disabled_role_menu_verification() -> None:
         "LINE_RICH_MENU_VOLUNTEER_ID",
         "LINE_RICH_MENU_ADOPTION_HUB_ID",
         "LINE_ROLE_MENU_SMOKE_EVIDENCE",
+        "LINE_ROLE_MENU_REPORT_PATH",
+        "LINE_ROLE_MENU_REPORT_SHA256",
+        "LINE_ROLE_MENU_RESOURCES_PATH",
+        "LINE_ROLE_MENU_RELEASE_MANIFEST",
     ):
         assert key in source
+    assert 'report.get("environment") != "production-like"' in source
