@@ -181,6 +181,40 @@ async def test_upload_failure_resumes_without_recreate(plan, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_fresh_runner_stops_at_incomplete_matching_resource(plan, tmp_path):
+    """A lost runner-local manifest must never cause a duplicate create."""
+    fake = FakeLine()
+    fake.fail_upload = True
+    with pytest.raises(PublicationError):
+        await publish(fake, plan, tmp_path / "first-run.json")
+
+    fake.fail_upload = False
+    writes_before_fresh_run = fake.calls.count(("POST", "richmenu"))
+    with pytest.raises(PublicationError, match="unresolved existing candidate"):
+        await publish(fake, plan, tmp_path / "fresh-run.json")
+
+    assert writes_before_fresh_run == 1
+    assert fake.calls.count(("POST", "richmenu")) == 1
+
+
+@pytest.mark.asyncio
+async def test_fresh_batch_detects_later_incomplete_role_before_any_write(plan, tmp_path):
+    import copy
+
+    fake = FakeLine()
+    second = copy.deepcopy(plan["default"])
+    second["fingerprint"] = "b" * 64
+    second["definition_sha256"] = "c" * 64
+    second["definition"]["name"] = "strayhub-volunteer-incomplete"
+    fake.resources["richmenu-incomplete"] = second["definition"]
+
+    with pytest.raises(PublicationError, match="unresolved existing candidate"):
+        await publish(fake, {"default": plan["default"], "volunteer": second}, tmp_path / "p.json")
+
+    assert all(method == "GET" for method, _ in fake.calls)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("persisted", [True, False])
 async def test_unknown_create_reconciles_without_retry(plan, tmp_path, persisted):
     fake = FakeLine()

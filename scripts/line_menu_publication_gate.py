@@ -27,7 +27,7 @@ from scripts.line_menu_manifest import (
     canonical_json,
     finalize_publication_manifest,
 )
-from scripts.line_menu_publication import PublicationError, ResourcePublisher
+from scripts.line_menu_publication import PublicationError, ResourcePublisher, save_manifest
 from scripts.sync_line_role_menus import (
     discover_definitions,
     publication_plan,
@@ -135,6 +135,8 @@ def _base_receipt(*, git_sha: str, run_id: str, run_attempt: str) -> dict[str, o
         "schema_version": 1,
         "operation": "menu-publication",
         "workflow": {"run_id": run_id, "run_attempt": run_attempt},
+        "repository": "GAE-263/StrayHub",
+        "workflow_identity": ".github/workflows/line-rich-menu-publish.yml",
         "git_sha": git_sha,
         "timestamp": datetime.now(UTC).isoformat(),
         "global_default_changed": False,
@@ -184,6 +186,8 @@ def failure_receipt(
     run_attempt: str,
     verified_manifest_created: bool = False,
     manifest_uploaded: bool = False,
+    error_code: str = "resource_publication",
+    candidate_ids: tuple[str, ...] = (),
 ) -> dict[str, object]:
     receipt = _base_receipt(git_sha=git_sha, run_id=run_id, run_attempt=run_attempt)
     receipt.update(
@@ -193,6 +197,11 @@ def failure_receipt(
             "orphan_candidate_ids": _orphan_candidates(progress_path),
             "verified_manifest_created": verified_manifest_created,
             "manifest_uploaded": manifest_uploaded,
+            "progress_sha256": (
+                sha256(progress_path.read_bytes()).hexdigest() if progress_path.exists() else None
+            ),
+            "error_code": error_code,
+            "candidate_ids": sorted(set(candidate_ids)),
         }
     )
     return receipt
@@ -210,13 +219,23 @@ async def run_gate(
     store: GcloudImmutableStore,
     run_id: str,
     run_attempt: str,
+    recovery_identity: dict | None = None,
 ) -> dict[str, object]:
     progress_path.parent.mkdir(parents=True, exist_ok=True)
     verified_manifest_created = False
     manifest_uploaded = False
     gate = "resource_publication"
     try:
-        await publisher.publish(plan, progress_path, expected_bot, git_sha)
+        if recovery_identity is None:
+            await publisher.publish(plan, progress_path, expected_bot, git_sha)
+        else:
+            await publisher.publish(
+                plan,
+                progress_path,
+                expected_bot,
+                git_sha,
+                recovery_identity=recovery_identity,
+            )
         gate = "manifest_validation"
         verified = finalize_publication_manifest(
             progress_path,
@@ -225,9 +244,17 @@ async def run_gate(
             expected_bot_basic_id=expected_bot,
         )
         verified_manifest_created = True
+        if recovery_identity is not None:
+            progress = json.loads(progress_path.read_bytes())
+            progress["recovery"]["manifest_produced"] = True
+            save_manifest(progress_path, progress)
         gate = "immutable_manifest_storage"
         stored_manifest = store.put("line-rich-menu-manifests", final_path.read_bytes())
         manifest_uploaded = True
+        if recovery_identity is not None:
+            progress = json.loads(progress_path.read_bytes())
+            progress["recovery"]["manifest_uploaded"] = True
+            save_manifest(progress_path, progress)
         receipt = success_receipt(
             verified=verified,
             outcomes=publisher.outcomes,
@@ -247,7 +274,7 @@ async def run_gate(
         OSError,
         ValueError,
         KeyError,
-    ):
+    ) as exc:
         receipt = failure_receipt(
             git_sha=git_sha,
             failure_gate=gate,
@@ -256,6 +283,8 @@ async def run_gate(
             run_attempt=run_attempt,
             verified_manifest_created=verified_manifest_created,
             manifest_uploaded=manifest_uploaded,
+            error_code=getattr(exc, "code", gate),
+            candidate_ids=getattr(exc, "candidate_ids", ()),
         )
         _atomic_write(receipt_path, canonical_json(receipt))
         raise PublicationError(
@@ -285,6 +314,30 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def execute() -> dict[str, object]:
+        progress_path = args.output_dir / "progress.json"
+        if progress_path.exists():
+            try:
+                recovery_identity = json.loads(progress_path.read_bytes())["recovery"]
+            except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise PublicationError("Recovered progress identity is invalid; STOP") from exc
+            if (
+                not isinstance(recovery_identity, dict)
+                or recovery_identity.get("run_id") != args.run_id
+                or recovery_identity.get("run_attempt") != args.run_attempt
+            ):
+                raise PublicationError("Recovered progress run identity mismatch; STOP")
+        else:
+            recovery_identity = {
+                "schema_version": 1,
+                "repository": "GAE-263/StrayHub",
+                "workflow": ".github/workflows/line-rich-menu-publish.yml",
+                "run_id": args.run_id,
+                "run_attempt": args.run_attempt,
+                "operation": "publish",
+                "created_at": datetime.now(UTC).isoformat(),
+                "manifest_produced": False,
+                "manifest_uploaded": False,
+            }
         async with httpx.AsyncClient(
             timeout=20,
             trust_env=False,
@@ -293,7 +346,7 @@ def main() -> None:
             return await run_gate(
                 publisher=ResourcePublisher(client),
                 plan=plan,
-                progress_path=args.output_dir / "progress.json",
+                progress_path=progress_path,
                 final_path=args.output_dir / "verified-manifest.json",
                 receipt_path=args.output_dir / "receipt.json",
                 expected_bot=args.expected_bot,
@@ -301,6 +354,7 @@ def main() -> None:
                 store=GcloudImmutableStore(args.bucket),
                 run_id=args.run_id,
                 run_attempt=args.run_attempt,
+                recovery_identity=recovery_identity,
             )
 
     try:

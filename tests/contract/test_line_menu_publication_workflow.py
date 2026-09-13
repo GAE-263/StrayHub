@@ -43,7 +43,11 @@ def test_publish_is_protected_and_has_minimal_permissions() -> None:
     publish_text = yaml.safe_dump(publish)
 
     assert publish["environment"] == "production-line-publication"
-    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
+    assert publish["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "id-token": "write",
+    }
     assert "inputs.operation == 'publish'" in publish["if"]
     assert "secrets.LINE_CHANNEL_ACCESS_TOKEN" in publish_text
     assert "google-github-actions/auth@v2" in publish_text
@@ -96,3 +100,21 @@ def test_artifact_is_only_a_sanitized_copy_not_authoritative_storage() -> None:
     assert "scripts.line_menu_publication_gate" in publish_text
     assert "GCP_LINE_MENU_MANIFEST_BUCKET" in publish_text
     assert "actions/upload-artifact@v4" in publish_text
+
+
+def test_resume_is_publish_only_and_fail_closed() -> None:
+    source, document = workflow()
+    plan_text = yaml.safe_dump(document["jobs"]["plan"])
+    publish = document["jobs"]["publish"]
+    publish_text = yaml.safe_dump(publish)
+
+    inputs = document["on"]["workflow_dispatch"]["inputs"]
+    assert {"resume_run_id", "resume_artifact_sha256"} <= set(inputs)
+    assert "line_menu_publication_recovery" not in plan_text
+    assert "GITHUB_TOKEN" not in plan_text
+    assert "line_menu_publication_recovery" in publish_text
+    assert publish["permissions"]["actions"] == "read"
+    assert "actions: write" not in source
+    assert "if: ${{ always() }}" in source
+    assert "line-menu-publication-output/progress.json" in source
+    assert "line-menu-publication-output/receipt.json" in source

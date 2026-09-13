@@ -56,6 +56,7 @@ def load_publication_manifest(
     *,
     expected_git_sha: str,
     expected_bot_basic_id: str,
+    allow_recovery: bool = False,
 ) -> VerifiedMenuManifest:
     """Load the existing publication schema and require three verified resources.
 
@@ -76,7 +77,10 @@ def load_publication_manifest(
         raise MenuManifestError("unable to parse publication manifest") from exc
     if not isinstance(data, dict):
         raise MenuManifestError("publication manifest must be a JSON object")
-    _exact_keys(data, {"schema", "git_sha", "bot", "resources", "updated_at"}, "manifest")
+    allowed_fields = {"schema", "git_sha", "bot", "resources", "updated_at"}
+    if allow_recovery:
+        allowed_fields.add("recovery")
+    _exact_keys(data, allowed_fields, "manifest")
     if data.get("schema") != 1:
         raise MenuManifestError("unsupported publication manifest schema")
     git_sha = data.get("git_sha")
@@ -169,6 +173,7 @@ def finalize_publication_manifest(
         progress_path,
         expected_git_sha=expected_git_sha,
         expected_bot_basic_id=expected_bot_basic_id,
+        allow_recovery=True,
     )
     try:
         progress = json.loads(progress_path.read_bytes(), object_pairs_hook=_reject_duplicate_keys)

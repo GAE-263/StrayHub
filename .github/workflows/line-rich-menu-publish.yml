@@ -15,6 +15,14 @@ on:
         options:
           - plan
           - publish
+      resume_run_id:
+        description: Prior failed publication run ID (publish only; pair with digest)
+        required: false
+        type: string
+      resume_artifact_sha256:
+        description: SHA-256 of the prior sanitized recovery artifact archive
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -64,6 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-line-publication
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
@@ -84,6 +93,28 @@ jobs:
           git show-ref --verify --quiet refs/remotes/origin/release
           [[ "$(git rev-parse refs/remotes/origin/release)" == "$INPUT_SHA" ]]
           git merge-base --is-ancestor "$INPUT_SHA" refs/remotes/origin/release
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --dev
+
+      - name: Restore trusted progress when explicitly requested
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+          RESUME_ARTIFACT_SHA256: ${{ inputs.resume_artifact_sha256 }}
+        run: |
+          uv run python -m scripts.line_menu_publication_recovery \
+            --source-run-id "$RESUME_RUN_ID" \
+            --artifact-sha256 "$RESUME_ARTIFACT_SHA256" \
+            --git-sha "$INPUT_SHA" \
+            --expected-bot "${{ vars.LINE_BOT_BASIC_ID }}" \
+            --current-run-id "$GITHUB_RUN_ID" \
+            --current-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output line-menu-publication-output/progress.json
 
       - name: Require protected publication configuration
         env:
@@ -106,12 +137,6 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - run: uv sync --dev
-
       - name: Publish resources and immutable verified manifest
         env:
           INPUT_SHA: ${{ inputs.git_sha }}
@@ -130,6 +155,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: line-rich-menu-publication-${{ inputs.git_sha }}-${{ github.run_attempt }}
-          path: line-menu-publication-output/
+          path: |
+            line-menu-publication-output/progress.json
+            line-menu-publication-output/receipt.json
           if-no-files-found: error
           retention-days: 30

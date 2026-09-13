@@ -21,6 +21,17 @@ import httpx
 class PublicationError(RuntimeError):
     """Safe operator message; never include upstream bodies or credentials."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "resource_publication",
+        candidate_ids: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.candidate_ids = candidate_ids
+
 
 def digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
@@ -98,7 +109,13 @@ class ResourcePublisher:
         return response
 
     async def publish(
-        self, plan: dict, manifest: Path, expected_bot: str, git_sha: str
+        self,
+        plan: dict,
+        manifest: Path,
+        expected_bot: str,
+        git_sha: str,
+        *,
+        recovery_identity: dict | None = None,
     ) -> dict[str, str]:
         if not re.fullmatch(r"@[A-Za-z0-9._-]+", expected_bot):
             raise PublicationError("Explicit expected Bot basicId is required")
@@ -110,10 +127,18 @@ class ResourcePublisher:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise PublicationError("Manifest is locked; STOP") from None
-            return await self._publish(plan, manifest, expected_bot, git_sha)
+            return await self._publish(
+                plan, manifest, expected_bot, git_sha, recovery_identity=recovery_identity
+            )
 
     async def _publish(
-        self, plan: dict, manifest: Path, expected_bot: str, git_sha: str
+        self,
+        plan: dict,
+        manifest: Path,
+        expected_bot: str,
+        git_sha: str,
+        *,
+        recovery_identity: dict | None,
     ) -> dict[str, str]:
         bot = (await self.request("GET", "info")).json()
         if bot.get("basicId") != expected_bot or not bot.get("userId"):
@@ -122,15 +147,124 @@ class ResourcePublisher:
         state: dict = (
             json.loads(manifest.read_text())
             if manifest.exists()
-            else {"schema": 1, "git_sha": git_sha, "bot": identity, "resources": {}}
+            else {
+                "schema": 1,
+                "git_sha": git_sha,
+                "bot": identity,
+                "resources": {},
+                **({"recovery": recovery_identity} if recovery_identity else {}),
+            }
         )
         if (
             state.get("schema") != 1
             or state.get("git_sha") != git_sha
             or state.get("bot") != identity
+            or (recovery_identity is not None and state.get("recovery") != recovery_identity)
         ):
             raise PublicationError("Manifest Bot/schema/Git identity mismatch; STOP")
+
+        for record in state["resources"].values():
+            if isinstance(record, dict):
+                record["verified"] = False
         save_manifest(manifest, state)
+
+        # Validate every owned candidate before the first write. A later bad
+        # candidate must not be discovered after an earlier image was uploaded.
+        candidate_ids: set[str] = set()
+        for fingerprint, record in state["resources"].items():
+            rid = record.get("id")
+            if not rid:
+                continue
+            rid = menu_id(rid)
+            if rid in candidate_ids:
+                raise PublicationError(
+                    "Resume candidate is mapped more than once; STOP",
+                    code="resume_source_invalid",
+                    candidate_ids=(rid,),
+                )
+            candidate_ids.add(rid)
+            item = next(
+                (value for value in plan.values() if value.get("fingerprint") == fingerprint),
+                None,
+            )
+            if item is None:
+                raise PublicationError(
+                    "Resume candidate has no matching local definition; STOP",
+                    code="resume_candidate_mismatch",
+                    candidate_ids=(rid,),
+                )
+            try:
+                actual = (await self.request("GET", f"richmenu/{rid}")).json()
+            except (PublicationError, ValueError):
+                raise PublicationError(
+                    "Resume candidate definition unavailable; STOP",
+                    code="resume_candidate_mismatch",
+                    candidate_ids=(rid,),
+                ) from None
+            if any(actual.get(key) != value for key, value in item["definition"].items()):
+                raise PublicationError(
+                    "Resume candidate definition mismatch; STOP",
+                    code="resume_candidate_mismatch",
+                    candidate_ids=(rid,),
+                )
+            try:
+                image = await self.request("GET", f"richmenu/{rid}/content", data_host=True)
+            except PublicationError:
+                raise PublicationError(
+                    "Resume candidate image readback unavailable; STOP",
+                    code="resume_image_unreadable",
+                    candidate_ids=(rid,),
+                ) from None
+            if image is not None and digest(image.content) != item["image_sha256"]:
+                raise PublicationError(
+                    "Resume candidate image mismatch; STOP",
+                    code="resume_image_mismatch",
+                    candidate_ids=(rid,),
+                )
+
+        # Classify every fresh role before creating any resource. This prevents
+        # an earlier role from being written before a later orphan is noticed.
+        listing = (await self.request("GET", "richmenu/list")).json()["richmenus"]
+        for role, item in plan.items():
+            record = state["resources"].get(item["fingerprint"], {})
+            if record.get("id"):
+                continue
+            same_definition = [
+                row
+                for row in listing
+                if all(row.get(key) == value for key, value in item["definition"].items())
+            ]
+            exact: list[str] = []
+            incomplete: list[str] = []
+            for candidate in same_definition:
+                candidate_id = menu_id(candidate.get("richMenuId"))
+                try:
+                    image = await self.request(
+                        "GET", f"richmenu/{candidate_id}/content", data_host=True
+                    )
+                except PublicationError:
+                    raise PublicationError(
+                        f"{role}: existing candidate image is unreadable; STOP",
+                        code="unresolved_existing_candidate",
+                        candidate_ids=(candidate_id,),
+                    ) from None
+                if image is None:
+                    incomplete.append(candidate_id)
+                elif digest(image.content) == item["image_sha256"]:
+                    exact.append(candidate_id)
+            if len(same_definition) > 1:
+                raise PublicationError(
+                    f"{role}: ambiguous matching resources; STOP",
+                    code="ambiguous_candidates",
+                    candidate_ids=tuple(sorted((*exact, *incomplete))),
+                )
+            if incomplete:
+                raise PublicationError(
+                    f"{role}: unresolved existing candidate(s) {','.join(incomplete)}; "
+                    "trusted recovery progress is required; STOP",
+                    code="unresolved_existing_candidate",
+                    candidate_ids=tuple(incomplete),
+                )
         result = {}
         self.outcomes = {}
         for role, item in plan.items():
@@ -166,20 +300,44 @@ class ResourcePublisher:
                     row for row in listing if all(row.get(k) == v for k, v in wanted.items())
                 ]
                 candidates = []
+                incomplete_candidates = []
                 for candidate in definition_candidates:
                     candidate_id = menu_id(candidate.get("richMenuId"))
-                    candidate_image = await self.request(
-                        "GET", f"richmenu/{candidate_id}/content", data_host=True
-                    )
-                    if (
-                        candidate_image is not None
-                        and digest(candidate_image.content) == item["image_sha256"]
-                    ):
+                    try:
+                        candidate_image = await self.request(
+                            "GET", f"richmenu/{candidate_id}/content", data_host=True
+                        )
+                    except PublicationError:
+                        raise PublicationError(
+                            f"{role}: existing candidate image is unreadable; STOP",
+                            code="unresolved_existing_candidate",
+                            candidate_ids=(candidate_id,),
+                        ) from None
+                    if candidate_image is None:
+                        incomplete_candidates.append(candidate_id)
+                    elif digest(candidate_image.content) == item["image_sha256"]:
                         candidates.append(candidate_id)
-                if len(candidates) > 1:
-                    raise PublicationError(f"{role}: ambiguous matching resources; STOP")
+                if (
+                    len(definition_candidates) > 1
+                    or len(candidates) > 1
+                    or len(incomplete_candidates) > 1
+                    or (candidates and incomplete_candidates)
+                ):
+                    raise PublicationError(
+                        f"{role}: ambiguous matching resources; STOP",
+                        code="ambiguous_candidates",
+                        candidate_ids=tuple(sorted((*candidates, *incomplete_candidates))),
+                    )
                 if candidates:
                     rid = candidates[0]
+                elif incomplete_candidates:
+                    candidate_list = ",".join(sorted(incomplete_candidates))
+                    raise PublicationError(
+                        f"{role}: unresolved existing candidate(s) {candidate_list}; "
+                        "trusted recovery progress is required; STOP",
+                        code="unresolved_existing_candidate",
+                        candidate_ids=tuple(incomplete_candidates),
+                    )
                 elif record["stage"] != "planned":
                     raise PublicationError(f"{role}: unresolved create intent; do not retry create")
                 else:
