@@ -120,9 +120,9 @@ def test_enabled_line_role_menu_features_accept_complete_safe_contract(tmp_path)
         line_role_menu_smoke_evidence=f"verified-20260901-{'a' * 40}",
     )
 
-    from tests.support.line_menu_smoke import simulated_report
+    from tests.support.line_menu_smoke import real_report_fixture
 
-    simulated_report(settings, tmp_path)
+    real_report_fixture(settings, tmp_path)
     assert settings.validate_runtime_safety() is settings
 
 
@@ -193,9 +193,9 @@ def test_acceptance_volunteer_menu_does_not_require_staff_liff(tmp_path):
         line_rich_menu_adoption_hub_id="richmenu-acceptance-hub",
         line_role_menu_smoke_evidence=f"verified-20260909-{'a' * 40}",
     )
-    from tests.support.line_menu_smoke import simulated_report
+    from tests.support.line_menu_smoke import real_report_fixture
 
-    simulated_report(settings, tmp_path)
+    real_report_fixture(settings, tmp_path)
     assert settings.validate_runtime_safety() is settings
 
 

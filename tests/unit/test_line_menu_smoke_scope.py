@@ -12,12 +12,13 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import SecretStr
 from services.api.app.config.line_menu_smoke import (
+    evidence_requirements,
     validate_report,
     verified_menu_request,
     webhook_user_allowed,
 )
 from services.api.app.config.settings import Settings, UnsafeRuntimeConfigurationError
-from tests.support.line_menu_smoke import simulated_report
+from tests.support.line_menu_smoke import real_report_fixture, simulated_report
 from tests.unit.test_settings_runtime_safety import safe_non_local_settings
 
 UID = "U" + "1" * 32
@@ -170,9 +171,10 @@ async def test_legacy_worker_router_applies_identical_recipient_scope(monkeypatc
     line.push.assert_not_called()
 
 
-def report_settings(tmp_path):
+def report_settings(tmp_path, *, staff_enabled: bool = False):
     settings = safe_non_local_settings(
         line_role_menu_features_enabled=True,
+        line_staff_menu_enabled=staff_enabled,
         web_public_base_url="https://strayhub.enadv.quest",
         line_rich_menu_default_id="richmenu-default",
         line_rich_menu_volunteer_id="richmenu-volunteer",
@@ -180,7 +182,7 @@ def report_settings(tmp_path):
         line_rich_menu_staff_id="richmenu-staff",
         line_staff_liff_id="1234567890-Synthetic",
     )
-    return settings, simulated_report(settings, tmp_path)
+    return settings, real_report_fixture(settings, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -212,7 +214,7 @@ def report_settings(tmp_path):
     ],
 )
 def test_global_report_rejects_incomplete_or_mismatched_evidence(tmp_path, mutation):
-    settings, report = report_settings(tmp_path)
+    settings, report = report_settings(tmp_path, staff_enabled=mutation == "staff")
     if mutation == "fixture":
         report["kind"] = "automated-fixture"
     elif mutation == "environment":
@@ -261,9 +263,31 @@ def test_global_report_rejects_incomplete_or_mismatched_evidence(tmp_path, mutat
 
 
 def test_complete_simulated_contract_is_not_a_real_smoke_claim(tmp_path):
-    settings, _ = report_settings(tmp_path)
-    validate_report(settings)
-    assert settings.validate_runtime_safety() is settings
+    settings = safe_non_local_settings(
+        line_role_menu_features_enabled=True,
+        web_public_base_url="https://strayhub.enadv.quest",
+        line_rich_menu_default_id="richmenu-default",
+        line_rich_menu_volunteer_id="richmenu-volunteer",
+        line_rich_menu_adoption_hub_id="richmenu-hub",
+    )
+    simulated_report(settings, tmp_path)
+
+    with pytest.raises(ValueError, match="report invalid"):
+        validate_report(settings)
+    with pytest.raises(UnsafeRuntimeConfigurationError, match="report"):
+        settings.validate_runtime_safety()
+
+
+def test_duplicate_report_keys_fail_closed(tmp_path):
+    settings, report = report_settings(tmp_path)
+    path = Path(settings.line_role_menu_report_file)
+    raw = json.dumps(report)
+    duplicated = raw[:-1] + ',"roles":["adopter","volunteer"]}'
+    path.write_text(duplicated)
+    settings.line_role_menu_report_sha256 = sha256(path.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="report invalid"):
+        validate_report(settings)
 
 
 def test_staff_liff_requirement_isolated_from_valid_smoke_contract(tmp_path):
@@ -277,10 +301,105 @@ def test_staff_liff_requirement_isolated_from_valid_smoke_contract(tmp_path):
         line_rich_menu_staff_id="richmenu-staff",
         line_staff_liff_id="",
     )
-    simulated_report(settings, tmp_path)
+    real_report_fixture(settings, tmp_path)
     validate_report(settings)
     with pytest.raises(UnsafeRuntimeConfigurationError, match="LINE_STAFF_LIFF_ID"):
         settings.validate_runtime_safety()
+
+
+def test_staff_line_gate_is_independent_from_adopter_volunteer_report(tmp_path):
+    settings, report = report_settings(tmp_path)
+
+    assert settings.line_staff_menu_enabled is False
+    assert set(report["roles"]) == {"adopter", "volunteer"}
+    assert "staff" not in report["resources"]
+    assert not any(case.startswith("staff.") for case in report["cases"])
+    assert settings.validate_runtime_safety() is settings
+
+
+def test_staff_line_gate_requires_staff_resource_liff_and_evidence(tmp_path):
+    settings, report = report_settings(tmp_path, staff_enabled=True)
+
+    assert set(report["roles"]) == {"adopter", "volunteer", "staff"}
+    assert "staff" in report["resources"]
+    assert any(case.startswith("staff.") for case in report["cases"])
+    assert settings.validate_runtime_safety() is settings
+
+
+def test_disabled_staff_ignores_staged_protected_resource_without_claiming_it(tmp_path):
+    settings, report = report_settings(tmp_path)
+    resources_path = Path(settings.line_role_menu_resources_file)
+    resources = json.loads(resources_path.read_text())
+    resources["staff"] = {
+        "id": "richmenu-staged-staff",
+        "definition_sha256": "3" * 64,
+        "image_sha256": "4" * 64,
+    }
+    resources_path.write_text(json.dumps(resources))
+
+    assert "staff" not in report["roles"]
+    assert "staff" not in report["resources"]
+    validate_report(settings)
+
+
+@pytest.mark.parametrize("missing", ["resource", "case"])
+def test_enabled_staff_requires_staff_resource_and_human_case(tmp_path, missing):
+    settings, report = report_settings(tmp_path, staff_enabled=True)
+    if missing == "resource":
+        resources_path = Path(settings.line_role_menu_resources_file)
+        resources = json.loads(resources_path.read_text())
+        del resources["staff"]
+        resources_path.write_text(json.dumps(resources))
+    else:
+        del report["cases"]["staff.staff_liff"]
+        report_path = Path(settings.line_role_menu_report_file)
+        report_path.write_text(json.dumps(report))
+        settings.line_role_menu_report_sha256 = sha256(report_path.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="report invalid"):
+        validate_report(settings)
+
+
+def test_disabled_staff_report_cannot_claim_staff_validation(tmp_path):
+    settings, report = report_settings(tmp_path)
+    report["roles"].append("staff")
+    report_path = Path(settings.line_role_menu_report_file)
+    report_path.write_text(json.dumps(report))
+    settings.line_role_menu_report_sha256 = sha256(report_path.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="report invalid"):
+        validate_report(settings)
+
+
+@pytest.mark.parametrize("mutation", ["boundary", "unknown_resource", "unknown_role"])
+def test_role_aware_contract_rejects_incomplete_or_unknown_scope(tmp_path, mutation):
+    settings, report = report_settings(tmp_path)
+    if mutation == "boundary":
+        del report["cases"]["boundary.cross_tenant_denied"]
+    elif mutation == "unknown_resource":
+        resources_path = Path(settings.line_role_menu_resources_file)
+        resources = json.loads(resources_path.read_text())
+        resources["unknown"] = resources["default"]
+        resources_path.write_text(json.dumps(resources))
+    else:
+        report["roles"].append("unknown")
+    report_path = Path(settings.line_role_menu_report_file)
+    report_path.write_text(json.dumps(report))
+    settings.line_role_menu_report_sha256 = sha256(report_path.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="report invalid"):
+        validate_report(settings)
+
+
+@pytest.mark.parametrize("staff_enabled", [False, True])
+def test_generator_and_validator_share_role_requirements(tmp_path, staff_enabled):
+    settings, report = report_settings(tmp_path, staff_enabled=staff_enabled)
+    requirements = evidence_requirements(settings)
+
+    assert tuple(report["roles"]) == requirements.roles
+    assert tuple(report["resources"]) == requirements.resource_roles
+    assert set(report["cases"]) == requirements.human_cases | {"resources.readback"}
+    validate_report(settings)
 
 
 def test_scope_and_old_evidence_in_fresh_process():
@@ -330,8 +449,9 @@ def test_test_mode_requires_configuration_but_not_evidence(process):
         settings.validate_runtime_safety(process=process)
 
 
-def test_evidence_cli_template_is_offline_not_run_and_cannot_enable(tmp_path):
-    settings, _ = report_settings(tmp_path)
+@pytest.mark.parametrize("staff_enabled", [False, True])
+def test_evidence_cli_template_is_offline_not_run_and_cannot_enable(tmp_path, staff_enabled):
+    settings, _ = report_settings(tmp_path, staff_enabled=staff_enabled)
     config = tmp_path / "config.env"
     fields = {key for key in Settings.model_fields if key.startswith("line_rich_menu_")}
     fields |= {
@@ -340,6 +460,7 @@ def test_evidence_cli_template_is_offline_not_run_and_cannot_enable(tmp_path):
         "web_public_base_url",
         "liff_id",
         "line_staff_liff_id",
+        "line_staff_menu_enabled",
         "line_role_menu_report_sha256",
         "line_role_menu_test_channel_id",
         "line_role_menu_test_user_sha256",
@@ -365,7 +486,11 @@ def test_evidence_cli_template_is_offline_not_run_and_cannot_enable(tmp_path):
     result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
     contents = json.loads(report.read_text())
+    requirements = evidence_requirements(settings)
     assert contents["kind"] == "automated-fixture"
+    assert tuple(contents["roles"]) == requirements.roles
+    assert tuple(contents["resources"]) == requirements.resource_roles
+    assert set(contents["cases"]) == requirements.human_cases | {"resources.readback"}
     assert all(case["result"] == "NOT RUN" for case in contents["cases"].values())
     assert UID not in report.read_text()
     assert report.stat().st_mode & 0o777 == 0o600

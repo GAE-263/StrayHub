@@ -5,10 +5,14 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 
 from pydantic import SecretStr
-from services.api.app.config.line_menu_smoke import HUMAN_CASES, config_digest, scope_digest
+from services.api.app.config.line_menu_smoke import (
+    config_digest,
+    evidence_requirements,
+    scope_digest,
+)
 
 
-def simulated_report(settings, tmp_path):
+def _report_fixture(settings, tmp_path, *, kind: str):
     settings.line_role_menu_bot_sha256 = "b" * 64
     settings.line_channel_id = "1234567890"
     settings.line_role_menu_test_channel_id = settings.line_channel_id
@@ -17,7 +21,7 @@ def simulated_report(settings, tmp_path):
     settings.line_role_menu_test_expires_at = (
         (datetime.now(timezone.utc) + timedelta(hours=1)).replace(microsecond=0).isoformat()
     )
-    if not settings.line_rich_menu_staff_id:
+    if settings.line_staff_menu_enabled and not settings.line_rich_menu_staff_id:
         settings.line_rich_menu_staff_id = "richmenu-synthetic-staff"
     manifest = {
         "git_sha": "a" * 40,
@@ -28,18 +32,19 @@ def simulated_report(settings, tmp_path):
             for role in ("api", "worker", "web")
         },
     }
+    requirements = evidence_requirements(settings)
     resources = {
         role: {
             "id": getattr(settings, f"line_rich_menu_{role}_id"),
             "definition_sha256": "f" * 64,
             "image_sha256": "1" * 64,
         }
-        for role in ("default", "volunteer", "adoption_hub", "staff")
+        for role in requirements.resource_roles
     }
     report = {
         "schema_version": 1,
-        "kind": "real-line",
-        "environment": "production",
+        "kind": kind,
+        "environment": "production" if kind == "real-line" else "isolated-test",
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "candidate": manifest,
         "channel_id": settings.line_channel_id,
@@ -48,11 +53,15 @@ def simulated_report(settings, tmp_path):
         "scope_expires_at": settings.line_role_menu_test_expires_at,
         "config_sha256": config_digest(settings),
         "resources": resources,
-        "roles": ["adopter", "volunteer", "staff"],
+        "roles": list(requirements.roles),
         "identity_protection": "protected-config-hashes-no-uid",
         "cases": {
-            case: {"result": "PASS", "source": "human", "reference": "synthetic-only"}
-            for case in HUMAN_CASES
+            case: {
+                "result": "PASS",
+                "source": "human" if kind == "real-line" else "automated",
+                "reference": "schema-fixture-only",
+            }
+            for case in requirements.human_cases
         },
     }
     report["cases"]["resources.readback"] = {
@@ -69,3 +78,13 @@ def simulated_report(settings, tmp_path):
         (tmp_path / "report.json").read_bytes()
     ).hexdigest()
     return report
+
+
+def real_report_fixture(settings, tmp_path):
+    """Build a structurally real operator-report fixture for validator unit tests only."""
+    return _report_fixture(settings, tmp_path, kind="real-line")
+
+
+def simulated_report(settings, tmp_path):
+    """Build isolated automated evidence that production validation must reject."""
+    return _report_fixture(settings, tmp_path, kind="automated-fixture")

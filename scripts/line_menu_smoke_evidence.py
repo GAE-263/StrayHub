@@ -9,13 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from services.api.app.config.line_menu_smoke import (
-    HUMAN_CASES,
     Report,
     config_digest,
     digest,
+    evidence_requirements,
     protected_bytes,
     protected_json,
     release_identity,
+    required_resources,
     scope_digest,
     utc,
     validate_report,
@@ -43,6 +44,7 @@ def main() -> None:
             "web_public_base_url",
             "liff_id",
             "line_staff_liff_id",
+            "line_staff_menu_enabled",
             "line_role_menu_report_sha256",
             "line_role_menu_test_channel_id",
             "line_role_menu_test_user_sha256",
@@ -56,7 +58,9 @@ def main() -> None:
                     raise ValueError("duplicate configuration")
                 values[key.lower()] = value
         # Explicit empty defaults defeat ambient environment values.
-        settings = Settings(_env_file=None, **{key: values.get(key, "") for key in allowed})
+        configured = {key: values.get(key, "") for key in allowed}
+        configured["line_staff_menu_enabled"] = values.get("line_staff_menu_enabled", "false")
+        settings = Settings(_env_file=None, **configured)
         settings.line_role_menu_release_file = args.release_manifest
         settings.line_role_menu_resources_file = args.resources
         settings.line_role_menu_report_file = args.report
@@ -66,6 +70,8 @@ def main() -> None:
             return
         manifest, _ = protected_json(args.release_manifest)
         resources, _ = protected_json(args.resources)
+        requirements = evidence_requirements(settings)
+        selected_resources = required_resources(settings, resources)
         report = {
             "schema_version": 1,
             "kind": args.kind,
@@ -77,12 +83,12 @@ def main() -> None:
             "scope_sha256": scope_digest(settings),
             "scope_expires_at": utc(settings.line_role_menu_test_expires_at).isoformat(),
             "config_sha256": config_digest(settings),
-            "resources": resources,
-            "roles": ["adopter", "volunteer", "staff"],
+            "resources": {role: menu.model_dump() for role, menu in selected_resources.items()},
+            "roles": list(requirements.roles),
             "identity_protection": "protected-config-hashes-no-uid",
             "cases": {
                 name: {"result": "NOT RUN", "source": "human", "reference": "pending"}
-                for name in sorted(HUMAN_CASES)
+                for name in sorted(requirements.human_cases)
             },
         }
         report["cases"]["resources.readback"] = {

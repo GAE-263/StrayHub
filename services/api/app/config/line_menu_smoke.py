@@ -10,6 +10,7 @@ import re
 import stat
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -27,7 +28,7 @@ CASES = {
     "staff": ("staff_liff", "staff_tenant_authorized"),
     "boundary": ("non_test_unchanged", "expired_denied", "cross_tenant_denied"),
 }
-HUMAN_CASES = {f"{role}.{case}" for role, cases in CASES.items() for case in cases}
+RESOURCE_ROLES = frozenset({"default", "volunteer", "adoption_hub", "staff"})
 _verified_webhook_users: ContextVar[frozenset[str]] = ContextVar(
     "line_menu_verified_users", default=frozenset()
 )
@@ -35,6 +36,39 @@ _verified_webhook_users: ContextVar[frozenset[str]] = ContextVar(
 
 def digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+@dataclass(frozen=True)
+class EvidenceRequirements:
+    roles: tuple[str, ...]
+    resource_roles: tuple[str, ...]
+    human_cases: frozenset[str]
+
+
+def evidence_requirements(settings: Settings) -> EvidenceRequirements:
+    roles = ["adopter", "volunteer"]
+    resource_roles = ["default", "volunteer", "adoption_hub"]
+    if settings.line_staff_menu_enabled:
+        roles.append("staff")
+        resource_roles.append("staff")
+    human_roles = set(roles) | {"boundary"}
+    return EvidenceRequirements(
+        roles=tuple(roles),
+        resource_roles=tuple(resource_roles),
+        human_cases=frozenset(f"{role}.{case}" for role in human_roles for case in CASES[role]),
+    )
+
+
+def required_roles(settings: Settings) -> tuple[str, ...]:
+    return evidence_requirements(settings).roles
+
+
+def required_resource_roles(settings: Settings) -> tuple[str, ...]:
+    return evidence_requirements(settings).resource_roles
+
+
+def required_human_cases(settings: Settings) -> frozenset[str]:
+    return evidence_requirements(settings).human_cases
 
 
 def utc(value: str) -> datetime:
@@ -145,6 +179,15 @@ class Menu(Contract):
     image_sha256: str = Field(pattern=SHA256)
 
 
+def required_resources(settings: Settings, resources: dict) -> dict[str, Menu]:
+    requirements = evidence_requirements(settings)
+    if not set(requirements.resource_roles).issubset(resources) or not set(resources).issubset(
+        RESOURCE_ROLES
+    ):
+        raise ValueError("report resource scope incomplete")
+    return {role: Menu.model_validate(resources[role]) for role in requirements.resource_roles}
+
+
 class Identity(Contract):
     git_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     images: dict[str, dict[str, str]]
@@ -177,22 +220,24 @@ class Report(Contract):
 
 
 def config_digest(settings: Settings) -> str:
-    # Test enablement/list/expiry and the global flag intentionally excluded:
-    # moving from scoped to global is the sole permitted transition without retest.
-    names = (
+    # Test enablement/list/expiry and the global role-menu flag are intentionally excluded:
+    # moving from scoped to global is the sole permitted transition without retest. The
+    # independent Staff flag remains included because it changes evidence requirements.
+    names = [
         "line_channel_id",
         "line_role_menu_bot_sha256",
         "web_public_base_url",
         "liff_id",
-        "line_staff_liff_id",
+        "line_staff_menu_enabled",
         "line_rich_menu_default_id",
         "line_rich_menu_volunteer_id",
         "line_rich_menu_adoption_hub_id",
-        "line_rich_menu_staff_id",
         "line_rich_menu_adopter_id",
         "line_rich_menu_region_select_id",
         "line_rich_menu_path_select_id",
-    )
+    ]
+    if settings.line_staff_menu_enabled:
+        names.extend(("line_staff_liff_id", "line_rich_menu_staff_id"))
     return digest(
         json.dumps(
             {name: getattr(settings, name) for name in names}, sort_keys=True, separators=(",", ":")
@@ -223,7 +268,16 @@ def protected_bytes(filename: str) -> bytes:
 
 def protected_json(filename: str) -> tuple[dict, str]:
     raw = protected_bytes(filename)
-    data = json.loads(raw)
+
+    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    data = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
     if not isinstance(data, dict):
         raise ValueError("invalid report document")
     return data, digest(raw)
@@ -251,9 +305,8 @@ def validate_report(settings: Settings) -> None:
         report = Report.model_validate(data)
         manifest, _ = protected_json(settings.line_role_menu_release_file)
         resources, _ = protected_json(settings.line_role_menu_resources_file)
-        expected = {role: Menu.model_validate(item) for role, item in resources.items()}
-        if set(expected) != {"default", "volunteer", "adoption_hub", "staff"}:
-            raise ValueError("report resource scope incomplete")
+        requirements = evidence_requirements(settings)
+        expected = required_resources(settings, resources)
         if report.kind != "real-line" or report.environment not in {
             "production",
             "production-like",
@@ -282,11 +335,13 @@ def validate_report(settings: Settings) -> None:
         for role, menu in expected.items():
             if menu.id != getattr(settings, f"line_rich_menu_{role}_id"):
                 raise ValueError("report menu ID mismatch")
-        if set(report.roles) != {"adopter", "volunteer", "staff"} or len(report.roles) != 3:
+        if set(report.roles) != set(requirements.roles) or len(report.roles) != len(
+            requirements.roles
+        ):
             raise ValueError("report role scope incomplete")
-        if set(report.cases) != HUMAN_CASES | {"resources.readback"}:
+        if set(report.cases) != requirements.human_cases | {"resources.readback"}:
             raise ValueError("report case scope mismatch")
-        for case in HUMAN_CASES:
+        for case in requirements.human_cases:
             result = report.cases.get(case)
             if result is None or result.result != "PASS" or result.source != "human":
                 raise ValueError("report required human case incomplete")
