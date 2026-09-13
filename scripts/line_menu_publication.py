@@ -61,11 +61,27 @@ def menu_id(value: object) -> str:
 
 
 class ResourcePublisher:
+    _ALLOWED_REQUESTS = (
+        ("GET", re.compile(r"info"), False),
+        ("GET", re.compile(r"richmenu/list"), False),
+        ("POST", re.compile(r"richmenu"), False),
+        ("GET", re.compile(r"richmenu/richmenu-[A-Za-z0-9-]+"), False),
+        ("GET", re.compile(r"richmenu/richmenu-[A-Za-z0-9-]+/content"), True),
+        ("POST", re.compile(r"richmenu/richmenu-[A-Za-z0-9-]+/content"), True),
+    )
+
     def __init__(self, client: httpx.AsyncClient):
         # Caller provides auth. Fixed hosts and no redirects prevent credential leakage.
         self.client = client
+        self.outcomes: dict[str, str] = {}
 
     async def request(self, method: str, path: str, *, data_host=False, **kwargs):
+        method = method.upper()
+        if not any(
+            method == allowed_method and data_host is allowed_data_host and pattern.fullmatch(path)
+            for allowed_method, pattern, allowed_data_host in self._ALLOWED_REQUESTS
+        ):
+            raise PublicationError("LINE operation is outside the resource-publication allowlist")
         host = "api-data.line.me" if data_host else "api.line.me"
         try:
             response = await self.client.request(
@@ -116,6 +132,7 @@ class ResourcePublisher:
             raise PublicationError("Manifest Bot/schema/Git identity mismatch; STOP")
         save_manifest(manifest, state)
         result = {}
+        self.outcomes = {}
         for role, item in plan.items():
             fingerprint = item["fingerprint"]
             entries = state["resources"]
@@ -129,19 +146,40 @@ class ResourcePublisher:
                     "verified": False,
                 },
             )
+            if any(
+                record.get(key) != value
+                for key, value in {
+                    "role": role,
+                    "definition_sha256": item["definition_sha256"],
+                    "image_sha256": item["image_sha256"],
+                }.items()
+            ):
+                raise PublicationError(f"{role}: progress manifest fingerprint mismatch; STOP")
             wanted = item["definition"]
             record["verified"] = False
             save_manifest(manifest, state)
             rid = record.get("id")
+            outcome = "reused"
             if not rid:
                 listing = (await self.request("GET", "richmenu/list")).json()["richmenus"]
-                candidates = [
+                definition_candidates = [
                     row for row in listing if all(row.get(k) == v for k, v in wanted.items())
                 ]
+                candidates = []
+                for candidate in definition_candidates:
+                    candidate_id = menu_id(candidate.get("richMenuId"))
+                    candidate_image = await self.request(
+                        "GET", f"richmenu/{candidate_id}/content", data_host=True
+                    )
+                    if (
+                        candidate_image is not None
+                        and digest(candidate_image.content) == item["image_sha256"]
+                    ):
+                        candidates.append(candidate_id)
                 if len(candidates) > 1:
                     raise PublicationError(f"{role}: ambiguous matching resources; STOP")
                 if candidates:
-                    rid = menu_id(candidates[0]["richMenuId"])
+                    rid = candidates[0]
                 elif record["stage"] != "planned":
                     raise PublicationError(f"{role}: unresolved create intent; do not retry create")
                 else:
@@ -150,6 +188,7 @@ class ResourcePublisher:
                     try:
                         response = await self.request("POST", "richmenu", json=wanted)
                         rid = menu_id(response.json().get("richMenuId"))
+                        outcome = "created"
                     except (PublicationError, ValueError):
                         listing = (await self.request("GET", "richmenu/list")).json()["richmenus"]
                         matches = [
@@ -162,6 +201,7 @@ class ResourcePublisher:
                                 f"{role}: create outcome unknown; unresolved/ambiguous; STOP"
                             ) from None
                         rid = menu_id(matches[0]["richMenuId"])
+                        outcome = "created"
                 record["id"] = rid
                 record["stage"] = "created"
                 save_manifest(manifest, state)
@@ -196,4 +236,5 @@ class ResourcePublisher:
             record.update(stage="ready", verified=True)
             save_manifest(manifest, state)
             result[role] = rid
+            self.outcomes[role] = outcome
         return result

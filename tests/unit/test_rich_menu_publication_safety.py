@@ -139,6 +139,35 @@ async def test_publication_requires_immutable_source_identity(plan, tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "data_host"),
+    [
+        ("DELETE", "richmenu/richmenu-synthetic", False),
+        ("POST", "user/synthetic/richmenu/richmenu-synthetic", False),
+        ("DELETE", "user/synthetic/richmenu", False),
+        ("POST", "richmenu/bulk/link", False),
+        ("POST", "message/push", False),
+        ("POST", "message/reply", False),
+        ("POST", "message/broadcast", False),
+        ("PUT", "channel/webhook/endpoint", False),
+        ("POST", "liff", False),
+        ("GET", "richmenu/richmenu-synthetic/content", False),
+    ],
+)
+async def test_transport_allowlist_rejects_non_publication_operations(method, path, data_host):
+    calls = []
+
+    def transport(request):
+        calls.append(request)
+        return httpx.Response(200)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+        with pytest.raises(PublicationError, match="allowlist"):
+            await ResourcePublisher(client).request(method, path, data_host=data_host)
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_upload_failure_resumes_without_recreate(plan, tmp_path):
     fake = FakeLine()
     fake.fail_upload = True
@@ -201,6 +230,10 @@ async def test_ambiguous_matches_stop(plan, tmp_path):
     fake.resources = {
         "richmenu-one": plan["default"]["definition"],
         "richmenu-two": plan["default"]["definition"],
+    }
+    fake.images = {
+        "richmenu-one": plan["default"]["image"],
+        "richmenu-two": plan["default"]["image"],
     }
     with pytest.raises(PublicationError, match="ambiguous"):
         await publish(fake, plan, tmp_path / "manifest.json")
@@ -315,6 +348,19 @@ async def test_same_version_name_but_different_definition_is_not_reused(plan, tm
     result = await publish(fake, plan, tmp_path / "manifest.json")
     assert result["default"] != "richmenu-old"
     assert fake.resources["richmenu-old"] == old
+
+
+@pytest.mark.asyncio
+async def test_same_definition_with_different_image_creates_new_resource(plan, tmp_path):
+    fake = FakeLine()
+    fake.resources["richmenu-old"] = plan["default"]["definition"]
+    fake.images["richmenu-old"] = b"different-image"
+
+    result = await publish(fake, plan, tmp_path / "manifest.json")
+
+    assert result["default"] != "richmenu-old"
+    assert fake.images["richmenu-old"] == b"different-image"
+    assert fake.calls.count(("POST", "richmenu")) == 1
 
 
 @pytest.mark.asyncio

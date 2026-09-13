@@ -1,0 +1,135 @@
+name: Protected LINE Rich Menu Publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact lowercase 40-character release commit SHA
+        required: true
+        type: string
+      operation:
+        description: Plan locally or publish resources after protected approval
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - publish
+
+permissions:
+  contents: read
+
+concurrency:
+  group: line-rich-menu-publication
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Validate exact source and publication plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require exact release HEAD
+        env:
+          INPUT_SHA: ${{ inputs.git_sha }}
+        run: |
+          [[ "$GITHUB_REF" == "refs/heads/release" ]]
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$INPUT_SHA" ]]
+          [[ "$(git cat-file -t "$INPUT_SHA")" == "commit" ]]
+          git show-ref --verify --quiet refs/remotes/origin/release
+          [[ "$(git rev-parse refs/remotes/origin/release)" == "$INPUT_SHA" ]]
+          git merge-base --is-ancestor "$INPUT_SHA" refs/remotes/origin/release
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --dev
+
+      - name: Validate canonical definitions and images without network
+        env:
+          INPUT_SHA: ${{ inputs.git_sha }}
+        run: uv run python -m scripts.sync_line_role_menus --git-sha "$INPUT_SHA"
+
+  publish:
+    name: Create or reuse resources and store verified manifest
+    needs: plan
+    if: ${{ inputs.operation == 'publish' }}
+    runs-on: ubuntu-latest
+    environment: production-line-publication
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate exact release HEAD after approval
+        env:
+          INPUT_SHA: ${{ inputs.git_sha }}
+        run: |
+          [[ "$GITHUB_REF" == "refs/heads/release" ]]
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$INPUT_SHA" ]]
+          [[ "$(git cat-file -t "$INPUT_SHA")" == "commit" ]]
+          git show-ref --verify --quiet refs/remotes/origin/release
+          [[ "$(git rev-parse refs/remotes/origin/release)" == "$INPUT_SHA" ]]
+          git merge-base --is-ancestor "$INPUT_SHA" refs/remotes/origin/release
+
+      - name: Require protected publication configuration
+        env:
+          BOT_BASIC_ID: ${{ vars.LINE_BOT_BASIC_ID }}
+          MANIFEST_BUCKET: ${{ vars.GCP_LINE_MENU_MANIFEST_BUCKET }}
+          PUBLISHER: ${{ vars.GCP_LINE_MENU_PUBLISHER_SERVICE_ACCOUNT }}
+          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        run: |
+          [[ "$BOT_BASIC_ID" =~ ^@[A-Za-z0-9._-]+$ ]]
+          [[ "$MANIFEST_BUCKET" =~ ^[a-z0-9][a-z0-9._-]+[a-z0-9]$ ]]
+          [[ -n "$PUBLISHER" ]]
+          [[ -n "$PROVIDER" ]]
+          [[ -n "$TOKEN" ]]
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_LINE_MENU_PUBLISHER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --dev
+
+      - name: Publish resources and immutable verified manifest
+        env:
+          INPUT_SHA: ${{ inputs.git_sha }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        run: |
+          uv run python -m scripts.line_menu_publication_gate \
+            --git-sha "$INPUT_SHA" \
+            --expected-bot "${{ vars.LINE_BOT_BASIC_ID }}" \
+            --bucket "${{ vars.GCP_LINE_MENU_MANIFEST_BUCKET }}" \
+            --output-dir line-menu-publication-output \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+
+      - name: Preserve sanitized publication evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: line-rich-menu-publication-${{ inputs.git_sha }}-${{ github.run_attempt }}
+          path: line-menu-publication-output/
+          if-no-files-found: error
+          retention-days: 30

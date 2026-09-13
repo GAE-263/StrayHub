@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -28,6 +30,10 @@ class VerifiedMenuManifest:
     bot_fingerprint: str
     manifest_sha256: str
     menus: dict[str, dict[str, str]]
+
+
+def canonical_json(value: dict[str, Any]) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -147,4 +153,62 @@ def load_publication_manifest(
         bot_fingerprint=bot_fp,
         manifest_sha256=sha256(raw).hexdigest(),
         menus={role: by_role[role] for role in REQUIRED_ROLES},
+    )
+
+
+def finalize_publication_manifest(
+    progress_path: Path,
+    output_path: Path,
+    *,
+    expected_git_sha: str,
+    expected_bot_basic_id: str,
+) -> VerifiedMenuManifest:
+    """Write the deterministic, minimal schema-1 form after authoritative validation."""
+
+    verified = load_publication_manifest(
+        progress_path,
+        expected_git_sha=expected_git_sha,
+        expected_bot_basic_id=expected_bot_basic_id,
+    )
+    try:
+        progress = json.loads(progress_path.read_bytes(), object_pairs_hook=_reject_duplicate_keys)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MenuManifestError("unable to parse publication manifest") from exc
+    resources: dict[str, dict[str, Any]] = {}
+    for fingerprint, record in progress["resources"].items():
+        role = record.get("role") if isinstance(record, dict) else None
+        if role not in REQUIRED_ROLES:
+            continue
+        resources[fingerprint] = {
+            "definition_sha256": record["definition_sha256"],
+            "id": record["id"],
+            "image_sha256": record["image_sha256"],
+            "role": role,
+            "stage": "ready",
+            "verified": True,
+        }
+    document = {
+        "bot": {
+            "basic_id": verified.bot_basic_id,
+            "bot_fp": verified.bot_fingerprint,
+        },
+        "git_sha": verified.git_sha,
+        "resources": resources,
+        "schema": 1,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".verified-menu-manifest-", dir=output_path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(canonical_json(document))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, output_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return load_publication_manifest(
+        output_path,
+        expected_git_sha=expected_git_sha,
+        expected_bot_basic_id=expected_bot_basic_id,
     )
