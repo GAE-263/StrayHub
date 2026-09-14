@@ -31,6 +31,32 @@ STAFF_MENU_ACTIONS: frozenset[str] = frozenset(
 BACK_TO_DEFAULT_MENU_ACTION = "back_to_default_menu"
 
 
+def back_to_default_menu_quick_reply_item() -> dict:
+    """Build the canonical LINE quick-reply action for leaving a flow."""
+    return {
+        "type": "action",
+        "action": {
+            "type": "postback",
+            "label": "返回主選單",
+            "data": f"action={BACK_TO_DEFAULT_MENU_ACTION}",
+            "displayText": "返回主選單",
+        },
+    }
+
+
+def add_back_to_default_menu(message: dict) -> dict:
+    """Attach exactly one return action while preserving other quick replies."""
+    quick_reply = message.setdefault("quickReply", {})
+    items = quick_reply.setdefault("items", [])
+    quick_reply["items"] = [
+        item
+        for item in items
+        if item.get("action", {}).get("data") != f"action={BACK_TO_DEFAULT_MENU_ACTION}"
+    ]
+    quick_reply["items"].append(back_to_default_menu_quick_reply_item())
+    return message
+
+
 def is_menu_action(action: str) -> bool:
     return (
         action in MENU_PLACEHOLDER_ACTIONS

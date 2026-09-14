@@ -103,7 +103,7 @@ class VolunteerExpirationService:
             await self.rich_menu_router.link_for_user(line_user_id=binding.line_user_id, role=None)
         except Exception:
             # 收斂本身已完成（權限已失效）；選單沒切不該讓整批 sweep 失敗。
-            logger.warning("resetting rich menu after expiry failed", exc_info=True)
+            logger.warning("resetting rich menu after expiry failed")
 
 
 __all__ = ["VolunteerExpirationService"]

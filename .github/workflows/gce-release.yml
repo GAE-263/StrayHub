@@ -83,6 +83,7 @@ jobs:
             tests/contract/test_gce_acceptance_isolation_contract.py \
             tests/contract/test_gce_production_compose_contract.py \
             tests/contract/test_gce_systemd_contract.py \
+            tests/contract/test_production_config_sync.py \
             tests/contract/test_gcp_platform_terraform_contract.py
 
       - name: Shell syntax and lint
@@ -94,6 +95,7 @@ jobs:
           bash -n infra/gce/scripts/verify-release-receipt.sh
           bash -n infra/gce/scripts/acceptance-preflight.sh
           bash -n infra/gce/scripts/cleanup-acceptance.sh
+          bash -n infra/gce/scripts/sync-production-config.sh
           shellcheck \
             scripts/build-release-bundle.sh \
             infra/gce/scripts/deploy-release-ci.sh \
@@ -101,7 +103,8 @@ jobs:
             infra/gce/scripts/rollback-release.sh \
             infra/gce/scripts/verify-release-receipt.sh \
             infra/gce/scripts/acceptance-preflight.sh \
-            infra/gce/scripts/cleanup-acceptance.sh
+            infra/gce/scripts/cleanup-acceptance.sh \
+            infra/gce/scripts/sync-production-config.sh
 
       - name: Production Compose and preflight contract
         run: |
