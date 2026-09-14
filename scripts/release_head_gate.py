@@ -22,6 +22,15 @@ class ReleaseHeadError(RuntimeError):
 Runner = Callable[..., subprocess.CompletedProcess[bytes]]
 
 
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ReleaseHeadError("duplicate_json_key")
+        result[key] = value
+    return result
+
+
 def validate_release_head_response(
     raw: bytes,
     requested_sha: str,
@@ -34,7 +43,7 @@ def validate_release_head_response(
     if any(not SHA_RE.fullmatch(value) for value in identities) or len(set(identities)) != 1:
         raise ReleaseHeadError("requested, workflow, and checkout SHAs do not match")
     try:
-        document = json.loads(raw)
+        document = json.loads(raw, object_pairs_hook=_unique_object)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ReleaseHeadError("authoritative release readback is invalid") from exc
     if not isinstance(document, dict) or document.get("ref") != RELEASE_REF:
