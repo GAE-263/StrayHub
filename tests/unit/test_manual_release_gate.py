@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import pytest
-from scripts.manual_release_gate import GateError, validate_gate, validate_line_gate
+from scripts.manual_release_gate import (
+    GateError,
+    create_publication_receipt,
+    validate_gate,
+    validate_line_gate,
+    validate_publication_receipt,
+)
 
 SHA = "a" * 40
 BUNDLE = "b" * 64
@@ -87,3 +93,31 @@ def test_line_gate_accepts_only_exact_confirmation() -> None:
         confirmation=f"PUBLISH LINE MENU {SHA}",
         secret_version="3",
     )
+
+
+def test_publication_receipt_binds_manifest_images_and_bundle(tmp_path) -> None:
+    manifest = tmp_path / "release-manifest.json"
+    receipt = tmp_path / "publication-receipt.json"
+    manifest.write_text(
+        __import__("json").dumps(
+            {
+                "git_sha": SHA,
+                "release_id": f"20260914T000000Z-{SHA[:12]}",
+                "release_bundle_sha256": BUNDLE,
+                "images": {
+                    service: {"repository": f"example/{service}", "digest": f"sha256:{index * 64}"}
+                    for service, index in (("api", "1"), ("worker", "2"), ("web", "3"))
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    create_publication_receipt(manifest, receipt, "123")
+    validate_publication_receipt(receipt, manifest, git_sha=SHA, bundle_sha256=BUNDLE, run_id="123")
+    document = __import__("json").loads(receipt.read_text(encoding="utf-8"))
+    document["release_bundle_sha256"] = "c" * 64
+    receipt.write_text(__import__("json").dumps(document), encoding="utf-8")
+    with pytest.raises(GateError, match="does not match"):
+        validate_publication_receipt(
+            receipt, manifest, git_sha=SHA, bundle_sha256=BUNDLE, run_id="123"
+        )

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 WORKFLOW_PATH = Path(".github/workflows/line-rich-menu-publish.yml")
@@ -134,3 +137,67 @@ def test_resume_is_publish_only_and_fail_closed() -> None:
     assert "if: ${{ always() }}" in source
     assert "line-menu-publication-output/progress.json" in source
     assert "line-menu-publication-output/receipt.json" in source
+
+
+@pytest.mark.parametrize(
+    ("uv_status", "signal", "expected"), [("0", "", 0), ("7", "", 7), ("0", "TERM", 143)]
+)
+def test_secret_file_is_removed_on_success_failure_and_signal(
+    tmp_path: Path, uv_status: str, signal: str, expected: int
+) -> None:
+    _, document = workflow()
+    step = next(
+        item
+        for item in document["jobs"]["publish"]["steps"]
+        if item.get("name") == "Access pinned token, publish, and remove token on every exit"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    gcloud = bin_dir / "gcloud"
+    gcloud.write_text(
+        '#!/bin/bash\nset -eu\nfor arg in "$@"; do\n'
+        '  case "$arg" in --out-file=*) f=${arg#--out-file=};; esac\n'
+        'done\nprintf synthetic-sensitive-value >"$f"\n',
+        encoding="utf-8",
+    )
+    uv = bin_dir / "uv"
+    uv.write_text(
+        '#!/bin/bash\nif [[ -n "${UV_SIGNAL:-}" ]]; then\n'
+        '  kill -s "$UV_SIGNAL" "$PPID"\n  sleep 1\nfi\n'
+        'exit "${UV_STATUS:-0}"\n',
+        encoding="utf-8",
+    )
+    gcloud.chmod(0o755)
+    uv.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "RUNNER_TEMP": str(tmp_path),
+            "BUCKET": "synthetic-bucket",
+            "CONFIG_SHA256": "a" * 64,
+            "EXPECTED_BOT": "@synthetic",
+            "INPUT_SHA": "b" * 40,
+            "PROJECT": "synthetic-project",
+            "SECRET_NAME": "synthetic-secret",
+            "SECRET_VERSION": "3",
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "UV_STATUS": uv_status,
+            "UV_SIGNAL": signal,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected
+    assert not (tmp_path / "line-publication-token").exists()
+    output_lines = (result.stdout + result.stderr).splitlines()
+    assert output_lines.count("::add-mask::synthetic-sensitive-value") == 1
+    assert all(
+        "synthetic-sensitive-value" not in line
+        for line in output_lines
+        if not line.startswith("::add-mask::")
+    )

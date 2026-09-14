@@ -23,3 +23,10 @@ def test_contract_rejects_broader_identity_or_permissions(tmp_path: Path) -> Non
         path.write_text(json.dumps(candidate), encoding="utf-8")
         with pytest.raises(ContractError):
             validate(path)
+
+
+def test_contract_rejects_duplicate_keys(tmp_path: Path) -> None:
+    path = tmp_path / "duplicate.json"
+    path.write_text('{"schema_version":1,"schema_version":1}', encoding="utf-8")
+    with pytest.raises(ContractError, match="duplicate"):
+        validate(path)

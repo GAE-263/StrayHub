@@ -63,9 +63,8 @@ GCP_PRODUCTION_ZONE
 
 The publisher and deployer are separate short-lived GitHub OIDC/WIF identities. The registry is a
 dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitly adopted legacy
-resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM, `release`
-WIF condition, variables, and environments are configured, repository wiring is ready but live
-automatic deployment is blocked by configuration.
+resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM and exact
+WIF conditions are configured, repository wiring is ready but manual deployment remains blocked.
 
 The publish job runs only for `operation=publish`, actor `yawan0203`, repository
 `GAE-263/StrayHub`, event `workflow_dispatch`, `refs/heads/release`, and four identical identities:
@@ -170,13 +169,13 @@ an exact operation. No Environment approval is needed to suppress writes on that
 
 ### Live activation checklist
 
-Repository implementation does not grant cloud access. Before the first automatic deployment, an
+Repository implementation does not grant cloud access. Before the first manual deployment, an
 operator must separately verify all of the following in GitHub and GCP:
 
 - create the `release` branch from the intended `main` commit;
 - create/configure `production` without required reviewers and retain `release-publication` without
   required reviewers;
-- set all seven non-secret variables listed above in the scopes used by their respective jobs;
+- review the checked-in `application-release-config.json` against the actual retained resources;
 - extend the WIF provider condition to admit the exact `refs/heads/release` workflow identity for
   the `release-publication` and `production` environments;
 - allow that WIF principal to impersonate only `strayhub-gce-deployer` with

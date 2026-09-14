@@ -39,8 +39,16 @@ class ContractError(ValueError):
 
 
 def validate(path: Path) -> None:
+    def unique(pairs: list[tuple[str, object]]) -> dict:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ContractError(f"duplicate WIF contract key: {key}")
+            result[key] = value
+        return result
+
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ContractError("WIF contract is unreadable") from exc
     if value != EXPECTED:
