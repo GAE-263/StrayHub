@@ -97,7 +97,18 @@ def test_both_jobs_pin_and_revalidate_exact_release_head() -> None:
         assert "git cat-file -t" in job_text
         assert "refs/remotes/origin/release" in job_text
         assert "git merge-base --is-ancestor" in job_text
-        assert "refs/heads/release" in job_text
+        if job_name == "plan":
+            assert "refs/heads/release" in job_text
+        else:
+            # The fixed release endpoint is now owned by the shared strict API gate,
+            # rather than appearing incidentally in an unauthenticated fetch command.
+            gate = next(
+                step for step in document["jobs"][job_name]["steps"] if step.get("id") == "gate"
+            )
+            assert gate["env"]["GH_TOKEN"] == "${{ github.token }}"
+            assert "scripts.release_head_gate" in gate["run"]
+            assert "--allow-superseded" not in gate["run"]
+            assert "git fetch" not in gate["run"]
 
 
 def test_workflow_cannot_promote_configure_or_deploy() -> None:

@@ -93,10 +93,9 @@ jobs:
           SECRET_VERSION: ${{ inputs.line_token_secret_version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --no-tags origin refs/heads/release:refs/remotes/origin/release
           [[ "$(git cat-file -t "$INPUT_SHA")" == "commit" ]]
           git merge-base --is-ancestor "$INPUT_SHA" refs/remotes/origin/release
-          python3 -m scripts.manual_release_gate line-gate --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$(git rev-parse HEAD)" --release-sha "$(git rev-parse refs/remotes/origin/release)" --secret-version "$SECRET_VERSION" --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}'
+          python3 -m scripts.manual_release_gate line-gate --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$(git rev-parse HEAD)" --release-sha "$INPUT_SHA" --secret-version "$SECRET_VERSION" --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}'
           python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$(git rev-parse HEAD)"
       - id: config
         name: Validate versioned non-secret publication config

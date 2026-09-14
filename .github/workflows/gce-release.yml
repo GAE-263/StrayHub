@@ -122,15 +122,16 @@ jobs:
         env:
           BUNDLE_SHA256: ${{ inputs.release_bundle_sha256 }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
           INPUT_SHA: ${{ inputs.git_sha }}
           OPERATION: ${{ inputs.operation }}
         run: |
-          git fetch --no-tags origin refs/heads/release:refs/remotes/origin/release
           checkout_sha="$(git rev-parse HEAD)"
-          release_sha="$(git rev-parse refs/remotes/origin/release)"
+          release_sha="$INPUT_SHA"
           args=(gate --operation "$OPERATION" --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$checkout_sha" --release-sha "$release_sha")
           if [[ -n "$BUNDLE_SHA256" ]]; then args+=(--bundle-sha256 "$BUNDLE_SHA256"); fi
           python3 -m scripts.manual_release_gate "${args[@]}" --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}'
+          python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$checkout_sha"
           printf '### Authorized `%s` for `%s`\n' "$OPERATION" "$release_sha" >>"$GITHUB_STEP_SUMMARY"
 
   publish-release:

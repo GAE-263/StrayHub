@@ -104,11 +104,11 @@
 
 相依：Steps 2–4 完成；需 repository 寫入／整合授權。
 
-- [ ] T27 將核准變更經獨立 PR 整合 main，確認沒有其他未核准 commits；重新審查 PR #20 最新完整累積 diff。
-- [ ] T28 依當下授權與 exact-head guard 完成 release PR 流程，保留 history 與既有 release hotfix；不可沿用規劃時舊 SHA。
-- [ ] T29 只採實際 release merge SHA、branch=release、event=push 的 runs，等待全部驗證完成，確認寫入 jobs skipped／not triggered。
-- [ ] T30 確認完整 Python、frontend、critical E2E、contracts、security、Terraform／Compose 與 clean-SHA image checks；引用精確 SHA CI，不無目的重跑大型 suite。
-- [ ] T31 凍結 candidate，記錄 release SHA 與驗證證據。後續 publication 的實際 image／bundle digests 須獨立記錄，不把 CI build 身分等同已發布 images。
+- [x] T27 將核准變更經獨立 PR 整合 main，確認沒有其他未核准 commits；重新審查 PR #20 最新完整累積 diff。
+- [x] T28 依當下授權與 exact-head guard 完成 release PR 流程，保留 history 與既有 release hotfix；不可沿用規劃時舊 SHA。
+- [x] T29 只採實際 release merge SHA、branch=release、event=push 的 runs，等待全部驗證完成，確認寫入 jobs skipped／not triggered。
+- [x] T30 確認完整 Python、frontend、critical E2E、contracts、security、Terraform／Compose 與 clean-SHA image checks；引用精確 SHA CI，不無目的重跑大型 suite。
+- [x] T31 凍結 candidate，記錄 release SHA 與驗證證據。後續 publication 的實際 image／bundle digests 須獨立記錄，不把 CI build 身分等同已發布 images。
 
 驗收：精確 release SHA 全部驗證成功；真人驗收開始後不得為小型文件整理任意改 SHA。
 
@@ -241,3 +241,34 @@
 - Remote readback: main bafde674ed5ed2b44b242951cc7535459bde0ba9; release 9d58d13e5ac634af9061288305bc548ec5e0ce8e. No remote codex/staff-web-docs branch exists.
 - Operational details and remaining external prerequisites: [LINE online operations](docs/deployment/line-online-operations.md). Authoritative WIF claims/ownership must be reviewed before enabling the new workflow; no external policy was changed.
 - Next boundary: Step 5 repository push/PR integration requires explicit authorization. No push, PR edit, merge, dispatch, GCP/LINE mutation, publication, deployment, config sync or restart performed.
+
+### Step 5 release candidate validation (2026-09-14)
+
+- PR #21 merged into main `e0ab761390809bcfc25f999a1bf68419758916fa`; PR #20 cumulative integration reviewed and merged by yawan0203 with exact-head guard.
+- Frozen release candidate: `a3e206f9a553d75be9ac342ce73998ce1cf9badc`. Parents: `9d58d13e5ac634af9061288305bc548ec5e0ce8e`, `e0ab761390809bcfc25f999a1bf68419758916fa`. Release-only historical merges preserved; candidate tree equals reviewed main tree.
+- [Release CI 34856253294](https://github.com/GAE-263/StrayHub/actions/runs/34856253294): exact candidate SHA, branch release, event push, attempt 1, SUCCESS. Python, frontend, Critical E2E, contracts, sensitive transport, Ruff/format, shell lint, Terraform without backend, Compose/preflight, secret scan and clean-SHA image build passed. This records existing CI; no large suite was rerun locally.
+- Authorization/publication/deployment/production verification jobs SKIPPED. LINE and online operations were not triggered. No published image/bundle digest is claimed.
+- Follow-up readback confirmed main/release unchanged. Local documentation commit is a progress record, not a new candidate; do not push or integrate it into the frozen release during rollout.
+- Step 6 remains incomplete. [External readiness proposal](docs/deployment/line-online-external-readiness.md) records current metadata and unresolved WIF ownership. No external mutation, dispatch, publication or deployment performed.
+
+### Step 6 external prerequisites — authorized six changes (2026-09-14)
+
+- User explicitly authorized the six cloud prerequisite changes. Applied the exact proposed WIF mapping/condition, replaced the two legacy environment bindings with scoped routes, created the dedicated LINE publisher SA, private manifest bucket, minimal custom role, and exact secret/bucket IAM bindings.
+- Final readback PASS at 15:19 UTC. [Sanitized receipt](docs/deployment/line-online-cloud-change-receipt.json); [scope and details](docs/deployment/line-online-external-readiness.md). The original JSON proposal is retained unchanged for its recorded SHA-256; the receipt records actual completion.
+- Candidate remains `a3e206f9a553d75be9ac342ce73998ce1cf9badc`; main unchanged. No active/queued/waiting/pending/requested GitHub runs at final check. Registry IAM and LINE secret versions unchanged; runtime secret member preserved; LINE SA has zero user-managed keys.
+- No secret payload, OIDC exchange, publication, deployment, dispatch, LINE API, config sync or runtime restart. No runtime source changes or large tests rerun.
+- T32 remains unchecked as an end-to-end prerequisite task: live federated authentication, AI credentials/provider readiness and deployment preflight are not yet proven. T33–T36 remain unexecuted and require their separate operation authorization.
+- Protected before/after policies and request files retained at `/private/tmp/strayhub-cloud-prerequisites.1aynrfcg` (directory 0700, JSON files 0600); no secret values stored. Do not automatically restore the prior broad trust or delete created resources.
+
+### Step 6 T33 — publication attempt blocked (2026-09-14)
+
+- User authorized application publication for exact release `a3e206f9a553d75be9ac342ce73998ce1cf9badc`. Created one run [34862095364](https://github.com/GAE-263/StrayHub/actions/runs/34862095364), workflow_dispatch/release/attempt 1, both actors yawan0203, operation publish.
+- Final run FAILURE: manual authorization job git fetch failed with exit 128 (missing HTTPS Git credentials after persist-credentials=false checkout). Full validation jobs passed. Publication/deployment/production verification SKIPPED; artifacts=0.
+- [Failure evidence and recovery boundary](docs/deployment/line-online-application-publication.md). T33 remains unchecked: no published images, bundle or receipt. T34–T36 not executed.
+- No rerun, cancel, second dispatch, code fix, WIF policy modification, secret payload access, LINE API, deployment or config sync. Earlier authorized cloud prerequisite changes preserved. A reviewed workflow correction and new candidate validation are required before fresh publication authorization.
+
+### T33 recovery — local workflow correction
+
+- Corrected application manual authorization and the identical LINE publish credential failure using the existing authenticated strict release HEAD API gate. Persisted Git credentials remain disabled; release/actor/attempt/confirmation contracts unchanged.
+- Before: three executable shell regressions failed with the original exit 128. After: 237 targeted tests passed. Validation details and the one reproduced baseline Mypy diagnostic are recorded in [publication recovery](docs/deployment/line-online-application-publication.md).
+- Local commit only; T33 remains incomplete. No push or fresh publication dispatch. A new integrated release SHA must pass candidate CI before a separately authorized publication attempt.

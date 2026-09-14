@@ -1,0 +1,135 @@
+{
+  "status": "PROPOSED_NOT_AUTHORIZED_NOT_APPLIED",
+  "candidate_sha": "a3e206f9a553d75be9ac342ce73998ce1cf9badc",
+  "project": "canvas-primacy-502703-k1",
+  "readback_required": true,
+  "provider": {
+    "name": "projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github",
+    "preserve_issuer": "https://token.actions.githubusercontent.com",
+    "preserve_existing_audiences": true,
+    "proposed_attribute_mapping": {
+      "google.subject": "assertion.sub",
+      "attribute.repository": "assertion.repository",
+      "attribute.ref": "assertion.ref",
+      "attribute.environment": "assertion.environment",
+      "attribute.release_route": "(assertion.workflow_ref == 'GAE-263/StrayHub/.github/workflows/gce-release.yml@refs/heads/release' && assertion.environment == 'release-publication') ? 'app-publish' : (assertion.workflow_ref == 'GAE-263/StrayHub/.github/workflows/gce-release.yml@refs/heads/release' && assertion.environment == 'production') ? 'app-deploy' : (assertion.workflow_ref == 'GAE-263/StrayHub/.github/workflows/line-rich-menu-publish.yml@refs/heads/release' && assertion.environment == 'release-publication') ? 'line-publish' : (assertion.workflow_ref == 'GAE-263/StrayHub/.github/workflows/line-online-operations.yml@refs/heads/release' && assertion.environment == 'production') ? 'line-online' : 'deny'"
+    },
+    "proposed_attribute_condition": "assertion.repository == 'GAE-263/StrayHub' && assertion.repository_id == '1323840999' && assertion.repository_owner_id == '313818911' && assertion.actor == 'yawan0203' && assertion.actor_id == '236169994' && assertion.event_name == 'workflow_dispatch' && assertion.ref == 'refs/heads/release' && assertion.run_attempt == '1' && attribute.release_route in ['app-publish', 'app-deploy', 'line-publish', 'line-online']"
+  },
+  "identity_routes": [
+    {
+      "route": "app-publish",
+      "workflow_ref": "GAE-263/StrayHub/.github/workflows/gce-release.yml@refs/heads/release",
+      "environment": "release-publication",
+      "service_account": "strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+      "role": "roles/iam.workloadIdentityUser",
+      "member": "principalSet://iam.googleapis.com/projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/attribute.release_route/app-publish"
+    },
+    {
+      "route": "app-deploy",
+      "workflow_ref": "GAE-263/StrayHub/.github/workflows/gce-release.yml@refs/heads/release",
+      "environment": "production",
+      "service_account": "strayhub-gce-deployer@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+      "role": "roles/iam.workloadIdentityUser",
+      "member": "principalSet://iam.googleapis.com/projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/attribute.release_route/app-deploy"
+    },
+    {
+      "route": "line-publish",
+      "workflow_ref": "GAE-263/StrayHub/.github/workflows/line-rich-menu-publish.yml@refs/heads/release",
+      "environment": "release-publication",
+      "service_account": "strayhub-line-menu-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+      "role": "roles/iam.workloadIdentityUser",
+      "member": "principalSet://iam.googleapis.com/projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/attribute.release_route/line-publish"
+    },
+    {
+      "route": "line-online",
+      "workflow_ref": "GAE-263/StrayHub/.github/workflows/line-online-operations.yml@refs/heads/release",
+      "environment": "production",
+      "service_account": "strayhub-gce-deployer@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+      "role": "roles/iam.workloadIdentityUser",
+      "member": "principalSet://iam.googleapis.com/projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/attribute.release_route/line-online"
+    }
+  ],
+  "remove_exact_legacy_members": [
+    {
+      "service_account": "strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+      "role": "roles/iam.workloadIdentityUser",
+      "member": "principalSet://iam.googleapis.com/projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/attribute.environment/release-publication"
+    },
+    {
+      "service_account": "strayhub-gce-deployer@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+      "role": "roles/iam.workloadIdentityUser",
+      "member": "principalSet://iam.googleapis.com/projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/attribute.environment/production"
+    }
+  ],
+  "line_service_account": {
+    "account_id": "strayhub-line-menu-publisher",
+    "create_only_if_absent": true,
+    "user_managed_keys": false
+  },
+  "line_manifest_role": {
+    "proposed_role_id": "strayhubLineManifestPublisher",
+    "stage": "GA",
+    "included_permissions": [
+      "storage.objects.create",
+      "storage.objects.get"
+    ],
+    "bind_only_on_bucket": "canvas-primacy-502703-k1-strayhub-line-menu-manifests",
+    "if_existing": "stop_and_compare_do_not_overwrite"
+  },
+  "line_manifest_bucket": {
+    "name": "canvas-primacy-502703-k1-strayhub-line-menu-manifests",
+    "location": "us-central1",
+    "storage_class": "STANDARD",
+    "uniform_bucket_level_access": true,
+    "public_access_prevention": "enforced",
+    "retention_seconds": 31536000,
+    "lock_retention_policy": false,
+    "if_existing": "stop_and_readback_do_not_recreate"
+  },
+  "line_secret_binding": {
+    "secret": "projects/canvas-primacy-502703-k1/secrets/strayhub-prod-line-channel-access-token",
+    "role": "roles/secretmanager.secretAccessor",
+    "member": "serviceAccount:strayhub-line-menu-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+    "workflow_pinned_version": "2",
+    "read_payload_in_preparation": false
+  },
+  "apply_order_after_separate_authorization": [
+    "Read back refs, running workflows, provider, affected IAM policies, other pool bindings, resource absence and operator permissions; stop on drift or unreviewed consumers.",
+    "Save protected exact policy snapshots and etags; remove only the two approved legacy workloadIdentityUser members using read-modify-write with concurrency guards; intentional authentication pause.",
+    "Update only provider mapping/condition; preserve issuer/audiences/other fields and immediately read back.",
+    "Add exact app-publish, app-deploy and line-online workloadIdentityUser members, preserving unrelated bindings and using concurrency guards.",
+    "Create only the absent dedicated LINE SA, absent minimal custom role and absent private bucket; add only reviewed secret/bucket/line-publish identity bindings; read back each completed action.",
+    "Stop before any workflow dispatch or credential exchange. Publication/deployment are separate authorization scopes."
+  ],
+  "limitations": [
+    "This is a data-only review proposal, not an executable apply tool or evidence of live IAM validation.",
+    "triggering_actor is enforced by existing workflows; no undocumented OIDC triggering_actor claim is assumed.",
+    "Existing issued access tokens are not revoked by these trust changes.",
+    "No proof of absence of unknown external IaC ownership or other pool consumers is claimed.",
+    "No automatic rollback to broad legacy trust; failed or uncertain writes require readback and a separately approved recovery.",
+    "Explicit target metadata readback succeeded after user authorization. Project-wide service-account policy enumeration was denied and not executed; unknown consumers are not excluded."
+  ],
+  "verified_metadata_snapshot": {
+    "date": "2026-09-14",
+    "main": "e0ab761390809bcfc25f999a1bf68419758916fa",
+    "release": "a3e206f9a553d75be9ac342ce73998ce1cf9badc",
+    "provider_state": "ACTIVE",
+    "provider_issuer": "https://token.actions.githubusercontent.com",
+    "provider_allowed_audiences_field": "absent",
+    "artifact_publisher_policy_etag": "BwZaTeopDWY=",
+    "deployer_policy_etag": "BwZaTepS6g4=",
+    "registry_policy_etag": "BwZaTen-iV0=",
+    "line_secret_policy_etag": "BwZaOcfRxzY=",
+    "line_publisher_describe": "NOT_FOUND",
+    "manifest_bucket_describe": "404",
+    "project_custom_roles": [],
+    "line_token_versions": {
+      "2": "ENABLED",
+      "1": "DISABLED"
+    },
+    "payload_access": false,
+    "terraform_state_access": false,
+    "revalidate_before_write": true
+  }
+}
