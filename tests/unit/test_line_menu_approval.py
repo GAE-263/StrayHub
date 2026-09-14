@@ -277,3 +277,86 @@ def test_schema_two_template_is_pending_and_cannot_authorize(tmp_path):
     save(settings, document)
     with pytest.raises(ValueError, match="report invalid"):
         validate_report(settings)
+
+
+@pytest.mark.parametrize("fault", [None, "confirmation", "expired", "incomplete", "revoked"])
+def test_approval_cli_validates_all_evidence_before_new_output(tmp_path, monkeypatch, fault):
+    import sys
+
+    from scripts.line_menu_smoke_evidence import main
+
+    settings, doc = approved_fixture(tmp_path, days_ago=0)
+    doc["approval"]["status"] = "pending"
+    if fault == "expired":
+        settings.line_role_menu_test_expires_at = "2020-01-01T00:00:00+00:00"
+    elif fault == "incomplete":
+        doc["evidence"]["cases"]["adopter.default_hub"]["result"] = "NOT RUN"
+    elif fault == "revoked":
+        doc["approval"]["status"] = "revoked"
+    save(settings, doc)
+    fields = {key for key in type(settings).model_fields if key.startswith("line_rich_menu_")}
+    fields |= {
+        "app_env",
+        "line_channel_id",
+        "line_role_menu_bot_sha256",
+        "web_public_base_url",
+        "liff_id",
+        "line_staff_liff_id",
+        "line_staff_menu_enabled",
+        "line_role_menu_test_channel_id",
+        "line_role_menu_test_expires_at",
+        "celery_ai_enabled",
+        "gemini_model_name",
+        "gemini_vertex_location",
+        "ai_provider",
+        "ai_model_name",
+        "ai_endpoint",
+    }
+    config = tmp_path / "approval.env"
+    config.write_text(
+        "\n".join(
+            f"{key.upper()}={str(getattr(settings, key))}"
+            for key in fields
+            if getattr(settings, key) is not None
+        )
+        + "\nLINE_ROLE_MENU_TEST_USER_SHA256="
+        + settings.line_role_menu_test_user_sha256.get_secret_value()
+    )
+    config.chmod(0o600)
+    output = tmp_path / "approved.json"
+    confirmation = (
+        "wrong"
+        if fault == "confirmation"
+        else "APPROVE LINE EVIDENCE " + settings.line_role_menu_report_sha256
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "evidence",
+            "approve",
+            "--config-env",
+            str(config),
+            "--release-manifest",
+            settings.line_role_menu_release_file,
+            "--resources",
+            settings.line_role_menu_resources_file,
+            "--report",
+            settings.line_role_menu_report_file,
+            "--output",
+            str(output),
+            "--reference",
+            "synthetic-human-fixture",
+            "--confirmation",
+            confirmation,
+        ],
+    )
+    if fault:
+        with pytest.raises(SystemExit):
+            main()
+        assert not output.exists()
+    else:
+        main()
+        settings.line_role_menu_report_file = str(output)
+        settings.line_role_menu_report_sha256 = digest(output.read_bytes())
+        validate_report(settings)

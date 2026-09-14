@@ -91,12 +91,12 @@
 
 相依：Steps 2–3 的契約。
 
-- [ ] T21 沿用既有 publication／manifest／config-sync 工具，提供一致的 dry-run、精確 apply、readback、receipt 輸出，不建立第二套發布平台。
-- [ ] T22 補齊受限配置、正式核准版本啟用、個人／default 選單切換及分批遷移操作；production 設定不靠手改容器或複製 env。
-- [ ] T23 新增 workflow 寫入 operation 沿用雙 actor、attempt=1、精確 repository／release／SHA、operation-specific confirmation；credential 前及首次 mutation 前重新讀取 release HEAD。
-- [ ] T24 Publication 不隱含 deploy／promotion／migration；push main、release 與 PR events 保持 zero external writes。
-- [ ] T25 每個具外部效果的工具記錄已完成步驟、去敏結果與恢復資料；不確定 outcome 先 readback，禁止盲目重試。
-- [ ] T26 工具測試覆蓋 dry-run 零寫入、拒絕路徑、部分失敗、中斷、receipt 一致性與精確恢復；公用 API／業務 schema 不因文件整理而改動。
+- [x] T21 沿用既有 publication／manifest／config-sync 工具，提供一致的 dry-run、精確 apply、readback、receipt 輸出，不建立第二套發布平台。
+- [x] T22 補齊受限配置、正式核准版本啟用、個人／default 選單切換及分批遷移操作；production 設定不靠手改容器或複製 env。
+- [x] T23 新增 workflow 寫入 operation 沿用雙 actor、attempt=1、精確 repository／release／SHA、operation-specific confirmation；credential 前及首次 mutation 前重新讀取 release HEAD。
+- [x] T24 Publication 不隱含 deploy／promotion／migration；push main、release 與 PR events 保持 zero external writes。
+- [x] T25 每個具外部效果的工具記錄已完成步驟、去敏結果與恢復資料；不確定 outcome 先 readback，禁止盲目重試。
+- [x] T26 工具測試覆蓋 dry-run 零寫入、拒絕路徑、部分失敗、中斷、receipt 一致性與精確恢復；公用 API／業務 schema 不因文件整理而改動。
 
 驗收：operator 無須手填 hashes、複製 secrets 或逐一更新使用者選單；工具可產生供批准的具體差異。
 
@@ -230,3 +230,14 @@
 - Same approved version validates after historical scope expiry with the test list removed. Bounded test access still expires; legacy schema 1 remains time-limited and is not auto-upgraded.
 - Approval remains an operator attestation protected by file ownership and the deployment boundary, not a cryptographic signature or proof of human truth. Runtime caches require an explicit disable/reload for immediate revocation.
 - No remote write, config sync, restart, publication, deployment, LINE API or credential access performed in this step.
+
+### Step 4 local validation (2026-09-14)
+
+- 309 targeted tests passed: offline plans, bounded settings, strict approval issuance, exact switches/restoration, partial/ambiguous failure, interruption, immutable receipts, config rollback/drift, manual actors/attempts/events, stale/duplicate release JSON, existing evidence/release contracts and sensitive transport. All clients/identities are synthetic; no live operation was executed.
+- Repository Ruff / format (972 files): PASS. Mypy for nine Step 4 Python/test files: PASS. This does not replace the separately documented Step 2 baseline diagnostics.
+- Shell syntax / ShellCheck 0.11.0, sensitive transport policy, repository-native secret scan and diff check: PASS.
+- Reused publication manifest and atomic config-sync/preflight. Added protected private plans, separate config sync/reload/menu switch/restore dispatch operations, first-attempt exact-head gates before WIF/SSH and again on the VM. No default switch from bounded scope; no identity or membership edits.
+- Fixed release bundle packaging to include host operator Python dependencies. API image includes scripts, so clean-SHA images remain required in Step 5 CI; no new image build or full Python/frontend/E2E rerun claimed here.
+- Remote readback: main bafde674ed5ed2b44b242951cc7535459bde0ba9; release 9d58d13e5ac634af9061288305bc548ec5e0ce8e. No remote codex/staff-web-docs branch exists.
+- Operational details and remaining external prerequisites: [LINE online operations](docs/deployment/line-online-operations.md). Authoritative WIF claims/ownership must be reviewed before enabling the new workflow; no external policy was changed.
+- Next boundary: Step 5 repository push/PR integration requires explicit authorization. No push, PR edit, merge, dispatch, GCP/LINE mutation, publication, deployment, config sync or restart performed.

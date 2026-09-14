@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,11 +28,14 @@ from services.api.app.config.settings import Settings
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("template", "validate"))
+    parser.add_argument("operation", choices=("template", "validate", "approve"))
     parser.add_argument("--config-env", type=Path, required=True)
     parser.add_argument("--release-manifest", required=True)
     parser.add_argument("--resources", required=True)
     parser.add_argument("--report", required=True)
+    parser.add_argument("--output", type=Path, help="New immutable approved report")
+    parser.add_argument("--confirmation", default="")
+    parser.add_argument("--reference", default="")
     parser.add_argument(
         "--kind", choices=("real-line", "automated-fixture"), default="automated-fixture"
     )
@@ -73,6 +77,41 @@ def main() -> None:
         settings.line_role_menu_release_file = args.release_manifest
         settings.line_role_menu_resources_file = args.resources
         settings.line_role_menu_report_file = args.report
+        if args.operation == "approve":
+            from services.api.app.config.line_menu_approval import evidence_digest
+            from services.api.app.config.line_menu_smoke import _scope_contract_valid
+
+            data, checksum = protected_json(args.report)
+            if (
+                args.output is None
+                or args.confirmation != f"APPROVE LINE EVIDENCE {checksum}"
+                or data.get("schema_version") != 2
+                or data.get("approval", {}).get("status") != "pending"
+                or not _scope_contract_valid(settings)
+                or data["evidence"]["scope_sha256"] != scope_digest(settings)
+            ):
+                raise ValueError("approval requires reviewed pending evidence and active scope")
+            data["approval"] = {
+                "status": "approved",
+                "operator": "yawan0203",
+                "approved_at": datetime.now(timezone.utc).isoformat(),
+                "evidence_sha256": evidence_digest(data),
+                "reference": args.reference,
+            }
+            raw = (json.dumps(data, indent=2) + "\n").encode()
+            with tempfile.NamedTemporaryFile(prefix="line-evidence-validation-") as pending:
+                pending.write(raw)
+                pending.flush()
+                settings.line_role_menu_report_file = pending.name
+                settings.line_role_menu_report_sha256 = digest(raw)
+                validate_report(settings)
+            fd = os.open(args.output, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, "wb") as output:
+                output.write(raw)
+                output.flush()
+                os.fsync(output.fileno())
+            print("Approved protected operator attestation; sha256=" + digest(raw))
+            return
         if args.operation == "validate":
             validate_report(settings)
             print("Report contract PASS (operator attestation; not proof of human truth)")

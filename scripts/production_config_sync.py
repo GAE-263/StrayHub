@@ -81,7 +81,9 @@ def application_identity(path: Path, expected_sha: str) -> str:
     return expected_sha
 
 
-def render_config(original: bytes, manifest: VerifiedMenuManifest) -> bytes:
+def render_config(
+    original: bytes, manifest: VerifiedMenuManifest, *, rollout: dict[str, str] | None = None
+) -> bytes:
     try:
         text = original.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -94,6 +96,8 @@ def render_config(original: bytes, manifest: VerifiedMenuManifest) -> bytes:
         "LINE_RICH_MENU_ADOPTION_HUB_ID": manifest.menus["adoption_hub"]["id"],
         **ROLLOUT_FLAGS,
     }
+    if rollout is not None:
+        replacements.update(rollout)
     seen: set[str] = set()
     rendered: list[str] = []
     for line in text.splitlines():
@@ -111,7 +115,7 @@ def render_config(original: bytes, manifest: VerifiedMenuManifest) -> bytes:
             rendered.append(f"{key}={replacements[key]}")
         else:
             rendered.append(line)
-    for key in MANAGED_KEYS:
+    for key in replacements:
         if key not in seen:
             rendered.append(f"{key}={replacements[key]}")
     return ("\n".join(rendered) + "\n").encode()
@@ -277,8 +281,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     except MenuManifestError as exc:
         raise ConfigSyncError("menu_manifest", str(exc)) from exc
     original = config_path.read_bytes()
-    rendered = render_config(original, manifest)
+    rollout = None
+    if getattr(args, "rollout", None):
+        from scripts.line_rollout_config import load_rollout
+
+        rollout_path = Path(args.rollout)
+        _safe_file(rollout_path, production=production)
+        rollout = load_rollout(rollout_path, manifest, production=production)
+        if application_git_sha != manifest.git_sha:
+            raise ConfigSyncError("rollout", "rollout requires the deployed exact menu release")
+    rendered = render_config(original, manifest, rollout=rollout)
     previous_sha = sha256_bytes(original)
+    expected = getattr(args, "expected_config_sha256", None)
+    if expected is not None and previous_sha != expected:
+        raise ConfigSyncError("config_drift", "configuration differs from reviewed plan")
+    if rollout is not None and not args.dry_run and expected is None:
+        raise ConfigSyncError("config_drift", "rollout apply requires reviewed config checksum")
     resulting_sha = sha256_bytes(rendered)
     changed = original != rendered
     plan = {
@@ -286,15 +304,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "menu_manifest_git_sha": manifest.git_sha,
         "menu_manifest_sha256": manifest.manifest_sha256,
         "target_config": "production.env",
-        "managed_keys": list(MANAGED_KEYS),
+        "managed_keys": list(dict.fromkeys((*MANAGED_KEYS, *(rollout or {})))),
         "previous_config_sha256": previous_sha,
         "resulting_config_sha256": resulting_sha,
-        "rollout_mode": "inert",
+        "rollout_mode": "reviewed" if rollout else "inert",
         "changed": changed,
         "validation": "passed",
     }
     if args.dry_run:
         return plan
+
+    if receipt_path.exists() or receipt_path.is_symlink():
+        raise ConfigSyncError("receipt", "immutable config-sync receipt already exists")
 
     lock_path = config_path.with_name(f".{config_path.name}.config-sync.lock")
     if lock_path.is_symlink():
@@ -314,6 +335,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         except BlockingIOError as exc:
             raise ConfigSyncError("lock", "another config sync holds the lock") from exc
         # Re-read under lock so a concurrent edit cannot be overwritten.
+        if receipt_path.exists() or receipt_path.is_symlink():
+            raise ConfigSyncError("receipt", "immutable config-sync receipt already exists")
         current = config_path.read_bytes()
         if sha256_bytes(current) != previous_sha:
             raise ConfigSyncError("lock", "production config changed after validation")
@@ -366,6 +389,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             preflight="passed",
             rollback_performed=False,
         )
+        if rollout is not None:
+            payload["rollout_flags"] = {key: rollout[key] for key in ROLLOUT_FLAGS}
         write_receipt(receipt_path, payload, uid=uid, gid=gid)
         return payload
     except (ConfigSyncError, OSError) as caught:
@@ -424,6 +449,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--secrets-root", required=True)
     result.add_argument("--receipt", required=True)
     result.add_argument("--dry-run", action="store_true")
+    result.add_argument("--rollout", help="Protected reviewed rollout JSON; no secrets")
+    result.add_argument("--expected-config-sha256", help="Exact previous config checksum")
     result.add_argument("--test-root", help=argparse.SUPPRESS)
     result.add_argument("--preflight-script", help=argparse.SUPPRESS)
     return result
