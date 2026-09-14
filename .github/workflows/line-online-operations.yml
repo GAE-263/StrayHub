@@ -1,0 +1,62 @@
+name: Manual LINE Online Operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact deployed and current release SHA
+        required: true
+        type: string
+      operation:
+        description: Execute one separately reviewed private VM plan
+        required: true
+        type: choice
+        options: [config-sync, reload-config, menu-switch, menu-restore]
+      plan_sha256:
+        description: SHA-256 of protected VM plan; no identities or config values
+        required: true
+        type: string
+      confirmation:
+        description: LINE ONLINE followed by operation, full SHA and plan SHA-256
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: line-online-operations
+  cancel-in-progress: false
+
+jobs:
+  operate:
+    name: Apply one reviewed online plan
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && github.actor == 'yawan0203' && github.triggering_actor == 'yawan0203' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      INPUT_SHA: ${{ inputs.git_sha }}
+      ONLINE_OPERATION: ${{ inputs.operation }}
+      PLAN_SHA256: ${{ inputs.plan_sha256 }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          persist-credentials: false
+      - name: Authorize exact plan before WIF
+        run: python3 -m scripts.line_online_gate --operation "$ONLINE_OPERATION" --plan-sha256 "$PLAN_SHA256" --git-sha "$INPUT_SHA" --confirmation "$CONFIRMATION"
+      - id: config
+        name: Validate fixed deployment target
+        run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.deployer }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Revalidate release and execute protected VM plan
+        run: python3 -m scripts.line_online_dispatch

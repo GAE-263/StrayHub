@@ -58,15 +58,19 @@ helper 以 nginx 將 `/v1/*` 送 FastAPI、其他路徑送 Next.js，再用一�
 single HTTPS origin。它不修改 `.env`、LINE Developers 或 Rich Menu。將輸出的 webhook URL
 與 LIFF Endpoint 手動填入受控 channel；結束後執行 `./scripts/test_line_local.sh stop`。
 
-發佈測試 Rich Menu 前先 dry-run，再明確執行：
+發佈測試 Rich Menu 前先 dry-run；寫入需另外批准並確認 Bot 身分：
 
 ```bash
 uv run python -m scripts.sync_line_role_menus
 uv run python -m scripts.sync_line_role_menus --apply \
-  --image-dir infra/local/rich-menu-images
+  --image-dir infra/local/rich-menu-images \
+  --expected-bot '@APPROVED_TEST_BOT' --manifest /approved/operator-directory/menus.json
 ```
 
-將輸出的 menu IDs 注入目前測試 process 並重新啟動服務。實機至少驗證：
+工具只建立／驗證資源，不刪除、不切 default、不綁定、不回寫 env。
+設定載入、單帳號綁定與全域切換需分別批准；詳見
+[安全發布與 gate 順序](line-rich-menu-safe-publication.md)。
+取得完整 ready IDs 及合法 gate 後，另行批准注入測試 process 與重新啟動。實機至少驗證：
 
 - 公開 menu 只有志工服務與領養流程。
 - 志工申請核准後切 volunteer menu；返回 default 不改權限。
@@ -95,7 +99,14 @@ LIFF 身分交換明確傳入要使用的 organization；後端逐一驗證 memb
 
 ## Production 啟用
 
-`LINE_ROLE_MENU_FEATURES_ENABLED=false` 是預設值。完成實機 smoke 後，將同一 release commit
-的 evidence 設為 `verified-YYYYMMDD-<40-char-tested-git-sha>`，由 production preflight 驗證
-全部 conditional config，再透過正常 release/approval 將 gate 設為 `true`。不可直接在 VM
-手改 env，也不可用 local smoke evidence 代替 production-like smoke。
+工作人員帳號、Google 登入及收容所內的核准責任見
+[收容所工作人員帳號與權限治理](staff-access-governance.md)。Staff LINE 是獨立選配能力，
+不是工作人員取得權限的必要流程。本次工作人員使用 Google 登入 Web 後台，自行申請
+加入收容所，由該收容所管理員核准；Staff LINE 延後。
+
+`LINE_ROLE_MENU_FEATURES_ENABLED=false` 是預設值。先依
+[受限 smoke runbook](line-rich-menu-safe-publication.md#受限-smoke-runbook本地機制不是執行-production-的授權)
+在全域關閉時驗證明確帳號；完整真人報告由 preflight 比對實際 release、映像、資源與必要案例，
+再透過正常 release/approval 啟用全域功能。`verified-YYYYMMDD-<40-char-tested-git-sha>`
+僅為舊版相容標籤，單獨不足以啟用。不可直接在 VM 手改 env，也不可用 local/mock evidence
+代替 production-like 真人 smoke。

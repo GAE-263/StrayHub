@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "repository": "GAE-263/StrayHub",
+  "actor": "yawan0203",
+  "event": "workflow_dispatch",
+  "ref": "refs/heads/release",
+  "workflow": "GAE-263/StrayHub/.github/workflows/line-rich-menu-publish.yml@refs/heads/release",
+  "service_account": "strayhub-line-menu-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+  "secret": "projects/canvas-primacy-502703-k1/secrets/strayhub-prod-line-channel-access-token",
+  "bucket": "canvas-primacy-502703-k1-strayhub-line-menu-manifests",
+  "allowed_permissions": [
+    "secretmanager.versions.access",
+    "storage.objects.create",
+    "storage.objects.get"
+  ],
+  "forbidden_permission_prefixes": [
+    "artifactregistry.",
+    "compute.",
+    "iap.",
+    "storage.objects.delete",
+    "storage.objects.list",
+    "storage.objects.update"
+  ]
+}

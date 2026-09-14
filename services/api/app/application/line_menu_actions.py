@@ -31,6 +31,38 @@ STAFF_MENU_ACTIONS: frozenset[str] = frozenset(
 BACK_TO_DEFAULT_MENU_ACTION = "back_to_default_menu"
 
 
+def back_to_default_menu_quick_reply_item() -> dict:
+    """Build the canonical LINE quick-reply action for leaving a flow."""
+    return {
+        "type": "action",
+        "action": {
+            "type": "postback",
+            "label": "返回主選單",
+            "data": f"action={BACK_TO_DEFAULT_MENU_ACTION}",
+            "displayText": "返回主選單",
+        },
+    }
+
+
+def add_back_to_default_menu(message: dict) -> dict:
+    """Attach exactly one return action while preserving other quick replies."""
+    # Builders must reserve one slot. Reject overflow instead of silently
+    # dropping a business action or sending a payload LINE will reject.
+    items = message.get("quickReply", {}).get("items", [])
+    retained = [
+        item
+        for item in items
+        if item.get("action", {}).get("data") != f"action={BACK_TO_DEFAULT_MENU_ACTION}"
+    ]
+    if len(retained) > 12:
+        raise ValueError("quick_reply_capacity")
+    message.setdefault("quickReply", {})["items"] = [
+        *retained,
+        back_to_default_menu_quick_reply_item(),
+    ]
+    return message
+
+
 def is_menu_action(action: str) -> bool:
     return (
         action in MENU_PLACEHOLDER_ACTIONS

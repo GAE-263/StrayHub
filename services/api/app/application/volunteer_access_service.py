@@ -807,8 +807,10 @@ class VolunteerAccessService:
             if binding is None:
                 return
             await self.rich_menu_router.link_for_user(line_user_id=binding.line_user_id, role=role)
-        except Exception:
-            logger.warning("switching rich menu after approval failed", exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "switching rich menu after approval failed (error_class=%s)", type(exc).__name__
+            )
 
     async def mutate_grant(
         self,

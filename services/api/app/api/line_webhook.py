@@ -65,6 +65,7 @@ from services.api.app.application.line_menu_actions import (
     MENU_LIFF_ACTIONS,
     MENU_PLACEHOLDER_ACTIONS,
     STAFF_MENU_ACTIONS,
+    add_back_to_default_menu,
 )
 from services.api.app.application.line_message_presenter import (
     BUTTER,
@@ -269,7 +270,9 @@ class _GrowthDiaryEventBoundary:
                                 else ""
                             )
                         ),
-                        "quickReply": {"items": growth_diary_quick_reply_items()},
+                        "quickReply": {
+                            "items": growth_diary_quick_reply_items(include_back_to_default=True)
+                        },
                     }
                 ],
             )
@@ -361,6 +364,14 @@ def _is_growth_diary_command(event: dict) -> bool:
         and event.get("message", {}).get("type") == "text"
         and event.get("message", {}).get("text", "").strip() == GROWTH_DIARY_COMMAND
     )
+
+
+def _postback_flow(event: dict) -> str | None:
+    if event.get("type") != "postback":
+        return None
+    return parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
+        "flow", [None]
+    )[0]
 
 
 async def _resolve_context(session, line_user_id: str) -> tuple[UUID, UUID, UUID, str]:
@@ -473,24 +484,45 @@ def _volunteer_application_liff_url() -> str:
     return f"https://liff.line.me/{get_settings().liff_id}"
 
 
-def _line_role_menu_features_active() -> bool:
-    return get_settings().line_role_menu_features_active()
+def _line_role_menu_features_active(line_user_id: str | None = None) -> bool:
+    from services.api.app.config.line_menu_smoke import webhook_user_allowed
+
+    return webhook_user_allowed(get_settings(), line_user_id)
+
+
+def _line_staff_menu_features_active(line_user_id: str | None = None) -> bool:
+    """Delegate Staff policy only for the current signature-verified user."""
+    from services.api.app.config.line_menu_smoke import webhook_user_verified
+
+    return bool(
+        webhook_user_verified(line_user_id) and get_settings().line_staff_menu_allowed(line_user_id)
+    )
+
+
+def _line_staff_menu_event_allowed(event: dict) -> bool:
+    source = event.get("source", {})
+    return source.get("type") == "user" and _line_staff_menu_features_active(source.get("userId"))
 
 
 def _rich_menu_router() -> RichMenuRoutingService | None:
-    """四個 richMenuId 都沒設定時回 None，選單切換為 no-op。"""
+    """沒有可用 role menu ID 時回 None；staff ID 只在獨立開關啟用時載入。"""
     settings = get_settings()
-    if not _line_role_menu_features_active():
+    if not settings.line_role_menu_features_active() and not settings.line_role_menu_test_enabled:
         return None
     registry = build_registry(
         default=settings.line_rich_menu_default_id,
         volunteer=settings.line_rich_menu_volunteer_id,
         adopter=settings.line_rich_menu_adopter_id,
-        staff=settings.line_rich_menu_staff_id,
+        staff=(settings.line_rich_menu_staff_id if settings.line_staff_menu_enabled else ""),
     )
     if not registry.menu_ids:
         return None
-    return RichMenuRoutingService(LineMessagingApiAdapter(), registry)
+    return RichMenuRoutingService(
+        LineMessagingApiAdapter(),
+        registry,
+        allowed=_line_role_menu_features_active,
+        staff_allowed=_line_staff_menu_features_active,
+    )
 
 
 async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
@@ -506,8 +538,10 @@ async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
     try:
         rich_menu_id = await router.link_for_user(line_user_id=line_user_id, role=role)
         return rich_menu_id is not None
-    except Exception:
-        logger.warning("switching rich menu failed (role=%s)", role, exc_info=True)
+    except Exception as exc:
+        logger.warning(
+            "switching rich menu failed (role=%s) (error_class=%s)", role, type(exc).__name__
+        )
         return False
 
 
@@ -580,13 +614,17 @@ async def _handle_menu_action(
     action = parse_qs(event.get("postback", {}).get("data", ""), keep_blank_values=True).get(
         "action", [""]
     )[0]
-    if not _line_role_menu_features_active() and (
+    line_user_id = event.get("source", {}).get("userId")
+    if action in STAFF_MENU_ACTIONS and not _line_staff_menu_event_allowed(event):
+        await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
+        return True
+    if not _line_role_menu_features_active(line_user_id) and (
         action in MENU_PLACEHOLDER_ACTIONS
-        or action in STAFF_MENU_ACTIONS
         or action
         in {
             "start_binding",
             "start_adoption_matching",
+            "start_growth_diary",
             "back_to_default_menu",
             "open_adoption_hub",
         }
@@ -617,11 +655,26 @@ async def _handle_menu_action(
             return True
         try:
             await line.link_rich_menu(rich_menu_id=rich_menu_id, user_id=line_user_id)
-        except Exception:
-            logger.warning("switching adoption hub menu failed", exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "switching adoption hub menu failed (error_class=%s)", type(exc).__name__
+            )
             await _reply(line, event, [_text("目前無法切換選單，請稍後再試。")])
             return True
-        await _reply(line, event, [_text("已切換到領養與毛孩日記選單 🐾")])
+        message = _text("已切換到領養與毛孩日記選單 🐾")
+        message["quickReply"] = {
+            "items": [
+                {
+                    "type": "action",
+                    "action": {
+                        "type": "postback",
+                        "label": "返回主選單",
+                        "data": "action=back_to_default_menu",
+                    },
+                }
+            ]
+        }
+        await _reply(line, event, [message])
         return True
     if action in STAFF_MENU_ACTIONS:
         # Staff action 必須先經過 server-side binding/membership/shelter resolution。
@@ -658,6 +711,9 @@ async def _handle_staff_menu_action(
     )[0]
     if action not in STAFF_MENU_ACTIONS:
         return False
+    if not _line_staff_menu_event_allowed(event):
+        await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
+        return True
     if role not in {LineRole.STAFF, LineRole.SHELTER_ADMIN}:
         raise DomainError("staff_access_required", "需要目前收容所的工作人員權限", 403)
     if action == "staff_animal_list":
@@ -720,7 +776,7 @@ async def _handle_public_volunteer_application_entry(
     is_postback_command = postback_values.get("action", [""])[0] == ("start_volunteer_application")
     if not is_text_command and not is_postback_command:
         return False
-    if not _line_role_menu_features_active():
+    if not _line_role_menu_features_active(event.get("source", {}).get("userId")):
         await _reply(line, event, [_text("此 LINE 功能目前尚未開放。")])
         return True
     line_user_id = event.get("source", {}).get("userId")
@@ -877,7 +933,7 @@ async def _get_or_create_adopter_identity(session, line_user_id: str) -> UUID:
 
 
 async def _active_adoption_draft(session, line_user_id: str):
-    if not _line_role_menu_features_active():
+    if not _line_role_menu_features_active(line_user_id):
         return None
     binding = await LineWebhookRepository(session).binding(line_user_id)
     if binding is None:
@@ -1703,7 +1759,13 @@ async def _reply_growth_diary_entry_choice(
     inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
     if not inquiries:
         await _reply(
-            line, event, [_text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")]
+            line,
+            event,
+            [
+                add_back_to_default_menu(
+                    _text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")
+                )
+            ],
         )
         return
     card = build_info_card(
@@ -1755,7 +1817,13 @@ async def _handle_growth_diary_postback(
         inquiries = await list_inquiries_for_adopter(session, adopter_user_id)
         if not inquiries:
             await _reply(
-                line, event, [_text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")]
+                line,
+                event,
+                [
+                    add_back_to_default_menu(
+                        _text("目前還沒有透過領養媒合完成的領養紀錄，請先完成領養流程。")
+                    )
+                ],
             )
             return
         if len(inquiries) == 1:
@@ -1800,7 +1868,11 @@ async def _handle_growth_diary_postback(
         if inquiry is None:
             raise DomainError("inquiry_not_found", "找不到這筆領養紀錄", 404)
         inquiry.last_growth_diary_prompted_at = datetime.now(timezone.utc)
-        await _reply(line, event, [_text("好的，我們晚點再提醒你 🐾")])
+        await _reply(
+            line,
+            event,
+            [add_back_to_default_menu(_text("好的，我們晚點再提醒你 🐾"))],
+        )
         return
 
     raise DomainError("invalid_postback_action", "目前步驟不允許此操作", 409)
@@ -1823,7 +1895,11 @@ async def _reply_growth_diary_history(
         await _reply(
             line,
             event,
-            [_text("目前還沒有任何毛孩日記紀錄，快去跟毛孩互動然後回來分享第一篇吧 🐾")],
+            [
+                add_back_to_default_menu(
+                    _text("目前還沒有任何毛孩日記紀錄，快去跟毛孩互動然後回來分享第一篇吧 🐾")
+                )
+            ],
         )
         return
     inquiries_by_id = {inquiry.id: inquiry for inquiry in inquiries}
@@ -1912,7 +1988,11 @@ async def _handle_growth_diary_message(
 
     if message_type == "text" and message.get("text", "").strip() == "取消":
         await clear_pending_growth_diary_draft(session, adopter_user_id)
-        await _reply(line, event, [_text("已取消這次成長日記紀錄。")])
+        await _reply(
+            line,
+            event,
+            [add_back_to_default_menu(_text("已取消這次成長日記紀錄。"))],
+        )
         return
 
     photo_key: str | None = None
@@ -2134,7 +2214,9 @@ async def _run_growth_diary_ai_analysis(
         if result is None and photo_keys:
             reply_message = _text(f"謝謝分享{animal_name}的照片！看到牠現在的樣子真替你們開心 🥰")
         if reply_message is not None:
-            reply_message["quickReply"] = {"items": growth_diary_quick_reply_items()}
+            reply_message["quickReply"] = {
+                "items": growth_diary_quick_reply_items(include_back_to_default=True)
+            }
     except Exception:
         logger.exception("growth_diary_ai_analysis_failed")
         return
@@ -2372,14 +2454,22 @@ async def _handle_adoption_postback(
             line,
             event,
             [
-                build_info_card(
-                    "已收到你的領養意願 🎉", accent_index=1, body="收容所工作人員將盡快與你聯絡。"
+                add_back_to_default_menu(
+                    build_info_card(
+                        "已收到你的領養意願 🎉",
+                        accent_index=1,
+                        body="收容所工作人員將盡快與你聯絡。",
+                    )
                 )
             ],
         )
         return
     if result.state in {AdoptionDraftState.CANCELLED, AdoptionDraftState.EXPIRED}:
-        await _reply(line, event, [build_info_card("已取消這次領養媒合對話", accent_index=3)])
+        await _reply(
+            line,
+            event,
+            [add_back_to_default_menu(build_info_card("已取消這次領養媒合對話", accent_index=3))],
+        )
         return
     await set_authentication_user_scope(session, adopter_user_id)
     updated = await AdoptionDraftRepository(session, None).get_active_for_adopter(adopter_user_id)
@@ -3663,7 +3753,7 @@ async def _select_line_flow(session, line_user_id: str, event: dict) -> str | No
     flow = values.get("flow", [""])[0]
     binding = await LineWebhookRepository(session).binding(line_user_id)
     entry = None
-    if action == "back_to_default_menu":
+    if action in {"back_to_default_menu", "open_adoption_hub"}:
         entry = "menu"
     elif action == "start_adoption_matching":
         await _get_or_create_adopter_identity(session, line_user_id)
@@ -3759,6 +3849,8 @@ async def webhook(
     line = LineMessagingApiAdapter()
     public_base_url = _line_public_base_url(request)
     results = []
+    from services.api.app.config.line_menu_smoke import verified_menu_request
+
     async with session_factory() as session:
         for event in payload.get("events", []):
             event_id = event.get("webhookEventId")
@@ -3768,11 +3860,16 @@ async def webhook(
                 )
                 continue
             report_id_to_dispatch = None
-            async with _growth_diary_event_transaction(
-                session,
-                event_id=event_id,
-                background_tasks=background_tasks,
-            ) as growth_diary_event_boundary:
+            async with (
+                verified_menu_request(
+                    {"destination": payload.get("destination"), "events": [event]}, settings
+                ),
+                _growth_diary_event_transaction(
+                    session,
+                    event_id=event_id,
+                    background_tasks=background_tasks,
+                ) as growth_diary_event_boundary,
+            ):
                 identity = LineWebhookRepository(session)
                 stored_event, claimed = await identity.claim_event(
                     webhook_event_id=event_id,
@@ -3788,6 +3885,14 @@ async def webhook(
                     if not line_user_id:
                         raise DomainError("line_user_missing", "LINE 使用者識別不存在", 403)
                     line.ensure_recipient_allowed(line_user_id)
+                    # Reject gated actions before flow selection creates a binding
+                    # or mutates current_flow for an excluded user.
+                    if not _line_role_menu_features_active(
+                        line_user_id
+                    ) and await _handle_menu_action(line, event):
+                        await identity.complete_event(stored_event)
+                        results.append({"webhook_event_id": event_id, "status": "processed"})
+                        continue
                     current_flow = await _select_line_flow(session, line_user_id, event)
                     if await _handle_menu_action(line, event):
                         await identity.complete_event(stored_event)
@@ -4154,6 +4259,13 @@ async def webhook(
                             reply_message = _text(_liff_binding_message())
                     else:
                         reply_message = _text(error.message)
+                    flow = _postback_flow(event)
+                    if (
+                        flow == "adoption"
+                        and error.code
+                        in {"draft_access_denied", "draft_expired", "draft_not_found"}
+                    ) or (flow == "growth_diary" and error.code == "inquiry_not_found"):
+                        add_back_to_default_menu(reply_message)
                     # When the failure came from the LINE API itself the reply
                     # token is already spent or invalid; replying again would
                     # raise a second time, escape this handler and roll back the
