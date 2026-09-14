@@ -104,9 +104,9 @@ jobs:
           REVISION: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
         run: |
           [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
-          for service in api worker web; do
-            docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f "infra/gce/images/Dockerfile.$service" -t "strayhub-$service:$REVISION" .
-          done
+          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.api -t "strayhub-api:$REVISION" .
+          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.worker -t "strayhub-worker:$REVISION" .
+          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.web -t "strayhub-web:$REVISION" .
 
   authorize-manual-write:
     name: Authorize exact manual write operation
