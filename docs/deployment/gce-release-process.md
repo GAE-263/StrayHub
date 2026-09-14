@@ -66,11 +66,14 @@ dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitl
 resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM and exact
 WIF conditions are configured, repository wiring is ready but manual deployment remains blocked.
 
-The publish job runs only for `operation=publish`, actor `yawan0203`, repository
-`GAE-263/StrayHub`, event `workflow_dispatch`, `refs/heads/release`, and four identical identities:
-input SHA, GitHub SHA, checkout HEAD, and fetched release HEAD. Confirmation is case-sensitive and
-whitespace-sensitive. It builds from the full protected-branch SHA, applies OCI source/revision labels,
-pushes each image, resolves its registry digest, and runs:
+The publish job runs only for `operation=publish`, repository `GAE-263/StrayHub`, event
+`workflow_dispatch`, `refs/heads/release`, and four identical identities: input SHA, GitHub SHA,
+checkout HEAD, and the authoritative GitHub API release HEAD. Both `github.actor` and
+`github.triggering_actor` must be exactly `yawan0203`, and `github.run_attempt` must be exactly `1`.
+The job repeats those checks itself before WIF and repeats the authoritative release readback
+immediately before its first image push. Confirmation is case-sensitive and whitespace-sensitive.
+It builds from the full protected-branch SHA, applies OCI source/revision labels, pushes each image,
+resolves its registry digest, and runs:
 
 ```bash
 ./scripts/build-release-bundle.sh \
@@ -158,10 +161,20 @@ through systemd, verifies exact running image references plus API/Web/Worker/Pos
 checks public Web/API health. A successful deployment writes a non-secret immutable receipt under
 `/var/lib/strayhub/releases/` and updates its `current.json` pointer.
 
-The final `verify-production` job reconnects through IAP and proves that the current pointer,
-manifest, successful receipt, and running digest set all match the expected release ID and Git SHA,
-then checks the canonical public Web/API health endpoints. It does not run authenticated acceptance
-or emit credentials.
+The deploy job independently repeats the manual identity and attempt checks and authoritative release
+readback before WIF, then repeats the readback immediately before SSH deployment. The final
+`verify-production` job is bound to that same run's successful deploy outputs. It reconnects through
+IAP and proves that the current pointer, manifest, successful receipt, and running digest set all
+match the deployed release ID and Git SHA, then checks the canonical public Web/API health endpoints.
+If release advances after deployment, verification records
+`release_superseded_after_deploy=true` and continues to verify the already deployed SHA; it never
+starts another deployment. It does not run authenticated acceptance or emit credentials.
+
+GitHub's **Re-run jobs** action is not a recovery mechanism for any manual write operation. A rerun
+changes `github.run_attempt`, so publication, deployment, LINE publication, and production
+verification fail closed. After a failure, start a new `workflow_dispatch` from the current release
+HEAD with fresh confirmation. A deploy recovery may reference only the explicitly selected,
+validated publication artifact from its trusted source run.
 
 The first transition merge into `release` is safe because GitHub evaluates the workflow definition
 from that pushed commit, whose publication and deployment jobs both require `workflow_dispatch` and
