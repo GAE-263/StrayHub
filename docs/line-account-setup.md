@@ -99,6 +99,11 @@ LIFF 身分交換明確傳入要使用的 organization；後端逐一驗證 memb
 
 ## Production 啟用
 
+工作人員帳號、Google 登入及收容所內的核准責任見
+[收容所工作人員帳號與權限治理](staff-access-governance.md)。Staff LINE 是獨立選配能力，
+不是工作人員取得權限的必要流程。本次工作人員使用 Google 登入 Web 後台，自行申請
+加入收容所，由該收容所管理員核准；Staff LINE 延後。
+
 `LINE_ROLE_MENU_FEATURES_ENABLED=false` 是預設值。先依
 [受限 smoke runbook](line-rich-menu-safe-publication.md#受限-smoke-runbook本地機制不是執行-production-的授權)
 在全域關閉時驗證明確帳號；完整真人報告由 preflight 比對實際 release、映像、資源與必要案例，

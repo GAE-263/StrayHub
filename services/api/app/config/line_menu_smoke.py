@@ -228,7 +228,7 @@ def expected_report_environment(settings: Settings) -> Literal["production", "pr
     raise ValueError("unsupported LINE role-menu evidence environment")
 
 
-def config_digest(settings: Settings) -> str:
+def config_digest(settings: Settings, *, include_ai: bool = False) -> str:
     # Test enablement/list/expiry and the global role-menu flag are intentionally excluded:
     # moving from scoped to global is the sole permitted transition without retest. The
     # independent Staff flag remains included because it changes evidence requirements.
@@ -245,6 +245,17 @@ def config_digest(settings: Settings) -> str:
         "line_rich_menu_region_select_id",
         "line_rich_menu_path_select_id",
     ]
+    if include_ai:
+        names.extend(
+            (
+                "celery_ai_enabled",
+                "gemini_model_name",
+                "gemini_vertex_location",
+                "ai_provider",
+                "ai_model_name",
+                "ai_endpoint",
+            )
+        )
     if settings.line_staff_menu_enabled:
         names.extend(("line_staff_liff_id", "line_rich_menu_staff_id"))
     return digest(
@@ -311,7 +322,13 @@ def validate_report(settings: Settings) -> None:
         data, checksum = protected_json(settings.line_role_menu_report_file)
         if checksum != settings.line_role_menu_report_sha256:
             raise ValueError("report checksum mismatch")
-        report = Report.model_validate(data)
+        durable = data.get("schema_version") == 2
+        if durable:
+            from services.api.app.config.line_menu_approval import validate_approval
+
+            report = validate_approval(data)
+        else:
+            report = Report.model_validate(data)
         manifest, _ = protected_json(settings.line_role_menu_release_file)
         resources, _ = protected_json(settings.line_role_menu_resources_file)
         requirements = evidence_requirements(settings)
@@ -320,7 +337,7 @@ def validate_report(settings: Settings) -> None:
         if report.kind != "real-line" or report.environment != expected_environment:
             raise ValueError("report must contain real LINE evidence")
         age = datetime.now(timezone.utc) - utc(report.observed_at)
-        if not timedelta(0) <= age <= MAX_AGE:
+        if not durable and not timedelta(0) <= age <= MAX_AGE:
             raise ValueError("report expired or future dated")
         if report.candidate != release_identity(manifest):
             raise ValueError("report candidate mismatch; equivalent trees are not accepted")
@@ -330,14 +347,17 @@ def validate_report(settings: Settings) -> None:
         ):
             raise ValueError("report Bot/Channel mismatch")
         scope_expiry = utc(report.scope_expires_at)
-        if (
+        if not durable and (
             not _scope_contract_valid(settings)
             or report.scope_sha256 != scope_digest(settings)
             or report.scope_expires_at != utc(settings.line_role_menu_test_expires_at).isoformat()
             or not datetime.now(timezone.utc) < scope_expiry <= utc(report.observed_at) + MAX_AGE
         ):
             raise ValueError("report account scope mismatch or expired")
-        if report.config_sha256 != config_digest(settings) or report.resources != expected:
+        if (
+            report.config_sha256 != config_digest(settings, include_ai=durable)
+            or report.resources != expected
+        ):
             raise ValueError("report config/resources mismatch")
         for role, menu in expected.items():
             if menu.id != getattr(settings, f"line_rich_menu_{role}_id"):

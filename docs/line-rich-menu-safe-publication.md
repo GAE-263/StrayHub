@@ -7,7 +7,19 @@ LINE 資源已發布；一般部署不會呼叫本工具。
 第二人批准。`release-publication` Environment 僅保留為既有 WIF claim namespace，不提供
 reviewer、secret 或 variable 安全性。
 
+## 本次範圍
+
+先上線一般使用者領養、毛孩日記與志工功能。工作人員只使用 Google 登入 Web 後台，
+Staff LINE 延後，維持 `LINE_STAFF_MENU_ENABLED=false`；Staff LIFF、staff 選單及 staff
+真人案例不作為本次發布條件。其帳號與核准規則集中於
+[工作人員帳號與權限治理](staff-access-governance.md)。一般使用者／志工的安全與真人驗收
+條件仍須完成；本文件不代表已授權發布、部署或啟用。
+
 ## 工具契約
+
+Terminal quick-reply builder 必須為返回按鈕預留一格，最多放 12 個其他 actions。
+超量時以 `quick_reply_capacity` 拒絕建立 payload，不靜默刪除業務 actions；若未來新增
+選項超量，呼叫端須先設計分頁。既有 intermediate responses 不因此加入返回按鈕。
 
 ```bash
 # 離線：不讀 .env、不建立 HTTP client、不寫 manifest
@@ -94,8 +106,8 @@ quick reply 是切換當下的返回入口，不是第三個圖片按鈕，後�
 
 | 程序 | 必要角色設定 | 時機 |
 | --- | --- | --- |
-| API | default、volunteer、staff、adoption_hub、flag、HTTPS origin、staff LIFF、smoke evidence | 身分／收容所接線與 webhook 互動 |
-| Legacy Worker | default、volunteer、flag | 核准後與授權到期的角色同步 |
+| API | default、volunteer、adoption_hub、flag、HTTPS origin、smoke evidence；staff 開啟時另含 staff ID／LIFF | 身分／收容所接線與 webhook 互動 |
+| Legacy Worker | default、volunteer、flag；staff 開啟時另含 staff flag／ID | 核准後與授權到期的角色同步 |
 | Celery Worker／Beat | 不新增 Rich Menu 設定 | 不是角色綁定責任程序 |
 
 API／Legacy Worker 的 default、volunteer 來自相同 Compose 變數。
@@ -103,7 +115,7 @@ API hub 新增 production Compose 接線；acceptance 原已接線，補一致�
 settings 有快取，改值須另行批准 runtime 載入，不是發布資源後立即生效。
 flag=false 且 test=false 維持非本機環境原行為；受限模式見下方新流程。
 true 缺 hub 會由 API settings／preflight 拒絕。
-production 共用 gate 仍要求 staff menu、staff LIFF、完整 smoke evidence，不因本輪只測兩角色而略過。
+Staff LINE 有獨立、預設關閉的 gate；一般領養者／志工 smoke 不會因此啟用 staff 選單。
 
 角色同步為 best effort；綁定失敗不回滾已提交的業務交易。通知已標 sent 後，menu link
 沒有獨立重試機制；不得重播核准通知補綁。本次不新增批次補償系統。
@@ -123,8 +135,9 @@ Mock manifest 的 Bot 為 `@synthetic`、ID 為 `richmenu-new-*`。這些只供�
 
 1. **資源階段**：確認正式 Bot/Channel 後，僅 POST 建立／上傳三角色資源並 GET 回讀。
    不改 default／綁定，保留全部舊 ID、圖片、definition。確認三筆 ready 並保存 manifest。
-2. **設定階段**：審查新 default／volunteer／hub IDs、既有 staff ID、staff LIFF、HTTPS origin；
-   準備 API／Legacy Worker 一致設定、正式 CI 與 immutable release，但不自動批准啟用。
+2. **設定階段**：審查新 default／volunteer／hub IDs 與 HTTPS origin；準備 API／Legacy
+   Worker 一致設定、正式 CI 與 immutable release，但不自動批准啟用。只有另案啟用
+   Staff LINE 時才加入 staff ID／LIFF 與 staff evidence。
 3. **Gate 先後**：採下方受限模式完成真實驗收，再取得完整報告；舊字串僅保留相容標籤，
    已不具全域啟用效力。本機 mock 永遠不能替代真人 evidence。
 4. **單帳號階段**：取得已確認一般使用者及有效志工身份；不可猜 UID 或改角色湊測試。
@@ -133,7 +146,7 @@ Mock manifest 的 Bot 為 `@synthetic`、ID 為 `richmenu-new-*`。這些只供�
    不啟用全域 flag。受限名單之外的 webhook／背景選單同步仍維持原行為。
 5. 驗一般使用者 default→hub→matching/diary→返回，以及志工散步授權／返回／再次角色同步；
    到期／未授權與跨收容所持續拒絕。不得用補發通知驗證。
-6. 兩帳號通過後，才另行批准 POST 全域 default。已有個人綁定不會因此更新；其他角色／
+6. 一般使用者與志工兩階段通過後，才另行批准 POST 全域 default。已有個人綁定不會因此更新；其他角色／
    批次綁定必須有另案範圍、清單及批准，不由資源工具執行。
 7. **恢復僅提案**：保留舊資源；原本有個人綁定則另行批准 link 舊 ID，原本無綁定則
    另行批准 unlink；全域 default 回復原 ID 也需獨立批准。工具不自動恢復。
@@ -175,20 +188,21 @@ scope predicate；preflight 比對兩程序 Channel、token、名單、Bot、期
 
 1. Review／正式 CI 後建立 immutable candidate；透過正式流程先部署 global=false、test=false。
    本輪不能執行此步。確認 receipt、SHA、API/Worker/Web digests、健康後才繼續。
-2. Operator 以安全方式確認一般領養者及**既有有效志工**，取得 Channel-bound UID hashes；
-   不以顯示名稱猜測，也不改角色湊測試。另核對 Bot hash、四個 menu IDs、HTTPS、志工 LIFF。
-   共用 production gate 要求既有 staff ID 與已審查 staff LIFF，不因只測兩人而略過。
-   Staff LIFF 的正式 ID／HTTPS endpoint 與權限設計由 LINE 管理者及安全 reviewer 提供，
-   必須在啟用 test=true **之前**備妥；未備妥時仍可部署兩 flag=false 的候選。
+2. 本次採單一真人帳號分階段驗收：先以一般使用者測試，再送出專用收容所的志工申請，
+   經正常管理員核准取得有效 grant 後測志工功能；不直接修改資料庫角色。記錄各階段身分、
+   scope 及時間，不宣稱是兩個不同使用者。Operator 安全確認帳號，取得 Channel-bound UID hash；
+   不以顯示名稱猜測，也不改角色湊測試。另核對 Bot hash、default／volunteer／adoption hub
+   IDs、HTTPS 與志工 LIFF。Staff LINE 是獨立能力，保持 `LINE_STAFF_MENU_ENABLED=false`
+   時，不要求 staff ID、Staff LIFF 或 staff 真人案例。
 3. 透過既有 `/etc/strayhub/production.env` 管理流程配置上述 scope、期限及資源。
    檔案需 operator/root 控制，不能 world/group writable；不手改容器。
    保持 global=false，只啟用 test=true，正式 preflight／部署載入。受限模式不要求真人報告，
-   但不豁免 HTTPS、staff、角色資源或身分／tenant gate。確認 API/Legacy Worker 範圍一致。
-4. **另行批准個人 LINE 寫入後**，GET 保存兩人的原綁定與平台 default；明確區分無綁定／
+   但不豁免 HTTPS、角色資源或身分／tenant gate。確認 API/Legacy Worker 範圍一致。
+4. **另行批准個人 LINE 寫入後**，GET 保存受驗帳號的原綁定與平台 default；明確區分無綁定／
    查詢失敗。只 link 已核對帳號到既有新版資源，不改平台 default，不建／刪資源。
    由使用者確認畫面、按鈕與返回。matching 入口可能建立領養對話 draft，散步流程可能
    建立 care draft，須在該案例前另取得明確業務寫入授權；不得自行送出申請／回報或叫 AI。
-5. Operator 保存 readback 的四角色完整定義／圖片摘要及真實案例證據。以下離線工具只產生
+5. Operator 保存目前啟用範圍的完整定義／圖片摘要及真實案例證據。以下離線工具只產生
    **NOT RUN** 模板，不會聯絡 LINE、不會寫 PASS，也不會覆蓋既有報告：
 
    ```bash
@@ -199,20 +213,19 @@ scope predicate；preflight 比對兩程序 Channel、token、名單、Bot、期
      --report /etc/strayhub/line-menu/smoke.json --kind real-line
    ```
 
-   `resources.json` 是受保護 readback 摘要，不是完整 publisher manifest；四個 key 必須為
-   `default / volunteer / adoption_hub / staff`，每項為
+   `resources.json` 是受保護 readback 摘要，不是完整 publisher manifest。Staff LINE 關閉時
+   報告只納入 `default / volunteer / adoption_hub`；Staff LINE 開啟時再強制加入 `staff`。每項為
    `{"id":"richmenu-…","definition_sha256":"<64 hex>","image_sha256":"<64 hex>"}`。
    新三角色可取既有 publisher manifest 中 `stage=ready, verified=true` 的相應三欄；
-   staff 由既有 GET 定義 canonical JSON 與實際圖片 bytes 計算 hash，不重新發布 staff。
+   若未來啟用 Staff LINE，staff 由既有 GET 定義 canonical JSON 與實際圖片 bytes 計算 hash。
    Definition hash 必須包括 size/name/chatBarText/selected/areas/actions，不能只比名稱。
    Operator 仍須核對 hash 對應當前實際 LINE readback；離線驗證器不宣稱能自行查 LINE。
 
    完成的案例由受保護審核流程逐項填 result/source/reference；reference 為私有稽核紀錄
    的不透明識別，不放 UID、token、URL 或對話原文。未做項目維持 NOT RUN。
-   `adopter.* / volunteer.* / staff.* / boundary.*` 需真人確認；
-   `resources.readback` 需自動回讀檢查。兩角色 PASS 不替 staff PASS。
-   Staff 測試需 LINE 管理者提供已確認且有既有 staff 資格的帳號並另批准加入測試名單；
-   staff LIFF／tenant 案例於本階段執行，不改真人資格、不偽造結果。
+   `adopter.* / volunteer.* / boundary.*` 需真人確認；`resources.readback` 需自動回讀檢查。
+   若 `LINE_STAFF_MENU_ENABLED=true`，才另外要求 `staff.*`、staff 資源與已確認的既有 staff
+   帳號；staff LIFF／tenant 案例不得改真人資格或偽造結果。
 6. 審核完成後，檔案保持 owner-controlled（例如 0600），將實際檔案 SHA-256 記入
    `LINE_ROLE_MENU_REPORT_SHA256`，再離線驗證：
 
@@ -230,12 +243,12 @@ scope predicate；preflight 比對兩程序 Channel、token、名單、Bot、期
    `/opt/strayhub/current/release-manifest.json`。Compose readonly mounts，缺檔不自動建立。
    preflight 對候選 bundle 的實際 manifest 驗證（切 pointer 前），runtime 啟動對 current
    manifest 驗證。preflight 額外比對實際 rendered API/Worker/Web image refs。
-7. 所有真人案例、staff/HTTPS gate、review 與部署條件齊備後，**另行批准** global=true
+7. 啟用範圍內的真人案例、HTTPS gate、review 與部署條件齊備後，**另行批准** global=true
    及平台 default／個人或批次切換；它們仍是不同操作。本工具不執行任何切換。
 8. 失敗／期限到達：停用 test mode，保存證據；另依保存的精確原綁定恢復指定帳號，
    原無綁定者 unlink，不改其他人。不重播通知、不重建資源、不隱含 rollback。
 
-### Evidence 契約及失效條件
+### Legacy schema 1 契約及失效條件
 
 Schema 1 分 `automated-fixture` 與 `real-line`。模板預設 automated-fixture/isolated-test；
 即使把所有結果填 PASS，也不能通過真實類型 gate。單元測試可模擬 real-line 合約，
@@ -359,3 +372,25 @@ uv run --no-sync pytest \
 與 network 唯一使用者；完成後精確移除 container/network，名稱篩選確認無殘留。
 前一輪 localhost 55439 的同等專用資源亦已精確移除。合成 DB 隨 tmpfs 移除、不可恢復；
 未使用 prune，沒有刪除使用者資料或舊 LINE 資源。
+
+## Schema 2：已核准版本與短期測試分離
+
+本次採 `template --schema-version 2`。Schema 2 外層保存 schema-1 形狀的 `evidence`、
+歷史 `scope` snapshot、各真人 case 的 `stages` 及 `approval`。模板全為 NOT RUN／pending，
+不能啟用功能；也不會將 legacy report 自動升級。
+
+- 單帳號用 `account-1` 等不透明參照；一般使用者階段必須早於正常核准後的 VOLUNTEER
+  階段。每 case 保存 observed_at、membership、scope hash/state，不保存 UID 或對話。
+- Boundary 負向測試可使用不同的受控 scope；必須如實標示 outside／expired／cross-tenant，
+  不得將其假稱為正常 allowed scope。正常操作必須與主測試 scope hash 一致。
+- Approval 必須為 approved、operator=yawan0203，綁定排除 approval 區塊後的 canonical
+  evidence SHA-256。核准須發生於觀察後七日內、主測試 scope 到期前，且不得在未來。
+- Runtime 仍驗證精確 release SHA、三映像 digests、bundle／Compose、環境、Bot／Channel、
+  選單資源與功能 config hash。Schema 2 額外將 AI provider/model/endpoint、Gemini model/location
+  與 Celery AI flag 納入 config hash；不得把改過功能設定的版本視為同一已驗收版本。
+- 有效核准的同版本可在歷史 scope 到期後重啟；可移除短期帳號名單與期限。test=true 的
+  bounded scope 仍照原規則到期拒絕。撤銷時由受控 operator 將 approval.status 改為 revoked
+  並更新受保護 report checksum；下一次驗證會拒絕。緊急停止需另行停用功能並載入配置，
+  不是只改檔案就讓已快取的 runtime 立即停止。
+- Report/checksum 仍須是受保護 operator/root 管理；hash 不等同簽章或真人操作證明。
+  舊 schema 1 維持原七日期限；前述 legacy 規則不套用於 schema 2 的已核准版本。

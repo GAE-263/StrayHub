@@ -217,3 +217,10 @@ def test_migration_and_persistence_operations_are_documented() -> None:
     assert "docker compose down` retains" in contract
     assert "docker compose down -v` destroys" in contract
     assert "strayhub-b2-verify" in contract
+
+
+def test_api_receives_optional_gemini_key_for_synchronous_adoption_and_diary():
+    environment = _compose()["services"]["api"]["environment"]
+    assert environment["GEMINI_API_KEY"] == "${GEMINI_API_KEY:-}"
+    assert environment["GEMINI_MODEL_NAME"] == "${GEMINI_MODEL_NAME:-gemini-3.5-flash-lite}"
+    assert environment["CELERY_AI_ENABLED"] == "${CELERY_AI_ENABLED:-false}"

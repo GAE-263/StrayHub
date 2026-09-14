@@ -46,14 +46,20 @@ def back_to_default_menu_quick_reply_item() -> dict:
 
 def add_back_to_default_menu(message: dict) -> dict:
     """Attach exactly one return action while preserving other quick replies."""
-    quick_reply = message.setdefault("quickReply", {})
-    items = quick_reply.setdefault("items", [])
-    quick_reply["items"] = [
+    # Builders must reserve one slot. Reject overflow instead of silently
+    # dropping a business action or sending a payload LINE will reject.
+    items = message.get("quickReply", {}).get("items", [])
+    retained = [
         item
         for item in items
         if item.get("action", {}).get("data") != f"action={BACK_TO_DEFAULT_MENU_ACTION}"
     ]
-    quick_reply["items"].append(back_to_default_menu_quick_reply_item())
+    if len(retained) > 12:
+        raise ValueError("quick_reply_capacity")
+    message.setdefault("quickReply", {})["items"] = [
+        *retained,
+        back_to_default_menu_quick_reply_item(),
+    ]
     return message
 
 

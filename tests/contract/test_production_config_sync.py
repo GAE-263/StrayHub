@@ -83,6 +83,71 @@ def checksum(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def rollout_command(tmp_path, *, preflight_exit=0):
+    from datetime import UTC, datetime, timedelta
+
+    root, config, receipt, command = prepare(tmp_path, preflight_exit=preflight_exit)
+    (root / "release.json").write_text(json.dumps({"git_sha": GIT_SHA}))
+    command[command.index("--application-git-sha") + 1] = GIT_SHA
+    rollout = root / "rollout.json"
+    rollout.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "bounded",
+                "git_sha": GIT_SHA,
+                "manifest_sha256": checksum(root / "menus.json"),
+                "channel_id": "1234567890",
+                "user_sha256": ["a" * 64],
+                "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            }
+        )
+    )
+    rollout.chmod(0o600)
+    command += ["--rollout", str(rollout), "--expected-config-sha256", checksum(config)]
+    return root, config, receipt, command
+
+
+def test_rollout_dry_run_zero_write_and_success_receipt(tmp_path):
+    root, config, receipt, command = rollout_command(tmp_path)
+    before = config.read_bytes()
+    result = execute(command + ["--dry-run"])
+    assert result.returncode == 0, result.stderr
+    assert config.read_bytes() == before and not receipt.exists()
+    assert json.loads(result.stdout)["rollout_mode"] == "reviewed"
+    result = execute(command)
+    assert result.returncode == 0, result.stderr
+    assert "LINE_ROLE_MENU_TEST_ENABLED=true" in config.read_text()
+    assert "LINE_ROLE_MENU_FEATURES_ENABLED=false" in config.read_text()
+    assert SECRET_VALUE not in result.stdout + result.stderr
+    assert json.loads(receipt.read_text())["rollout_flags"]["LINE_ROLE_MENU_TEST_ENABLED"] == "true"
+
+
+def test_rollout_preflight_failure_restores_original_checksum(tmp_path):
+    root, config, receipt, command = rollout_command(tmp_path, preflight_exit=1)
+    before = config.read_bytes()
+    result = execute(command)
+    assert result.returncode != 0
+    assert config.read_bytes() == before
+    assert json.loads(receipt.read_text())["rollback_performed"] is True
+
+
+def test_rollout_plan_config_drift_or_repeat_never_mutates(tmp_path):
+    root, config, receipt, command = rollout_command(tmp_path)
+    before = config.read_bytes()
+    config.write_bytes(before + b"OTHER_CHANGE=keep\n")
+    result = execute(command)
+    assert result.returncode != 0
+    assert config.read_bytes() == before + b"OTHER_CHANGE=keep\n"
+    assert not receipt.exists()
+    config.write_bytes(before)
+    receipt.write_text('{"existing":"receipt"}')
+    result = execute(command)
+    assert result.returncode != 0
+    assert config.read_bytes() == before
+    assert receipt.read_text() == '{"existing":"receipt"}'
+
+
 def test_render_only_updates_allowlist_and_never_executes_values(tmp_path: Path) -> None:
     marker = tmp_path / "must-not-exist"
     original = (
@@ -265,3 +330,29 @@ def test_shell_wrapper_is_inert_and_does_not_manage_services() -> None:
     assert "scripts.production_config_sync" in source
     for forbidden in ("systemctl", "docker", "service ", "LINE_CHANNEL_ACCESS_TOKEN"):
         assert forbidden not in source
+
+
+def test_rollback_keeps_exclusive_lock_until_failure_receipt(tmp_path, monkeypatch):
+    from scripts import production_config_sync as sync
+
+    root, config, receipt, command = prepare(tmp_path, preflight_exit=23)
+    args = sync.parser().parse_args(command[3:])
+    original = config.read_bytes()
+    real_write = sync.atomic_write
+    checked = []
+
+    def guarded_write(path, content, **kwargs):
+        if (path == config and content == original) or path == receipt:
+            with (root / ".production.env.config-sync.lock").open("rb") as contender:
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            checked.append(path)
+        return real_write(path, content, **kwargs)
+
+    monkeypatch.setattr(sync, "atomic_write", guarded_write)
+    with pytest.raises(sync.ConfigSyncError, match="preflight failed"):
+        sync.run(args)
+    assert checked == [config, receipt]
+    assert config.read_bytes() == original
+    with (root / ".production.env.config-sync.lock").open("rb") as released:
+        fcntl.flock(released, fcntl.LOCK_EX | fcntl.LOCK_NB)

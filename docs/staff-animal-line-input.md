@@ -2,7 +2,12 @@
 
 > 定位：LINE/LIFF 只是工作人員的輸入介面；資料的家在 StrayHub 後端（CRM 唯一事實來源）。
 > 前端：`line-liff/staff-animal/`（由 paw-village 表單衍生）。
-> 狀態：後端、OpenAPI 與前端授權接線已實作；production 預設不啟用 mock。
+> 狀態：延後功能，不列入本次發布驗收；本次工作人員只使用 Google 登入 Web 管理介面。
+> Production 的 staff LINE 能力由 `LINE_STAFF_MENU_ENABLED=false` 獨立關閉。
+
+工作人員自行申請加入收容所、管理員核准的規則見
+[工作人員帳號與權限治理](staff-access-governance.md)。以下保留供未來 Staff LINE 工程交接，
+不是本次操作清單，也不代表正式環境已啟用。
 
 ## 環境與實機前置條件
 
@@ -10,9 +15,12 @@
 - 實機 smoke 必須使用非 production LINE account/channel、公開 HTTPS origin、真實
   `LINE_STAFF_LIFF_ID` 與 Messaging API credential，並先確認測試資料可安全公開。
 - Production 由 Secret Manager／部署 config 注入 credential；
-  `LINE_ROLE_MENU_FEATURES_ENABLED` 預設 `false`，未附精確 commit 的 smoke evidence 不可啟用。
+  `LINE_ROLE_MENU_FEATURES_ENABLED` 與 `LINE_STAFF_MENU_ENABLED` 均預設 `false`。Staff LINE
+  未獨立開啟時，不要求 Staff LIFF，也不會路由或處理 staff 選單 action。
 
 ## 進入點
+
+本節只適用於另行批准的 Staff LINE 選配能力，不是一般工作人員帳號的必要流程。
 LINE 工作人員選單 → 「新增動物」/「更新健康紀錄」→ webhook 回覆 LIFF 連結
 `https://liff.line.me/<LINE_STAFF_LIFF_ID>?action=<staff action>` → 開啟本 LIFF 並在驗證後
 直達對應表單。「動物清單」由 webhook 在目前 shelter scope 回覆 active 動物摘要；

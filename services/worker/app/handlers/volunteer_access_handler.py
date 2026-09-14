@@ -149,12 +149,14 @@ class VolunteerAccessHandler:
                                 line_user_id=line_user_id,
                                 role="VOLUNTEER",
                             )
-                        except Exception:
+                        except Exception as exc:
                             # The approval and notification outbox already
                             # committed. Menu UI is non-authoritative and may
                             # self-heal on the user's next public-menu entry.
                             logger.warning(
-                                "linking volunteer menu after committed approval failed",
+                                "linking volunteer menu after committed approval failed "
+                                "(error_class=%s)",
+                                type(exc).__name__,
                             )
                 await worker_repository.complete_notification(delivery, sent=True)
         await self.session.commit()

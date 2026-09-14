@@ -81,7 +81,9 @@ def application_identity(path: Path, expected_sha: str) -> str:
     return expected_sha
 
 
-def render_config(original: bytes, manifest: VerifiedMenuManifest) -> bytes:
+def render_config(
+    original: bytes, manifest: VerifiedMenuManifest, *, rollout: dict[str, str] | None = None
+) -> bytes:
     try:
         text = original.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -94,6 +96,8 @@ def render_config(original: bytes, manifest: VerifiedMenuManifest) -> bytes:
         "LINE_RICH_MENU_ADOPTION_HUB_ID": manifest.menus["adoption_hub"]["id"],
         **ROLLOUT_FLAGS,
     }
+    if rollout is not None:
+        replacements.update(rollout)
     seen: set[str] = set()
     rendered: list[str] = []
     for line in text.splitlines():
@@ -111,7 +115,7 @@ def render_config(original: bytes, manifest: VerifiedMenuManifest) -> bytes:
             rendered.append(f"{key}={replacements[key]}")
         else:
             rendered.append(line)
-    for key in MANAGED_KEYS:
+    for key in replacements:
         if key not in seen:
             rendered.append(f"{key}={replacements[key]}")
     return ("\n".join(rendered) + "\n").encode()
@@ -277,8 +281,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     except MenuManifestError as exc:
         raise ConfigSyncError("menu_manifest", str(exc)) from exc
     original = config_path.read_bytes()
-    rendered = render_config(original, manifest)
+    rollout = None
+    if getattr(args, "rollout", None):
+        from scripts.line_rollout_config import load_rollout
+
+        rollout_path = Path(args.rollout)
+        _safe_file(rollout_path, production=production)
+        rollout = load_rollout(rollout_path, manifest, production=production)
+        if application_git_sha != manifest.git_sha:
+            raise ConfigSyncError("rollout", "rollout requires the deployed exact menu release")
+    rendered = render_config(original, manifest, rollout=rollout)
     previous_sha = sha256_bytes(original)
+    expected = getattr(args, "expected_config_sha256", None)
+    if expected is not None and previous_sha != expected:
+        raise ConfigSyncError("config_drift", "configuration differs from reviewed plan")
+    if rollout is not None and not args.dry_run and expected is None:
+        raise ConfigSyncError("config_drift", "rollout apply requires reviewed config checksum")
     resulting_sha = sha256_bytes(rendered)
     changed = original != rendered
     plan = {
@@ -286,15 +304,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "menu_manifest_git_sha": manifest.git_sha,
         "menu_manifest_sha256": manifest.manifest_sha256,
         "target_config": "production.env",
-        "managed_keys": list(MANAGED_KEYS),
+        "managed_keys": list(dict.fromkeys((*MANAGED_KEYS, *(rollout or {})))),
         "previous_config_sha256": previous_sha,
         "resulting_config_sha256": resulting_sha,
-        "rollout_mode": "inert",
+        "rollout_mode": "reviewed" if rollout else "inert",
         "changed": changed,
         "validation": "passed",
     }
     if args.dry_run:
         return plan
+
+    if receipt_path.exists() or receipt_path.is_symlink():
+        raise ConfigSyncError("receipt", "immutable config-sync receipt already exists")
 
     lock_path = config_path.with_name(f".{config_path.name}.config-sync.lock")
     if lock_path.is_symlink():
@@ -306,72 +327,72 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     old_handlers = {
         signum: signal.signal(signum, _signal_handler) for signum in (signal.SIGINT, signal.SIGTERM)
     }
+    lock = None
     try:
-        with lock_path.open("rb") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise ConfigSyncError("lock", "another config sync holds the lock") from exc
-            # Re-read under lock so a concurrent edit cannot be overwritten.
-            current = config_path.read_bytes()
-            if sha256_bytes(current) != previous_sha:
-                raise ConfigSyncError("lock", "production config changed after validation")
-            if changed:
-                descriptor, _backup_name = tempfile.mkstemp(
-                    prefix=f".{config_path.name}.config-sync-backup.", dir=config_path.parent
-                )
-                os.fchmod(descriptor, 0o640)
-                os.fchown(descriptor, uid, gid)
-                with os.fdopen(descriptor, "wb") as backup:
-                    backup.write(original)
-                    backup.flush()
-                    os.fsync(backup.fileno())
-                _fsync_directory(config_path.parent)
-                replaced = True
-                atomic_write(config_path, rendered, uid=uid, gid=gid, mode=0o640)
-            preflight_script = (
-                Path(args.preflight_script)
-                if args.preflight_script
-                else (
-                    Path(__file__).resolve().parents[1]
-                    / "infra/gce/scripts/production-preflight.sh"
-                )
+        lock = lock_path.open("rb")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ConfigSyncError("lock", "another config sync holds the lock") from exc
+        # Re-read under lock so a concurrent edit cannot be overwritten.
+        if receipt_path.exists() or receipt_path.is_symlink():
+            raise ConfigSyncError("receipt", "immutable config-sync receipt already exists")
+        current = config_path.read_bytes()
+        if sha256_bytes(current) != previous_sha:
+            raise ConfigSyncError("lock", "production config changed after validation")
+        if changed:
+            descriptor, _backup_name = tempfile.mkstemp(
+                prefix=f".{config_path.name}.config-sync-backup.", dir=config_path.parent
             )
-            preflight_details = _safe_file(preflight_script, production=production)
-            if not preflight_details.st_mode & stat.S_IXUSR:
-                raise ConfigSyncError(
-                    "preflight", "canonical production preflight is not executable"
-                )
-            command = [
-                str(preflight_script),
-                "--config-env",
-                str(config_path),
-                "--secrets-root",
-                str(secrets_root),
-                "--project-name",
-                "strayhub-d1-preflight-config-sync",
-                "--image-env",
-                str(image_env),
-            ]
-            try:
-                completed = subprocess.run(command, capture_output=True, text=True, check=False)
-            except OSError as exc:
-                raise ConfigSyncError("preflight", "canonical production preflight failed") from exc
-            if completed.returncode != 0:
-                raise ConfigSyncError("preflight", "canonical production preflight failed")
-            payload = receipt_payload(
-                status="success",
-                gate="",
-                application_git_sha=application_git_sha,
-                manifest=manifest,
-                previous_sha=previous_sha,
-                resulting_sha=resulting_sha,
-                changed=changed,
-                preflight="passed",
-                rollback_performed=False,
-            )
-            write_receipt(receipt_path, payload, uid=uid, gid=gid)
-            return payload
+            os.fchmod(descriptor, 0o640)
+            os.fchown(descriptor, uid, gid)
+            with os.fdopen(descriptor, "wb") as backup:
+                backup.write(original)
+                backup.flush()
+                os.fsync(backup.fileno())
+            _fsync_directory(config_path.parent)
+            replaced = True
+            atomic_write(config_path, rendered, uid=uid, gid=gid, mode=0o640)
+        preflight_script = (
+            Path(args.preflight_script)
+            if args.preflight_script
+            else (Path(__file__).resolve().parents[1] / "infra/gce/scripts/production-preflight.sh")
+        )
+        preflight_details = _safe_file(preflight_script, production=production)
+        if not preflight_details.st_mode & stat.S_IXUSR:
+            raise ConfigSyncError("preflight", "canonical production preflight is not executable")
+        command = [
+            str(preflight_script),
+            "--config-env",
+            str(config_path),
+            "--secrets-root",
+            str(secrets_root),
+            "--project-name",
+            "strayhub-d1-preflight-config-sync",
+            "--image-env",
+            str(image_env),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        except OSError as exc:
+            raise ConfigSyncError("preflight", "canonical production preflight failed") from exc
+        if completed.returncode != 0:
+            raise ConfigSyncError("preflight", "canonical production preflight failed")
+        payload = receipt_payload(
+            status="success",
+            gate="",
+            application_git_sha=application_git_sha,
+            manifest=manifest,
+            previous_sha=previous_sha,
+            resulting_sha=resulting_sha,
+            changed=changed,
+            preflight="passed",
+            rollback_performed=False,
+        )
+        if rollout is not None:
+            payload["rollout_flags"] = {key: rollout[key] for key in ROLLOUT_FLAGS}
+        write_receipt(receipt_path, payload, uid=uid, gid=gid)
+        return payload
     except (ConfigSyncError, OSError) as caught:
         sync_error = (
             caught
@@ -410,6 +431,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise
         raise sync_error from caught
     finally:
+        if lock is not None:
+            lock.close()
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
 
@@ -426,6 +449,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--secrets-root", required=True)
     result.add_argument("--receipt", required=True)
     result.add_argument("--dry-run", action="store_true")
+    result.add_argument("--rollout", help="Protected reviewed rollout JSON; no secrets")
+    result.add_argument("--expected-config-sha256", help="Exact previous config checksum")
     result.add_argument("--test-root", help=argparse.SUPPRESS)
     result.add_argument("--preflight-script", help=argparse.SUPPRESS)
     return result

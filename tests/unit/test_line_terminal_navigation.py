@@ -100,3 +100,51 @@ async def test_adoption_intermediate_state_does_not_offer_default_menu() -> None
 
 async def _empty() -> list:
     return []
+
+
+@pytest.mark.parametrize("count", [13, 14])
+def test_return_action_rejects_overflow_without_dropping_business_actions(count):
+    import copy
+
+    message = {
+        "quickReply": {
+            "items": [
+                {"type": "action", "action": {"type": "postback", "data": f"action=choice_{i}"}}
+                for i in range(count)
+            ]
+        }
+    }
+    before = copy.deepcopy(message)
+    with pytest.raises(ValueError, match="quick_reply_capacity"):
+        add_back_to_default_menu(message)
+    assert message == before
+
+
+def test_return_action_fits_twelve_actions_and_remains_idempotent():
+    message = {
+        "quickReply": {
+            "items": [
+                {"type": "action", "action": {"type": "postback", "data": f"action=choice_{i}"}}
+                for i in range(12)
+            ]
+        }
+    }
+    add_back_to_default_menu(message)
+    add_back_to_default_menu(message)
+    assert len(message["quickReply"]["items"]) == 13
+    assert len(_back_actions(message)) == 1
+
+
+@pytest.mark.asyncio
+async def test_menu_failure_logs_type_without_sensitive_exception(monkeypatch, caplog):
+    from unittest.mock import AsyncMock
+
+    router = SimpleNamespace(
+        link_for_user=AsyncMock(side_effect=RuntimeError("synthetic-private-payload"))
+    )
+    monkeypatch.setattr(line_webhook, "_rich_menu_router", lambda: router)
+    assert await line_webhook._switch_rich_menu("synthetic-user", "VOLUNTEER") is False
+    assert "error_class=RuntimeError" in caplog.text
+    assert "synthetic-private-payload" not in caplog.text
+    assert "synthetic-user" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)

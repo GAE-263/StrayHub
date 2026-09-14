@@ -538,8 +538,10 @@ async def _switch_rich_menu(line_user_id: str | None, role: str | None) -> bool:
     try:
         rich_menu_id = await router.link_for_user(line_user_id=line_user_id, role=role)
         return rich_menu_id is not None
-    except Exception:
-        logger.warning("switching rich menu failed (role=%s)", role)
+    except Exception as exc:
+        logger.warning(
+            "switching rich menu failed (role=%s) (error_class=%s)", role, type(exc).__name__
+        )
         return False
 
 
@@ -653,8 +655,10 @@ async def _handle_menu_action(
             return True
         try:
             await line.link_rich_menu(rich_menu_id=rich_menu_id, user_id=line_user_id)
-        except Exception:
-            logger.warning("switching adoption hub menu failed")
+        except Exception as exc:
+            logger.warning(
+                "switching adoption hub menu failed (error_class=%s)", type(exc).__name__
+            )
             await _reply(line, event, [_text("目前無法切換選單，請稍後再試。")])
             return True
         message = _text("已切換到領養與毛孩日記選單 🐾")

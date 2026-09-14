@@ -83,7 +83,14 @@ git -C "$ROOT_DIR" archive "$git_sha" \
   infra/gce/systemd \
   docs/deployment/acceptance-isolation.md \
   docs/deployment/acceptance-bootstrap.md \
-  scripts/verify_acceptance_live.py | tar -x -C "$payload_dir"
+  scripts/verify_acceptance_live.py \
+  scripts/production_config_sync.py \
+  scripts/line_menu_manifest.py \
+  scripts/line_rollout_config.py \
+  scripts/line_menu_rollout.py \
+  scripts/line_online_operator.py \
+  scripts/manual_release_gate.py \
+  scripts/release_head_gate.py | tar -x -C "$payload_dir"
 
 printf '%s\n' "$git_sha" >"$payload_dir/revision"
 printf 'STRAYHUB_API_IMAGE=%s\n' "$api_image" >"$payload_dir/image-digests.env"
