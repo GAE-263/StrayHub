@@ -283,6 +283,8 @@ def validate_and_prepare(
         "workflow_identity",
         "git_sha",
         "timestamp",
+        "publication_config_sha256",
+        "credential",
         "global_default_changed",
         "per_user_binding_changed",
         "resources_deleted",
@@ -306,6 +308,13 @@ def validate_and_prepare(
         or receipt["status"] != "failure"
         or receipt["verified_manifest_created"] is not False
         or receipt["manifest_uploaded"] is not False
+        or not re.fullmatch(r"[0-9a-f]{64}", str(receipt["publication_config_sha256"]))
+        or not isinstance(receipt["credential"], dict)
+        or set(receipt["credential"]) != {"secret_name", "version"}
+        or not re.fullmatch(
+            r"[A-Za-z][A-Za-z0-9_-]{0,254}", str(receipt["credential"]["secret_name"])
+        )
+        or not re.fullmatch(r"[1-9][0-9]*", str(receipt["credential"]["version"]))
         or receipt["progress_sha256"] != sha256(progress_raw).hexdigest()
         or any(
             receipt[key] is not False

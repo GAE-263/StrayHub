@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "gcp_project_id": "canvas-primacy-502703-k1",
+  "workload_identity_provider": "projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github",
+  "artifact_publisher_service_account": "strayhub-artifact-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+  "deployer_service_account": "strayhub-gce-deployer@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+  "artifact_registry": "asia-east1-docker.pkg.dev/canvas-primacy-502703-k1/strayhub",
+  "production_instance": "strayhub-gce",
+  "production_zone": "us-central1-c"
+}

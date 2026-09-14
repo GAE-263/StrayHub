@@ -15,11 +15,6 @@ ignores:
     parameter: LINE_CHANNEL_ACCESS_TOKEN
     reason: os.environ.get reads a process environment variable; it is not a URL query reader.
     owner: line-integration
-  - path: scripts/line_menu_publication_gate.py
-    rule: query_reader
-    parameter: LINE_CHANNEL_ACCESS_TOKEN
-    reason: os.environ.get reads the protected job environment and sends the value only as an Authorization header.
-    owner: line-integration
   - path: scripts/verify_acceptance_live.py
     rule: query_reader
     parameter: access_token

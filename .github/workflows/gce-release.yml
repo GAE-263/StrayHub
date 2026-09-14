@@ -2,259 +2,208 @@ name: GCE Immutable Release
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/gce-release.yml"
-      - "infra/gce/**"
-      - "infra/gcp-platform/**"
-      - "infra/gce/images/Dockerfile.*"
-      - "scripts/build-release-bundle.sh"
-      - "scripts/verify_acceptance_live.py"
-      - "services/**"
-      - "tests/contract/test_gce_release_contract.py"
-      - "tests/contract/test_gcp_platform_terraform_contract.py"
-      - "pyproject.toml"
-      - "uv.lock"
   push:
-    # Every release commit must run the complete release pipeline. Do not add a path filter here:
-    # frontend-only and documentation-bundled releases are still production candidates.
     branches: [main, release]
   workflow_dispatch:
     inputs:
-      publish:
-        description: Publish immutable release images and bundle after verification
+      operation:
+        description: Verification, immutable publication, or separate receipt-backed deployment
         required: true
-        default: false
-        type: boolean
-      deploy:
-        description: Deploy the published release (release branch only)
+        default: verify
+        type: choice
+        options:
+          - verify
+          - publish
+          - deploy
+      git_sha:
+        description: Exact lowercase 40-character release HEAD
         required: true
-        default: false
-        type: boolean
+        type: string
+      confirmation:
+        description: Exact operation confirmation including the full SHA
+        required: false
+        type: string
       schema_compatibility:
-        description: Reviewed rollback compatibility for the release
+        description: Reviewed rollback compatibility for publication
         required: true
         default: unknown
         type: choice
-        options:
-          - unknown
-          - forward-only
-          - backward-compatible-with-previous
+        options: [unknown, forward-only, backward-compatible-with-previous]
+      publication_run_id:
+        description: Successful prior publication workflow run ID (deploy only)
+        required: false
+        type: string
+      publication_artifact_id:
+        description: Exact prior publication artifact ID (deploy only)
+        required: false
+        type: string
+      publication_artifact_sha256:
+        description: Exact SHA-256 of the prior publication artifact archive (deploy only)
+        required: false
+        type: string
+      release_bundle_sha256:
+        description: Exact bundle SHA-256 from the verified publication receipt (deploy only)
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  # Keep deployment and its receipt verification atomic relative to the next release workflow.
   group: gce-immutable-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   full-quality-gate:
     name: Full repository quality gate
-    if: >-
-      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/release') ||
-          (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'deploy' }}
     uses: ./.github/workflows/ci.yml
 
   verify-release:
     name: Verify GCE release candidate
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'deploy' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
           fetch-depth: 0
-
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
-
       - run: uv sync --dev
-
       - name: Python quality and release contracts
         run: |
           uv run ruff check .
           uv run ruff format --check .
-          uv run pytest \
-            tests/contract/test_gce_release_contract.py \
-            tests/contract/test_gce_acceptance_isolation_contract.py \
-            tests/contract/test_gce_production_compose_contract.py \
-            tests/contract/test_gce_systemd_contract.py \
-            tests/contract/test_production_config_sync.py \
-            tests/contract/test_gcp_platform_terraform_contract.py
-
+          uv run pytest tests/contract/test_gce_release_contract.py tests/contract/test_gce_acceptance_isolation_contract.py tests/contract/test_gce_production_compose_contract.py tests/contract/test_gce_systemd_contract.py tests/contract/test_production_config_sync.py tests/contract/test_gcp_platform_terraform_contract.py tests/unit/test_manual_release_gate.py
       - name: Shell syntax and lint
         run: |
-          bash -n scripts/build-release-bundle.sh
-          bash -n infra/gce/scripts/deploy-release-ci.sh
-          bash -n infra/gce/scripts/deploy-release.sh
-          bash -n infra/gce/scripts/rollback-release.sh
-          bash -n infra/gce/scripts/verify-release-receipt.sh
-          bash -n infra/gce/scripts/acceptance-preflight.sh
-          bash -n infra/gce/scripts/cleanup-acceptance.sh
-          bash -n infra/gce/scripts/sync-production-config.sh
-          shellcheck \
-            scripts/build-release-bundle.sh \
-            infra/gce/scripts/deploy-release-ci.sh \
-            infra/gce/scripts/deploy-release.sh \
-            infra/gce/scripts/rollback-release.sh \
-            infra/gce/scripts/verify-release-receipt.sh \
-            infra/gce/scripts/acceptance-preflight.sh \
-            infra/gce/scripts/cleanup-acceptance.sh \
-            infra/gce/scripts/sync-production-config.sh
-
+          bash -n scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
+          shellcheck scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
       - name: Production Compose and preflight contract
         run: |
           ./infra/gce/scripts/preflight.sh
-          docker compose \
-            -f infra/gce/docker-compose.production.yml \
-            --env-file infra/gce/.env.production.example \
-            config --quiet
-
+          docker compose -f infra/gce/docker-compose.production.yml --env-file infra/gce/.env.production.example config --quiet
       - name: Terraform validation without backend access
         run: |
-          terraform fmt -check -recursive \
-            infra/gce/terraform \
-            infra/gcp-platform/terraform
+          terraform fmt -check -recursive infra/gce/terraform infra/gcp-platform/terraform
           terraform -chdir=infra/gce/terraform init -backend=false -input=false
           terraform -chdir=infra/gce/terraform validate
           terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
           terraform -chdir=infra/gcp-platform/terraform validate
-
       - name: Repository-native secret scan
         run: |
-          ! rg -n --hidden \
-            --glob '!.git/**' \
-            --glob '!node_modules/**' \
-            --glob '!**/.venv/**' \
-            --glob '!**/.terraform/**' \
-            --glob '!**/*.lock' \
-            '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----)' \
-            .
-
+          ! rg -n --hidden --glob '!.git/**' --glob '!node_modules/**' --glob '!**/.venv/**' --glob '!**/.terraform/**' --glob '!**/*.lock' '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----)' .
       - name: Build clean-SHA images without publication
         env:
-          REVISION: ${{ github.sha }}
+          REVISION: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
         run: |
-          docker build \
-            --label "org.opencontainers.image.revision=$REVISION" \
-            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gce/images/Dockerfile.api -t "strayhub-api:$REVISION" .
-          docker build \
-            --label "org.opencontainers.image.revision=$REVISION" \
-            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gce/images/Dockerfile.worker -t "strayhub-worker:$REVISION" .
-          docker build \
-            --label "org.opencontainers.image.revision=$REVISION" \
-            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -f infra/gce/images/Dockerfile.web -t "strayhub-web:$REVISION" .
+          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
+          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.api -t "strayhub-api:$REVISION" .
+          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.worker -t "strayhub-worker:$REVISION" .
+          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.web -t "strayhub-web:$REVISION" .
+
+  authorize-manual-write:
+    name: Authorize exact manual write operation
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && (inputs.operation == 'publish' || inputs.operation == 'deploy') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Refuse stale release candidates and verify manual confirmation
+        env:
+          BUNDLE_SHA256: ${{ inputs.release_bundle_sha256 }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          git fetch --no-tags origin refs/heads/release:refs/remotes/origin/release
+          checkout_sha="$(git rev-parse HEAD)"
+          release_sha="$(git rev-parse refs/remotes/origin/release)"
+          args=(gate --operation "$OPERATION" --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$checkout_sha" --release-sha "$release_sha")
+          if [[ -n "$BUNDLE_SHA256" ]]; then args+=(--bundle-sha256 "$BUNDLE_SHA256"); fi
+          python3 -m scripts.manual_release_gate "${args[@]}"
+          printf '### Authorized `%s` for `%s`\n' "$OPERATION" "$release_sha" >>"$GITHUB_STEP_SUMMARY"
 
   publish-release:
     name: Publish immutable release candidate
-    needs: [full-quality-gate, verify-release]
-    if: >-
-      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/release') ||
-          (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    needs: [full-quality-gate, verify-release, authorize-manual-write]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && inputs.operation == 'publish' }}
     runs-on: ubuntu-latest
+    # OIDC namespace only; not an approval, secret, or variable gate.
     environment: release-publication
-    outputs:
-      artifact_digest: ${{ steps.artifact.outputs.artifact-digest }}
-      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
-      release_id: ${{ steps.bundle.outputs.release_id }}
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.git_sha }}
           fetch-depth: 0
-
-      - name: Require publication configuration
-        env:
-          REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
-          PUBLISHER: ${{ vars.GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT }}
-          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-        run: |
-          [[ -n "$REGISTRY" ]]
-          [[ -n "$PUBLISHER" ]]
-          [[ -n "$PROVIDER" ]]
-
+          persist-credentials: false
+      - id: config
+        name: Validate versioned non-secret release configuration
+        run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_RELEASE_PUBLISHER_SERVICE_ACCOUNT }}
-
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.publisher }}
       - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Authenticate Docker to the dedicated registry
-        env:
-          REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
-        run: |
-          registry_host="${REGISTRY%%/*}"
-          gcloud auth configure-docker "$registry_host" --quiet
-
       - name: Build and push exact Git SHA images
         id: images
         env:
-          REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
-          REVISION: ${{ github.sha }}
+          REGISTRY: ${{ steps.config.outputs.registry }}
+          REVISION: ${{ inputs.git_sha }}
         run: |
+          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
+          gcloud auth configure-docker "${REGISTRY%%/*}" --quiet
           for service in api worker web; do
             image="$REGISTRY/strayhub-$service:$REVISION"
-            docker build \
-              --label "org.opencontainers.image.revision=$REVISION" \
-              --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-              -f "infra/gce/images/Dockerfile.$service" -t "$image" .
+            docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f "infra/gce/images/Dockerfile.$service" -t "$image" .
             docker push "$image"
             reference="$(docker inspect --format='{{index .RepoDigests 0}}' "$image")"
             [[ "$reference" == *@sha256:* ]]
             printf '%s_image=%s\n' "$service" "$reference" >>"$GITHUB_OUTPUT"
           done
-
-      - name: Build and validate immutable release bundle
-        id: bundle
+      - name: Build and validate immutable release bundle and receipt
         env:
           API_IMAGE: ${{ steps.images.outputs.api_image }}
           WORKER_IMAGE: ${{ steps.images.outputs.worker_image }}
           WEB_IMAGE: ${{ steps.images.outputs.web_image }}
-          SCHEMA_COMPATIBILITY: ${{ github.event_name == 'workflow_dispatch' && inputs.schema_compatibility || 'unknown' }}
         run: |
-          chmod +x scripts/build-release-bundle.sh infra/gce/scripts/release-manifest.py
-          ./scripts/build-release-bundle.sh \
-            --git-sha "${{ github.sha }}" \
-            --api-image "$API_IMAGE" \
-            --worker-image "$WORKER_IMAGE" \
-            --web-image "$WEB_IMAGE" \
-            --schema-compatibility "$SCHEMA_COMPATIBILITY" \
-            --ci-run-id "${{ github.run_id }}" \
-            --ci-workflow "${{ github.workflow }}" \
-            --output-dir release-bundle
-          release_id="$(python3 infra/gce/scripts/release-manifest.py show-field \
-            --manifest release-bundle/release-manifest.json --field release_id)"
-          printf 'release_id=%s\n' "$release_id" >>"$GITHUB_OUTPUT"
-
+          ./scripts/build-release-bundle.sh --git-sha "${{ inputs.git_sha }}" --api-image "$API_IMAGE" --worker-image "$WORKER_IMAGE" --web-image "$WEB_IMAGE" --schema-compatibility "${{ inputs.schema_compatibility }}" --ci-run-id "$GITHUB_RUN_ID" --ci-workflow "$GITHUB_WORKFLOW" --output-dir release-bundle
+          python3 -m scripts.manual_release_gate create-publication-receipt --manifest release-bundle/release-manifest.json --output release-bundle/publication-receipt.json --run-id "$GITHUB_RUN_ID"
       - uses: actions/upload-artifact@v4
-        id: artifact
+        id: publication_artifact
         with:
-          name: strayhub-gce-release-${{ github.sha }}
+          name: strayhub-gce-publication-${{ inputs.git_sha }}
           path: release-bundle/
           if-no-files-found: error
           retention-days: 30
+      - name: Record publication identity
+        run: |
+          printf 'Publication artifact ID: `%s`\n' '${{ steps.publication_artifact.outputs.artifact-id }}' >>"$GITHUB_STEP_SUMMARY"
+          printf 'Publication artifact SHA-256: `%s`\n' '${{ steps.publication_artifact.outputs.artifact-digest }}' >>"$GITHUB_STEP_SUMMARY"
+          printf 'Deployment performed: `false`\n' >>"$GITHUB_STEP_SUMMARY"
 
   deploy-production:
-    name: Deploy release to production GCE
-    needs: publish-release
-    if: >-
-      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/release') ||
-          (github.event_name == 'workflow_dispatch' && inputs.deploy &&
-           github.ref == 'refs/heads/release') }}
+    name: Deploy previously published release to production GCE
+    needs: authorize-manual-write
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && inputs.operation == 'deploy' }}
     runs-on: ubuntu-latest
     environment:
       name: production
       url: https://strayhub.enadv.quest
+    outputs:
+      release_id: ${{ steps.artifact.outputs.release_id }}
     permissions:
       actions: read
       contents: read
@@ -262,107 +211,70 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.git_sha }}
           fetch-depth: 0
-
-      - name: Refuse stale release candidates
-        run: |
-          git fetch --no-tags origin refs/heads/release:refs/remotes/origin/release
-          [[ "$(git rev-parse refs/remotes/origin/release)" == "$GITHUB_SHA" ]]
-
-      - name: Download and validate release artifact
+          persist-credentials: false
+      - id: artifact
+        name: Download and validate prior publication receipt
         env:
-          ARTIFACT_ID: ${{ needs.publish-release.outputs.artifact_id }}
-          EXPECTED_ARTIFACT_DIGEST: ${{ needs.publish-release.outputs.artifact_digest }}
-          EXPECTED_RELEASE_ID: ${{ needs.publish-release.outputs.release_id }}
+          ARTIFACT_ID: ${{ inputs.publication_artifact_id }}
+          ARTIFACT_SHA256: ${{ inputs.publication_artifact_sha256 }}
+          BUNDLE_SHA256: ${{ inputs.release_bundle_sha256 }}
           GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id }}
         run: |
-          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
-          [[ "$EXPECTED_ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
-          artifact_archive="$RUNNER_TEMP/strayhub-gce-release-$GITHUB_SHA.zip"
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
-            >"$artifact_archive"
-          printf '%s  %s\n' "$EXPECTED_ARTIFACT_DIGEST" "$artifact_archive" | sha256sum --check -
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$PUBLICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ && "$BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          run_json="$RUNNER_TEMP/publication-run.json"
+          artifact_json="$RUNNER_TEMP/publication-artifact.json"
+          archive="$RUNNER_TEMP/publication.zip"
+          gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$PUBLICATION_RUN_ID" >"$run_json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); e={"event":"workflow_dispatch","head_branch":"release","head_sha":sys.argv[2],"conclusion":"success","path":".github/workflows/gce-release.yml"}; any(r.get(k)!=v for k,v in e.items()) and sys.exit("prior publication run identity mismatch")' "$run_json" "$INPUT_SHA"
+          gh api "/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" >"$artifact_json"
+          python3 -c 'import json,sys; a=json.load(open(sys.argv[1])); d=str(a.get("digest","")).removeprefix("sha256:"); ok=a.get("workflow_run",{}).get("id")==int(sys.argv[2]) and a.get("name")==f"strayhub-gce-publication-{sys.argv[3]}" and a.get("expired") is False and d==sys.argv[4]; sys.exit(0 if ok else "publication artifact metadata mismatch")' "$artifact_json" "$PUBLICATION_RUN_ID" "$INPUT_SHA" "$ARTIFACT_SHA256"
+          gh api "/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$archive"
+          printf '%s  %s\n' "$ARTIFACT_SHA256" "$archive" | sha256sum --check -
           mkdir release-bundle
-          unzip -q "$artifact_archive" -d release-bundle
-          python3 infra/gce/scripts/release-manifest.py validate-artifact \
-            --artifact-dir release-bundle
-          [[ "$(python3 infra/gce/scripts/release-manifest.py show-field \
-            --manifest release-bundle/release-manifest.json --field git_sha)" == "$GITHUB_SHA" ]]
-          [[ "$(python3 infra/gce/scripts/release-manifest.py show-field \
-            --manifest release-bundle/release-manifest.json --field release_id)" == \
-            "$EXPECTED_RELEASE_ID" ]]
-
-      - name: Require deployment configuration
-        env:
-          DEPLOYER: ${{ vars.GCP_RELEASE_DEPLOYER_SERVICE_ACCOUNT }}
-          INSTANCE: ${{ vars.GCP_PRODUCTION_INSTANCE }}
-          PROJECT: ${{ vars.GCP_PRODUCTION_PROJECT }}
-          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          ZONE: ${{ vars.GCP_PRODUCTION_ZONE }}
-        run: |
-          [[ -n "$DEPLOYER" ]]
-          [[ -n "$INSTANCE" ]]
-          [[ -n "$PROJECT" ]]
-          [[ -n "$PROVIDER" ]]
-          [[ -n "$ZONE" ]]
-
+          unzip -q "$archive" -d release-bundle
+          python3 infra/gce/scripts/release-manifest.py validate-artifact --artifact-dir release-bundle
+          python3 -m scripts.manual_release_gate validate-publication-receipt --receipt release-bundle/publication-receipt.json --manifest release-bundle/release-manifest.json --git-sha "$INPUT_SHA" --bundle-sha256 "$BUNDLE_SHA256" --run-id "$PUBLICATION_RUN_ID"
+          release_id="$(python3 infra/gce/scripts/release-manifest.py show-field --manifest release-bundle/release-manifest.json --field release_id)"
+          printf 'release_id=%s\n' "$release_id" >>"$GITHUB_OUTPUT"
+      - id: config
+        name: Validate versioned non-secret deployment configuration
+        run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_RELEASE_DEPLOYER_SERVICE_ACCOUNT }}
-
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.deployer }}
       - uses: google-github-actions/setup-gcloud@v2
-
       - name: Transfer and deploy validated release over IAP
-        env:
-          GCP_INSTANCE: ${{ vars.GCP_PRODUCTION_INSTANCE }}
-          GCP_PROJECT: ${{ vars.GCP_PRODUCTION_PROJECT }}
-          GCP_ZONE: ${{ vars.GCP_PRODUCTION_ZONE }}
-        run: |
-          infra/gce/scripts/deploy-release-ci.sh \
-            --artifact-dir release-bundle \
-            --git-sha "$GITHUB_SHA" \
-            --instance "$GCP_INSTANCE" \
-            --project "$GCP_PROJECT" \
-            --run-id "$GITHUB_RUN_ID" \
-            --zone "$GCP_ZONE"
+        run: infra/gce/scripts/deploy-release-ci.sh --artifact-dir release-bundle --git-sha "${{ inputs.git_sha }}" --instance "${{ steps.config.outputs.instance }}" --project "${{ steps.config.outputs.project_id }}" --run-id "$GITHUB_RUN_ID" --zone "${{ steps.config.outputs.zone }}"
 
   verify-production:
     name: Verify production release
-    needs: [publish-release, deploy-production]
+    needs: deploy-production
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && inputs.operation == 'deploy' && needs.deploy-production.result == 'success' }}
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://strayhub.enadv.quest
+    environment: production
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          ref: ${{ inputs.git_sha }}
+          persist-credentials: false
+      - id: config
+        run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_RELEASE_DEPLOYER_SERVICE_ACCOUNT }}
-
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.deployer }}
       - uses: google-github-actions/setup-gcloud@v2
-
       - name: Verify exact receipt and runtime over IAP
-        env:
-          GCP_INSTANCE: ${{ vars.GCP_PRODUCTION_INSTANCE }}
-          GCP_PROJECT: ${{ vars.GCP_PRODUCTION_PROJECT }}
-          GCP_ZONE: ${{ vars.GCP_PRODUCTION_ZONE }}
-          RELEASE_ID: ${{ needs.publish-release.outputs.release_id }}
-        run: |
-          gcloud compute ssh "$GCP_INSTANCE" \
-            --project "$GCP_PROJECT" \
-            --zone "$GCP_ZONE" \
-            --tunnel-through-iap \
-            --quiet \
-            --command "sudo -n /opt/strayhub/current/infra/gce/scripts/verify-release-receipt.sh --git-sha '$GITHUB_SHA' --release-id '$RELEASE_ID'"
-
+        run: gcloud compute ssh "${{ steps.config.outputs.instance }}" --project "${{ steps.config.outputs.project_id }}" --zone "${{ steps.config.outputs.zone }}" --tunnel-through-iap --quiet --command "sudo -n /opt/strayhub/current/infra/gce/scripts/verify-release-receipt.sh --git-sha '${{ inputs.git_sha }}' --release-id '${{ needs.deploy-production.outputs.release_id }}'"
       - name: Verify canonical public health
         run: |
           curl --fail --silent --show-error --max-time 15 https://strayhub.enadv.quest/ >/dev/null

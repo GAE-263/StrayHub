@@ -1,6 +1,6 @@
 # Immutable GCE Release Process
 
-Status: release-branch automatic deployment wiring **IMPLEMENTED IN REPOSITORY**; live activation pending
+Status: single-operator manual publication/deployment gates **IMPLEMENTED IN REPOSITORY**; live activation pending
 
 Deletion safety: **BLOCKED**
 
@@ -17,8 +17,9 @@ clean Git SHA
   -> registry@sha256 references
   -> deterministic deployment-bundle.tar
   -> release-manifest.json + checksums.sha256
-  -> merge/push exact commit to release
-  -> WIF + OS Login/IAP deployment
+  -> merge/push exact commit to release (verification only)
+  -> manual immutable publication of exact release HEAD
+  -> separate receipt-backed manual WIF + OS Login/IAP deployment
   -> exact receipt/runtime/public-health verification
 ```
 
@@ -31,13 +32,24 @@ Terraform validation without backend access, the repository secret scan, and cle
 builds. The release workflow calls the repository's primary CI as a required reusable workflow, so
 its full backend/frontend/contracts/critical-E2E matrix must also pass before publication.
 
-For this small-team workflow, merging the reviewed exact commit into `release` is the production
-approval. There is deliberately no required GitHub environment reviewer: `release-publication` and
-`production` provide identity separation, deployment history, and environment-scoped WIF subjects,
-not a second human approval. Direct pushes to `release` have the same effect and therefore must be
-restricted operationally to intentional releases.
+This repository uses a **single-operator manual gate**. It is not an independent human approval
+control. GitHub Environment names are retained only as OIDC identity namespaces and are not treated
+as approval, secret, or variable protection. A push to `release` runs verification and clean-SHA
+local image builds only; its write jobs are excluded by job-level `workflow_dispatch` conditions.
 
-A `release` push publishes automatically and requires these repository/environment variables:
+Application publication and deployment read strict versioned non-secret values from
+`infra/gce/application-release-config.json`; they do not read GitHub Environment variables.
+The manual sequence is:
+
+```text
+main → release review → release push verification only
+→ dispatch publish with PUBLISH <full-sha>
+→ record publication run/artifact/bundle digests
+→ separate dispatch deploy with DEPLOY PRODUCTION <full-sha> <bundle-sha256>
+→ production receipt verification
+```
+
+The former variable names are no longer workflow inputs:
 
 ```text
 GCP_WORKLOAD_IDENTITY_PROVIDER
@@ -51,11 +63,13 @@ GCP_PRODUCTION_ZONE
 
 The publisher and deployer are separate short-lived GitHub OIDC/WIF identities. The registry is a
 dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitly adopted legacy
-resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM, `release`
-WIF condition, variables, and environments are configured, repository wiring is ready but live
-automatic deployment is blocked by configuration.
+resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM and exact
+WIF conditions are configured, repository wiring is ready but manual deployment remains blocked.
 
-The publish job builds from the full protected-branch SHA, applies OCI source/revision labels,
+The publish job runs only for `operation=publish`, actor `yawan0203`, repository
+`GAE-263/StrayHub`, event `workflow_dispatch`, `refs/heads/release`, and four identical identities:
+input SHA, GitHub SHA, checkout HEAD, and fetched release HEAD. Confirmation is case-sensitive and
+whitespace-sensitive. It builds from the full protected-branch SHA, applies OCI source/revision labels,
 pushes each image, resolves its registry digest, and runs:
 
 ```bash
@@ -83,6 +97,7 @@ The published artifact contains:
 release-manifest.json
 deployment-bundle.tar
 checksums.sha256
+publication-receipt.json
 ```
 
 The deterministic tar contains the exact Compose file, GCE scripts/systemd units, secret map,
@@ -103,10 +118,11 @@ agreement between the manifest and `image-digests.env`.
 
 ## Production trigger and transport
 
-After `verify-release` succeeds, `publish-release` builds and publishes the exact `release` SHA and
-uploads the validated bundle. `deploy-production` refuses a stale SHA, downloads the artifact by its
-immutable artifact ID, fails unless the downloaded archive matches the publisher's SHA-256 output,
-revalidates the manifest and file checksums, and transfers only the bundle files through IAP. Public
+`publish-release` never invokes deployment. A later `operation=deploy` run performs no build or
+publication. It validates the prior successful workflow identity, exact artifact ID/name/archive
+SHA-256, publication receipt, manifest SHA, image digests, and bundle SHA-256 before WIF auth or SSH.
+Missing, expired, stale, or inconsistent evidence fails closed. It then transfers only the bundle
+files through IAP. Public
 TCP 22, static SSH keys, firewall changes, production rebuilds, and Terraform mutation are
 forbidden.
 
@@ -147,18 +163,19 @@ manifest, successful receipt, and running digest set all match the expected rele
 then checks the canonical public Web/API health endpoints. It does not run authenticated acceptance
 or emit credentials.
 
-Manual `workflow_dispatch` publication remains available for recovery/testing. Automatic deployment
-from it is accepted only when `deploy=true` and the selected ref is `release`.
+The first transition merge into `release` is safe because GitHub evaluates the workflow definition
+from that pushed commit, whose publication and deployment jobs both require `workflow_dispatch` and
+an exact operation. No Environment approval is needed to suppress writes on that transition push.
 
 ### Live activation checklist
 
-Repository implementation does not grant cloud access. Before the first automatic deployment, an
+Repository implementation does not grant cloud access. Before the first manual deployment, an
 operator must separately verify all of the following in GitHub and GCP:
 
 - create the `release` branch from the intended `main` commit;
 - create/configure `production` without required reviewers and retain `release-publication` without
   required reviewers;
-- set all seven non-secret variables listed above in the scopes used by their respective jobs;
+- review the checked-in `application-release-config.json` against the actual retained resources;
 - extend the WIF provider condition to admit the exact `refs/heads/release` workflow identity for
   the `release-publication` and `production` environments;
 - allow that WIF principal to impersonate only `strayhub-gce-deployer` with

@@ -3,6 +3,10 @@
 本文件是本地發布準備，不是 production／LINE 操作授權。不得因部署成功而假設
 LINE 資源已發布；一般部署不會呼叫本工具。
 
+本 repository 採 GitHub Free/private repository 的 single-operator manual gate；這不是獨立
+第二人批准。`release-publication` Environment 僅保留為既有 WIF claim namespace，不提供
+reviewer、secret 或 variable 安全性。
+
 ## 工具契約
 
 ```bash
@@ -24,7 +28,14 @@ uv run python -m scripts.sync_line_role_menus --apply \
   --manifest /approved/operator-directory/menus.json
 ```
 
-憑證僅從 process 的 `LINE_CHANNEL_ACCESS_TOKEN` 取得，不放命令參數／manifest。
+正式 workflow 不再讀 GitHub secret/variable。它先驗證 actor、repository、dispatch、release
+ref、exact release HEAD 及精確 `PUBLISH LINE MENU <full-sha>`，再讀取
+`infra/gce/line-publication-config.json`，經 WIF 存取固定 Secret Manager secret 的明確正整數
+version。`latest`、alias、resource path、空值與 shell 內容全部拒絕。
+
+Token 只存在 runner 的 mode 0600 短生命週期檔案；取得後立即 add-mask，不寫 output、
+`GITHUB_ENV`、artifact、cache、manifest 或 receipt，EXIT/HUP/INT/TERM 都清理。發布 receipt
+只記 secret name/version 與 publication config SHA-256，不記 value 或 payload hash。
 GET Bot info 的 basicId 必須與人工確認的正式 Bot 一致；manifest 另固定 Bot userId
 的 SHA-256。Bot info 不提供 Channel ID，因此 Channel→Bot 的 Console 關係仍由 operator
 先唯讀確認，不能聲稱此 API 驗證了 Channel ID。
@@ -49,6 +60,17 @@ manifest 以 mode 0600 暫存檔、fsync、原子 replace 保存；lock 檔保�
 造成鎖競爭。必須跨主機由 operator 保證單一 publisher，檔案鎖不是分散式鎖。
 不要遺失／編輯 unresolved intent，也不要換空 manifest「重試」；需先人工唯讀釐清結果。
 資源 ID、Bot basicId、hash 是操作識別資料，不含 token、真人 UID 或其他 PII。
+
+## 手動 LINE 發布與基礎設施前置
+
+`operation=plan` 不做 WIF、Secret Manager、LINE 或 GCS 操作。`operation=publish` 只建立／
+回讀資源及 create-only immutable manifest，不切 default、不 link/unlink、不刪除、不發訊息。
+未來 WIF 最小權限與 claims 固定於 `infra/gce/line-publication-wif-contract.json`，由離線測試
+驗證；本次不 apply。專用 publisher SA、候選 manifest bucket（全球名稱尚未確認）、其 IAM、
+以及現有 provider 對精確 workflow/actor/ref claims 的支援，都必須由下一輪另行建立或核對。
+
+正式順序：release verification → WIF/SA/bucket/IAM ready → pinned secret version ready → plan
+→ manual publish exact SHA → immutable manifest → inert config sync → scoped human smoke → promotion。
 
 ## 流程與責任
 

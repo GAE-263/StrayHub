@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "gcp_project_id": "canvas-primacy-502703-k1",
+  "gcp_project_number": "629644858010",
+  "workload_identity_provider": "projects/629644858010/locations/global/workloadIdentityPools/github-strayhub/providers/github",
+  "publisher_service_account": "strayhub-line-menu-publisher@canvas-primacy-502703-k1.iam.gserviceaccount.com",
+  "manifest_bucket": "canvas-primacy-502703-k1-strayhub-line-menu-manifests",
+  "line_token_secret_name": "strayhub-prod-line-channel-access-token",
+  "bot_basic_id": "@356imngb",
+  "location": "us-central1",
+  "manifest_retention_seconds": 31536000
+}

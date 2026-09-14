@@ -1,20 +1,26 @@
-name: Protected LINE Rich Menu Publication
+name: Manual LINE Rich Menu Publication
 
 on:
   workflow_dispatch:
     inputs:
       git_sha:
-        description: Exact lowercase 40-character release commit SHA
+        description: Exact lowercase 40-character release HEAD
         required: true
         type: string
       operation:
-        description: Plan locally or publish resources after protected approval
+        description: Offline plan or explicitly authorized publication
         required: true
         default: plan
         type: choice
-        options:
-          - plan
-          - publish
+        options: [plan, publish]
+      confirmation:
+        description: Exact PUBLISH LINE MENU plus full release SHA (publish only)
+        required: false
+        type: string
+      line_token_secret_version:
+        description: Pinned positive integer Secret Manager version (publish only)
+        required: false
+        type: string
       resume_run_id:
         description: Prior failed publication run ID (publish only; pair with digest)
         required: false
@@ -33,7 +39,7 @@ concurrency:
 
 jobs:
   plan:
-    name: Validate exact source and publication plan
+    name: Validate exact source and offline publication plan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,36 +47,34 @@ jobs:
           ref: ${{ inputs.git_sha }}
           fetch-depth: 0
           persist-credentials: false
-
       - name: Require exact release HEAD
         env:
           INPUT_SHA: ${{ inputs.git_sha }}
         run: |
-          [[ "$GITHUB_REF" == "refs/heads/release" ]]
-          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$(git rev-parse HEAD)" == "$INPUT_SHA" ]]
+          [[ "$GITHUB_REF" == "refs/heads/release" && "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$INPUT_SHA" && "$GITHUB_SHA" == "$INPUT_SHA" ]]
           [[ "$(git cat-file -t "$INPUT_SHA")" == "commit" ]]
           git show-ref --verify --quiet refs/remotes/origin/release
           [[ "$(git rev-parse refs/remotes/origin/release)" == "$INPUT_SHA" ]]
           git merge-base --is-ancestor "$INPUT_SHA" refs/remotes/origin/release
-
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-
       - run: uv sync --dev
-
+      - name: Validate versioned non-secret config and future WIF contract
+        run: |
+          python3 -m scripts.line_publication_config --config infra/gce/line-publication-config.json
+          python3 -m scripts.line_wif_contract --contract infra/gce/line-publication-wif-contract.json
       - name: Validate canonical definitions and images without network
-        env:
-          INPUT_SHA: ${{ inputs.git_sha }}
-        run: uv run python -m scripts.sync_line_role_menus --git-sha "$INPUT_SHA"
+        run: uv run python -m scripts.sync_line_role_menus --git-sha "${{ inputs.git_sha }}"
 
   publish:
     name: Create or reuse resources and store verified manifest
     needs: plan
-    if: ${{ inputs.operation == 'publish' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'publish' }}
     runs-on: ubuntu-latest
-    environment: production-line-publication
+    # Existing WIF namespace only; not an approval, secret, or variable gate.
+    environment: release-publication
     permissions:
       actions: read
       contents: read
@@ -81,25 +85,26 @@ jobs:
           ref: ${{ inputs.git_sha }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Revalidate exact release HEAD after approval
+      - id: gate
+        name: Authorize operator and exact release identity before cloud access
         env:
+          CONFIRMATION: ${{ inputs.confirmation }}
           INPUT_SHA: ${{ inputs.git_sha }}
+          SECRET_VERSION: ${{ inputs.line_token_secret_version }}
         run: |
-          [[ "$GITHUB_REF" == "refs/heads/release" ]]
-          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$(git rev-parse HEAD)" == "$INPUT_SHA" ]]
+          git fetch --no-tags origin refs/heads/release:refs/remotes/origin/release
           [[ "$(git cat-file -t "$INPUT_SHA")" == "commit" ]]
-          git show-ref --verify --quiet refs/remotes/origin/release
-          [[ "$(git rev-parse refs/remotes/origin/release)" == "$INPUT_SHA" ]]
           git merge-base --is-ancestor "$INPUT_SHA" refs/remotes/origin/release
-
+          python3 -m scripts.manual_release_gate line-gate --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$(git rev-parse HEAD)" --release-sha "$(git rev-parse refs/remotes/origin/release)" --secret-version "$SECRET_VERSION"
+      - id: config
+        name: Validate versioned non-secret publication config
+        run: |
+          python3 -m scripts.line_publication_config --config infra/gce/line-publication-config.json --github-output "$GITHUB_OUTPUT"
+          python3 -m scripts.line_wif_contract --contract infra/gce/line-publication-wif-contract.json
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-
       - run: uv sync --dev
-
       - name: Restore trusted progress when explicitly requested
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -107,49 +112,37 @@ jobs:
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           RESUME_ARTIFACT_SHA256: ${{ inputs.resume_artifact_sha256 }}
         run: |
-          uv run python -m scripts.line_menu_publication_recovery \
-            --source-run-id "$RESUME_RUN_ID" \
-            --artifact-sha256 "$RESUME_ARTIFACT_SHA256" \
-            --git-sha "$INPUT_SHA" \
-            --expected-bot "${{ vars.LINE_BOT_BASIC_ID }}" \
-            --current-run-id "$GITHUB_RUN_ID" \
-            --current-run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --output line-menu-publication-output/progress.json
-
-      - name: Require protected publication configuration
-        env:
-          BOT_BASIC_ID: ${{ vars.LINE_BOT_BASIC_ID }}
-          MANIFEST_BUCKET: ${{ vars.GCP_LINE_MENU_MANIFEST_BUCKET }}
-          PUBLISHER: ${{ vars.GCP_LINE_MENU_PUBLISHER_SERVICE_ACCOUNT }}
-          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-        run: |
-          [[ "$BOT_BASIC_ID" =~ ^@[A-Za-z0-9._-]+$ ]]
-          [[ "$MANIFEST_BUCKET" =~ ^[a-z0-9][a-z0-9._-]+[a-z0-9]$ ]]
-          [[ -n "$PUBLISHER" ]]
-          [[ -n "$PROVIDER" ]]
-          [[ -n "$TOKEN" ]]
-
+          uv run python -m scripts.line_menu_publication_recovery --source-run-id "$RESUME_RUN_ID" --artifact-sha256 "$RESUME_ARTIFACT_SHA256" --git-sha "$INPUT_SHA" --expected-bot "${{ steps.config.outputs.bot_basic_id }}" --current-run-id "$GITHUB_RUN_ID" --current-run-attempt "$GITHUB_RUN_ATTEMPT" --output line-menu-publication-output/progress.json
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_LINE_MENU_PUBLISHER_SERVICE_ACCOUNT }}
-
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.publisher }}
       - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Publish resources and immutable verified manifest
+      - name: Access pinned token, publish, and remove token on every exit
         env:
+          BUCKET: ${{ steps.config.outputs.bucket }}
+          CONFIG_SHA256: ${{ steps.config.outputs.config_sha256 }}
+          EXPECTED_BOT: ${{ steps.config.outputs.bot_basic_id }}
           INPUT_SHA: ${{ inputs.git_sha }}
-          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          PROJECT: ${{ steps.config.outputs.project_id }}
+          SECRET_NAME: ${{ steps.config.outputs.secret_name }}
+          SECRET_VERSION: ${{ inputs.line_token_secret_version }}
         run: |
-          uv run python -m scripts.line_menu_publication_gate \
-            --git-sha "$INPUT_SHA" \
-            --expected-bot "${{ vars.LINE_BOT_BASIC_ID }}" \
-            --bucket "${{ vars.GCP_LINE_MENU_MANIFEST_BUCKET }}" \
-            --output-dir line-menu-publication-output \
-            --run-id "$GITHUB_RUN_ID" \
-            --run-attempt "$GITHUB_RUN_ATTEMPT"
-
+          set -euo pipefail
+          umask 077
+          token_file="$RUNNER_TEMP/line-publication-token"
+          cleanup() { rm -f -- "$token_file"; }
+          terminate() { cleanup; trap - EXIT; exit "$1"; }
+          trap cleanup EXIT
+          trap 'terminate 129' HUP
+          trap 'terminate 130' INT
+          trap 'terminate 143' TERM
+          gcloud secrets versions access "$SECRET_VERSION" --secret="$SECRET_NAME" --project="$PROJECT" --out-file="$token_file"
+          chmod 0600 "$token_file"
+          token_mask="$(<"$token_file")"
+          printf '::add-mask::%s\n' "$token_mask"
+          unset token_mask
+          uv run python -m scripts.line_menu_publication_gate --git-sha "$INPUT_SHA" --expected-bot "$EXPECTED_BOT" --bucket "$BUCKET" --output-dir line-menu-publication-output --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --token-file "$token_file" --config-sha256 "$CONFIG_SHA256" --secret-name "$SECRET_NAME" --secret-version "$SECRET_VERSION"
       - name: Preserve sanitized publication evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

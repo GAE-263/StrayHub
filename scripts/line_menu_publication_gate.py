@@ -52,6 +52,17 @@ class StoredObject:
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess[bytes]]
 
 
+def read_token_file(path: Path) -> str:
+    try:
+        mode = path.stat().st_mode & 0o777
+        token = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise PublicationError(f"token file is unavailable: {exc.strerror}") from exc
+    if mode != 0o600 or not token or "\n" in token or "\r" in token:
+        raise PublicationError("token file must be a non-empty single line with mode 0600")
+    return token
+
+
 def _run(args: Sequence[str]) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(args, check=False, capture_output=True, timeout=60)
 
@@ -130,7 +141,15 @@ def _orphan_candidates(progress_path: Path) -> list[str]:
     return sorted(set(candidates))
 
 
-def _base_receipt(*, git_sha: str, run_id: str, run_attempt: str) -> dict[str, object]:
+def _base_receipt(
+    *,
+    git_sha: str,
+    run_id: str,
+    run_attempt: str,
+    config_sha256: str = "0" * 64,
+    secret_name: str = "synthetic-secret",
+    secret_version: str = "1",
+) -> dict[str, object]:
     return {
         "schema_version": 1,
         "operation": "menu-publication",
@@ -139,6 +158,8 @@ def _base_receipt(*, git_sha: str, run_id: str, run_attempt: str) -> dict[str, o
         "workflow_identity": ".github/workflows/line-rich-menu-publish.yml",
         "git_sha": git_sha,
         "timestamp": datetime.now(UTC).isoformat(),
+        "publication_config_sha256": config_sha256,
+        "credential": {"secret_name": secret_name, "version": secret_version},
         "global_default_changed": False,
         "per_user_binding_changed": False,
         "resources_deleted": False,
@@ -152,8 +173,18 @@ def success_receipt(
     stored: StoredObject,
     run_id: str,
     run_attempt: str,
+    config_sha256: str = "0" * 64,
+    secret_name: str = "synthetic-secret",
+    secret_version: str = "1",
 ) -> dict[str, object]:
-    receipt = _base_receipt(git_sha=verified.git_sha, run_id=run_id, run_attempt=run_attempt)
+    receipt = _base_receipt(
+        git_sha=verified.git_sha,
+        run_id=run_id,
+        run_attempt=run_attempt,
+        config_sha256=config_sha256,
+        secret_name=secret_name,
+        secret_version=secret_version,
+    )
     receipt.update(
         {
             "status": "success",
@@ -188,8 +219,18 @@ def failure_receipt(
     manifest_uploaded: bool = False,
     error_code: str = "resource_publication",
     candidate_ids: tuple[str, ...] = (),
+    config_sha256: str = "0" * 64,
+    secret_name: str = "synthetic-secret",
+    secret_version: str = "1",
 ) -> dict[str, object]:
-    receipt = _base_receipt(git_sha=git_sha, run_id=run_id, run_attempt=run_attempt)
+    receipt = _base_receipt(
+        git_sha=git_sha,
+        run_id=run_id,
+        run_attempt=run_attempt,
+        config_sha256=config_sha256,
+        secret_name=secret_name,
+        secret_version=secret_version,
+    )
     receipt.update(
         {
             "status": "failure",
@@ -220,6 +261,9 @@ async def run_gate(
     run_id: str,
     run_attempt: str,
     recovery_identity: dict | None = None,
+    config_sha256: str = "0" * 64,
+    secret_name: str = "synthetic-secret",
+    secret_version: str = "1",
 ) -> dict[str, object]:
     progress_path.parent.mkdir(parents=True, exist_ok=True)
     verified_manifest_created = False
@@ -261,6 +305,9 @@ async def run_gate(
             stored=stored_manifest,
             run_id=run_id,
             run_attempt=run_attempt,
+            config_sha256=config_sha256,
+            secret_name=secret_name,
+            secret_version=secret_version,
         )
         receipt_bytes = canonical_json(receipt)
         _atomic_write(receipt_path, receipt_bytes)
@@ -285,6 +332,9 @@ async def run_gate(
             manifest_uploaded=manifest_uploaded,
             error_code=getattr(exc, "code", gate),
             candidate_ids=getattr(exc, "candidate_ids", ()),
+            config_sha256=config_sha256,
+            secret_name=secret_name,
+            secret_version=secret_version,
         )
         _atomic_write(receipt_path, canonical_json(receipt))
         raise PublicationError(
@@ -301,14 +351,25 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--run-attempt", required=True)
+    parser.add_argument("--token-file", type=Path, required=True)
+    parser.add_argument("--config-sha256", required=True)
+    parser.add_argument("--secret-name", required=True)
+    parser.add_argument("--secret-version", required=True)
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.git_sha):
         parser.error("--git-sha must be a full lowercase SHA")
     if not RUN_ID.fullmatch(args.run_id) or not RUN_ID.fullmatch(args.run_attempt):
         parser.error("workflow run identity must be numeric")
-    token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-    if not token:
-        parser.error("LINE_CHANNEL_ACCESS_TOKEN is required in the protected publish job")
+    if not re.fullmatch(r"[0-9a-f]{64}", args.config_sha256):
+        parser.error("--config-sha256 must be lowercase SHA-256")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,254}", args.secret_name):
+        parser.error("--secret-name is invalid")
+    if not re.fullmatch(r"[1-9][0-9]*", args.secret_version):
+        parser.error("--secret-version must be a positive integer")
+    try:
+        token = read_token_file(args.token_file)
+    except PublicationError as exc:
+        parser.error(str(exc))
     definitions = discover_definitions()
     plan = publication_plan({role: definitions[role] for role in REQUIRED_ROLES}, args.image_dir)
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -355,6 +416,9 @@ def main() -> None:
                 run_id=args.run_id,
                 run_attempt=args.run_attempt,
                 recovery_identity=recovery_identity,
+                config_sha256=args.config_sha256,
+                secret_name=args.secret_name,
+                secret_version=args.secret_version,
             )
 
     try:

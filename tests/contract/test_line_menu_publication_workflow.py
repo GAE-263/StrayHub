@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 WORKFLOW_PATH = Path(".github/workflows/line-rich-menu-publish.yml")
@@ -21,6 +24,8 @@ def test_workflow_is_manual_only_and_plan_is_default() -> None:
     assert inputs["git_sha"]["required"] == "true"
     assert inputs["operation"]["default"] == "plan"
     assert inputs["operation"]["options"] == ["plan", "publish"]
+    assert inputs["line_token_secret_version"]["required"] == "false"
+    assert inputs["confirmation"]["required"] == "false"
     assert document["permissions"] == {"contents": "read"}
 
 
@@ -42,17 +47,31 @@ def test_publish_is_protected_and_has_minimal_permissions() -> None:
     publish = document["jobs"]["publish"]
     publish_text = yaml.safe_dump(publish)
 
-    assert publish["environment"] == "production-line-publication"
+    assert publish["environment"] == "release-publication"
     assert publish["permissions"] == {
         "actions": "read",
         "contents": "read",
         "id-token": "write",
     }
     assert "inputs.operation == 'publish'" in publish["if"]
-    assert "secrets.LINE_CHANNEL_ACCESS_TOKEN" in publish_text
+    assert "secrets.LINE_CHANNEL_ACCESS_TOKEN" not in publish_text
+    assert "vars." not in publish_text
     assert "google-github-actions/auth@v2" in publish_text
-    assert "GCP_LINE_MENU_MANIFEST_BUCKET" in publish_text
-    assert "GCP_LINE_MENU_PUBLISHER_SERVICE_ACCOUNT" in publish_text
+    assert "line-publication-config.json" in publish_text
+    assert "gcloud secrets versions access" in publish_text
+    assert "--token-file" in publish_text
+    assert "::add-mask::" in publish_text
+    assert 'versions access "latest"' not in publish_text
+    assert publish_text.index("manual_release_gate line-gate") < publish_text.index(
+        "google-github-actions/auth@v2"
+    )
+    assert publish_text.index("google-github-actions/auth@v2") < publish_text.index(
+        "gcloud secrets versions access"
+    )
+    assert "GITHUB_ENV" not in publish_text
+    assert "trap cleanup EXIT" in publish_text
+    assert "terminate 143" in publish_text and "TERM" in publish_text
+    assert "chmod 0600" in publish_text
 
 
 def test_both_jobs_pin_and_revalidate_exact_release_head() -> None:
@@ -60,7 +79,7 @@ def test_both_jobs_pin_and_revalidate_exact_release_head() -> None:
     for job_name in ("plan", "publish"):
         job_text = yaml.safe_dump(document["jobs"][job_name])
         assert "ref: ${{ inputs.git_sha }}" in job_text
-        assert "^[0-9a-f]{40}$" in job_text
+        assert "^[0-9a-f]{40}$" in job_text or "manual_release_gate line-gate" in job_text
         assert "git cat-file -t" in job_text
         assert "refs/remotes/origin/release" in job_text
         assert "git merge-base --is-ancestor" in job_text
@@ -98,7 +117,7 @@ def test_artifact_is_only_a_sanitized_copy_not_authoritative_storage() -> None:
     publish_text = yaml.safe_dump(document["jobs"]["publish"])
 
     assert "scripts.line_menu_publication_gate" in publish_text
-    assert "GCP_LINE_MENU_MANIFEST_BUCKET" in publish_text
+    assert "steps.config.outputs.bucket" in publish_text
     assert "actions/upload-artifact@v4" in publish_text
 
 
@@ -118,3 +137,67 @@ def test_resume_is_publish_only_and_fail_closed() -> None:
     assert "if: ${{ always() }}" in source
     assert "line-menu-publication-output/progress.json" in source
     assert "line-menu-publication-output/receipt.json" in source
+
+
+@pytest.mark.parametrize(
+    ("uv_status", "signal", "expected"), [("0", "", 0), ("7", "", 7), ("0", "TERM", 143)]
+)
+def test_secret_file_is_removed_on_success_failure_and_signal(
+    tmp_path: Path, uv_status: str, signal: str, expected: int
+) -> None:
+    _, document = workflow()
+    step = next(
+        item
+        for item in document["jobs"]["publish"]["steps"]
+        if item.get("name") == "Access pinned token, publish, and remove token on every exit"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    gcloud = bin_dir / "gcloud"
+    gcloud.write_text(
+        '#!/bin/bash\nset -eu\nfor arg in "$@"; do\n'
+        '  case "$arg" in --out-file=*) f=${arg#--out-file=};; esac\n'
+        'done\nprintf synthetic-sensitive-value >"$f"\n',
+        encoding="utf-8",
+    )
+    uv = bin_dir / "uv"
+    uv.write_text(
+        '#!/bin/bash\nif [[ -n "${UV_SIGNAL:-}" ]]; then\n'
+        '  kill -s "$UV_SIGNAL" "$PPID"\n  sleep 1\nfi\n'
+        'exit "${UV_STATUS:-0}"\n',
+        encoding="utf-8",
+    )
+    gcloud.chmod(0o755)
+    uv.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "RUNNER_TEMP": str(tmp_path),
+            "BUCKET": "synthetic-bucket",
+            "CONFIG_SHA256": "a" * 64,
+            "EXPECTED_BOT": "@synthetic",
+            "INPUT_SHA": "b" * 40,
+            "PROJECT": "synthetic-project",
+            "SECRET_NAME": "synthetic-secret",
+            "SECRET_VERSION": "3",
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "UV_STATUS": uv_status,
+            "UV_SIGNAL": signal,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected
+    assert not (tmp_path / "line-publication-token").exists()
+    output_lines = (result.stdout + result.stderr).splitlines()
+    assert output_lines.count("::add-mask::synthetic-sensitive-value") == 1
+    assert all(
+        "synthetic-sensitive-value" not in line
+        for line in output_lines
+        if not line.startswith("::add-mask::")
+    )
