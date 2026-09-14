@@ -72,6 +72,20 @@ def test_publish_is_protected_and_has_minimal_permissions() -> None:
     assert "trap cleanup EXIT" in publish_text
     assert "terminate 143" in publish_text and "TERM" in publish_text
     assert "chmod 0600" in publish_text
+    for context in (
+        "${{ github.actor }}",
+        "${{ github.triggering_actor }}",
+        "${{ github.run_attempt }}",
+    ):
+        assert context in publish_text
+    assert publish_text.count("release_head_gate") >= 2
+    assert publish_text.index("release_head_gate") < publish_text.index(
+        "google-github-actions/auth@v2"
+    )
+    secret_access = publish_text.index("gcloud secrets versions access")
+    publication = publish_text.index("scripts.line_menu_publication_gate")
+    assert publish_text.rindex("release_head_gate", 0, secret_access) < secret_access
+    assert secret_access < publish_text.rindex("release_head_gate") < publication
 
 
 def test_both_jobs_pin_and_revalidate_exact_release_head() -> None:
@@ -167,8 +181,14 @@ def test_secret_file_is_removed_on_success_failure_and_signal(
         'exit "${UV_STATUS:-0}"\n',
         encoding="utf-8",
     )
+    python3 = bin_dir / "python3"
+    python3.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    git = bin_dir / "git"
+    git.write_text('#!/bin/bash\nprintf "%s\\n" "$INPUT_SHA"\n', encoding="utf-8")
     gcloud.chmod(0o755)
     uv.chmod(0o755)
+    python3.chmod(0o755)
+    git.chmod(0o755)
     result = subprocess.run(
         ["bash", "-c", step["run"]],
         cwd=tmp_path,
@@ -185,6 +205,7 @@ def test_secret_file_is_removed_on_success_failure_and_signal(
             "SECRET_VERSION": "3",
             "GITHUB_RUN_ID": "123",
             "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_SHA": "b" * 40,
             "UV_STATUS": uv_status,
             "UV_SIGNAL": signal,
         },

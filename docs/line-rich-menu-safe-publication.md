@@ -28,10 +28,17 @@ uv run python -m scripts.sync_line_role_menus --apply \
   --manifest /approved/operator-directory/menus.json
 ```
 
-正式 workflow 不再讀 GitHub secret/variable。它先驗證 actor、repository、dispatch、release
-ref、exact release HEAD 及精確 `PUBLISH LINE MENU <full-sha>`，再讀取
+正式 workflow 不再讀 GitHub secret/variable。它先驗證 `github.actor` 與
+`github.triggering_actor` 都精確為 `yawan0203`、`github.run_attempt` 精確為 `1`、repository、
+dispatch、release ref、exact release HEAD 及精確 `PUBLISH LINE MENU <full-sha>`，再讀取
 `infra/gce/line-publication-config.json`，經 WIF 存取固定 Secret Manager secret 的明確正整數
 version。`latest`、alias、resource path、空值與 shell 內容全部拒絕。
+
+publish job 在 WIF 前自行重做完整 gate 並查 GitHub API 的 authoritative release HEAD；取得
+token 後、第一個 LINE/GCS mutation 前再查一次。任何差異、API 失敗、空白或非唯一 JSON
+回應都 fail closed。不得按 **Re-run jobs** 恢復寫入；失敗後只能從當下 release HEAD 建立
+新的 `workflow_dispatch`。若需要續接進度，新 dispatch 必須明確指定並驗證既有來源 run 與
+artifact digest，再由既有 create-intent/readback 流程判斷是否可安全續行。
 
 Token 只存在 runner 的 mode 0600 短生命週期檔案；取得後立即 add-mask，不寫 output、
 `GITHUB_ENV`、artifact、cache、manifest 或 receipt，EXIT/HUP/INT/TERM 都清理。發布 receipt
