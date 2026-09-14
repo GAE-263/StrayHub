@@ -337,6 +337,7 @@ async def _push_delivery(
     job_id: UUID,
     delivery: GrowthDiaryDelivery,
 ) -> None:
+    message: dict
     if delivery.purpose == "staff":
         message = {
             "type": "text",
@@ -351,12 +352,11 @@ async def _push_delivery(
         message = build_growth_diary_ai_reply_card(
             mood=delivery.mood or "neutral", reply_text=delivery.adopter_reply
         )
-        message["quickReply"] = {"items": growth_diary_quick_reply_items()}
     else:
         message = {
             "type": "text",
             "text": "已收到這篇近況紀錄。",
-            "quickReply": {"items": growth_diary_quick_reply_items()},
+            "quickReply": {"items": growth_diary_quick_reply_items(include_back_to_default=True)},
         }
     async with httpx.AsyncClient(timeout=10) as client:
         await LineMessagingApiAdapter(client=client, settings=get_worker_settings()).push(

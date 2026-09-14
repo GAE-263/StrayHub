@@ -612,7 +612,9 @@ async def test_growth_diary_concern_fanout_is_tenant_scoped_and_retryable() -> N
             claim_token="notify-a",
             status="sent",
         )
-        assert (job_id, organization_id) in await pending_celery_dispatches(session_factory)
+        assert (job_id, organization_id) in await pending_celery_dispatches(
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
+        )
         retry = await claim_growth_diary_notifications(
             session_factory,
             job_id=job_id,
@@ -640,7 +642,9 @@ async def test_growth_diary_reconciliation_recovers_execution_states(status: str
             job.available_at = datetime.now(timezone.utc) - timedelta(seconds=1)
             if status == "running":
                 job.claimed_at = datetime.now(timezone.utc) - timedelta(days=1)
-        assert (job_id, organization_id) in await pending_celery_dispatches(session_factory)
+        assert (job_id, organization_id) in await pending_celery_dispatches(
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
+        )
     finally:
         await _cleanup(organization_id)
 
@@ -862,7 +866,7 @@ async def test_growth_diary_publish_failure_preserves_entry_and_outbox(
             raise ConnectionError("redis unavailable")
 
         monkeypatch.setattr(celery_app, "send_task", fail_publish)
-        assert await dispatch_ai_job(job_id, organization_id) is False
+        assert await dispatch_ai_job(job_id, organization_id, factory=session_factory) is False
         async with session_factory() as session, session.begin():
             await set_organization_scope(session, organization_id)
             entry = await session.get(GrowthDiaryEntry, entry_id)
@@ -910,7 +914,9 @@ async def test_failed_growth_diary_notification_is_republished_by_reconciliation
             ),
         )
 
-        assert (job_id, organization_id) in await pending_celery_dispatches(session_factory)
+        assert (job_id, organization_id) in await pending_celery_dispatches(
+            session_factory, visibility_timeout=get_worker_settings().celery_visibility_timeout
+        )
         assert await _publish(
             session_factory,
             job_id=job_id,

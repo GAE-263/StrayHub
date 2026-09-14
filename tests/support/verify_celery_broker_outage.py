@@ -29,7 +29,7 @@ async def main() -> None:
             job = await session.scalar(select(AIProcessingJob).where(AIProcessingJob.id == job_id))
             assert job is not None
             job.status = "pending_enqueue"
-        dispatched = await dispatch_ai_job(job_id, organization_id)
+        dispatched = await dispatch_ai_job(job_id, organization_id, factory=session_factory)
         async with session_factory() as session, session.begin():
             await set_organization_scope(session, organization_id)
             status = await session.scalar(

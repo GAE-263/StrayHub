@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from services.api.app.application.ports.line_messaging import LineMessagingPort
@@ -104,9 +105,18 @@ def build_registry(
 class RichMenuRoutingService:
     """依角色把對應 rich menu 綁到單一使用者的 LINE UID。"""
 
-    def __init__(self, line: LineMessagingPort, registry: RichMenuRegistry) -> None:
+    def __init__(
+        self,
+        line: LineMessagingPort,
+        registry: RichMenuRegistry,
+        *,
+        allowed: Callable[[str | None], bool] | None = None,
+        staff_allowed: Callable[[str | None], bool] | None = None,
+    ) -> None:
         self.line = line
         self.registry = registry
+        self.allowed = allowed
+        self.staff_allowed = staff_allowed
 
     async def link_for_user(
         self,
@@ -117,11 +127,19 @@ class RichMenuRoutingService:
         organization_selected: bool = False,
     ) -> str | None:
         """綁定對應選單，回傳所綁定的 richMenuId；若尚未註冊該選單則回傳 None。"""
+        if self.allowed is not None and not self.allowed(line_user_id):
+            return None
         menu_key = menu_key_for_role(
             role,
             bound=bound,
             organization_selected=organization_selected,
         )
+        if (
+            menu_key == MENU_STAFF
+            and self.staff_allowed is not None
+            and not self.staff_allowed(line_user_id)
+        ):
+            return None
         rich_menu_id = self.registry.get(menu_key)
         if rich_menu_id is None:
             # 尚未建立該角色選單（例如還沒 --apply）；框架階段視為 no-op。

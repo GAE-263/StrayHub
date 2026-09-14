@@ -55,6 +55,25 @@ def _post(client: TestClient, events: list[dict]):
     )
 
 
+def _back_to_default_actions(messages: list[dict]) -> list[dict]:
+    found: list[dict] = []
+
+    def visit(value) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "postback" and value.get("data") == (
+                "action=back_to_default_menu"
+            ):
+                found.append(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(messages)
+    return found
+
+
 async def _seed(organization_id: UUID, animal_id: UUID, *, region: str = "north") -> None:
     connection = await asyncpg.connect(_database_url())
     try:
@@ -332,10 +351,12 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
             ).json()["event_results"][0]["status"]
             == "processed"
         )
-        result = _post(client, [_event(line_user_id, "action=submit&flow=adoption")]).json()[
-            "event_results"
-        ][0]
+        terminal_event = _event(line_user_id, "action=submit&flow=adoption")
+        terminal_event["replyToken"] = "test-reply"
+        result = _post(client, [terminal_event]).json()["event_results"][0]
         assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
 
         async def verify() -> None:
             connection = await asyncpg.connect(_database_url())
@@ -353,6 +374,81 @@ def test_specific_animal_flow_submits_without_optional_ai(monkeypatch) -> None:
                 await connection.close()
 
         asyncio.run(verify())
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        get_settings.cache_clear()
+
+
+def test_adoption_cancel_terminal_reply_returns_to_default(monkeypatch) -> None:
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-adoption-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id = uuid4(), uuid4()
+    line_user_id = f"Ucancel{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+    try:
+        client = TestClient(app)
+        assert (
+            _post(
+                client,
+                [_event(line_user_id, "action=start_adoption_matching&flow=adoption")],
+            ).json()["event_results"][0]["status"]
+            == "processed"
+        )
+        terminal_event = _event(line_user_id, "action=cancel&flow=adoption")
+        terminal_event["replyToken"] = "test-reply"
+        result = _post(client, [terminal_event]).json()["event_results"][0]
+
+        assert result["status"] == "processed", result
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
+    finally:
+        asyncio.run(_cleanup(organization_id, (line_user_id,)))
+        get_settings.cache_clear()
+
+
+def test_adoption_expired_terminal_reply_returns_to_default(monkeypatch) -> None:
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "fake-adoption-webhook")
+    get_settings.cache_clear()
+    organization_id, animal_id = uuid4(), uuid4()
+    line_user_id = f"Uexpired{uuid4().hex}"
+    asyncio.run(_seed(organization_id, animal_id))
+
+    async def expire_draft() -> None:
+        connection = await asyncpg.connect(_database_url())
+        try:
+            await connection.execute(
+                """UPDATE adoption_drafts d SET expires_at=now()-interval '1 second'
+                FROM line_user_bindings b
+                WHERE b.user_id=d.adopter_user_id AND b.line_user_id=$1""",
+                line_user_id,
+            )
+        finally:
+            await connection.close()
+
+    try:
+        client = TestClient(app)
+        assert (
+            _post(
+                client,
+                [_event(line_user_id, "action=start_adoption_matching&flow=adoption")],
+            ).json()["event_results"][0]["status"]
+            == "processed"
+        )
+        asyncio.run(expire_draft())
+        terminal_event = _event(
+            line_user_id,
+            f"action=select_organization&flow=adoption&value={organization_id}",
+        )
+        terminal_event["replyToken"] = "test-reply"
+        result = _post(client, [terminal_event]).json()["event_results"][0]
+
+        assert result == {
+            "webhook_event_id": result["webhook_event_id"],
+            "status": "rejected",
+            "reason": "draft_expired",
+        }
+        messages = line_webhook.LineMessagingApiAdapter.reply.call_args.kwargs["messages"]
+        assert len(_back_to_default_actions(messages)) == 1
     finally:
         asyncio.run(_cleanup(organization_id, (line_user_id,)))
         get_settings.cache_clear()

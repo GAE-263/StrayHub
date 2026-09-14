@@ -1,16 +1,8 @@
-"""驗證並（可選）發佈「依角色」的多個 LINE Rich Menu。
+"""Dry-run by default; --apply only creates/verifies resources, never activates.
 
-與既有 sync_line_rich_menu.py 的差異：
-  - 這支處理「多份、依角色」的選單（default/volunteer/adopter/staff），全為 postback。
-  - --apply 會逐一建立每個選單並印出「角色 -> richMenuId」對應，
-    供 line_rich_menu_routing.RichMenuRegistry 使用（綁定時依角色 link 給 UID）。
-
-用法：
-  # 只驗證（不需憑證/圖片）
-  uv run python -m scripts.sync_line_role_menus
-
-  # 實際建立（需 .env 的 LINE_CHANNEL_ACCESS_TOKEN，且每個角色一張圖）
-  uv run python -m scripts.sync_line_role_menus --apply --image-dir infra/local/rich-menu-images
+Requires explicit expected Bot and durable manifest for publication. Credentials
+come only from the process environment, not .env or API settings. See
+docs/line-rich-menu-safe-publication.md for the separately approved rollout.
 """
 
 from __future__ import annotations
@@ -21,7 +13,15 @@ import glob
 import os
 from pathlib import Path
 
+import httpx
 import yaml  # type: ignore[import-untyped]
+from PIL import Image
+from scripts.line_menu_publication import (
+    PublicationError,
+    ResourcePublisher,
+    canonical,
+    digest,
+)
 
 VALID_ROLES = {"default", "volunteer", "adopter", "staff", "adoption_hub"}
 CONFIG_GLOB = "infra/local/line-rich-menu-*.yaml"
@@ -103,43 +103,51 @@ def resolve_role_image(image_dir: Path, role: str) -> tuple[Path, str]:
     return path, IMAGE_CONTENT_TYPES[path.suffix.lower()]
 
 
-async def apply(by_role: dict[str, dict], image_dir: Path) -> dict[str, str]:
-    from services.api.app.infrastructure.line.messaging_api_adapter import (
-        LineMessagingApiAdapter,
-        close_shared_line_client,
-    )
-
-    adapter = LineMessagingApiAdapter()
-    result: dict[str, str] = {}
-    try:
-        # LINE 沒有「更新 rich menu」的 API，只能重建。這裡先刪掉本框架管理的同名
-        # 選單，否則每次 --apply 都會在 channel 上多留一組同名孤兒（尤其是中途失敗時）。
-        managed_names = {
-            document.get("name", f"strayhub-{role}") for role, document in by_role.items()
+def publication_plan(by_role: dict[str, dict], image_dir: Path) -> dict:
+    plan = {}
+    for role, document in sorted(by_role.items()):
+        path, content_type = resolve_role_image(image_dir, role)
+        content = path.read_bytes()
+        with Image.open(path) as image:
+            if image.size != (2500, 1686) or image.format not in {"PNG", "JPEG"}:
+                raise ValueError(f"{role}: expected 2500x1686 PNG/JPEG")
+            if IMAGE_CONTENT_TYPES[path.suffix.lower()] != Image.MIME[image.format]:
+                raise ValueError(f"{role}: image extension/content type mismatch")
+            image.verify()
+        if len(content) > 1024 * 1024:
+            raise ValueError(f"{role}: image exceeds 1 MiB")
+        definition = to_line_rich_menu(document)
+        definition_hash = digest(canonical(definition))
+        image_hash = digest(content)
+        fingerprint = digest(
+            canonical({"role": role, "definition": definition_hash, "image": image_hash})
+        )
+        # Name helps reconciliation but is NEVER sufficient proof of equivalence.
+        definition["name"] = f"strayhub-{role}-{fingerprint}"
+        plan[role] = {
+            "definition": definition,
+            "definition_sha256": digest(canonical(definition)),
+            "image_sha256": image_hash,
+            "fingerprint": fingerprint,
+            "image": content,
+            "content_type": content_type,
         }
-        for existing in await adapter.list_rich_menus():
-            if existing.get("name") in managed_names:
-                print(f"[清理] 刪除既有選單 {existing['richMenuId']}（{existing.get('name')}）")
-                await adapter.delete_rich_menu(rich_menu_id=existing["richMenuId"])
+    return plan
 
-        for role, document in by_role.items():
-            image_path, content_type = resolve_role_image(image_dir, role)
-            content = image_path.read_bytes()
-            rich_menu = to_line_rich_menu(document)
-            await adapter.validate_rich_menu(rich_menu=rich_menu)
-            rich_menu_id = await adapter.create_rich_menu(rich_menu=rich_menu)
-            await adapter.upload_rich_menu_image(
-                rich_menu_id=rich_menu_id,
-                content=content,
-                content_type=content_type,
-            )
-            result[role] = rich_menu_id
-        # default 綁給所有人作為基準；其餘角色於綁定時由 RichMenuRoutingService 依 UID link。
-        if "default" in result:
-            await adapter.link_rich_menu(rich_menu_id=result["default"])
-    finally:
-        await close_shared_line_client()
-    return result
+
+async def apply(
+    by_role: dict[str, dict],
+    image_dir: Path,
+    *,
+    manifest: Path,
+    expected_bot: str,
+    git_sha: str,
+    client: httpx.AsyncClient,
+) -> dict[str, str]:
+    """Resource publication only. No environment writes or menu activation."""
+    return await ResourcePublisher(client).publish(
+        publication_plan(by_role, image_dir), manifest, expected_bot, git_sha
+    )
 
 
 ENV_KEYS = {
@@ -152,11 +160,10 @@ ENV_KEYS = {
 
 
 def write_env(mapping: dict[str, str], env_path: Path) -> list[str]:
-    """把新的 richMenuId 寫回 .env。
+    """Legacy explicit export helper; never called by the publication CLI.
 
-    LINE 沒有更新 rich menu 的 API，每次 --apply 都會產生全新的 id。若 .env
-    沒跟著更新，RichMenuRoutingService 會拿著已刪除的 id 去 link，LINE 回 4xx
-    而綁定流程把它當 best-effort 吞掉 —— 選單靜默地不會切換。
+    Caller must separately authorize configuration changes. Existing resources
+    remain valid; publishing resources alone does not change active mappings.
     """
     if not env_path.is_file():
         return []
@@ -182,41 +189,60 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--image-dir", type=Path, default=Path("infra/local/rich-menu-images"))
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--expected-bot", help="Explicit expected Bot basicId, e.g. @approved-bot")
+    parser.add_argument("--git-sha", help="Exact source commit for definitions and images")
     parser.add_argument(
-        "--env-file", type=Path, default=Path(".env"), help="要回寫 richMenuId 的 .env"
+        "--roles",
+        nargs="+",
+        choices=sorted(VALID_ROLES),
+        default=["default", "volunteer", "adoption_hub"],
     )
+    parser.add_argument("--env-file", type=Path, help="Removed: export IDs separately after review")
     parser.add_argument(
-        "--no-write-env", action="store_true", help="不要把新的 richMenuId 寫回 .env"
+        "--no-write-env", action="store_true", help="Compatibility no-op; env is never written"
     )
     args = parser.parse_args()
 
-    by_role = discover_definitions()
-    for role, document in by_role.items():
-        _ = to_line_rich_menu(document)  # 轉換驗證
-        print(f"[OK] {role}: {document.get('name')}（{len(document['actions'])} 個項目）")
+    if args.env_file:
+        parser.error("--env-file no longer writes configuration; review manifest IDs separately")
+    definitions = discover_definitions()
+    by_role = {role: definitions[role] for role in args.roles}
+    plan = publication_plan(by_role, args.image_dir)
+    for role, item in plan.items():
+        print(f"[PLAN] {role}: definition={item['definition_sha256']} image={item['image_sha256']}")
 
     if not args.apply:
-        print("驗證通過（dry-run，未發佈）。加 --apply --image-dir <dir> 才會實際建立。")
+        print("DRY RUN: no network, no writes; create/reuse resources only; no activation.")
         return
 
-    if not os.environ.get("LINE_CHANNEL_ACCESS_TOKEN") and "fake" in (
-        os.environ.get("LINE_CHANNEL_ID", "")
-    ):
-        parser.error("--apply 需要真實的 LINE_CHANNEL_ACCESS_TOKEN")
-    mapping = asyncio.run(apply(by_role, args.image_dir))
+    token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+    if not token or not args.manifest or not args.expected_bot or not args.git_sha:
+        parser.error("--apply requires token env, --manifest, --expected-bot and --git-sha")
+
+    async def publish():
+        async with httpx.AsyncClient(
+            timeout=20, trust_env=False, headers={"Authorization": f"Bearer {token}"}
+        ) as client:
+            return await ResourcePublisher(client).publish(
+                plan, args.manifest, args.expected_bot, args.git_sha
+            )
+
+    try:
+        mapping = asyncio.run(publish())
+    except PublicationError as exc:
+        parser.exit(1, f"{exc}\nNo activation performed.\n")
+    except (OSError, ValueError, KeyError):
+        # Do not print exception bodies (may contain server text or local configuration).
+        parser.exit(1, "Publication stopped; inspect sanitized manifest stages; no activation.\n")
     print("角色 -> richMenuId：")
     for role, rid in mapping.items():
         print(f"  {role}: {rid}")
 
-    if args.no_write_env:
-        print(f"\n[!] 未回寫 {args.env_file}；舊的 richMenuId 已失效，選單切換會靜默失效。")
-        return
-    updated = write_env(mapping, args.env_file)
-    if updated:
-        print(f"\n[env] 已更新 {args.env_file}：{', '.join(updated)}")
-        print("    API 的 get_settings() 有 lru_cache，需重啟才會生效。")
-    else:
-        print(f"\n[!] 找不到 {args.env_file}，richMenuId 請自行填入設定。")
+    print(
+        "Resources verified. Existing menus/bindings/config unchanged; "
+        "activation requires separate approval."
+    )
 
 
 if __name__ == "__main__":

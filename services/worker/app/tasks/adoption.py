@@ -54,7 +54,7 @@ from services.api.app.application.line_adoption_flex import (
     build_match_report,
 )
 from services.api.app.application.media_access import issue_adoption_photo_token
-from services.api.app.config.settings import get_worker_settings
+from services.api.app.config.settings import get_worker_photo_signing_secret, get_worker_settings
 from services.api.app.domain.line_adoption_state import AdoptionDraftState
 from services.api.app.infrastructure.ai.gemini_client import (
     GeminiClient,
@@ -314,6 +314,7 @@ def _curation_card(
     base_url = get_worker_settings().web_public_base_url.strip().rstrip("/")
     if base_url.startswith("https://") and candidate.current_photo_key:
         token = issue_adoption_photo_token(
+            signing_secret=get_worker_photo_signing_secret(),
             organization_id=organization_id,
             animal_id=candidate.animal_id,
             object_key=candidate.current_photo_key,
@@ -595,6 +596,7 @@ def _followup_card(
     base_url = get_worker_settings().web_public_base_url.strip().rstrip("/")
     if base_url.startswith("https://") and candidate.current_photo_key:
         token = issue_adoption_photo_token(
+            signing_secret=get_worker_photo_signing_secret(),
             organization_id=organization_id,
             animal_id=candidate.animal_id,
             object_key=candidate.current_photo_key,
@@ -732,7 +734,9 @@ def extract_profile(
         )
         return "stale" if outcome.stale else "duplicate"
     if outcome.next_job_id is not None:
-        runtime.run(lambda _factory: dispatch_ai_job(outcome.next_job_id, organization_uuid))
+        runtime.run(
+            lambda factory: dispatch_ai_job(outcome.next_job_id, organization_uuid, factory=factory)
+        )
     return _deliver_profile_notification(
         self,
         job_id=job_uuid,
@@ -1160,6 +1164,7 @@ async def _push_suitability_result(
         base_url = get_worker_settings().web_public_base_url.strip().rstrip("/")
         if base_url.startswith("https://") and snapshot.current_photo_key:
             token = issue_adoption_photo_token(
+                signing_secret=get_worker_photo_signing_secret(),
                 organization_id=organization_id,
                 animal_id=snapshot.animal_id,
                 object_key=snapshot.current_photo_key,

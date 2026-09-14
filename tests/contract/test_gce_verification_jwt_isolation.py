@@ -45,6 +45,9 @@ REFERENCE_ALLOWLIST = {
     "infra/gce/secrets/acceptance-secret-map.tsv",
     "infra/gce/verification/README.md",
     "review.md",
+    # Executes deployment prerequisites in tmp_path with non-credential text;
+    # never reads or generates real signing keys.
+    "tests/contract/test_deploy_release_failures.py",
     "tests/contract/test_gce_production_compose_contract.py",
     "tests/contract/test_gce_secret_manager_contract.py",
     "tests/contract/test_gce_tls_edge_contract.py",

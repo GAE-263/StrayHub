@@ -72,11 +72,34 @@ gcloud compute scp "${gcloud_common[@]}" \
   "$ARTIFACT_DIR/checksums.sha256" \
   "$remote_target"
 
+# The old release validates the envelope, but must not supply the deployment logic:
+# its secret inventory and preflight can be older than the incoming Compose contract.
+# Copy into a root-owned parent before validation/execution, avoiding writable IAP
+# staging paths during privileged execution. Retain the bootstrap as failure evidence.
+bootstrap_command="$(cat <<'BOOTSTRAP'
+set -euo pipefail
+artifact_source="$1"
+expected_sha="$2"
+validator=/opt/strayhub/current/infra/gce/scripts/release-manifest.py
+bootstrap_dir="$(mktemp -d /var/lib/strayhub/releases/.deploy-bootstrap.XXXXXX)"
+for file in release-manifest.json deployment-bundle.tar checksums.sha256; do
+  install -o root -g root -m 0444 "$artifact_source/$file" "$bootstrap_dir/$file"
+done
+"$validator" validate-artifact --artifact-dir "$bootstrap_dir" >/dev/null
+actual_sha="$("$validator" show-field --manifest "$bootstrap_dir/release-manifest.json" --field git_sha)"
+[[ "$actual_sha" == "$expected_sha" ]]
+"$validator" extract-artifact --artifact-dir "$bootstrap_dir" --destination "$bootstrap_dir/payload"
+chown -R root:root "$bootstrap_dir"
+chmod -R a-w "$bootstrap_dir"
+exec "$bootstrap_dir/payload/infra/gce/scripts/deploy-release.sh" \
+  --artifact-dir "$bootstrap_dir" \
+  --deployment-role 'GitHub Actions production deployer' \
+  --confirm-production DEPLOY_STRAYHUB_PRODUCTION
+BOOTSTRAP
+)"
+printf -v quoted_bootstrap '%q' "$bootstrap_command"
 gcloud compute ssh "$INSTANCE" "${gcloud_common[@]}" \
-  --command "sudo -n /opt/strayhub/current/infra/gce/scripts/deploy-release.sh \
-    --artifact-dir '$remote_dir' \
-    --deployment-role 'GitHub Actions production deployer' \
-    --confirm-production DEPLOY_STRAYHUB_PRODUCTION"
+  --command "sudo -n bash -c $quoted_bootstrap -- '$remote_dir' '$GIT_SHA'"
 
 gcloud compute ssh "$INSTANCE" "${gcloud_common[@]}" \
   --command "rm -f \

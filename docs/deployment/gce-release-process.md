@@ -110,20 +110,30 @@ revalidates the manifest and file checksums, and transfers only the bundle files
 TCP 22, static SSH keys, firewall changes, production rebuilds, and Terraform mutation are
 forbidden.
 
-The CI deployer invokes the canonical host-side deployment command with non-interactive sudo:
+The CI deployer copies the artifact into a unique root-owned
+`/var/lib/strayhub/releases/.deploy-bootstrap.*` directory. The currently installed manifest tool
+validates this copy and its expected SHA before extracting it. Only then does CI execute the
+**incoming bundle's** deployment script with non-interactive sudo; the old release's deployment
+logic must not interpret a newer Compose/secret contract. The protected bootstrap remains as evidence.
 
 ```bash
-sudo -n /opt/strayhub/current/infra/gce/scripts/deploy-release.sh \
-  --artifact-dir /tmp/strayhub-ci-release-RUN_ID-GIT_SHA \
+sudo -n /var/lib/strayhub/releases/.deploy-bootstrap.UNIQUE/payload/infra/gce/scripts/deploy-release.sh \
+  --artifact-dir /var/lib/strayhub/releases/.deploy-bootstrap.UNIQUE \
   --deployment-role "GitHub Actions production deployer" \
   --confirm-production DEPLOY_STRAYHUB_PRODUCTION
 ```
 
 Before stopping the application, the script validates the full artifact, canonical destination,
 new/unused release ID, protected configuration, current secret generation and JWT files. It extracts
-the bundle, makes the release root-owned/read-only, refreshes secrets atomically, pulls exact
-digests, and runs the accepted production preflight against those digests. Any failure stops before
-runtime change.
+the bundle, makes the release root-owned/read-only, reloads systemd, and materializes the incoming
+release's explicit production secret map directly from Secret Manager. It does not restart the
+old secrets unit (which would use the old map and affect dependent runtime units). It preserves
+the protected secret ownership, pulls exact digests, and runs production preflight against those
+digests. Preflight checks matching API/Celery Worker/Beat broker and AI settings and Redis
+credentials. The database-backed legacy Worker does not consume a Celery broker; its runtime
+safety is validated separately, as is each other process. Failures here precede application stop and migration; a complete
+new secret generation may already have been activated. Candidate units are installed/reloaded by
+the existing activation step after the release pointer changes.
 
 Only after those gates pass does it stop `strayhub.service`, run the accepted migration container
 with migration credentials, and prove the database reached the manifest revision. It never runs a
@@ -225,10 +235,20 @@ release.
 
 ## Failure and security rules
 
-- A migration failure prevents pointer activation; the script attempts to restart the unchanged
-  current release without a database downgrade.
-- A failure after pointer activation writes no success receipt and requires incident review. The
-  deploy script does not silently claim success or invent an automatic schema rollback.
+- A deployment failure never automatically starts/restarts either release or restores a pointer.
+  If the runtime was stopped, it may remain stopped until an operator reviews the evidence and
+  explicitly authorizes recovery. Migration failure does not prove that the database is unchanged.
+- The EXIT trap preserves the original exit code even if diagnostic output fails. Its `stage` and
+  `last_completed` fields describe command acknowledgements, not authoritative runtime/DB state.
+  A pointer replacement can take effect before an error is reported; inspect the actual pointer
+  read-only. Do not infer that the previous release is safe to start or downgrade the schema.
+- No recovery or receipt-writing runs in the trap. A failure during receipt creation/activation
+  may leave a receipt or temporary symlink; inspect it rather than assuming no receipt exists.
+  Release directories, old receipts, bootstrap/staging and temporary pointer evidence are retained.
+  The CI wrapper cleans its exact staging files only after deployment succeeds. The deploy script
+  owns no host file lock; workflow concurrency serializes normal CI deployments, not manual invocations.
+- The separate, explicitly authorized rollback/reactivation tools retain their own behavior;
+  they are not called by this deploy failure path and must never be invoked as an implicit retry.
 - Normal stop/restart never uses `docker compose down -v`; named volumes and backups remain intact.
 - Release files and receipts contain provenance only. Secret values, environment dumps, JWT keys,
   authentication cookies, database URLs, and credentials must never be logged or archived.

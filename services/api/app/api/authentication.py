@@ -190,19 +190,24 @@ def get_session_service(_session: AsyncSession = Depends(request_session)) -> Se
         )
     rich_menu_router = None
     registry = build_registry()
-    if settings.line_role_menu_features_active():
+    if settings.line_role_menu_features_active() or settings.line_role_menu_test_enabled:
         registry = build_registry(
             default=settings.line_rich_menu_default_id,
             volunteer=settings.line_rich_menu_volunteer_id,
             adopter=settings.line_rich_menu_adopter_id,
-            staff=settings.line_rich_menu_staff_id,
+            staff=(settings.line_rich_menu_staff_id if settings.line_staff_menu_enabled else ""),
         )
     if registry.menu_ids:
         from services.api.app.infrastructure.line.messaging_api_adapter import (
             LineMessagingApiAdapter,
         )
 
-        rich_menu_router = RichMenuRoutingService(LineMessagingApiAdapter(), registry)
+        rich_menu_router = RichMenuRoutingService(
+            LineMessagingApiAdapter(),
+            registry,
+            allowed=settings.line_role_menu_allowed,
+            staff_allowed=settings.line_staff_menu_allowed,
+        )
     return SessionService(
         AuthenticationRepository(_session),
         password_hasher=Argon2PasswordHasher(),
