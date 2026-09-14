@@ -71,3 +71,19 @@ Bot/Channel/LIFF authoritative 對應、測試收容所與正常 Google/LINE 身
 查詢限定本 project 的 cloudaudit.googleapis.com/activity、iam.googleapis.com、Create/UpdateWorkloadIdentityPoolProvider；只提取 timestamp、method、resourceName、caller user agent，未取得 credential、request payload 或完整 state。Update resourceName 精確對應 github-strayhub/providers/github；建立事件的 resourceName 為 parent pool github-strayhub。
 
 結論：已觀察到的管理方式為 Codex/operator 透過 gcloud 建立及更新，未找到 Terraform 管理證據。這不是對所有未知外部 state 的完整排除。無需使用被拒絕的 state 讀取方式；下一步以既有 provider 的精確 mapping/condition 與 SA policy 差異作為審查標的，不重建 pool/provider。T32 仍未完成，所有外部 mutation 仍待授權。
+
+## 精確變更提案與目前授權阻擋
+
+[Cloud change plan](line-online-cloud-change-plan.json) 是純資料草案，包含完整 CEL mapping/condition、四組 principalSet、精確移除的兩個舊 environment members，以及新增 LINE SA／bucket／custom role／secret binding 的範圍。沒有執行器，也不代表 apply 授權。
+
+本輪成功唯讀確認：pool 目前只有 github provider；project custom role list 為空；GitHub repository ID=1323840999、owner ID=313818911、yawan0203 actor ID=236169994。套用前仍須重讀，不能假定資源維持不存在。
+
+提案在既有 repository/actor 名稱之外同時固定 numeric IDs；只接受 release、workflow_dispatch、attempt 1 與四組 workflow/environment 配對。新 release_route 以完整配對產生，其他一律 deny。LINE workflow 只取得 LINE SA，無法由同一 release-publication environment 取得 artifact publisher。
+
+官方依據：[GitHub OIDC claims](https://docs.github.com/en/actions/reference/security/oidc) 列有 workflow_ref、event_name、actor/actor_id、repository IDs、run_attempt；未假設有 triggering_actor claim，後者仍由現有 workflow 強制。[Google WIF](https://docs.cloud.google.com/iam/docs/workload-identity-federation) 支援 CEL attribute mapping/condition 及 attribute principalSet；[deployment pipeline guide](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) 說明指定 SA 的 workloadIdentityUser 綁定。未要求修改 GitHub OIDC subject template。
+
+安全套用順序先移除精確舊寬鬆 binding，再改 provider，最後新增精確 binding；此間會短暫拒絕新的 workflow 認證。開始前必須確認沒有正在執行的寫入工作；已核發 token 不會因此立即撤銷。其他欄位／bindings 保留、policy 以 etag 防止覆蓋競態；不自動恢復過寬 trust。
+
+新的 provider／SA policy／registry policy／secret policy metadata readback 遭自動安全審核拒絕，理由是早先明確禁止 WIF/IAM/Secret Manager 操作，後續「繼續」未明確撤銷。該批命令未執行，不改用替代工具。**下一個需要的授權僅為指定資源的唯讀 metadata 查證**，包括 project 內 pool bindings 的去敏檢查與權限 metadata；不包含 secret payload、Terraform state、IAM/cloud 寫入或 workflow dispatch。查證完成後才可提交最終外部 apply 授權範圍。
+
+本機只做 JSON 結構與精確身分／路由一致性檢查，不宣稱已由 GCP 執行 CEL 驗證或完成真實 token exchange。未重跑大型 suite、未變更 runtime、未 push，候選 release 不變。
