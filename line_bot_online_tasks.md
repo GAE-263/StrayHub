@@ -250,3 +250,12 @@
 - Authorization/publication/deployment/production verification jobs SKIPPED. LINE and online operations were not triggered. No published image/bundle digest is claimed.
 - Follow-up readback confirmed main/release unchanged. Local documentation commit is a progress record, not a new candidate; do not push or integrate it into the frozen release during rollout.
 - Step 6 remains incomplete. [External readiness proposal](docs/deployment/line-online-external-readiness.md) records current metadata and unresolved WIF ownership. No external mutation, dispatch, publication or deployment performed.
+
+### Step 6 external prerequisites — authorized six changes (2026-09-14)
+
+- User explicitly authorized the six cloud prerequisite changes. Applied the exact proposed WIF mapping/condition, replaced the two legacy environment bindings with scoped routes, created the dedicated LINE publisher SA, private manifest bucket, minimal custom role, and exact secret/bucket IAM bindings.
+- Final readback PASS at 15:19 UTC. [Sanitized receipt](docs/deployment/line-online-cloud-change-receipt.json); [scope and details](docs/deployment/line-online-external-readiness.md). The original JSON proposal is retained unchanged for its recorded SHA-256; the receipt records actual completion.
+- Candidate remains `a3e206f9a553d75be9ac342ce73998ce1cf9badc`; main unchanged. No active/queued/waiting/pending/requested GitHub runs at final check. Registry IAM and LINE secret versions unchanged; runtime secret member preserved; LINE SA has zero user-managed keys.
+- No secret payload, OIDC exchange, publication, deployment, dispatch, LINE API, config sync or runtime restart. No runtime source changes or large tests rerun.
+- T32 remains unchecked as an end-to-end prerequisite task: live federated authentication, AI credentials/provider readiness and deployment preflight are not yet proven. T33–T36 remain unexecuted and require their separate operation authorization.
+- Protected before/after policies and request files retained at `/private/tmp/strayhub-cloud-prerequisites.1aynrfcg` (directory 0700, JSON files 0600); no secret values stored. Do not automatically restore the prior broad trust or delete created resources.

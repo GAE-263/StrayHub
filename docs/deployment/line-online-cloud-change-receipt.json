@@ -1,0 +1,32 @@
+{
+  "status": "SIX_PREREQUISITE_CHANGES_APPLIED_READBACK_PASS",
+  "time_utc": "2026-09-14T15:19:46.597770+00:00",
+  "candidate_sha": "a3e206f9a553d75be9ac342ce73998ce1cf9badc",
+  "project": "canvas-primacy-502703-k1",
+  "plan_sha256": "ae15110c041a0fb7113caf8db10e732ae988d56f1838509a4ceacef583c452df",
+  "line_sa_user_managed_keys": 0,
+  "registry_policy_unchanged": true,
+  "secret_versions_unchanged": true,
+  "runtime_secret_member_preserved": true,
+  "ref_drift": false,
+  "bucket_retention_locked": false,
+  "bucket_soft_delete_policy": {
+    "effectiveTime": "2026-09-14T15:17:49.028000+00:00",
+    "retentionDurationSeconds": "604800"
+  },
+  "external_calls_not_performed": [
+    "secret payload access",
+    "OIDC token exchange",
+    "workflow dispatch",
+    "publication",
+    "deployment",
+    "LINE API",
+    "config sync",
+    "runtime restart"
+  ],
+  "limitations": [
+    "No live federated authentication verified",
+    "No secret token validity or AI availability verified",
+    "No exhaustive inherited permissions or other resource policy audit"
+  ]
+}

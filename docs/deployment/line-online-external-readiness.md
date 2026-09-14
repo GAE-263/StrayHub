@@ -1,6 +1,6 @@
 # LINE 上線 Step 6：外部條件變更草案
 
-2026-09-14。此文件是可審查的準備紀錄，不是 apply／dispatch 授權；T32–T36 尚未完成。
+2026-09-14。此文件保留準備及執行紀錄。使用者後續明確授權六項前置變更，已完成並 readback PASS（見文末）；T32–T36 整體仍未完成，publication/deployment 未獲本輪授權。
 
 ## 凍結身分
 
@@ -109,3 +109,24 @@ Bot/Channel/LIFF authoritative 對應、測試收容所與正常 Google/LINE 身
 下一個授權標的是 JSON 中的**前置資源與權限變更**：保留現有 pool/provider、收斂條件與指定 SA 綁定；建立指定 LINE SA、兩權限 custom role、私有 manifest bucket，新增指定 secret/bucket bindings。不包含 dispatch、credential payload access、publication、deployment、LINE API、config sync 或 runtime restart。
 
 變更共用 provider 可能使未知但依賴舊 main/environment/branch 信任的工作無法取得新憑證；這是需審查的相容性影響。若尚未接受此範圍與影響，不得 apply。若執行時發現與 snapshot 不符或有進行中的寫入工作，停止而不自行擴權；不恢復過寬 trust。T32 仍保持未完成，直到實際變更與 readback 通過。
+
+## 六項變更執行完成 — 2026-09-14 15:19 UTC
+
+使用者明確表示「授權執行上述六項」。執行前所有 specified targets、policy etags、refs 與 workflow 狀態符合基準；在受保護目錄保存 before/after 與每個 IAM request，逐項變更後驗證，最後再次完整 readback。
+
+| 變更 | 實際結果 |
+| --- | --- |
+| 既有 WIF | mapping/condition 精確符合 JSON proposal；issuer/audience 保留；GitHub actor/IDs、release、manual dispatch、attempt 1、四種 workflow/environment routes 已收斂 |
+| 舊 environment bindings | 兩個精確 members 已移除；artifact publisher 僅 app-publish，deployer 僅 app-deploy/line-online |
+| LINE publisher SA | 已建立，僅 line-publish federated binding；user-managed keys=0 |
+| Manifest bucket | 已建立於 US-CENTRAL1，STANDARD、uniform access、public access prevention=enforced；retention=31536000 秒、未 lock；平台預設 soft-delete=604800 秒 |
+| Custom role | `projects/canvas-primacy-502703-k1/roles/strayhubLineManifestPublisher`，GA，僅 objects.create/get；只在指定 bucket 綁定 LINE SA |
+| Secret IAM | 保留 runtime SA，僅新增 LINE publisher 的 secretAccessor；version 2 enabled/1 disabled 未變；未讀 payload |
+
+Registry IAM、main/release refs 未變。變更後未發現 in_progress、queued、waiting、pending、requested GitHub runs。這是查詢當下狀態；後續操作前仍重新確認。
+
+原 proposal 保持不變，SHA-256 `ae15110c041a0fb7113caf8db10e732ae988d56f1838509a4ceacef583c452df`；其 PROPOSED 標記代表原審查版本，實際完成狀態以 [receipt](line-online-cloud-change-receipt.json) 為準。完整 policy 備份保留在 `/private/tmp/strayhub-cloud-prerequisites.1aynrfcg`，目錄 0700／JSON 0600，不含 secret payload。
+
+限制：GCP 接受 CEL 且 readback 一致，但沒有執行 OIDC token exchange、實際 SA federation 或 LINE token validity 測試；未進行完整 inherited permissions audit。T32 的 IAM/資源部分完成，AI／部署前置與實際運作尚未證明。
+
+未執行：push、dispatch/rerun、publication、deployment、LINE API、config sync、runtime restart、secret payload access、Terraform state access。恢復僅提供精確備份與已完成狀態，不自動恢復過寬 trust、不刪除資源；必要恢復需另外審查授權。
