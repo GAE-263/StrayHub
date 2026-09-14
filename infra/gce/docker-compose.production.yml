@@ -133,6 +133,9 @@ services:
       AI_ENDPOINT: ${AI_ENDPOINT:-}
       AI_MODEL_NAME: ${AI_MODEL_NAME:-}
       AI_API_KEY: ${AI_API_KEY:-}
+      # Synchronous adoption/diary paths use the same optional Gemini key.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-3.5-flash-lite}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
       CELERY_AI_ENABLED: ${CELERY_AI_ENABLED:-false}
       CELERY_QUEUE_AI: ${CELERY_QUEUE_AI:-ai}

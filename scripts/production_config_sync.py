@@ -306,72 +306,68 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     old_handlers = {
         signum: signal.signal(signum, _signal_handler) for signum in (signal.SIGINT, signal.SIGTERM)
     }
+    lock = None
     try:
-        with lock_path.open("rb") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise ConfigSyncError("lock", "another config sync holds the lock") from exc
-            # Re-read under lock so a concurrent edit cannot be overwritten.
-            current = config_path.read_bytes()
-            if sha256_bytes(current) != previous_sha:
-                raise ConfigSyncError("lock", "production config changed after validation")
-            if changed:
-                descriptor, _backup_name = tempfile.mkstemp(
-                    prefix=f".{config_path.name}.config-sync-backup.", dir=config_path.parent
-                )
-                os.fchmod(descriptor, 0o640)
-                os.fchown(descriptor, uid, gid)
-                with os.fdopen(descriptor, "wb") as backup:
-                    backup.write(original)
-                    backup.flush()
-                    os.fsync(backup.fileno())
-                _fsync_directory(config_path.parent)
-                replaced = True
-                atomic_write(config_path, rendered, uid=uid, gid=gid, mode=0o640)
-            preflight_script = (
-                Path(args.preflight_script)
-                if args.preflight_script
-                else (
-                    Path(__file__).resolve().parents[1]
-                    / "infra/gce/scripts/production-preflight.sh"
-                )
+        lock = lock_path.open("rb")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ConfigSyncError("lock", "another config sync holds the lock") from exc
+        # Re-read under lock so a concurrent edit cannot be overwritten.
+        current = config_path.read_bytes()
+        if sha256_bytes(current) != previous_sha:
+            raise ConfigSyncError("lock", "production config changed after validation")
+        if changed:
+            descriptor, _backup_name = tempfile.mkstemp(
+                prefix=f".{config_path.name}.config-sync-backup.", dir=config_path.parent
             )
-            preflight_details = _safe_file(preflight_script, production=production)
-            if not preflight_details.st_mode & stat.S_IXUSR:
-                raise ConfigSyncError(
-                    "preflight", "canonical production preflight is not executable"
-                )
-            command = [
-                str(preflight_script),
-                "--config-env",
-                str(config_path),
-                "--secrets-root",
-                str(secrets_root),
-                "--project-name",
-                "strayhub-d1-preflight-config-sync",
-                "--image-env",
-                str(image_env),
-            ]
-            try:
-                completed = subprocess.run(command, capture_output=True, text=True, check=False)
-            except OSError as exc:
-                raise ConfigSyncError("preflight", "canonical production preflight failed") from exc
-            if completed.returncode != 0:
-                raise ConfigSyncError("preflight", "canonical production preflight failed")
-            payload = receipt_payload(
-                status="success",
-                gate="",
-                application_git_sha=application_git_sha,
-                manifest=manifest,
-                previous_sha=previous_sha,
-                resulting_sha=resulting_sha,
-                changed=changed,
-                preflight="passed",
-                rollback_performed=False,
-            )
-            write_receipt(receipt_path, payload, uid=uid, gid=gid)
-            return payload
+            os.fchmod(descriptor, 0o640)
+            os.fchown(descriptor, uid, gid)
+            with os.fdopen(descriptor, "wb") as backup:
+                backup.write(original)
+                backup.flush()
+                os.fsync(backup.fileno())
+            _fsync_directory(config_path.parent)
+            replaced = True
+            atomic_write(config_path, rendered, uid=uid, gid=gid, mode=0o640)
+        preflight_script = (
+            Path(args.preflight_script)
+            if args.preflight_script
+            else (Path(__file__).resolve().parents[1] / "infra/gce/scripts/production-preflight.sh")
+        )
+        preflight_details = _safe_file(preflight_script, production=production)
+        if not preflight_details.st_mode & stat.S_IXUSR:
+            raise ConfigSyncError("preflight", "canonical production preflight is not executable")
+        command = [
+            str(preflight_script),
+            "--config-env",
+            str(config_path),
+            "--secrets-root",
+            str(secrets_root),
+            "--project-name",
+            "strayhub-d1-preflight-config-sync",
+            "--image-env",
+            str(image_env),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        except OSError as exc:
+            raise ConfigSyncError("preflight", "canonical production preflight failed") from exc
+        if completed.returncode != 0:
+            raise ConfigSyncError("preflight", "canonical production preflight failed")
+        payload = receipt_payload(
+            status="success",
+            gate="",
+            application_git_sha=application_git_sha,
+            manifest=manifest,
+            previous_sha=previous_sha,
+            resulting_sha=resulting_sha,
+            changed=changed,
+            preflight="passed",
+            rollback_performed=False,
+        )
+        write_receipt(receipt_path, payload, uid=uid, gid=gid)
+        return payload
     except (ConfigSyncError, OSError) as caught:
         sync_error = (
             caught
@@ -410,6 +406,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise
         raise sync_error from caught
     finally:
+        if lock is not None:
+            lock.close()
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
 

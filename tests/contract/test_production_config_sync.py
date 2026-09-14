@@ -265,3 +265,29 @@ def test_shell_wrapper_is_inert_and_does_not_manage_services() -> None:
     assert "scripts.production_config_sync" in source
     for forbidden in ("systemctl", "docker", "service ", "LINE_CHANNEL_ACCESS_TOKEN"):
         assert forbidden not in source
+
+
+def test_rollback_keeps_exclusive_lock_until_failure_receipt(tmp_path, monkeypatch):
+    from scripts import production_config_sync as sync
+
+    root, config, receipt, command = prepare(tmp_path, preflight_exit=23)
+    args = sync.parser().parse_args(command[3:])
+    original = config.read_bytes()
+    real_write = sync.atomic_write
+    checked = []
+
+    def guarded_write(path, content, **kwargs):
+        if (path == config and content == original) or path == receipt:
+            with (root / ".production.env.config-sync.lock").open("rb") as contender:
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            checked.append(path)
+        return real_write(path, content, **kwargs)
+
+    monkeypatch.setattr(sync, "atomic_write", guarded_write)
+    with pytest.raises(sync.ConfigSyncError, match="preflight failed"):
+        sync.run(args)
+    assert checked == [config, receipt]
+    assert config.read_bytes() == original
+    with (root / ".production.env.config-sync.lock").open("rb") as released:
+        fcntl.flock(released, fcntl.LOCK_EX | fcntl.LOCK_NB)

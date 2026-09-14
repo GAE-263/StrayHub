@@ -63,12 +63,12 @@
 
 相依：T01；環境相關修正參考 T06。
 
-- [ ] T07 核對 Google 登入、收容所自行申請／管理員核准的實作，統一六份文件；runbook 改為單帳號分階段驗收，Staff LINE 明確排除。
-- [ ] T08 修正 `scripts/production_config_sync.py` 的鎖範圍：lock 涵蓋 rollback、checksum 核對與 failure receipt 寫入，防止交錯執行造成成功 receipt 與最終設定不符。
-- [ ] T09 為 Quick Reply 補上通用 13 項容量防禦，保持必要流程操作與返回行為；以具體超量案例鎖定截取／保留規則。
-- [ ] T10 補足 Rich Menu best-effort 失敗的安全錯誤分類，不記錄 response body、token、UID 或私人資料，不回滾已提交業務交易。
-- [ ] T11 核對領養／日記及志工涉及的真實 AI 路徑與 image／Compose 設定，補足必要接線；保留 API／Legacy Worker／Celery 邊界與 AI 失敗降級。
-- [ ] T12 先重現已知缺陷，再執行 targeted regression、workflow contracts、security、lint／type checks；修改範圍不得加入 Staff LINE 或其他產品功能。
+- [x] T07 核對 Google 登入、收容所自行申請／管理員核准的實作，統一六份文件；runbook 改為單帳號分階段驗收，Staff LINE 明確排除。
+- [x] T08 修正 `scripts/production_config_sync.py` 的鎖範圍：lock 涵蓋 rollback、checksum 核對與 failure receipt 寫入，防止交錯執行造成成功 receipt 與最終設定不符。
+- [x] T09 為 Quick Reply 補上通用 13 項容量防禦，保持必要流程操作與返回行為；以具體超量案例鎖定截取／保留規則。
+- [x] T10 補足 Rich Menu best-effort 失敗的安全錯誤分類，不記錄 response body、token、UID 或私人資料，不回滾已提交業務交易。
+- [x] T11 核對領養／日記及志工涉及的真實 AI 路徑與 image／Compose 設定，補足必要接線；保留 API／Legacy Worker／Celery 邊界與 AI 失敗降級。
+- [x] T12 先重現已知缺陷，再執行 targeted regression、workflow contracts、security、lint／type checks；修改範圍不得加入 Staff LINE 或其他產品功能。
 
 驗收：已知會迫使真人驗收後改 SHA 的工作先完成；真實 AI 成功不能由 mock／unconfigured 結果替代。
 
@@ -208,3 +208,16 @@
 ## LINE 平台參考
 
 [LINE Rich menus overview](https://developers.line.biz/en/docs/messaging-api/rich-menus-overview/)：Rich Menu 僅在手機 LINE 顯示；個人 API 綁定優先於 API default，再優先於 Manager default。平台規則與 API 限制在正式操作前重新核對。
+
+
+### Step 2 local validation (2026-09-14)
+
+- Regression before fixes: 4 failures reproduced (rollback lock, two overflow cases, API Gemini wiring).
+- After fixes: 264 targeted tests passed, covering config sync, terminal navigation, Compose, role menus, Celery import, runtime settings, release/manual gates, workflow contracts and sensitive transport.
+- Ruff check / format check / sensitive transport script / repository secret scan / diff check: PASS.
+- Mypy: NOT PASS; four identical baseline errors reproduced with original HEAD files via `--shadow-file`. No new diagnostics. Existing issues: missing PyYAML stubs, ZoneInfo/timezone assignment in webhook, and two old test typing errors. Full clean candidate CI remains required in Step 5.
+- Quick Reply policy: preserve business actions; reject more than 12 non-return actions before mutating the message. No silent truncation. Existing bounded terminal builders and idempotence verified.
+- Config-sync lock now covers rollback and failure receipt. Failure regression verifies a competing lock cannot enter until both complete.
+- Gemini key/model passed to API for existing synchronous adoption/diary paths. No production flag changed, no real AI call or credential modification performed.
+- Staff join flow verified in `google_authentication.py`: applicant submits organization; administrator review chooses approved role. Documentation corrected accordingly.
+- Existing staged six documents included in Step 2; original stash remains preserved. No push or PR update.

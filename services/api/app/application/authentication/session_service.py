@@ -475,13 +475,14 @@ class SessionService:
                 role=role,
                 organization_selected=organization_selected,
             )
-        except Exception:
+        except Exception as exc:
             # 選單切換為非關鍵操作（LINE API 可能暫時不可用）；綁定已成功即回傳。
             # 但一定要留下紀錄：最常見的原因是 .env 的 richMenuId 在重跑
             # sync_line_role_menus.py --apply 之後過期，靜默吞掉會讓人查錯方向。
             logger.warning(
-                "linking rich menu failed; menu unchanged (role=%s)",
+                "linking rich menu failed; menu unchanged (role=%s) (error_class=%s)",
                 role,
+                type(exc).__name__,
             )
             return
 

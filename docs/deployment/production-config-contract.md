@@ -49,8 +49,8 @@ without introducing a service-account JSON or application-side GCS dependency.
 | `CELERY_VISIBILITY_TIMEOUT`, `CELERY_MAX_RETRIES`, `CELERY_RETRY_BACKOFF_MAX` | Celery Worker | Non-secret recovery policy | bounded verification values | Compose non-secret env/config |
 | `CELERY_RECONCILE_INTERVAL_SECONDS` | Beat | Non-secret schedule | `30` | Compose non-secret env/config |
 | `CELERY_WORKER_CONCURRENCY` | Celery Worker | Non-secret capacity | `2` | Compose non-secret env/config |
-| `GEMINI_API_KEY` | Celery Worker when AI flag is enabled | Secret | Unset while disabled | Secret Manager → optional staged `runtime.env`; required before enablement |
-| `GEMINI_MODEL_NAME`, `GEMINI_VERTEX_LOCATION` | Celery Worker | Non-secret | checked-in defaults | Compose non-secret env/config |
+| `GEMINI_API_KEY` | API synchronous adoption/diary; Celery Worker when AI flag is enabled | Secret | Unset while disabled | Secret Manager → optional staged `runtime.env`; required before enablement |
+| `GEMINI_MODEL_NAME`, `GEMINI_VERTEX_LOCATION` | Model: API/Celery; Vertex location: Celery | Non-secret | checked-in defaults | Compose non-secret env/config |
 | `STOOL_API_URL`, `STOOL_TIMEOUT_SECONDS` | Legacy Worker | Non-secret optional provider config | unset / bounded default | Compose non-secret env/config |
 | `STOOL_API_KEY` | Legacy Worker when stool provider is enabled | Secret | unset | Secret Manager → optional staged `runtime.env` |
 
@@ -60,12 +60,18 @@ The existing LINE webhook credentials remain required because they also serve th
 workflow. The integrated role-menu, adoption-conversation, and staff-menu behavior has a separate
 fail-closed release gate. `LINE_ROLE_MENU_FEATURES_ENABLED` defaults to `false` in both checked-in
 GCE environments. Local/test runtimes may exercise the integration without changing that production
-default. Every non-local runtime disables role-menu switching and public adoption/volunteer entry
-unless the flag is explicitly true.
+default. Non-local role-menu access requires global enablement or a valid bounded test scope;
+neither mode grants business or tenant permissions.
+
+The current release scope is adoption, growth diary, and volunteer features. Staff use the
+Google-authenticated Web interface and submit shelter join requests for administrator approval.
+Keep `LINE_STAFF_MENU_ENABLED=false`; Staff LINE resources, LIFF, and staff smoke evidence are
+deferred and are not prerequisites for this scope. See [staff access governance](../staff-access-governance.md).
 
 | Field | Consumer | Classification | Local default | Production rule / source |
 | --- | --- | --- | --- | --- |
 | `LINE_ROLE_MENU_FEATURES_ENABLED` | API, Worker | Non-secret boolean | `false`; local/test behavior remains available | Compose config; must be exactly `true` or `false`, default `false` |
+| `LINE_STAFF_MENU_ENABLED` | API, Worker | Non-secret boolean | `false` | Independent opt-in for the optional staff LINE surface; requires role-menu global/test mode plus staff menu and LIFF configuration |
 | `LINE_CHANNEL_ID` | API | Non-secret channel identifier | Synthetic/fake local ID | Existing required Compose config; non-placeholder |
 | `LINE_CHANNEL_SECRET` | API | Secret | Synthetic/fake local secret | Existing required Secret Manager key `line-channel-secret` |
 | `LINE_CHANNEL_ACCESS_TOKEN` | API, Worker | Secret | Synthetic/fake local token | Existing required Secret Manager key `line-channel-access-token`; Worker receives it only for post-commit menu switching |
@@ -73,9 +79,9 @@ unless the flag is explicitly true.
 | `WEB_PUBLIC_BASE_URL` | API / release preflight | Non-secret public origin for LINE entry and short-lived adoption-photo URLs | Empty; local proxied webhook may derive its HTTPS origin | Required only when enabled; absolute HTTPS, non-loopback, reviewed origin |
 | `LINE_RICH_MENU_DEFAULT_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
 | `LINE_RICH_MENU_VOLUNTEER_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
-| `LINE_RICH_MENU_STAFF_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; Compose config, non-placeholder |
+| `LINE_RICH_MENU_STAFF_ID` | API, Worker | Non-secret LINE resource ID | Empty/no-op | Required only when `LINE_STAFF_MENU_ENABLED=true`; otherwise staged values are not routed |
 | `LINE_RICH_MENU_ADOPTION_HUB_ID` | API | Non-secret LINE resource ID | Empty/no-op | Required only when enabled; verified hub resource; not needed by Legacy Worker/Celery |
-| `LINE_STAFF_LIFF_ID` | API / release preflight | Non-secret staff LIFF ID | Empty | Required only when enabled; Compose config, non-placeholder |
+| `LINE_STAFF_LIFF_ID` | API / release preflight | Non-secret staff LIFF ID | Empty | Required only when `LINE_STAFF_MENU_ENABLED=true`; the normal staff surface is Google-authenticated Web management |
 | `LINE_ROLE_MENU_SMOKE_EVIDENCE` | API | Legacy compatibility label | Empty | `verified-YYYYMMDD-<40-char-tested-git-sha>` alone no longer authorizes enablement |
 | `LINE_ROLE_MENU_TEST_ENABLED` | API / Legacy Worker | Protected operator config | false | Explicit bounded account mode; never enables all users |
 | `LINE_ROLE_MENU_TEST_CHANNEL_ID`, `LINE_ROLE_MENU_BOT_SHA256` | API / Legacy Worker | Protected verified identity | Empty | Channel equals configured Messaging Channel; signed webhook destination matches Bot hash |
@@ -83,8 +89,10 @@ unless the flag is explicitly true.
 | `LINE_ROLE_MENU_REPORT_PATH`, `LINE_ROLE_MENU_REPORT_SHA256`, `LINE_ROLE_MENU_RESOURCES_PATH` | API / preflight | Protected readonly evidence | /dev/null, empty, /dev/null | Global enablement requires real-line report, current immutable identity and resource readback; mock rejected |
 | `LINE_ROLE_MENU_RELEASE_MANIFEST` | API / preflight | Actual verified release manifest | /dev/null | Global mode requires `/opt/strayhub/current/release-manifest.json`; preflight substitutes candidate bundle manifest before switch |
 
-The bounded mode retains the production HTTPS, staff LIFF and resource gates; only the prior-human-
-evidence requirement is deferred until global enablement. Neither mode grants business/tenant access.
+The bounded mode retains production HTTPS and resource gates; staff LIFF/resource/evidence become
+part of the contract only when the independent staff LINE capability is enabled. Neither mode grants
+business/tenant access. Staff management remains available through the Google-authenticated Web flow
+while `LINE_STAFF_MENU_ENABLED=false`.
 See [executable operator sequence and invalidation rules](../line-rich-menu-safe-publication.md).
 Legacy label-only global deployments must migrate their evidence before their next startup; both flags
 false remain compatible without evidence. No Rich Menu settings are added to Celery Worker/Beat.
@@ -99,8 +107,10 @@ The repository's `line-liff/adopter/index.html` is a local mock only. The former
 `apps/web/public/adoption-entry/index.html` route and `_adoption_entry_message` placeholder were
 removed when the real conversation was integrated. The GCE Web image and release bundle do not copy
 `line-liff/`, and nginx/systemd define no alias for `line-liff/serve-demo.sh` or either mock page.
-Before the gate can be enabled, the staff LIFF ID must point at a separately reviewed production
-artifact under `WEB_PUBLIC_BASE_URL`, and the exact release commit must pass real LINE smoke.
+If the independent staff LINE gate is enabled, its LIFF ID must point at a separately reviewed
+production artifact under `WEB_PUBLIC_BASE_URL`, and the exact release commit must additionally pass
+the staff real-LINE smoke cases. With that gate false, adopter/volunteer enablement does not depend
+on a Staff LIFF.
 
 Optional previous JWT key material and its reference follow the same Secret Manager/non-secret
 identifier split when rotation enables them. External AI endpoint/model fields become Compose
