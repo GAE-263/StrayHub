@@ -31,11 +31,20 @@ class GateError(ValueError):
     """A manual release authorization or receipt is invalid."""
 
 
+def validate_manual_run_identity(actor: str, triggering_actor: str, run_attempt: str) -> None:
+    if actor != OPERATOR or triggering_actor != OPERATOR:
+        raise GateError("original or triggering operator identity mismatch")
+    if run_attempt != "1":
+        raise GateError("manual write operations require a fresh first workflow attempt")
+
+
 def validate_gate(
     *,
     operation: str,
     confirmation: str,
     actor: str,
+    triggering_actor: str,
+    run_attempt: str,
     repository: str,
     event_name: str,
     ref: str,
@@ -47,8 +56,9 @@ def validate_gate(
 ) -> None:
     if operation not in {"publish", "deploy"}:
         raise GateError("operation is not a production write operation")
-    if actor != OPERATOR or repository != REPOSITORY:
-        raise GateError("operator or repository identity mismatch")
+    validate_manual_run_identity(actor, triggering_actor, run_attempt)
+    if repository != REPOSITORY:
+        raise GateError("repository identity mismatch")
     if event_name != "workflow_dispatch" or ref != RELEASE_REF:
         raise GateError("manual release ref is invalid")
     identities = (github_sha, input_sha, checkout_sha, release_sha)
@@ -69,6 +79,8 @@ def validate_gate(
 def validate_line_gate(
     *,
     actor: str,
+    triggering_actor: str,
+    run_attempt: str,
     repository: str,
     event_name: str,
     ref: str,
@@ -79,8 +91,9 @@ def validate_line_gate(
     confirmation: str,
     secret_version: str,
 ) -> None:
-    if actor != OPERATOR or repository != REPOSITORY:
-        raise GateError("operator or repository identity mismatch")
+    validate_manual_run_identity(actor, triggering_actor, run_attempt)
+    if repository != REPOSITORY:
+        raise GateError("repository identity mismatch")
     if event_name != "workflow_dispatch" or ref != RELEASE_REF:
         raise GateError("LINE publication must be manually dispatched from release")
     identities = (github_sha, input_sha, checkout_sha, release_sha)
@@ -222,11 +235,19 @@ def export_application_config(path: Path, output: Path) -> None:
     )
 
 
-def _gate_from_environment(args: argparse.Namespace) -> None:
+def _add_run_identity(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--actor", required=True)
+    parser.add_argument("--triggering-actor", required=True)
+    parser.add_argument("--run-attempt", required=True)
+
+
+def _gate_from_arguments(args: argparse.Namespace) -> None:
     validate_gate(
         operation=args.operation,
         confirmation=args.confirmation,
-        actor=os.environ.get("GITHUB_ACTOR", ""),
+        actor=args.actor,
+        triggering_actor=args.triggering_actor,
+        run_attempt=args.run_attempt,
         repository=os.environ.get("GITHUB_REPOSITORY", ""),
         event_name=os.environ.get("GITHUB_EVENT_NAME", ""),
         ref=os.environ.get("GITHUB_REF", ""),
@@ -248,12 +269,16 @@ def main() -> int:
     gate.add_argument("--checkout-sha", required=True)
     gate.add_argument("--release-sha", required=True)
     gate.add_argument("--bundle-sha256")
+    _add_run_identity(gate)
     line = subparsers.add_parser("line-gate")
     line.add_argument("--confirmation", required=True)
     line.add_argument("--git-sha", required=True)
     line.add_argument("--checkout-sha", required=True)
     line.add_argument("--release-sha", required=True)
     line.add_argument("--secret-version", required=True)
+    _add_run_identity(line)
+    identity = subparsers.add_parser("run-identity")
+    _add_run_identity(identity)
     create = subparsers.add_parser("create-publication-receipt")
     create.add_argument("--manifest", type=Path, required=True)
     create.add_argument("--output", type=Path, required=True)
@@ -270,10 +295,12 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "gate":
-            _gate_from_environment(args)
+            _gate_from_arguments(args)
         elif args.command == "line-gate":
             validate_line_gate(
-                actor=os.environ.get("GITHUB_ACTOR", ""),
+                actor=args.actor,
+                triggering_actor=args.triggering_actor,
+                run_attempt=args.run_attempt,
                 repository=os.environ.get("GITHUB_REPOSITORY", ""),
                 event_name=os.environ.get("GITHUB_EVENT_NAME", ""),
                 ref=os.environ.get("GITHUB_REF", ""),
@@ -284,6 +311,8 @@ def main() -> int:
                 confirmation=args.confirmation,
                 secret_version=args.secret_version,
             )
+        elif args.command == "run-identity":
+            validate_manual_run_identity(args.actor, args.triggering_actor, args.run_attempt)
         elif args.command == "create-publication-receipt":
             create_publication_receipt(args.manifest, args.output, args.run_id)
         elif args.command == "validate-publication-receipt":

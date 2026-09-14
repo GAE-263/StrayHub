@@ -543,6 +543,70 @@ def test_release_push_has_zero_external_write_jobs() -> None:
         assert "github.event_name == 'push'" not in condition
 
 
+def test_manual_write_jobs_recheck_release_head_and_reject_reruns() -> None:
+    workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
+    document = __import__("yaml").load(workflow, Loader=__import__("yaml").BaseLoader)
+    required_contexts = (
+        "${{ github.actor }}",
+        "${{ github.triggering_actor }}",
+        "${{ github.run_attempt }}",
+    )
+    for job_name in ("authorize-manual-write", "publish-release", "deploy-production"):
+        start = workflow.index(f"  {job_name}:")
+        following = [
+            workflow.find(f"\n  {name}:", start + 1)
+            for name in document["jobs"]
+            if workflow.find(f"\n  {name}:", start + 1) >= 0
+        ]
+        text = workflow[start : min(following) if following else len(workflow)]
+        assert all(context in text for context in required_contexts)
+    for job_name in ("publish-release", "deploy-production"):
+        steps = document["jobs"][job_name]["steps"]
+        assert any("manual_release_gate" in step.get("run", "") for step in steps)
+        auth_index = next(
+            index
+            for index, step in enumerate(steps)
+            if "google-github-actions/auth" in step.get("uses", "")
+        )
+        freshness = [
+            index for index, step in enumerate(steps) if "release_head_gate" in step.get("run", "")
+        ]
+        assert freshness and freshness[0] < auth_index
+        mutation_markers = ("docker push", "deploy-release-ci.sh")
+        mutation_index = next(
+            index
+            for index, step in enumerate(steps)
+            if any(marker in step.get("run", "") for marker in mutation_markers)
+        )
+        assert freshness[-1] == mutation_index
+        mutation_step = steps[mutation_index]["run"]
+        if job_name == "publish-release":
+            first_gate = mutation_step.index("release_head_gate")
+            credential_helper = mutation_step.index("gcloud auth configure-docker")
+            last_gate = mutation_step.rindex("release_head_gate")
+            assert first_gate < credential_helper < last_gate < mutation_step.index("docker push")
+        else:
+            assert mutation_step.index("release_head_gate") < mutation_step.index(
+                "deploy-release-ci.sh"
+            )
+
+
+def test_production_verification_observes_superseded_release_without_skipping() -> None:
+    workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
+    document = __import__("yaml").load(workflow, Loader=__import__("yaml").BaseLoader)
+    verify = document["jobs"]["verify-production"]
+    text = workflow[workflow.index("  verify-production:") :]
+    assert "needs.deploy-production.result == 'success'" in verify["if"]
+    assert "--allow-superseded" in text
+    assert "release_superseded_after_deploy" in text
+    assert "needs.deploy-production.outputs.deployed_sha" in text
+    assert "needs.deploy-production.outputs.bundle_sha256" in text
+    assert "needs.deploy-production.outputs.publication_run_id" in text
+    assert "${{ github.triggering_actor }}" in text
+    assert "${{ github.run_attempt }}" in text
+    assert "deploy-release-ci.sh" not in text
+
+
 def test_generated_release_bundle_is_excluded_from_git_and_images() -> None:
     assert "/release-bundle/" in (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "release-bundle/" in (ROOT / ".dockerignore").read_text(encoding="utf-8")

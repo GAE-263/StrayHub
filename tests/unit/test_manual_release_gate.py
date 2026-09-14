@@ -16,6 +16,8 @@ BUNDLE = "b" * 64
 def context(**overrides: str) -> dict[str, str]:
     values = {
         "actor": "yawan0203",
+        "triggering_actor": "yawan0203",
+        "run_attempt": "1",
         "repository": "GAE-263/StrayHub",
         "event_name": "workflow_dispatch",
         "ref": "refs/heads/release",
@@ -26,6 +28,40 @@ def context(**overrides: str) -> dict[str, str]:
     }
     values.update(overrides)
     return values
+
+
+@pytest.mark.parametrize("operation", ["publish", "deploy", "line"])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"triggering_actor": "someone-else", "run_attempt": "2"},
+        {"triggering_actor": ""},
+        {"run_attempt": ""},
+        {"run_attempt": "not-a-number"},
+        {"run_attempt": "2"},
+        {"actor": "someone-else"},
+    ],
+)
+def test_manual_writes_reject_rerun_or_actor_mismatch(
+    operation: str, overrides: dict[str, str]
+) -> None:
+    kwargs = context(**overrides)
+    with pytest.raises(GateError):
+        if operation == "line":
+            validate_line_gate(
+                confirmation=f"PUBLISH LINE MENU {SHA}", secret_version="3", **kwargs
+            )
+        else:
+            validate_gate(
+                operation=operation,
+                confirmation=(
+                    f"PUBLISH {SHA}"
+                    if operation == "publish"
+                    else f"DEPLOY PRODUCTION {SHA} {BUNDLE}"
+                ),
+                bundle_sha256=BUNDLE if operation == "deploy" else None,
+                **kwargs,
+            )
 
 
 def test_publish_and_deploy_confirmations_are_exact() -> None:
@@ -68,6 +104,8 @@ def test_line_gate_rejects_unpinned_secret_versions(version: str) -> None:
     with pytest.raises(GateError):
         validate_line_gate(
             actor="yawan0203",
+            triggering_actor="yawan0203",
+            run_attempt="1",
             repository="GAE-263/StrayHub",
             event_name="workflow_dispatch",
             ref="refs/heads/release",
@@ -83,6 +121,8 @@ def test_line_gate_rejects_unpinned_secret_versions(version: str) -> None:
 def test_line_gate_accepts_only_exact_confirmation() -> None:
     validate_line_gate(
         actor="yawan0203",
+        triggering_actor="yawan0203",
+        run_attempt="1",
         repository="GAE-263/StrayHub",
         event_name="workflow_dispatch",
         ref="refs/heads/release",
