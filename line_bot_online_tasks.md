@@ -259,3 +259,10 @@
 - No secret payload, OIDC exchange, publication, deployment, dispatch, LINE API, config sync or runtime restart. No runtime source changes or large tests rerun.
 - T32 remains unchecked as an end-to-end prerequisite task: live federated authentication, AI credentials/provider readiness and deployment preflight are not yet proven. T33–T36 remain unexecuted and require their separate operation authorization.
 - Protected before/after policies and request files retained at `/private/tmp/strayhub-cloud-prerequisites.1aynrfcg` (directory 0700, JSON files 0600); no secret values stored. Do not automatically restore the prior broad trust or delete created resources.
+
+### Step 6 T33 — publication attempt blocked (2026-09-14)
+
+- User authorized application publication for exact release `a3e206f9a553d75be9ac342ce73998ce1cf9badc`. Created one run [34862095364](https://github.com/GAE-263/StrayHub/actions/runs/34862095364), workflow_dispatch/release/attempt 1, both actors yawan0203, operation publish.
+- Final run FAILURE: manual authorization job git fetch failed with exit 128 (missing HTTPS Git credentials after persist-credentials=false checkout). Full validation jobs passed. Publication/deployment/production verification SKIPPED; artifacts=0.
+- [Failure evidence and recovery boundary](docs/deployment/line-online-application-publication.md). T33 remains unchecked: no published images, bundle or receipt. T34–T36 not executed.
+- No rerun, cancel, second dispatch, code fix, WIF policy modification, secret payload access, LINE API, deployment or config sync. Earlier authorized cloud prerequisite changes preserved. A reviewed workflow correction and new candidate validation are required before fresh publication authorization.
