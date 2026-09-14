@@ -319,3 +319,5 @@ The future VM receives bucket-level `roles/storage.objectCreator` plus
 `roles/storage.objectViewer`; lifecycle, not the VM, owns expiration. The proposed 35-day age rule is
 explicitly not seven-daily/four-weekly selection. Local fake-CLI verification does not prove live GCS
 or IAM. See `docs/deployment/gcs-backup.md`.
+
+Schema 2 protected approvals bind the exact release, resource identities and AI configuration. Historical test-scope expiry does not invalidate an approved unchanged release at restart. Bounded test access still expires; schema 1 retains its original seven-day limit. A revoked/missing/mismatched approval fails startup validation. See the schema-2 operator contract in the LINE publication runbook.

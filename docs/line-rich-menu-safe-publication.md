@@ -248,7 +248,7 @@ scope predicate；preflight 比對兩程序 Channel、token、名單、Bot、期
 8. 失敗／期限到達：停用 test mode，保存證據；另依保存的精確原綁定恢復指定帳號，
    原無綁定者 unlink，不改其他人。不重播通知、不重建資源、不隱含 rollback。
 
-### Evidence 契約及失效條件
+### Legacy schema 1 契約及失效條件
 
 Schema 1 分 `automated-fixture` 與 `real-line`。模板預設 automated-fixture/isolated-test；
 即使把所有結果填 PASS，也不能通過真實類型 gate。單元測試可模擬 real-line 合約，
@@ -372,3 +372,25 @@ uv run --no-sync pytest \
 與 network 唯一使用者；完成後精確移除 container/network，名稱篩選確認無殘留。
 前一輪 localhost 55439 的同等專用資源亦已精確移除。合成 DB 隨 tmpfs 移除、不可恢復；
 未使用 prune，沒有刪除使用者資料或舊 LINE 資源。
+
+## Schema 2：已核准版本與短期測試分離
+
+本次採 `template --schema-version 2`。Schema 2 外層保存 schema-1 形狀的 `evidence`、
+歷史 `scope` snapshot、各真人 case 的 `stages` 及 `approval`。模板全為 NOT RUN／pending，
+不能啟用功能；也不會將 legacy report 自動升級。
+
+- 單帳號用 `account-1` 等不透明參照；一般使用者階段必須早於正常核准後的 VOLUNTEER
+  階段。每 case 保存 observed_at、membership、scope hash/state，不保存 UID 或對話。
+- Boundary 負向測試可使用不同的受控 scope；必須如實標示 outside／expired／cross-tenant，
+  不得將其假稱為正常 allowed scope。正常操作必須與主測試 scope hash 一致。
+- Approval 必須為 approved、operator=yawan0203，綁定排除 approval 區塊後的 canonical
+  evidence SHA-256。核准須發生於觀察後七日內、主測試 scope 到期前，且不得在未來。
+- Runtime 仍驗證精確 release SHA、三映像 digests、bundle／Compose、環境、Bot／Channel、
+  選單資源與功能 config hash。Schema 2 額外將 AI provider/model/endpoint、Gemini model/location
+  與 Celery AI flag 納入 config hash；不得把改過功能設定的版本視為同一已驗收版本。
+- 有效核准的同版本可在歷史 scope 到期後重啟；可移除短期帳號名單與期限。test=true 的
+  bounded scope 仍照原規則到期拒絕。撤銷時由受控 operator 將 approval.status 改為 revoked
+  並更新受保護 report checksum；下一次驗證會拒絕。緊急停止需另行停用功能並載入配置，
+  不是只改檔案就讓已快取的 runtime 立即停止。
+- Report/checksum 仍須是受保護 operator/root 管理；hash 不等同簽章或真人操作證明。
+  舊 schema 1 維持原七日期限；前述 legacy 規則不套用於 schema 2 的已核准版本。

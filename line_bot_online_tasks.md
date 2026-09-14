@@ -76,14 +76,14 @@
 
 相依：T07；與 Step 2 一併完成後再凍結 candidate。
 
-- [ ] T13 定義有明確版本的新 evidence schema：分離短期測試 scope 與正式版本核准；舊 schema 不自動轉成永久核准。
-- [ ] T14 保留 bounded scope 的帳號、Bot／Channel、期限及 fail-closed 驗證；測試資格到期仍拒絕新測試操作。
-- [ ] T15 正式核准綁定精確 release SHA、三個 image digests、bundle／Compose、Bot／Channel、資源 hashes、受驗功能設定與可信核准紀錄。
-- [ ] T16 同一已核准版本重啟不依賴已過期測試名單；保留受保護的撤銷機制，缺證據、篡改、身分不符或撤銷均 fail closed。
-- [ ] T17 SHA／image／Bot／Channel／選單或受驗功能設定改變時要求重新驗證；不接受等價 tree 替代 SHA。
-- [ ] T18 單帳號各案例記錄當時角色、scope、時間及去識別證據參照；一般使用者與志工階段不得混用權限或偽造不同使用者。
-- [ ] T19 保持真人與自動化來源可區別；負向案例的受控 scope 變更須被明確記錄，不能用最終 scope 假稱所有案例都在同一狀態完成。
-- [ ] T20 更新 validator、模板、preflight、runtime、文件及測試；功能關閉且無 evidence 的部署保持可啟動。
+- [x] T13 定義有明確版本的新 evidence schema：分離短期測試 scope 與正式版本核准；舊 schema 不自動轉成永久核准。
+- [x] T14 保留 bounded scope 的帳號、Bot／Channel、期限及 fail-closed 驗證；測試資格到期仍拒絕新測試操作。
+- [x] T15 正式核准綁定精確 release SHA、三個 image digests、bundle／Compose、Bot／Channel、資源 hashes、受驗功能設定與可信核准紀錄。
+- [x] T16 同一已核准版本重啟不依賴已過期測試名單；保留受保護的撤銷機制，缺證據、篡改、身分不符或撤銷均 fail closed。
+- [x] T17 SHA／image／Bot／Channel／選單或受驗功能設定改變時要求重新驗證；不接受等價 tree 替代 SHA。
+- [x] T18 單帳號各案例記錄當時角色、scope、時間及去識別證據參照；一般使用者與志工階段不得混用權限或偽造不同使用者。
+- [x] T19 保持真人與自動化來源可區別；負向案例的受控 scope 變更須被明確記錄，不能用最終 scope 假稱所有案例都在同一狀態完成。
+- [x] T20 更新 validator、模板、preflight、runtime、文件及測試；功能關閉且無 evidence 的部署保持可啟動。
 
 驗收：首次真實 LINE 驗收仍必要；同版本日常重啟無須每七天重新手機驗收；新版本不沿用舊身分證據。
 
@@ -221,3 +221,12 @@
 - Gemini key/model passed to API for existing synchronous adoption/diary paths. No production flag changed, no real AI call or credential modification performed.
 - Staff join flow verified in `google_authentication.py`: applicant submits organization; administrator review chooses approved role. Documentation corrected accordingly.
 - Existing staged six documents included in Step 2; original stash remains preserved. No push or PR update.
+
+### Step 3 local validation (2026-09-14)
+
+- 197 targeted tests passed: schema 2 approval, legacy expiry, bounded scope, staff gate, runtime/preflight, GCE release contracts and sensitive transport. Fixtures are synthetic; no human or live LINE PASS was generated.
+- Ruff / format / Mypy (four changed Python files), sensitive transport policy, repository-native secret scan and diff check: PASS.
+- Schema 2 binds the historical scope, staged single-account observations, exact release/images/resources/configuration (including AI), and protected operator approval. Pending/revoked/tampered/duplicate-key/wrong-identity evidence fails closed.
+- Same approved version validates after historical scope expiry with the test list removed. Bounded test access still expires; legacy schema 1 remains time-limited and is not auto-upgraded.
+- Approval remains an operator attestation protected by file ownership and the deployment boundary, not a cryptographic signature or proof of human truth. Runtime caches require an explicit disable/reload for immediate revocation.
+- No remote write, config sync, restart, publication, deployment, LINE API or credential access performed in this step.
