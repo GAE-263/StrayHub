@@ -266,3 +266,9 @@
 - Final run FAILURE: manual authorization job git fetch failed with exit 128 (missing HTTPS Git credentials after persist-credentials=false checkout). Full validation jobs passed. Publication/deployment/production verification SKIPPED; artifacts=0.
 - [Failure evidence and recovery boundary](docs/deployment/line-online-application-publication.md). T33 remains unchecked: no published images, bundle or receipt. T34–T36 not executed.
 - No rerun, cancel, second dispatch, code fix, WIF policy modification, secret payload access, LINE API, deployment or config sync. Earlier authorized cloud prerequisite changes preserved. A reviewed workflow correction and new candidate validation are required before fresh publication authorization.
+
+### T33 recovery — local workflow correction
+
+- Corrected application manual authorization and the identical LINE publish credential failure using the existing authenticated strict release HEAD API gate. Persisted Git credentials remain disabled; release/actor/attempt/confirmation contracts unchanged.
+- Before: three executable shell regressions failed with the original exit 128. After: 237 targeted tests passed. Validation details and the one reproduced baseline Mypy diagnostic are recorded in [publication recovery](docs/deployment/line-online-application-publication.md).
+- Local commit only; T33 remains incomplete. No push or fresh publication dispatch. A new integrated release SHA must pass candidate CI before a separately authorized publication attempt.

@@ -28,3 +28,12 @@ No publication receipt or image digest can be inferred from the verification-onl
 Run completed with conclusion=failure. Candidate verification (including clean-SHA image build), Python, Frontend Quality, Contracts and Critical E2E all succeeded. Manual authorization failed; Publish immutable release candidate, Production deployment and Production verification were SKIPPED. Artifacts total_count=0.
 
 Result: APPLICATION PUBLICATION BLOCKED — NOT PUBLISHED — NOT DEPLOYED. No image push or publication WIF exchange occurred because the entire publish job was skipped. The earlier six cloud prerequisite changes remain in place; no rollback was performed.
+
+## Local correction prepared (not pushed)
+
+- Reproduced the missing-Git-credential failure by executing the actual workflow shell with isolated offline git/gh clients: three positive-path cases (application publish, deploy, LINE publish) failed with exit 128 before the fix.
+- Application authorization now passes step-scoped GH_TOKEN to the existing strict release HEAD API gate. It checks manual identity/confirmation first, then fresh authoritative SHA before reporting authorization. LINE publication removes the same unauthenticated fetch and retains its existing strict API gate. Neither workflow persists Git credentials; no new token or broader permissions.
+- 237 targeted tests PASS, including 51 executed-shell cases, shared strict JSON/manual gates, GCE/LINE workflow contracts, online operation boundaries and sensitive transport. Synthetic clients only; no live dispatch, credentials or external writes in tests.
+- Ruff/format, sensitive transport script, repository secret scan and diff check PASS. Mypy passes the new execution-test file; the existing LINE contract test has one missing PyYAML-stubs diagnostic, identically reproduced from unchanged HEAD via shadow-file. No new Mypy diagnostic; do not claim all-file Mypy PASS.
+- No production Python/scripts or runtime Dockerfile/Compose changes. No runtime image rebuild or full Python/frontend/E2E suite rerun locally; new candidate CI remains required after integration.
+- This local correction does not alter the failed run or the frozen remote candidate. No push, PR modification, merge, dispatch/rerun, cloud/LINE operation or deployment performed during the correction.
