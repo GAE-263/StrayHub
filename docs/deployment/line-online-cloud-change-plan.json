@@ -107,7 +107,29 @@
     "triggering_actor is enforced by existing workflows; no undocumented OIDC triggering_actor claim is assumed.",
     "Existing issued access tokens are not revoked by these trust changes.",
     "No proof of absence of unknown external IaC ownership or other pool consumers is claimed.",
-    "Latest combined IAM/provider/secret readback was denied by automatic safety review; do not apply historical snapshots.",
-    "No automatic rollback to broad legacy trust; failed or uncertain writes require readback and a separately approved recovery."
-  ]
+    "No automatic rollback to broad legacy trust; failed or uncertain writes require readback and a separately approved recovery.",
+    "Explicit target metadata readback succeeded after user authorization. Project-wide service-account policy enumeration was denied and not executed; unknown consumers are not excluded."
+  ],
+  "verified_metadata_snapshot": {
+    "date": "2026-09-14",
+    "main": "e0ab761390809bcfc25f999a1bf68419758916fa",
+    "release": "a3e206f9a553d75be9ac342ce73998ce1cf9badc",
+    "provider_state": "ACTIVE",
+    "provider_issuer": "https://token.actions.githubusercontent.com",
+    "provider_allowed_audiences_field": "absent",
+    "artifact_publisher_policy_etag": "BwZaTeopDWY=",
+    "deployer_policy_etag": "BwZaTepS6g4=",
+    "registry_policy_etag": "BwZaTen-iV0=",
+    "line_secret_policy_etag": "BwZaOcfRxzY=",
+    "line_publisher_describe": "NOT_FOUND",
+    "manifest_bucket_describe": "404",
+    "project_custom_roles": [],
+    "line_token_versions": {
+      "2": "ENABLED",
+      "1": "DISABLED"
+    },
+    "payload_access": false,
+    "terraform_state_access": false,
+    "revalidate_before_write": true
+  }
 }

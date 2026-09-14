@@ -87,3 +87,25 @@ Bot/Channel/LIFF authoritative 對應、測試收容所與正常 Google/LINE 身
 新的 provider／SA policy／registry policy／secret policy metadata readback 遭自動安全審核拒絕，理由是早先明確禁止 WIF/IAM/Secret Manager 操作，後續「繼續」未明確撤銷。該批命令未執行，不改用替代工具。**下一個需要的授權僅為指定資源的唯讀 metadata 查證**，包括 project 內 pool bindings 的去敏檢查與權限 metadata；不包含 secret payload、Terraform state、IAM/cloud 寫入或 workflow dispatch。查證完成後才可提交最終外部 apply 授權範圍。
 
 本機只做 JSON 結構與精確身分／路由一致性檢查，不宣稱已由 GCP 執行 CEL 驗證或完成真實 token exchange。未重跑大型 suite、未變更 runtime、未 push，候選 release 不變。
+
+## 指定資源 metadata 查證完成（2026-09-14）
+
+使用者明確授權上述唯讀範圍後，指定命令成功執行；先前 readback 阻擋已就此範圍解除，不代表外部寫入獲准。
+
+| 指定資源 | 本輪結果 | 擬採動作 |
+| --- | --- | --- |
+| github provider | ACTIVE；原 mapping/condition 未漂移；issuer 為 token.actions.githubusercontent.com；oidc 未列 allowedAudiences | 只收斂 mapping/condition，保留 issuer/audience 行為 |
+| Artifact publisher IAM | 唯一綁定為 release-publication environment 的 workloadIdentityUser；etag BwZaTeopDWY= | 精確替換成 app-publish 路由 |
+| Deployer IAM | 唯一綁定為 production environment 的 workloadIdentityUser；etag BwZaTepS6g4= | 精確替換成 app-deploy、line-online 路由 |
+| asia-east1/strayhub Registry IAM | runtime SA reader、artifact publisher writer；etag BwZaTen-iV0= | 保留，不修改 Registry IAM |
+| LINE token secret IAM | 唯一直接綁定為 runtime SA secretAccessor；etag BwZaOcfRxzY= | 保留原 member，新增指定 LINE SA secretAccessor |
+| LINE token versions | 2 ENABLED、1 DISABLED | 不讀 payload、不新增或旋轉版本；未證明憑證有效 |
+| LINE publisher SA／manifest bucket | NOT_FOUND／404 | 僅在重新確認不存在後建立指定目標 |
+| Project custom roles | 空清單 | 建立指定兩權限 custom role；不修改其他角色 |
+| GitHub refs／runs | main/release 維持已記錄 SHA；in_progress、queued、waiting 清單均空 | 變更前再次檢查；此次不是永久無並行操作保證 |
+
+這裡的 IAM 表僅描述指定資源的直接 policy，不是所有 inherited/effective permissions 的完整證明。全專案 service accounts 列舉及逐一 IAM policy 查詢被自動安全審核拒絕，因超出指定資源授權；該批命令未執行，不以其他工具繞過。未知其他 pool consumers 尚未排除。
+
+下一個授權標的是 JSON 中的**前置資源與權限變更**：保留現有 pool/provider、收斂條件與指定 SA 綁定；建立指定 LINE SA、兩權限 custom role、私有 manifest bucket，新增指定 secret/bucket bindings。不包含 dispatch、credential payload access、publication、deployment、LINE API、config sync 或 runtime restart。
+
+變更共用 provider 可能使未知但依賴舊 main/environment/branch 信任的工作無法取得新憑證；這是需審查的相容性影響。若尚未接受此範圍與影響，不得 apply。若執行時發現與 snapshot 不符或有進行中的寫入工作，停止而不自行擴權；不恢復過寬 trust。T32 仍保持未完成，直到實際變更與 readback 通過。
