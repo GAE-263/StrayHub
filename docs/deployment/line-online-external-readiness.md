@@ -32,7 +32,7 @@ WIF 精確配對提案（均為 `GAE-263/StrayHub/.github/workflows/<file>@refs/
 
 必須先確認 GitHub OIDC 實際可用 claims 及管理來源，再產出最終 mapping、condition、principalSet 和保留 etag 的 IAM 差異。不能假定 OIDC 有 triggering_actor claim；雙 actor、attempt=1、operation confirmation 與即時 release HEAD 檢查仍由 workflow/gate 強制，不以 WIF 取代。
 
-Repository 的 infra Terraform 搜尋未找到現行 provider resource；文件記錄曾啟用它，但不足以判定現行 authoritative ownership。**需維運者確認是其他 Terraform/IaC、其他 repository，或人工管理。** 在此之前不提供可誤用的直接覆寫命令，也不 apply。
+Repository 的 infra Terraform 搜尋未找到現行 provider resource。後續 Admin Activity 查證已找到 gcloud 建立及修改紀錄（見下方 ownership 追查），可確認已觀察到的操作管理方式。沒有證據能保證其後從未被其他 IaC 納管；本次不為此讀取遠端 state，也不直接 apply。後續提案保留既有 provider，針對當下 readback 產出精確差異，需另外取得外部寫入授權。
 
 ## 授權後的順序與停止條件
 
@@ -50,3 +50,24 @@ Publication、deployment、LINE publication 分開執行，不使用 rerun。未
 Bot/Channel/LIFF authoritative 對應、測試收容所與正常 Google/LINE 身分流程、bounded scope、真人手機驗收、真實 AI 成功、全域啟用及個人選單遷移仍未完成。它們不能由 CI、merge 或本草案代替。
 
 本輪沒有 Secret Manager payload access、GCP/LINE mutation、dispatch、publish、deploy、config sync、restart 或正式業務資料寫入。
+
+## WIF ownership 追查（2026-09-14）
+
+- 維運者回覆目前不清楚管理來源；這不構成人工管理的證據。
+- 本地 Git 可見歷史中，`a6f39ea0a42987b00c882edd8bad63155e0308e8`（2026-08-31）的首次發布紀錄已記載此 pool/provider 與兩個 service accounts，但沒有對應 provisioning 指令。
+- 本地可見 Git 歷史的 Terraform/shell/Python 搜尋未找到此 provider 的管理宣告。查不到來源不代表其他 repository 沒有管理它。
+- GCE local state serial 27 與 backup serial 25，僅提取 resource addresses 檢查，均無 workload identity pool/provider。未輸出完整 state 或資源屬性。
+- Platform root 的 source、README、F5b adoption ledger 只列 secrets metadata/runtime IAM、KMS、backup/state buckets；未列 WIF。這是來源與歷史 ledger 證據，不能代替現行遠端 state。
+- 遠端 platform state payload 讀取遭自動安全審核拒絕：完整 state 可能包含敏感資料，輸出過濾不足以消除讀取風險；命令未執行，未以其他工具繞過。
+- 180 日 Audit Logs metadata 查詢持續未回應，已中止。後續縮小為 30 日 Admin Activity create/update metadata，設定 40 秒上限，成功返回 8 筆紀錄（四次操作各含 request/completion）。
+
+| UTC 時間（request） | 指定 provider 管理事件 | Caller user agent 摘要 |
+| --- | --- | --- |
+| 2026-08-31T01:41:36.353263517Z | CreateWorkloadIdentityPoolProvider | gcloud 582.0.0、agent-name/codex_cli、providers.create-oidc |
+| 2026-08-31T01:57:23.342946360Z | UpdateWorkloadIdentityPoolProvider | gcloud 582.0.0、agent-name/codex_cli、providers.update-oidc |
+| 2026-09-03T06:54:46.509972894Z | UpdateWorkloadIdentityPoolProvider | gcloud 582.0.0、agent-name/codex_cli、providers.update-oidc |
+| 2026-09-08T01:37:42.009066938Z | UpdateWorkloadIdentityPoolProvider | gcloud 582.0.0、agent-name/codex_cli、providers.update-oidc |
+
+查詢限定本 project 的 cloudaudit.googleapis.com/activity、iam.googleapis.com、Create/UpdateWorkloadIdentityPoolProvider；只提取 timestamp、method、resourceName、caller user agent，未取得 credential、request payload 或完整 state。Update resourceName 精確對應 github-strayhub/providers/github；建立事件的 resourceName 為 parent pool github-strayhub。
+
+結論：已觀察到的管理方式為 Codex/operator 透過 gcloud 建立及更新，未找到 Terraform 管理證據。這不是對所有未知外部 state 的完整排除。無需使用被拒絕的 state 讀取方式；下一步以既有 provider 的精確 mapping/condition 與 SA policy 差異作為審查標的，不重建 pool/provider。T32 仍未完成，所有外部 mutation 仍待授權。
