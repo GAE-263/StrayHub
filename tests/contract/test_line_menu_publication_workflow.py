@@ -21,6 +21,8 @@ def test_workflow_is_manual_only_and_plan_is_default() -> None:
     assert inputs["git_sha"]["required"] == "true"
     assert inputs["operation"]["default"] == "plan"
     assert inputs["operation"]["options"] == ["plan", "publish"]
+    assert inputs["line_token_secret_version"]["required"] == "false"
+    assert inputs["confirmation"]["required"] == "false"
     assert document["permissions"] == {"contents": "read"}
 
 
@@ -42,17 +44,31 @@ def test_publish_is_protected_and_has_minimal_permissions() -> None:
     publish = document["jobs"]["publish"]
     publish_text = yaml.safe_dump(publish)
 
-    assert publish["environment"] == "production-line-publication"
+    assert publish["environment"] == "release-publication"
     assert publish["permissions"] == {
         "actions": "read",
         "contents": "read",
         "id-token": "write",
     }
     assert "inputs.operation == 'publish'" in publish["if"]
-    assert "secrets.LINE_CHANNEL_ACCESS_TOKEN" in publish_text
+    assert "secrets.LINE_CHANNEL_ACCESS_TOKEN" not in publish_text
+    assert "vars." not in publish_text
     assert "google-github-actions/auth@v2" in publish_text
-    assert "GCP_LINE_MENU_MANIFEST_BUCKET" in publish_text
-    assert "GCP_LINE_MENU_PUBLISHER_SERVICE_ACCOUNT" in publish_text
+    assert "line-publication-config.json" in publish_text
+    assert "gcloud secrets versions access" in publish_text
+    assert "--token-file" in publish_text
+    assert "::add-mask::" in publish_text
+    assert 'versions access "latest"' not in publish_text
+    assert publish_text.index("manual_release_gate line-gate") < publish_text.index(
+        "google-github-actions/auth@v2"
+    )
+    assert publish_text.index("google-github-actions/auth@v2") < publish_text.index(
+        "gcloud secrets versions access"
+    )
+    assert "GITHUB_ENV" not in publish_text
+    assert "trap cleanup EXIT" in publish_text
+    assert "terminate 143" in publish_text and "TERM" in publish_text
+    assert "chmod 0600" in publish_text
 
 
 def test_both_jobs_pin_and_revalidate_exact_release_head() -> None:
@@ -60,7 +76,7 @@ def test_both_jobs_pin_and_revalidate_exact_release_head() -> None:
     for job_name in ("plan", "publish"):
         job_text = yaml.safe_dump(document["jobs"][job_name])
         assert "ref: ${{ inputs.git_sha }}" in job_text
-        assert "^[0-9a-f]{40}$" in job_text
+        assert "^[0-9a-f]{40}$" in job_text or "manual_release_gate line-gate" in job_text
         assert "git cat-file -t" in job_text
         assert "refs/remotes/origin/release" in job_text
         assert "git merge-base --is-ancestor" in job_text
@@ -98,7 +114,7 @@ def test_artifact_is_only_a_sanitized_copy_not_authoritative_storage() -> None:
     publish_text = yaml.safe_dump(document["jobs"]["publish"])
 
     assert "scripts.line_menu_publication_gate" in publish_text
-    assert "GCP_LINE_MENU_MANIFEST_BUCKET" in publish_text
+    assert "steps.config.outputs.bucket" in publish_text
     assert "actions/upload-artifact@v4" in publish_text
 
 

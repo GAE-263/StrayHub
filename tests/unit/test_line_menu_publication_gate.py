@@ -15,6 +15,7 @@ from scripts.line_menu_publication_gate import (
     ImmutableStorageError,
     StoredObject,
     failure_receipt,
+    read_token_file,
     run_gate,
     success_receipt,
 )
@@ -147,7 +148,10 @@ def test_failure_receipt_records_orphan_without_secret(tmp_path: Path) -> None:
     assert receipt["orphan_candidate_ids"] == ["richmenu-synthetic-orphan"]
     assert receipt["manifest_uploaded"] is False
     assert receipt["global_default_changed"] is False
-    assert "secret" not in json.dumps(receipt).lower()
+    serialized = json.dumps(receipt).lower()
+    assert receipt["credential"] == {"secret_name": "synthetic-secret", "version": "1"}
+    assert "access_token" not in serialized
+    assert "authorization" not in serialized
 
 
 class FakePublisher:
@@ -249,3 +253,17 @@ def test_storage_namespace_and_bucket_are_fail_closed() -> None:
 def test_publication_errors_are_safe_for_operator_output() -> None:
     error = PublicationError("Publication stopped at resource_publication")
     assert "token" not in str(error).lower()
+
+
+def test_token_file_requires_mode_0600_and_single_line(tmp_path: Path) -> None:
+    path = tmp_path / "token"
+    path.write_text("synthetic-value", encoding="utf-8")
+    path.chmod(0o600)
+    assert read_token_file(path) == "synthetic-value"
+    path.chmod(0o644)
+    with pytest.raises(PublicationError, match="0600"):
+        read_token_file(path)
+    path.chmod(0o600)
+    path.write_text("synthetic\nvalue", encoding="utf-8")
+    with pytest.raises(PublicationError, match="single line"):
+        read_token_file(path)
