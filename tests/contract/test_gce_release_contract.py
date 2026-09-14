@@ -466,7 +466,7 @@ def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> No
     assert 'receipt.get("verification") != "passed"' in receipt_verify
 
 
-def test_gce_release_workflow_automatically_deploys_exact_release_branch_sha() -> None:
+def test_gce_release_workflow_requires_separate_manual_write_operations() -> None:
     workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
     ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     release_push = workflow.split("  push:", maxsplit=1)[1].split(
@@ -491,33 +491,56 @@ def test_gce_release_workflow_automatically_deploys_exact_release_branch_sha() -
     assert "deploy-production:" in workflow
     assert "verify-production:" in workflow
     assert "uses: ./.github/workflows/ci.yml" in workflow
-    assert "needs: [full-quality-gate, verify-release]" in workflow
-    assert "needs: publish-release" in workflow
+    assert "needs: [full-quality-gate, verify-release, authorize-manual-write]" in workflow
+    assert "operation:" in workflow
+    assert "options:" in workflow
+    assert "- verify" in workflow and "- publish" in workflow and "- deploy" in workflow
+    assert "inputs.publish" not in workflow
+    assert "inputs.deploy" not in workflow
+    assert "needs: publish-release" not in workflow
     assert "github.ref == 'refs/heads/release'" in workflow
     assert "Refuse stale release candidates" in workflow
-    assert "steps.artifact.outputs.artifact-id" in workflow
+    assert "steps.publication_artifact.outputs.artifact-id" in workflow
     assert '"/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip"' in workflow
     assert "sha256sum --check" in workflow
     assert "deploy-release-ci.sh" in workflow
     assert "verify-release-receipt.sh" in workflow
     assert "--tunnel-through-iap" in workflow
-    assert "GCP_RELEASE_DEPLOYER_SERVICE_ACCOUNT" in workflow
+    assert "application-release-config.json" in workflow
+    assert "vars." not in workflow
     assert "group: gce-immutable-release-${{ github.ref }}" in workflow
     assert "cancel-in-progress: false" in workflow
-    assert publication.index("Require publication configuration") < publication.index(
-        "google-github-actions/auth"
-    )
-    assert deployment.index("Download and validate release artifact") < deployment.index(
+    assert publication.index(
+        "Validate versioned non-secret release configuration"
+    ) < publication.index("google-github-actions/auth")
+    assert deployment.index("Download and validate prior publication receipt") < deployment.index(
         "deploy-release-ci.sh"
     )
-    assert deployment.index("Require deployment configuration") < deployment.index(
-        "google-github-actions/auth"
-    )
+    assert deployment.index(
+        "Validate versioned non-secret deployment configuration"
+    ) < deployment.index("google-github-actions/auth")
     assert "actions: read" in deployment
     assert "^[0-9a-f]{64}$" in deployment
     assert "terraform apply" not in workflow
     assert "service-account-key" not in workflow.lower()
     assert "alembic downgrade" not in workflow.lower()
+    assert "github.event_name == 'workflow_dispatch'" in publication
+    assert "inputs.operation == 'publish'" in publication
+    assert "github.event_name == 'workflow_dispatch'" in deployment
+    assert "inputs.operation == 'deploy'" in deployment
+    assert "github.event_name == 'push'" not in publication
+    assert "github.event_name == 'push'" not in deployment
+    assert "manual_release_gate" in workflow
+    assert "publication-receipt.json" in workflow
+
+
+def test_release_push_has_zero_external_write_jobs() -> None:
+    workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
+    document = __import__("yaml").load(workflow, Loader=__import__("yaml").BaseLoader)
+    for job in ("publish-release", "deploy-production"):
+        condition = document["jobs"][job]["if"]
+        assert "workflow_dispatch" in condition
+        assert "github.event_name == 'push'" not in condition
 
 
 def test_generated_release_bundle_is_excluded_from_git_and_images() -> None:
