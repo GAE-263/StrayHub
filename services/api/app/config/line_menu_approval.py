@@ -16,8 +16,14 @@ from services.api.app.config.line_menu_smoke import (
     MAX_AGE,
     SHA256,
     Contract,
+    Identity,
+    Menu,
     Report,
+    config_digest,
     digest,
+    expected_report_environment,
+    release_identity,
+    required_resources,
     utc,
 )
 
@@ -145,3 +151,45 @@ def validate_approval(document: dict, *, now: datetime | None = None) -> Report:
     ):
         raise ValueError("single-account sequence invalid")
     return report
+
+
+class DirectOpening(Contract):
+    """Operator risk acceptance, explicitly NOT evidence of successful user testing."""
+
+    schema_version: Literal[3]
+    kind: Literal["operator-authorized-direct-opening"]
+    environment: Literal["production"]
+    candidate: Identity
+    channel_id: str = Field(pattern=r"^[0-9]+$")
+    bot_sha256: str = Field(pattern=SHA256)
+    config_sha256: str = Field(pattern=SHA256)
+    resources: dict[str, Menu]
+    human_validation: Literal["NOT RUN"]
+    accept_unverified_user_flows: bool
+    staff_enabled: Literal[False]
+    approval: Approval
+
+
+def validate_direct_opening(
+    document: dict, settings: Settings, manifest: dict, resources: dict
+) -> None:
+    direct = DirectOpening.model_validate(document)
+    if (
+        direct.approval.status != "approved"
+        or direct.approval.evidence_sha256 != evidence_digest(document)
+        or utc(direct.approval.approved_at) > datetime.now(timezone.utc)
+        or not direct.accept_unverified_user_flows
+        or settings.line_staff_menu_enabled
+        or settings.line_role_menu_test_enabled
+        or direct.environment != expected_report_environment(settings)
+        or direct.candidate != release_identity(manifest)
+        or direct.channel_id != settings.line_channel_id
+        or direct.bot_sha256 != settings.line_role_menu_bot_sha256
+        or direct.config_sha256 != config_digest(settings, include_ai=True)
+        or set(direct.resources) != {"default", "volunteer", "adoption_hub"}
+        or direct.resources != required_resources(settings, resources)
+    ):
+        raise ValueError("direct opening authorization mismatch")
+    for role, menu in direct.resources.items():
+        if menu.id != getattr(settings, f"line_rich_menu_{role}_id"):
+            raise ValueError("direct opening menu mismatch")

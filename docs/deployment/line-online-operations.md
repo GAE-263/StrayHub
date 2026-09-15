@@ -118,3 +118,17 @@ Release bundle 已收錄 host operator 所需的標準函式庫 Python 模組，
 
 平台 endpoint 依 [LINE Messaging API reference](https://developers.line.biz/en/reference/messaging-api/)
 核對；同步操作沒有使用 bulk API、訊息推送 API 或資源刪除 API。
+
+## 明確接受未驗收直接開放
+
+schema 3 是獨立的 operator 授權路徑，並非 schema 2 真人驗收報告。
+`human_validation` 固定為 `NOT RUN`，必須明確接受未驗收使用者流程，Staff/test
+維持 false。授權綁定 release SHA、三映像 digest、Compose/bundle、Bot/Channel、
+三角色選單及包含 AI 的設定 hash。既有登入、簽章、membership 與 tenant 邊界不變。
+
+以 `line_menu_smoke_evidence direct-template` 產生 pending 文件；操作者確認後使用
+`authorize-direct` 與 `AUTHORIZE DIRECT LINE OPEN <SHA> <pending-file-sha256>`，
+產生新的受保護 immutable 授權文件。它不是測試成功證明，不能轉寫成真人 PASS。
+正式 global config-sync/preflight 仍驗證完整授權與候選身分；同版本可正常 reload，
+SHA/images/config/menu 改變時必須重新審查授權。撤銷文件後須 disable/reload 清除快取。
+此路徑不自行切 default、遷移使用者、授予志工資格或啟用 Staff。
