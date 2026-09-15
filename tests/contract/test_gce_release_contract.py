@@ -487,7 +487,9 @@ def test_gce_release_workflow_requires_separate_manual_write_operations() -> Non
     assert "workflow_call:" in ci_workflow
     assert "environment: release-publication" in workflow
     assert "name: production" in workflow
-    assert "build-release-bundle.sh" in workflow
+    assert "build-immutable-release.sh" in workflow
+    assert "--reuse-only" in workflow
+    assert "docker build" not in publication
     assert "deploy-production:" in workflow
     assert "verify-production:" in workflow
     assert "uses: ./.github/workflows/ci.yml" in workflow
@@ -572,7 +574,7 @@ def test_manual_write_jobs_recheck_release_head_and_reject_reruns() -> None:
             index for index, step in enumerate(steps) if "release_head_gate" in step.get("run", "")
         ]
         assert freshness and freshness[0] < auth_index
-        mutation_markers = ("docker push", "deploy-release-ci.sh")
+        mutation_markers = ("docker push", "build-immutable-release.sh", "deploy-release-ci.sh")
         mutation_index = next(
             index
             for index, step in enumerate(steps)
@@ -584,7 +586,12 @@ def test_manual_write_jobs_recheck_release_head_and_reject_reruns() -> None:
             first_gate = mutation_step.index("release_head_gate")
             credential_helper = mutation_step.index("gcloud auth configure-docker")
             last_gate = mutation_step.rindex("release_head_gate")
-            assert first_gate < credential_helper < last_gate < mutation_step.index("docker push")
+            mutation_command = (
+                "docker push" if "docker push" in mutation_step else "build-immutable-release.sh"
+            )
+            assert (
+                first_gate < credential_helper < last_gate < mutation_step.index(mutation_command)
+            )
         else:
             assert mutation_step.index("release_head_gate") < mutation_step.index(
                 "deploy-release-ci.sh"

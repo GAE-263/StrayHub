@@ -50,7 +50,7 @@ def test_primary_ci_owns_release_static_contracts_without_cloud_credentials() ->
     assert "gcloud " not in release_steps
 
 
-def test_release_workflow_reuses_ci_and_only_publish_builds_images() -> None:
+def test_release_workflow_reuses_ci_and_only_main_builds_images() -> None:
     text = RELEASE_PATH.read_text(encoding="utf-8")
     release = _workflow(RELEASE_PATH)
 
@@ -61,10 +61,8 @@ def test_release_workflow_reuses_ci_and_only_publish_builds_images() -> None:
         "authorize-manual-write",
     ]
 
-    for job_name, job in release["jobs"].items():
+    for job in release["jobs"].values():
         commands = "\n".join(step.get("run", "") for step in job.get("steps", []))
-        if job_name == "publish-release":
-            assert "docker build" in commands
-        else:
-            assert "docker build" not in commands
-    assert text.count("docker build") == 1
+        assert "docker build" not in commands
+    assert "build-immutable-release.sh" in text
+    assert "--reuse-only" in text

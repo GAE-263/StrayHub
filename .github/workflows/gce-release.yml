@@ -116,40 +116,19 @@ jobs:
           workload_identity_provider: ${{ steps.config.outputs.provider }}
           service_account: ${{ steps.config.outputs.publisher }}
       - uses: google-github-actions/setup-gcloud@v2
-      - name: Build exact Git SHA images without publication
-        env:
-          REGISTRY: ${{ steps.config.outputs.registry }}
-          REVISION: ${{ inputs.git_sha }}
-        run: |
-          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
-          for service in api worker web; do
-            image="$REGISTRY/strayhub-$service:$REVISION"
-            docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f "infra/gce/images/Dockerfile.$service" -t "$image" .
-          done
-      - name: Revalidate current release and push immutable images
-        id: images
+      - name: Download and validate canonical main release artifact
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_SHA: ${{ inputs.git_sha }}
           REGISTRY: ${{ steps.config.outputs.registry }}
+          REVISION: ${{ inputs.git_sha }}
         run: |
           python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$(git rev-parse HEAD)"
           gcloud auth configure-docker "${REGISTRY%%/*}" --quiet
           python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$(git rev-parse HEAD)"
-          for service in api worker web; do
-            image="$REGISTRY/strayhub-$service:$INPUT_SHA"
-            docker push "$image"
-            reference="$(docker inspect --format='{{index .RepoDigests 0}}' "$image")"
-            [[ "$reference" == *@sha256:* ]]
-            printf '%s_image=%s\n' "$service" "$reference" >>"$GITHUB_OUTPUT"
-          done
+          scripts/build-immutable-release.sh --git-sha "$REVISION" --registry "$REGISTRY" --output-dir release-bundle --reuse-only
       - name: Build and validate immutable release bundle and receipt
-        env:
-          API_IMAGE: ${{ steps.images.outputs.api_image }}
-          WORKER_IMAGE: ${{ steps.images.outputs.worker_image }}
-          WEB_IMAGE: ${{ steps.images.outputs.web_image }}
         run: |
-          ./scripts/build-release-bundle.sh --git-sha "${{ inputs.git_sha }}" --api-image "$API_IMAGE" --worker-image "$WORKER_IMAGE" --web-image "$WEB_IMAGE" --schema-compatibility "${{ inputs.schema_compatibility }}" --ci-run-id "$GITHUB_RUN_ID" --ci-workflow "$GITHUB_WORKFLOW" --output-dir release-bundle
           python3 -m scripts.manual_release_gate create-publication-receipt --manifest release-bundle/release-manifest.json --output release-bundle/publication-receipt.json --run-id "$GITHUB_RUN_ID"
       - uses: actions/upload-artifact@v4
         id: publication_artifact
