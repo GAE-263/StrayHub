@@ -89,7 +89,7 @@ build_or_reuse_image() {
       --cache-to "type=gha,mode=max,scope=strayhub-$service,version=2"
     )
   fi
-  digest="$(image_digest "$image")"
+  digest="$(image_digest "$image")" || return 1
   if [[ -z "$digest" ]]; then
     docker buildx build \
       --push \
@@ -100,8 +100,8 @@ build_or_reuse_image() {
       --label "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-GAE-263/StrayHub}" \
       --file "$ROOT_DIR/infra/gce/images/Dockerfile.$service" \
       --tag "$image" \
-      "$ROOT_DIR" >&2
-    digest="$(image_digest "$image")"
+      "$ROOT_DIR" >&2 || fail "image build failed for $image"
+    digest="$(image_digest "$image")" || return 1
   fi
   [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "image digest readback failed for $image"
   printf '%s@%s' "${image%%:*}" "$digest"

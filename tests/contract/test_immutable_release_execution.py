@@ -33,6 +33,8 @@ if name == 'gcloud':
     if os.environ.get('EMPTY_DIGEST'):
         sys.exit(0)
     error = os.environ.get('LOOKUP_ERROR')
+    if os.environ.get('LOOKUP_SERVICE') and os.environ['LOOKUP_SERVICE'] not in a[4]:
+        error = None
     if error:
         print(error, file=sys.stderr)
         sys.exit(1)
@@ -139,6 +141,15 @@ def test_lookup_errors_never_build(release_cli, error):
 def test_empty_successful_registry_response_is_rejected(release_cli):
     run, state = release_cli
     result, _ = run("empty", EMPTY_DIGEST="1")
+    assert result.returncode != 0
+    assert '"buildx"' not in (state / "calls").read_text()
+
+
+def test_service_lookup_error_propagates_from_command_substitution(release_cli):
+    run, state = release_cli
+    result, _ = run(
+        "denied", LOOKUP_ERROR="PERMISSION_DENIED: denied", LOOKUP_SERVICE="strayhub-api"
+    )
     assert result.returncode != 0
     assert '"buildx"' not in (state / "calls").read_text()
 
