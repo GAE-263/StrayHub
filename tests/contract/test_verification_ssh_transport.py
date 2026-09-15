@@ -31,15 +31,25 @@ def test_probe_retries_only_publickey_transport_failure(
     document = yaml.load(
         (ROOT / ".github/workflows/gce-release.yml").read_text(), Loader=yaml.BaseLoader
     )
-    steps = document["jobs"]["verify-production"]["steps"]
-    probe = next(s for s in steps if s.get("name") == "Establish verification SSH transport")
-    verification = next(
-        s for s in steps if s.get("name") == "Verify exact receipt and runtime over IAP"
-    )
-    assert steps.index(probe) < steps.index(verification)
-    assert "--command true" in probe["run"]
-    assert "verify-release-receipt.sh" not in probe["run"]
-    assert "for attempt" not in verification["run"]
+    probe_script = ROOT / "infra/gce/scripts/prepare-production-ssh.sh"
+    probe = probe_script.read_text()
+    for job_name, operation in (
+        ("deploy-production", "Transfer and deploy validated release over IAP"),
+        ("verify-production", "Verify exact receipt and runtime over IAP"),
+    ):
+        steps = document["jobs"][job_name]["steps"]
+        preparation = next(
+            s for s in steps if s.get("name") == "Establish production SSH transport"
+        )
+        actual = next(s for s in steps if s.get("name") == operation)
+        sdk = next(s for s in steps if s.get("uses") == "google-github-actions/setup-gcloud@v2")
+        assert sdk["with"]["version"] == "582.0.0"
+        assert preparation["run"] == "infra/gce/scripts/prepare-production-ssh.sh"
+        assert steps.index(sdk) < steps.index(preparation) < steps.index(actual)
+        assert "for attempt" not in actual["run"]
+    assert "--command true" in probe
+    assert "verify-release-receipt.sh" not in probe
+    assert "deploy-release-ci.sh" not in probe
     mock = tmp_path / "gcloud"
     mock.write_text(
         "#!/bin/bash\n"
@@ -54,7 +64,7 @@ def test_probe_retries_only_publickey_transport_failure(
     sleep.chmod(0o700)
     calls = tmp_path / "calls"
     result = subprocess.run(
-        ["bash", "-e", "-o", "pipefail", "-c", probe["run"]],
+        ["bash", "-e", "-o", "pipefail", "-c", probe],
         env={
             **os.environ,
             "PATH": f"{tmp_path}:{os.environ['PATH']}",
@@ -62,9 +72,9 @@ def test_probe_retries_only_publickey_transport_failure(
             "FAILURES": str(failures),
             "STATUS": str(status),
             "MESSAGE": message,
-            "VERIFY_INSTANCE": "synthetic",
-            "VERIFY_PROJECT": "synthetic",
-            "VERIFY_ZONE": "synthetic",
+            "SSH_INSTANCE": "synthetic",
+            "SSH_PROJECT": "synthetic",
+            "SSH_ZONE": "us-central1-c",
         },
         capture_output=True,
         text=True,

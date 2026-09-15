@@ -284,6 +284,14 @@ jobs:
           workload_identity_provider: ${{ steps.config.outputs.provider }}
           service_account: ${{ steps.config.outputs.deployer }}
       - uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: "582.0.0"
+      - name: Establish production SSH transport
+        env:
+          SSH_INSTANCE: ${{ steps.config.outputs.instance }}
+          SSH_PROJECT: ${{ steps.config.outputs.project_id }}
+          SSH_ZONE: ${{ steps.config.outputs.zone }}
+        run: infra/gce/scripts/prepare-production-ssh.sh
       - name: Transfer and deploy validated release over IAP
         env:
           GH_TOKEN: ${{ github.token }}
@@ -338,27 +346,14 @@ jobs:
           workload_identity_provider: ${{ steps.config.outputs.provider }}
           service_account: ${{ steps.config.outputs.deployer }}
       - uses: google-github-actions/setup-gcloud@v2
-      - name: Establish verification SSH transport
+        with:
+          version: "582.0.0"
+      - name: Establish production SSH transport
         env:
-          VERIFY_INSTANCE: ${{ steps.config.outputs.instance }}
-          VERIFY_PROJECT: ${{ steps.config.outputs.project_id }}
-          VERIFY_ZONE: ${{ steps.config.outputs.zone }}
-        run: |
-          # New runners have new OS Login keys. Retry only authentication for a
-          # side-effect-free probe; never retry deployment or receipt verification.
-          for attempt in 1 2 3; do
-            if output="$(gcloud compute ssh "$VERIFY_INSTANCE" --project "$VERIFY_PROJECT" --zone "$VERIFY_ZONE" --tunnel-through-iap --quiet --ssh-flag='-o ConnectTimeout=15' --command true 2>&1)"; then
-              break
-            else
-              status=$?
-            fi
-            if [[ "$status" != 255 || "$output" != *'Permission denied (publickey)'* || "$attempt" == 3 ]]; then
-              printf 'Verification SSH transport failed (exit=%s).\n' "$status" >&2
-              exit "$status"
-            fi
-            printf 'Verification SSH authentication unavailable; waiting before probe %s/3.\n' "$((attempt + 1))"
-            sleep 10
-          done
+          SSH_INSTANCE: ${{ steps.config.outputs.instance }}
+          SSH_PROJECT: ${{ steps.config.outputs.project_id }}
+          SSH_ZONE: ${{ steps.config.outputs.zone }}
+        run: infra/gce/scripts/prepare-production-ssh.sh
       - name: Verify exact receipt and runtime over IAP
         run: gcloud compute ssh "${{ steps.config.outputs.instance }}" --project "${{ steps.config.outputs.project_id }}" --zone "${{ steps.config.outputs.zone }}" --tunnel-through-iap --quiet --command "sudo -n /opt/strayhub/current/infra/gce/scripts/verify-release-receipt.sh --git-sha '${{ inputs.git_sha }}' --release-id '${{ needs.deploy-production.outputs.release_id }}'"
       - name: Verify canonical public health
