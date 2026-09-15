@@ -66,7 +66,10 @@ image_digest() {
   local image="$1"
   local digest
   if ! digest="$(gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)' 2>"$lookup_error")"; then
-    if grep -q 'NOT_FOUND:' "$lookup_error"; then
+    # gcloud emits "Image not found." for a missing tag and NOT_FOUND for some
+    # API transports. Both mean the immutable tag has not been published yet;
+    # every other lookup failure remains fail-closed to avoid duplicate builds.
+    if grep -Eq 'NOT_FOUND:|Image not found\.' "$lookup_error"; then
       return 0
     fi
     fail "registry lookup failed for $image; refusing to rebuild"

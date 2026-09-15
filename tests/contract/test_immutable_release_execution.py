@@ -40,7 +40,7 @@ if name == 'gcloud':
         sys.exit(1)
     tag = a[4]
     if tag not in tags:
-        print('NOT_FOUND: image absent', file=sys.stderr)
+        print(os.environ.get('FAKE_NOT_FOUND', 'NOT_FOUND: image absent'), file=sys.stderr)
         sys.exit(1)
     print(tags[tag])
 elif a[:2] == ['buildx', 'build']:
@@ -126,6 +126,13 @@ def test_first_publish_and_rerun_preserve_exact_artifact(release_cli):
     calls_after = (state / "calls").read_text()[len(calls_before) :]
     assert '"buildx"' not in calls_after
     assert calls_before.count('"buildx"') == 4
+
+
+def test_gcloud_image_not_found_response_is_rebuilt_once(release_cli):
+    run, state = release_cli
+    result, _ = run("gcloud-not-found", FAKE_NOT_FOUND="Image not found.")
+    assert result.returncode == 0, result.stderr
+    assert (state / "calls").read_text().count('"buildx"') == 4
 
 
 @pytest.mark.parametrize("error", ["PERMISSION_DENIED: denied", "connection timed out"])
