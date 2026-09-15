@@ -45,7 +45,12 @@ def compare(reference: dict, candidate: dict, environment: str) -> list[str]:
         for field in PROCESS_FIELDS:
             if expected[name].get(field) != actual[name].get(field):
                 errors.append(f"{environment}: {name}.{field} differs")
-        if set(expected[name].get("environment", {})) != set(actual[name].get("environment", {})):
+        expected_keys = set(expected[name].get("environment", {}))
+        actual_keys = set(actual[name].get("environment", {}))
+        # Local Docker uses dedicated AES encryption instead of cloud KMS.
+        if environment == "staging" and name == "api":
+            expected_keys |= {"PII_ALLOW_LOCAL_PROVIDER", "PII_LOCAL_KEY_BASE64"}
+        if expected_keys != actual_keys:
             errors.append(f"{environment}: {name} environment contract differs")
         if expected[name].get("volumes") != actual[name].get("volumes"):
             errors.append(f"{environment}: {name} storage mount contract differs")
@@ -63,10 +68,14 @@ def compare(reference: dict, candidate: dict, environment: str) -> list[str]:
         import re
 
         for name in APPLICATION_IMAGES:
+            if actual.get(name, {}).get("platform") != "linux/amd64":
+                errors.append(f"staging: {name} must run the linux/amd64 release")
             if not re.fullmatch(
                 r"[^@]+@sha256:[0-9a-f]{64}", actual.get(name, {}).get("image", "")
             ):
                 errors.append(f"staging: {name} lacks an exact digest")
+        if not candidate.get("networks", {}).get("strayhub_runtime", {}).get("internal"):
+            errors.append("staging: outbound network is not isolated")
     # Compose resolves unnamed resources under the project name; explicit shared
     # names or external resources would silently bypass environment isolation.
     if candidate.get("name") == reference.get("name"):

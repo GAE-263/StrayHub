@@ -22,15 +22,15 @@ than inventing an HTTP health endpoint. Phase 4 must verify their running state 
 | Images | Same Dockerfiles; local build or selected digest | Required release digests, no build | Release digest env, existing no-build deploy |
 | API / Web host ports | Loopback 18081 / 13001 | Loopback 18082 / 13002 | Existing edge-facing configured ports |
 | PostgreSQL / MinIO / Redis | Loopback debug ports 65433 / 19000 / 16379 | Internal network only | Internal network only |
-| Volumes and network | `strayhub-local-runtime` project | `strayhub-staging` project, dedicated VM | `strayhub-production` project |
-| Config / secrets | Dedicated local env and generated local JWT files | Dedicated protected staging env, JWT, KMS and LINE identity | Existing protected production generations |
-| HTTPS / nginx | Optional external ngrok/nginx; direct local ports are HTTP | Dedicated HTTPS edge upstreams | Existing managed nginx edge |
-| LINE / data | Local/test channel and fictional data | Dedicated test channel, allowlisted users, fictional data | Production channel and records |
-| Deployment lifecycle | Compose wrapper, explicit migration then startup | Phase 4 must share deployment lifecycle implementation | Existing manifest/preflight/migration/systemd/receipt lifecycle |
+| Volumes and network | `strayhub-local-runtime` project | Local Docker `strayhub-staging` project; internal network blocks outbound traffic | `strayhub-production` project |
+| Config / secrets | Dedicated local env and generated local JWT files | Dedicated local JWT/AES keys; mock AI; `APP_ENV=local` | Existing protected production generations |
+| HTTPS / nginx | Optional external ngrok/nginx; direct local ports are HTTP | Local HTTP; cloud HTTPS checks remain pending | Existing managed nginx edge |
+| LINE / data | Local/test channel and fictional data | Disabled outbound LINE; fictional data only | Production channel and records |
+| Deployment lifecycle | Compose wrapper, explicit migration then startup | Manual immutable artifact fetch, validation, migration, runtime-only receipt | Existing manifest/preflight/migration/systemd/receipt lifecycle |
 
 Ingress lives outside the application Compose graph today. Adding a new nginx service only
-to Staging would conceal that difference. Phase 4 must verify the actual staging HTTPS edge,
-its routing and upload/security rules; a passing Compose comparison alone is not ingress parity.
+to Staging would conceal that difference. Local Docker does not verify the cloud HTTPS edge,
+its routing or upload/security rules; a passing Compose comparison is not ingress parity.
 
 The old `infra/local/docker-compose.yml` stays available as an **infrastructure-only test
 fixture** for existing host-run unit/integration tests and their data volumes. It is not the
@@ -56,7 +56,8 @@ bash scripts/runtime-compose.sh /absolute/path/local.env up -d api worker celery
 
 `scripts/check_runtime_parity.py` renders all three models with every profile enabled, including
 migration. It compares service membership, images, commands, entrypoints, dependencies,
-healthchecks, environment key sets, mount contracts and network membership. It rejects shared
+healthchecks, environment key sets (with explicit local AES config additions), mount contracts
+and network membership. It rejects shared
 production resource names, public local/staging ports, mutable staging image references and
 staging build definitions. Rendered secrets are never printed by the checker.
 
@@ -64,18 +65,25 @@ Run `uv run pytest tests/contract/test_runtime_parity.py`. The fixture uses synt
 and digest values; mutation tests prove contract drift is rejected. These are Compose model
 checks, not proof that containers, cloud access, LINE or HTTPS work.
 
-## Phase 4 activation prerequisites
+## Phase 4: local Docker decision
 
 The read-only inventory on 2026-09-15 found `strayhub-gce`, `nginx-20260820-033352` and
 `rrapi-20260813`, with no named StrayHub staging VM. The temporary acceptance stack is a
 separate existing workflow and is not silently repurposed as persistent Staging.
 
-Before live promotion, establish a dedicated staging VM and hostname, protected configuration,
-secrets/test LINE identities, publisher/deployer WIF trust and successful Phase 2 build/rerun
-evidence. Reuse the production deployment lifecycle through an explicit environment contract;
-do not run the production-only `deploy-release.sh` against staging or duplicate its lifecycle.
-Then test migration, image/runtime identity, HTTPS and authenticated multi-shelter E2E before
-issuing a SHA/digest-bound staging PASS receipt. No Phase 4 PASS is claimed by this change.
+The user chose local Docker instead of provisioning a paid GCP Staging VM. See
+[local staging operations](local-staging.md). This changes Phase 4 from automatic cloud staging
+to a manually initiated local release rehearsal. No VM, DNS, self-hosted runner or production
+deployment is created. Release images remain immutable `linux/amd64` images, including on Macs.
+
+The local runner reuses artifact checksum/manifest/extraction validation and the canonical
+Compose bundle. It does not invoke production-only systemd/deploy scripts. Its local overlay
+is hashed separately in evidence: this is not an assertion that local configuration was part
+of an older artifact. Local-only AES config and internal networking are intentional differences.
+
+Live authenticated multi-shelter E2E, migration revision readback, task execution and cloud
+WIF/IAP/IAM/KMS/HTTPS checks remain acceptance work. Runtime-only PASS is **not** Phase 4
+acceptance or authorization for production promotion. No cloud equivalence is claimed.
 
 ## Revert
 

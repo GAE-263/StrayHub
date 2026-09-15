@@ -14,6 +14,7 @@ def models():
         f"STRAYHUB_{service.upper()}_IMAGE": f"example.invalid/strayhub-{service}@sha256:{'a' * 64}"
         for service in ("api", "worker", "web")
     }
+    images["PII_LOCAL_KEY_BASE64"] = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
     with patch.dict("os.environ", images):
         return {
             name: render(ROOT / "infra/gce/.env.production.example", name)

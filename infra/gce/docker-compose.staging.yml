@@ -1,24 +1,38 @@
-# Full staging runtime on a dedicated VM. Supply dedicated env/secrets and exact digests.
+# Local-only release rehearsal. No GCP VM, source mounts or application rebuilds.
 name: strayhub-staging
 services:
   api:
+    platform: linux/amd64
+    environment:
+      PII_ALLOW_LOCAL_PROVIDER: "true"
+      PII_LOCAL_KEY_BASE64: ${PII_LOCAL_KEY_BASE64:?Local staging requires a dedicated AES-256 key}
     image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
     build: !reset null
     ports: !override
       - "127.0.0.1:18082:8080"
   migration:
+    platform: linux/amd64
     image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
   worker:
+    platform: linux/amd64
     image: ${STRAYHUB_WORKER_IMAGE:?Staging requires the Worker digest}
     build: !reset null
   celery-worker:
+    platform: linux/amd64
     image: ${STRAYHUB_WORKER_IMAGE:?Staging requires the Worker digest}
     build: !reset null
   celery-beat:
+    platform: linux/amd64
     image: ${STRAYHUB_WORKER_IMAGE:?Staging requires the Worker digest}
     build: !reset null
   web:
+    platform: linux/amd64
     image: ${STRAYHUB_WEB_IMAGE:?Staging requires the Web digest}
     build: !reset null
     ports: !override
       - "127.0.0.1:13002:8080"
+
+# Block outbound LINE, cloud APIs and other external integrations by default.
+networks:
+  strayhub_runtime:
+    internal: true
