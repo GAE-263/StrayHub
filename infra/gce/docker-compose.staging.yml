@@ -8,8 +8,7 @@ services:
       PII_LOCAL_KEY_BASE64: ${PII_LOCAL_KEY_BASE64:?Local staging requires a dedicated AES-256 key}
     image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
     build: !reset null
-    ports: !override
-      - "127.0.0.1:18082:8080"
+    ports: !reset []
   migration:
     platform: linux/amd64
     image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
@@ -29,10 +28,43 @@ services:
     platform: linux/amd64
     image: ${STRAYHUB_WEB_IMAGE:?Staging requires the Web digest}
     build: !reset null
-    ports: !override
+    ports: !reset []
+
+  # The only service attached to a non-internal network. It contains no
+  # runtime configuration or secrets and exposes the release only on loopback.
+  staging-edge:
+    platform: linux/amd64
+    image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
+    restart: unless-stopped
+    command: ["python", "-m", "scripts.local_staging_proxy"]
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; socket.create_connection(('127.0.0.1', 8080), 3).close(); socket.create_connection(('127.0.0.1', 8081), 3).close()"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "127.0.0.1:18082:8081"
       - "127.0.0.1:13002:8080"
+    networks:
+      - strayhub_runtime
+      - staging_ingress
 
 # Block outbound LINE, cloud APIs and other external integrations by default.
 networks:
   strayhub_runtime:
     internal: true
+  staging_ingress:
+    driver: bridge

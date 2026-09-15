@@ -44,15 +44,20 @@ containers of project `strayhub-staging` are stopped before migration. Its persi
 storage and Redis volumes are retained. Never run concurrent staging attempts on this project.
 Changing database initialization passwords does not rotate an existing database volume.
 
-API: `http://127.0.0.1:18082`; Web: `http://127.0.0.1:13002`.
-Postgres, MinIO and Redis have no published ports. The internal Docker network blocks outbound
+API: `http://127.0.0.1:18082`; Web: `http://127.0.0.1:13002`. A secret-free, read-only edge
+container is the only service connected to the ingress network and both ports bind to loopback.
+API and Web remain exclusively on the internal runtime network. Postgres, MinIO and Redis have no
+published ports. The internal Docker network blocks outbound
 LINE/AI/cloud calls; LINE login, LIFF and cloud KMS are intentionally not validated. `APP_ENV=local`
 uses the application's local configuration policy, not its production fail-fast policy.
 
-After successful migration, Compose health checks and container image/running-state checks,
-`runtime-receipt.json` binds git SHA, artifact/image digests, bundle/manifest hashes and the local
-overlay hash. Worker/Beat checks establish running state, **not successful task execution**.
-Failures do not generate a receipt. Containers and volumes are left available for diagnosis;
+After migration, the runner reads back the exact Alembic revision, bootstraps deterministic
+synthetic tenants through the explicitly guarded operator path, and executes authenticated API,
+QR/care-report and cross-shelter denial checks using the non-superuser runtime database role. It
+also probes both loopback endpoints. Only then does `staging-receipt.json` bind the results to the
+git SHA, artifact/image digests, bundle/manifest hashes and staging contract hashes. Worker/Beat
+checks establish running state, **not successful task execution**. Failures do not generate a
+receipt. Containers and volumes are left available for diagnosis;
 captured tool output is suppressed because it can include credentials.
 
 Inspect only this project using Docker Desktop or focused container logs. To stop it without
@@ -61,11 +66,9 @@ does not delete volumes, manage production, create cloud resources or modify CI 
 
 ## Acceptance boundaries
 
-This is runtime rehearsal tooling, not a completed Phase 4 acceptance gate. The receipt says
-`production_promotion_approved: false`, with authenticated E2E and cloud checks `NOT_RUN`.
-The existing `verify_acceptance_live.py` requires a separately guarded acceptance bootstrap;
-do not bypass that guard or count mocked Playwright tests as live shelter-isolation evidence.
-Migration revision readback, authenticated E2E, tenant isolation and actual task execution still
-need a local-compatible acceptance path. GCP WIF/IAP/IAM, KMS and public HTTPS/systemd checks
-remain separate production/cloud acceptance requirements. A local receipt is not signed CI
-attestation and must not by itself authorize production promotion.
+This completes the local Docker portion of Phase 4, but does not authorize production promotion.
+The bootstrap still requires both the dedicated environment flag and CLI confirmation, accepts
+only synthetic fixture identities, and is now explicitly valid in `APP_ENV=local`. GCP
+WIF/IAP/IAM, KMS and public HTTPS/systemd checks remain separate production/cloud acceptance
+requirements. The receipt records cloud checks as not applicable locally, is not a signed CI
+attestation, and always says `production_promotion_approved: false`.

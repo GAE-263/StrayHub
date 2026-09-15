@@ -12,15 +12,22 @@ import hashlib
 import importlib.util
 import json
 import os
+import secrets
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import URLError
 from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 from scripts.check_runtime_parity import APPLICATION_IMAGES, ROOT, compare
 
 OVERLAY = ROOT / "infra/gce/docker-compose.staging.yml"
 PROJECT = "strayhub-staging"
+RECEIPT = "staging-receipt.json"
+RUNNER = Path(__file__).resolve()
+EDGE_COMMAND = ["python", "-m", "scripts.local_staging_proxy"]
+EDGE_PORTS = {("127.0.0.1", 8081, "18082"), ("127.0.0.1", 8080, "13002")}
 
 
 def run(args: list[str], env: dict[str, str]) -> str:
@@ -35,6 +42,22 @@ def validate_context(context: dict) -> None:
     host = context["Endpoints"]["docker"]["Host"]
     if not host.startswith("unix://"):
         raise ValueError("Staging requires a local Unix-socket Docker context, not TCP/SSH")
+
+
+def read_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise ValueError(f"Malformed local env file line {number}")
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in values:
+            raise ValueError(f"Invalid or duplicate local env key on line {number}")
+        values[key] = value
+    return values
 
 
 def validate_model(model: dict) -> None:
@@ -81,6 +104,32 @@ def validate_model(model: dict) -> None:
         raise ValueError("Staging AES key must be base64-encoded 32 bytes") from None
     if len(key) != 32 or str(api_values.get("PII_ALLOW_LOCAL_PROVIDER")).lower() != "true":
         raise ValueError("Staging requires enabled local AES encryption with a 32-byte key")
+    edge = model["services"].get("staging-edge", {})
+    if edge.get("image") != model["services"]["api"].get("image"):
+        raise ValueError("Staging edge must use the immutable API release image")
+    if set(edge.get("networks", {})) != {"strayhub_runtime", "staging_ingress"}:
+        raise ValueError("Staging edge must be the isolated ingress boundary")
+    if model["networks"]["staging_ingress"].get("internal"):
+        raise ValueError("Staging ingress network must support loopback publication")
+    edge_secret_mounts = edge["secrets"] if "secrets" in edge else None
+    if edge.get("environment") or edge_secret_mounts or edge.get("volumes"):
+        raise ValueError("Staging edge must not receive configuration or secrets")
+    if (
+        not edge.get("read_only")
+        or edge.get("cap_drop") != ["ALL"]
+        or edge.get("security_opt") != ["no-new-privileges:true"]
+        or edge.get("command") != EDGE_COMMAND
+    ):
+        raise ValueError("Staging edge sandbox is incomplete")
+    ports = {
+        (port.get("host_ip"), port.get("target"), str(port.get("published")))
+        for port in edge.get("ports", [])
+    }
+    if ports != EDGE_PORTS:
+        raise ValueError("Staging edge ports differ from the loopback contract")
+    for service in ("api", "web"):
+        if model["services"][service].get("ports"):
+            raise ValueError(f"{service} must not publish ports directly")
 
 
 def verify_container(container: dict, service: str, expected_image: str | None) -> None:
@@ -91,6 +140,37 @@ def verify_container(container: dict, service: str, expected_image: str | None) 
         raise ValueError(f"{service} is not healthy")
     if expected_image and container["Config"]["Image"] != expected_image:
         raise ValueError(f"{service} image identity mismatch")
+
+
+def verify_e2e(result: dict, runtime_role: str) -> None:
+    required_passes = {
+        "valid_login",
+        "invalid_auth",
+        "authenticated_api",
+        "tenant_a_positive",
+        "tenant_b_negative",
+        "volunteer_grant",
+        "qr_first",
+        "care_report",
+        "cross_shelter_denial",
+    }
+    if any(not str(result.get(key, "")).startswith("PASS") for key in required_passes):
+        raise ValueError("Authenticated staging acceptance did not fully pass")
+    if result.get("runtime_role") != runtime_role:
+        raise ValueError("Acceptance used an unexpected database runtime role")
+    if result.get("runtime_bypassrls") is not False or result.get("runtime_superuser") is not False:
+        raise ValueError("Acceptance runtime role bypasses tenant isolation")
+    if not isinstance(result.get("rls_table_count"), int) or result["rls_table_count"] < 1:
+        raise ValueError("Acceptance found no row-level-security protected tables")
+
+
+def probe_loopback(url: str) -> None:
+    try:
+        with urlopen(url, timeout=10) as response:  # noqa: S310 - fixed loopback URLs only
+            if response.status != 200:
+                raise ValueError("Loopback ingress returned a non-200 response")
+    except (OSError, URLError) as exc:
+        raise ValueError("Loopback ingress is unavailable") from exc
 
 
 def deploy(args: argparse.Namespace) -> None:
@@ -114,6 +194,7 @@ def deploy(args: argparse.Namespace) -> None:
         raise ValueError("Confirm dedicated local secrets and synthetic data before deployment")
     if not args.env_file.is_file() or args.env_file.stat().st_mode & 0o077:
         raise ValueError("Local env file must exist with mode 0600")
+    local_values = read_env_file(args.env_file)
     args.work_dir.mkdir(parents=True, mode=0o700, exist_ok=False)
     artifact_dir = args.work_dir / "artifact"
     artifact_dir.mkdir()
@@ -167,7 +248,10 @@ def deploy(args: argparse.Namespace) -> None:
     print("Pulling release images; migrating isolated database", flush=True)
     run(compose + ["--profile", "*", "pull"], env)
     # Stop only this project's application processes before migrating persistent local data.
-    run(compose + ["stop", "api", "web", "worker", "celery-worker", "celery-beat"], env)
+    run(
+        compose + ["stop", "staging-edge", "api", "web", "worker", "celery-worker", "celery-beat"],
+        env,
+    )
     run(
         compose
         + [
@@ -193,21 +277,104 @@ def deploy(args: argparse.Namespace) -> None:
         if len(ids) != 1:
             raise ValueError(f"Expected exactly one {service} container")
         item = json.loads(run(docker + ["inspect", ids[0]], env))[0]
-        image = images.get(APPLICATION_IMAGES.get(service, ""))
+        image = (
+            images["api"]
+            if service == "staging-edge"
+            else images.get(APPLICATION_IMAGES.get(service, ""))
+        )
         verify_container(item, service, image)
+    postgres_id = run(compose + ["ps", "-q", "postgres"], env).strip()
+    api_id = run(compose + ["ps", "-q", "api"], env).strip()
+    if not postgres_id or not api_id:
+        raise ValueError("Required acceptance containers are unavailable")
+    revision = run(
+        docker
+        + [
+            "exec",
+            postgres_id,
+            "psql",
+            "-U",
+            local_values["POSTGRES_USER"],
+            "-d",
+            local_values["POSTGRES_DB"],
+            "-tAc",
+            "SELECT version_num FROM alembic_version",
+        ],
+        env,
+    ).strip()
+    if revision != manifest["migration_revision"]:
+        raise ValueError("Database migration revision does not match the release manifest")
+    password = secrets.token_urlsafe(32)
+    common_exec = [
+        *docker,
+        "exec",
+        "-e",
+        "APP_ENV=local",
+        "-e",
+        "STRAYHUB_ALLOW_ACCEPTANCE_BOOTSTRAP=true",
+        "-e",
+        f"ACCEPTANCE_BOOTSTRAP_PASSWORD={password}",
+    ]
+    guarded_shell = (
+        'export AUTH_JWT_ACTIVE_PRIVATE_KEY="$(cat /run/secrets/runtime_jwt_private_key)"; '
+        'export AUTH_JWT_ACTIVE_PUBLIC_KEY="$(cat /run/secrets/runtime_jwt_public_key)"; '
+    )
+    run(
+        common_exec
+        + [
+            "-e",
+            f"DATABASE_URL={local_values['DATABASE_MIGRATION_URL']}",
+            api_id,
+            "/bin/sh",
+            "-ec",
+            guarded_shell + "exec python -m scripts.bootstrap_acceptance --confirm-synthetic-data",
+        ],
+        env,
+    )
+    e2e = json.loads(
+        run(
+            common_exec
+            + [
+                "-e",
+                f"DATABASE_URL={local_values['DATABASE_URL']}",
+                api_id,
+                "/bin/sh",
+                "-ec",
+                guarded_shell
+                + "exec python -m scripts.verify_acceptance_live "
+                + "--base-url http://127.0.0.1:8080 --confirm-synthetic-data",
+            ],
+            env,
+        )
+    )
+    runtime_role = urlsplit(local_values["DATABASE_URL"]).username
+    if not runtime_role:
+        raise ValueError("Local runtime database URL has no role")
+    verify_e2e(e2e, runtime_role)
+    probe_loopback("http://127.0.0.1:18082/healthz")
+    probe_loopback("http://127.0.0.1:13002/")
     receipt = {
         **expected,
         "artifact_image": args.artifact,
-        "scope": "local-docker-runtime-only",
+        "scope": "local-docker-staging",
         "production_promotion_approved": False,
         "runtime": "PASS",
-        "authenticated_e2e": "NOT_RUN",
-        "cloud_checks": "NOT_RUN",
-        "overlay_sha256": hashlib.sha256(OVERLAY.read_bytes()).hexdigest(),
+        "migration_revision": {"expected": manifest["migration_revision"], "actual": revision},
+        "authenticated_e2e": {"status": "PASS", **e2e},
+        "loopback_ingress": {
+            "status": "PASS",
+            "api": "http://127.0.0.1:18082",
+            "web": "http://127.0.0.1:13002",
+        },
+        "cloud_checks": "NOT_APPLICABLE_LOCAL",
+        "contract_sha256": {
+            "overlay": hashlib.sha256(OVERLAY.read_bytes()).hexdigest(),
+            "runner": hashlib.sha256(RUNNER.read_bytes()).hexdigest(),
+        },
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
-    (args.work_dir / "runtime-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print("Local runtime PASS. E2E/cloud acceptance pending; production promotion NOT approved.")
+    (args.work_dir / RECEIPT).write_text(json.dumps(receipt, indent=2) + "\n")
+    print("Local staging PASS. Production promotion remains NOT approved.")
 
 
 def main() -> int:
