@@ -23,7 +23,8 @@ services:
       - strayhub_runtime
 
   minio:
-    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    # Official MinIO Quay image, pinned to the amd64 manifest for this release.
+    image: quay.io/minio/minio@sha256:34c8e2f52a5984492555427fee07254c80036bdb7079bb91679232abd7a4fa20
     restart: unless-stopped
     command: server /data
     environment:
