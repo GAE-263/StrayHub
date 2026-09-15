@@ -23,6 +23,9 @@ jobs:
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     environment: release-publication
+    outputs:
+      artifact_image: ${{ steps.identity.outputs.artifact_image }}
+      git_sha: ${{ env.REVISION }}
     permissions:
       contents: read
       id-token: write
@@ -74,6 +77,77 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Record immutable release identity
+        id: identity
         run: |
+          cat release-bundle/artifact-identity.env >>"$GITHUB_OUTPUT"
           cat release-bundle/artifact-identity.env >>"$GITHUB_STEP_SUMMARY"
           printf 'Actions artifact is a convenience copy; Artifact Registry is the canonical release store.\n' >>"$GITHUB_STEP_SUMMARY"
+
+  staging:
+    name: Hosted Docker Staging
+    needs: build-release
+    # Historical builds remain reusable, but only the workflow's own main SHA
+    # can issue promotion evidence. Each hosted runner has disposable data.
+    if: ${{ needs.build-release.outputs.git_sha == github.sha }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release-publication
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REVISION: ${{ needs.build-release.outputs.git_sha }}
+      RELEASE_ARTIFACT: ${{ needs.build-release.outputs.artifact_image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - id: config
+        run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
+      # Reuse the existing workflow/environment publisher trust for registry
+      # pulls. No deployer identity or production runtime secrets are used.
+      - uses: google-github-actions/auth@v2
+        id: registry_auth
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.publisher }}
+          token_format: access_token
+          create_credentials_file: false
+      - uses: docker/login-action@v3
+        with:
+          registry: asia-east1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.registry_auth.outputs.access_token }}
+      - name: Create disposable synthetic staging configuration
+        run: uv run python -m scripts.staging_attestation prepare --directory "$RUNNER_TEMP/staging-secrets"
+      - name: Verify exact OCI release with canonical Docker acceptance
+        run: |
+          uv run python -m scripts.local_staging \
+            --context default --artifact "$RELEASE_ARTIFACT" \
+            --env-file "$RUNNER_TEMP/staging-secrets/staging.env" \
+            --work-dir "$RUNNER_TEMP/staging-attempt" --confirm-local-secrets
+      - name: Issue hosted staging attestation
+        env:
+          STAGING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          uv run python -m scripts.staging_attestation create \
+            --receipt "$RUNNER_TEMP/staging-attempt/staging-receipt.json" \
+            --output "$RUNNER_TEMP/staging-attestation.json" \
+            --git-sha "$REVISION" --artifact "$RELEASE_ARTIFACT"
+      - uses: actions/upload-artifact@v4
+        id: attestation
+        with:
+          name: strayhub-staging-${{ env.REVISION }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/staging-attestation.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record staging promotion evidence
+        env:
+          ARTIFACT_ID: ${{ steps.attestation.outputs.artifact-id }}
+          ARTIFACT_SHA256: ${{ steps.attestation.outputs.artifact-digest }}
+        run: |
+          printf 'Staging run: `%s`\nStaging artifact identity: `%s:%s`\n' "$GITHUB_RUN_ID" "$ARTIFACT_ID" "$ARTIFACT_SHA256" >>"$GITHUB_STEP_SUMMARY"
+          printf 'Scope: hosted Docker, synthetic data; cloud/LINE checks excluded. Production requires a separate manual gate.\n' >>"$GITHUB_STEP_SUMMARY"
