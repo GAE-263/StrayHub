@@ -99,7 +99,7 @@ def validate_rollout(
         # Full identity, resources, human PASS and approval validation is performed
         # by canonical preflight in the exact API image before accepting this config.
         if (
-            report.get("schema_version") != 2
+            report.get("schema_version") not in {2, 3}
             or report.get("approval", {}).get("status") != "approved"
         ):
             raise ValueError("approval")
