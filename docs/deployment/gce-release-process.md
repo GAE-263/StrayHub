@@ -25,17 +25,17 @@ clean Git SHA
 
 ## Build and publication
 
-`.github/workflows/gce-release.yml` adds a GCE verification and deployment gate. Pull requests and
-pushes to `main` run release verification without publication. Every push to `release`, without a
-path filter, runs release contracts, Ruff, shell syntax/lint, production Compose/preflight,
-Terraform validation without backend access, the repository secret scan, and clean-SHA image
-builds. The release workflow calls the repository's primary CI as a required reusable workflow, so
-its full backend/frontend/contracts/critical-E2E matrix must also pass before publication.
+`.github/workflows/ci.yml` is the only pull-request and `main` quality workflow. It owns the full
+backend/frontend/contracts/critical-E2E matrix plus release shell lint, production
+Compose/preflight, Terraform validation without backend access, and the repository secret scan.
+`.github/workflows/gce-release.yml` runs only for `release` pushes and manual operations and calls
+that primary CI as its reusable verification gate. Verification does not build images; only an
+authorized manual publication builds the API, Worker, and Web images.
 
 This repository uses a **single-operator manual gate**. It is not an independent human approval
 control. GitHub Environment names are retained only as OIDC identity namespaces and are not treated
-as approval, secret, or variable protection. A push to `release` runs verification and clean-SHA
-local image builds only; its write jobs are excluded by job-level `workflow_dispatch` conditions.
+as approval, secret, or variable protection. A push to `release` runs the reusable CI verification
+only; its image build and write jobs are excluded by job-level `workflow_dispatch` conditions.
 
 Application publication and deployment read strict versioned non-secret values from
 `infra/gce/application-release-config.json`; they do not read GitHub Environment variables.

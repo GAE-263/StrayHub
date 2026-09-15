@@ -1,9 +1,8 @@
 name: GCE Immutable Release
 
 on:
-  pull_request:
   push:
-    branches: [main, release]
+    branches: [release]
   workflow_dispatch:
     inputs:
       operation:
@@ -59,55 +58,6 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'deploy' }}
     uses: ./.github/workflows/ci.yml
 
-  verify-release:
-    name: Verify GCE release candidate
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'deploy' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
-      - run: uv sync --dev
-      - name: Python quality and release contracts
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pytest tests/contract/test_gce_release_contract.py tests/contract/test_gce_acceptance_isolation_contract.py tests/contract/test_gce_production_compose_contract.py tests/contract/test_gce_systemd_contract.py tests/contract/test_production_config_sync.py tests/contract/test_gcp_platform_terraform_contract.py tests/unit/test_manual_release_gate.py tests/unit/test_release_head_gate.py
-      - name: Shell syntax and lint
-        run: |
-          bash -n scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
-          shellcheck scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
-      - name: Production Compose and preflight contract
-        run: |
-          ./infra/gce/scripts/preflight.sh
-          docker compose -f infra/gce/docker-compose.production.yml --env-file infra/gce/.env.production.example config --quiet
-      - name: Terraform validation without backend access
-        run: |
-          terraform fmt -check -recursive infra/gce/terraform infra/gcp-platform/terraform
-          terraform -chdir=infra/gce/terraform init -backend=false -input=false
-          terraform -chdir=infra/gce/terraform validate
-          terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
-          terraform -chdir=infra/gcp-platform/terraform validate
-      - name: Repository-native secret scan
-        run: |
-          ! rg -n --hidden --glob '!.git/**' --glob '!node_modules/**' --glob '!**/.venv/**' --glob '!**/.terraform/**' --glob '!**/*.lock' '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----)' .
-      - name: Build clean-SHA images without publication
-        env:
-          REVISION: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
-        run: |
-          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
-          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.api -t "strayhub-api:$REVISION" .
-          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.worker -t "strayhub-worker:$REVISION" .
-          docker build --label "org.opencontainers.image.revision=$REVISION" --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -f infra/gce/images/Dockerfile.web -t "strayhub-web:$REVISION" .
-
   authorize-manual-write:
     name: Authorize exact manual write operation
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && (inputs.operation == 'publish' || inputs.operation == 'deploy') }}
@@ -136,7 +86,7 @@ jobs:
 
   publish-release:
     name: Publish immutable release candidate
-    needs: [full-quality-gate, verify-release, authorize-manual-write]
+    needs: [full-quality-gate, authorize-manual-write]
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && inputs.operation == 'publish' }}
     runs-on: ubuntu-latest
     # OIDC namespace only; not an approval, secret, or variable gate.

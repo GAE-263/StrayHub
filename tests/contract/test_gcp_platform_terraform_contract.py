@@ -56,9 +56,9 @@ def test_legacy_source_is_removed_without_weakening_current_release() -> None:
     compose = (ROOT / "infra/gce/docker-compose.production.yml").read_text(encoding="utf-8")
     for source in (workflow, compose):
         assert "infra/gcp-demo" not in source
-        assert "infra/gce/images/Dockerfile.api" in source
-        assert "infra/gce/images/Dockerfile.worker" in source
-        assert "infra/gce/images/Dockerfile.web" in source
+    for dockerfile in ("Dockerfile.api", "Dockerfile.worker", "Dockerfile.web"):
+        assert dockerfile in compose
+    assert '"infra/gce/images/Dockerfile.$service"' in workflow
     assert "terraform apply" not in workflow
 
 
