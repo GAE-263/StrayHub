@@ -1,9 +1,9 @@
 # Phase 5: hosted Docker staging and production promotion
 
-Status at the 2026-09-15 acceptance checkpoint: hosted Docker staging passed and the gated
-workflow is active on both `main` and `release`. The first production promotion through this gate
-has NOT been performed; Phase 5 end-to-end production acceptance remains pending. No new GCP VM
-was created. See the [acceptance record](cicd-phase-5-6-acceptance.md) for exact identities and runs.
+Status at 2026-09-15 16:17 UTC (2026-09-16 Asia/Taipei): the first production promotion through
+the hosted staging gate passed, including post-deployment receipt/runtime/public health checks.
+Production is on `7bb29ea60aeee435b0f05744af969a2ce0542882`; no new GCP VM was created.
+See the [acceptance record](cicd-phase-5-6-acceptance.md) for exact identities and runs.
 
 ## Step 1: hosted staging evidence
 
@@ -82,11 +82,11 @@ the staging evidence. Worker/Beat checks establish running state, not successful
 Production retains its existing cloud preflight and receipt/runtime verification.
 
 Focused attestation, local staging, runtime parity, immutable release, manual gate and release
-workflow tests and live hosted acceptance have passed. For the remaining first production
-promotion, record evidence validation before deployer auth, then read back the exact deployed
-images and receipt against the staging identity. The successful Phase 6 verify-only run checked
-the OLD deployed release; it does not substitute for this promotion acceptance. Existing production
-remains in place until a separately authorized manual deployment.
+workflow tests and live hosted acceptance have passed. First production promotion run
+`34992481583` also passed evidence validation before deployer auth and exact deployed
+receipt/runtime checks. The earlier Phase 6 verify-only run checked the OLD deployed release;
+the later deploy run supplies the distinct promotion acceptance. Future deployments continue to
+require explicit authorization and fresh eligible matching evidence.
 
 ## Reversal
 

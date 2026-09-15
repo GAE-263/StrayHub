@@ -59,7 +59,10 @@ def test_preflight_verifies_actual_candidate_before_runtime_stop():
     assert 'services[service]["image"] != entry["repository"]' in preflight
     assert "inconsistent menu scope configuration" in preflight
     assert "validate_runtime_safety" in preflight
-    assert deploy.index("stage=preflight") < deploy.index("stage=runtime_stop")
+    assert deploy.index("checkpoint_stage preflight") < deploy.index(
+        "checkpoint_stage runtime_stop"
+    )
+    assert deploy.index("production-preflight.sh") < deploy.index("systemctl stop strayhub.service")
     assert "sync_line_role_menus" not in deploy
 
 

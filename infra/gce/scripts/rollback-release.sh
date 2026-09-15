@@ -42,6 +42,10 @@ done
 [[ "$TARGET_RELEASE" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$ ]] || fail "invalid target release ID"
 [[ "$CONFIRM_ROLLBACK" == "ROLLBACK_STRAYHUB_APPLICATION" ]] || fail "explicit rollback confirmation is required"
 [[ -n "$DEPLOYMENT_ROLE" ]] || fail "--deployment-role is required"
+[[ ! -L "$STATE_DIR/.operation.lock" ]] || fail "invalid operation lock"
+exec 9>"$STATE_DIR/.operation.lock"
+flock -n 9 || fail "another deployment or recovery holds the host lock"
+[[ ! -e "$STATE_DIR/active-deployment.json" && ! -L "$STATE_DIR/active-deployment.json" ]] || fail "incomplete deployment requires recovery first"
 [[ -L "$CURRENT_LINK" ]] || fail "current release pointer is missing"
 [[ -L "$STATE_DIR/current.json" ]] || fail "successful current deployment receipt is missing"
 [[ -f "$CONFIG_ENV" && -s "$SECRETS_ROOT/current/runtime.env" ]] || fail "protected runtime configuration is incomplete"
@@ -56,6 +60,12 @@ target_dir="$RELEASE_ROOT/$TARGET_RELEASE"
 
 "$MANIFEST_TOOL" validate-release-dir --release-dir "$current_dir" >/dev/null
 "$MANIFEST_TOOL" validate-release-dir --release-dir "$target_dir" >/dev/null
+"$MANIFEST_TOOL" validate-receipt --manifest "$current_dir/release-manifest.json" --receipt "$STATE_DIR/current.json"
+"$MANIFEST_TOOL" validate-receipt --manifest "$target_dir/release-manifest.json" --receipt "$STATE_DIR/$TARGET_RELEASE.json"
+# Fail closed across schema changes; compatible metadata alone cannot prove live DB state.
+current_revision="$("$MANIFEST_TOOL" show-field --manifest "$current_dir/release-manifest.json" --field migration_revision)"
+target_revision="$("$MANIFEST_TOOL" show-field --manifest "$target_dir/release-manifest.json" --field migration_revision)"
+[[ "$current_revision" == "$target_revision" ]] || fail "rollback across migration revisions requires separate review"
 "$MANIFEST_TOOL" validate-rollback \
   --current-manifest "$current_dir/release-manifest.json" \
   --target-release "$TARGET_RELEASE" \
@@ -74,6 +84,12 @@ compose=(
 )
 
 # Validate and pull N-1 before touching the current runtime. No migration is executed.
+for dependency in strayhub-secrets.service strayhub-migrate.service; do
+  systemctl is-active --quiet "$dependency" || \
+    fail "dependency units must already be active; refusing implicit migration on restart"
+done
+db_revision="$("${compose[@]}" --profile tools run --rm --no-deps migration alembic -c services/api/alembic.ini current 2>&1)"
+python3 "$SCRIPT_DIR/deployment-state.py" head --revision "$current_revision" <<<"$db_revision" || fail "live database revision differs"
 "${compose[@]}" pull api worker web
 "$target_dir/infra/gce/scripts/production-preflight.sh" \
   --config-env "$CONFIG_ENV" \
@@ -120,7 +136,7 @@ curl --fail --silent --show-error --max-time 15 "https://$canonical_hostname/hea
 
 rolled_back_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 receipt="$STATE_DIR/rollback-${rolled_back_at//[:\-]/}-$TARGET_RELEASE.json"
-"$target_dir/infra/gce/scripts/release-manifest.py" write-receipt \
+"$MANIFEST_TOOL" write-receipt \
   --manifest "$target_dir/release-manifest.json" \
   --previous-release "$current_release" \
   --deployed-at "$rolled_back_at" \

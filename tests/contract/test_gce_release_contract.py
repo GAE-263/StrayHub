@@ -46,7 +46,7 @@ def test_candidate_secrets_are_materialized_without_restarting_runtime(
 ) -> None:
     deploy = (ROOT / "infra/gce/scripts/deploy-release.sh").read_text(encoding="utf-8")
     start = deploy.index("systemctl daemon-reload")
-    end = deploy.index("\ncompose=(", start)
+    end = deploy.index("\nfi\n\ncompose=(", start)
     assert "systemctl restart strayhub-secrets.service" not in deploy
     assert (
         end
@@ -617,3 +617,26 @@ def test_production_verification_observes_superseded_release_without_skipping() 
 def test_generated_release_bundle_is_excluded_from_git_and_images() -> None:
     assert "/release-bundle/" in (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "release-bundle/" in (ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+
+def test_receipt_creation_never_overwrites_prior_evidence(tmp_path: Path) -> None:
+    artifact = build_artifact(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    args = argparse.Namespace(
+        manifest=artifact / "release-manifest.json",
+        previous_release=PREVIOUS_RELEASE,
+        deployed_at="2026-09-16T00:00:00Z",
+        actor="synthetic tester",
+        output=receipt,
+    )
+    release_manifest.write_receipt(args)
+    before = receipt.read_bytes()
+    release_manifest.validate_receipt(args.manifest, receipt, PREVIOUS_RELEASE)
+    with pytest.raises(FileExistsError):
+        release_manifest.write_receipt(args)
+    assert receipt.read_bytes() == before
+    value = json.loads(before)
+    for field in ("git_sha", "images", "migration_revision", "previous_release_id"):
+        receipt.write_text(json.dumps(value | {field: "mismatch"}))
+        with pytest.raises(release_manifest.ReleaseError):
+            release_manifest.validate_receipt(args.manifest, receipt, PREVIOUS_RELEASE)

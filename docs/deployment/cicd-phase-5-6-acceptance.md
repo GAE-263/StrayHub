@@ -1,5 +1,9 @@
 # CI/CD Phase 5 and 6 acceptance record
 
+Latest outcome: **Phase 5 first production promotion PASS**, completed 2026-09-15 16:17 UTC
+(2026-09-16 00:17 Asia/Taipei). See the final section below. The earlier checkpoint and failed
+attempt are retained as history; their pending status is superseded by that successful run.
+
 Checkpoint: 2026-09-15 (run timestamps in UTC). This is a historical acceptance record, not a
 claim that these SHAs remain branch HEAD forever or that an artifact remains available forever.
 Revalidate current branch heads and artifact expiry before any future operation.
@@ -131,3 +135,51 @@ eligible exact artifact. Record successful staging evidence validation before de
 publication identity, bundle checksum, all three staging/production image digests, resulting
 receipt and post-deployment verification. Do not treat branch alignment or the old-release
 verify-only success as proof that this deployment has occurred.
+
+## First production promotion completed
+
+[PR #41](https://github.com/GAE-263/StrayHub/pull/41) added safe registry diagnostics and the
+earlier acceptance documentation. Its [CI](https://github.com/GAE-263/StrayHub/actions/runs/34989538911)
+passed before merge. The merge SHA was `7bb29ea60aeee435b0f05744af969a2ce0542882`.
+[Main CI](https://github.com/GAE-263/StrayHub/actions/runs/34990288181) and
+[build/hosted staging](https://github.com/GAE-263/StrayHub/actions/runs/34990288178) passed before
+release was normally fast-forwarded from `2e121a6…` to this SHA. No additional force update or
+IAM/WIF change was required. [Release push CI](https://github.com/GAE-263/StrayHub/actions/runs/34990958333)
+also passed.
+
+The previous registry error did not recur. Diagnostics improve future observability but do not
+establish the original failure's root cause. No region change or access-policy expansion was made.
+
+| Identity | Accepted value |
+| --- | --- |
+| Release ID | `20260915T154252Z-7bb29ea60aee` |
+| Git SHA | `7bb29ea60aeee435b0f05744af969a2ce0542882` |
+| Staging run / attempt | `34990288178` / `1` |
+| Staging artifact ID | `10404843625` |
+| Staging archive SHA-256 | `68845685854bce71ed210ee9ee6d79b686a65c62946d71af9418ec8e2f024910` |
+| Publication run | [34990957571](https://github.com/GAE-263/StrayHub/actions/runs/34990957571) |
+| Publication artifact ID | `10405079642` |
+| Publication archive SHA-256 | `0d530a7840ea32fc184067c36f4be97a28db773915e91c4adf956970377a8d21` |
+| OCI release digest | `sha256:3d8aedecbc117d05067145aa3add1647653541501501dba2aac408bf1db8b51c` |
+| Bundle SHA-256 | `da05c899f890df18e45a3ab58f533379fd91b6a236e6f360672ddcdae53e7305` |
+| Manifest SHA-256 | `6e7584eebfb08c579f8c944423539684e3144d3c44eeda5ef7877058e07080ff` |
+| API image digest | `sha256:f7dfc76f063e183b6a9e771d4eb02e025a565838f451c01a2dc404b5d7785475` |
+| Web image digest | `sha256:50356ac34219d538567f6622250590b16f5986a01776559ebb588bd587509e53` |
+| Worker image digest | `sha256:c120e4c8887a58160e671f68d73a35bc1ccc905534f734312e32b6931672528e` |
+
+Local validation of the downloaded publication receipt/artifact and hosted evidence passed before
+dispatching [deploy run 34992481583](https://github.com/GAE-263/StrayHub/actions/runs/34992481583).
+That run's hosted-evidence gate passed at 16:03:20 UTC before its deployer auth step completed at
+16:03:21 UTC. It reused the published artifact; publication and full CI jobs were skipped in the
+deploy run. No application image was built during publication or deployment.
+
+Production preflight passed, the normal migration/head checks executed, the current pointer was
+switched, and the new systemd runtime passed. Both old and new manifests target
+`0056_line_webhook_auth_scope`; no downgrade was performed. Unlike Phase 6 verify-only, this
+authorized operation did stop/start the application and materialize a new secret generation.
+
+The deployment reported PASS with previous release `20260915T055145Z-f07c643d63f9`. The separate
+verification job passed exact receipt/runtime at 16:17:29 UTC and public root/health checks at
+16:17:30 UTC. The old release directory and branch backup remain recovery evidence, not blanket
+authorization for rollback. Phase 7 recovery/resume and current-pair rollback acceptance, plus
+Phase 8 cleanup, remain pending.
