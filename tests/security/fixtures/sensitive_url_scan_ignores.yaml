@@ -1,5 +1,10 @@
 version: 1
 ignores:
+  - path: scripts/check_runtime_parity.py
+    rule: query_reader
+    parameter: secrets
+    reason: dict.get compares rendered Compose secret mount metadata; no URL query is read or constructed and no secret value is printed.
+    owner: runtime-contract
   - path: apps/web/app/(volunteer)/volunteer-entry/liffUrl.ts
     rule: query_reader
     parameter: id_token

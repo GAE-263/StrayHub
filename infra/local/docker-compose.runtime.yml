@@ -1,0 +1,19 @@
+# Full local runtime: layer after infra/gce/docker-compose.production.yml.
+# The existing docker-compose.yml remains the infrastructure-only unit-test fixture.
+name: strayhub-local-runtime
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:65433:5432"
+  minio:
+    ports:
+      - "127.0.0.1:19000:9000"
+  redis:
+    ports:
+      - "127.0.0.1:16379:6379"
+  api:
+    ports: !override
+      - "127.0.0.1:18081:8080"
+  web:
+    ports: !override
+      - "127.0.0.1:13001:8080"

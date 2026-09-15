@@ -1,0 +1,24 @@
+# Full staging runtime on a dedicated VM. Supply dedicated env/secrets and exact digests.
+name: strayhub-staging
+services:
+  api:
+    image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:18082:8080"
+  migration:
+    image: ${STRAYHUB_API_IMAGE:?Staging requires the API digest}
+  worker:
+    image: ${STRAYHUB_WORKER_IMAGE:?Staging requires the Worker digest}
+    build: !reset null
+  celery-worker:
+    image: ${STRAYHUB_WORKER_IMAGE:?Staging requires the Worker digest}
+    build: !reset null
+  celery-beat:
+    image: ${STRAYHUB_WORKER_IMAGE:?Staging requires the Worker digest}
+    build: !reset null
+  web:
+    image: ${STRAYHUB_WEB_IMAGE:?Staging requires the Web digest}
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:13002:8080"
