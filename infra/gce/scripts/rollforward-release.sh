@@ -44,6 +44,10 @@ done
 [[ "$CONFIRM_ROLLFORWARD" == "ROLLFORWARD_STRAYHUB_APPLICATION" ]] ||
   fail "explicit roll-forward confirmation is required"
 [[ -n "$DEPLOYMENT_ROLE" ]] || fail "--deployment-role is required"
+[[ ! -L "$STATE_DIR/.operation.lock" ]] || fail "invalid operation lock"
+exec 9>"$STATE_DIR/.operation.lock"
+flock -n 9 || fail "another deployment or recovery holds the host lock"
+[[ ! -e "$STATE_DIR/active-deployment.json" && ! -L "$STATE_DIR/active-deployment.json" ]] || fail "incomplete deployment requires recovery first"
 [[ -L "$CURRENT_LINK" ]] || fail "current release pointer is missing"
 [[ -L "$STATE_DIR/current.json" ]] || fail "successful current deployment receipt is missing"
 [[ -f "$CONFIG_ENV" && -s "$SECRETS_ROOT/current/runtime.env" ]] ||
@@ -59,6 +63,8 @@ target_dir="$RELEASE_ROOT/$TARGET_RELEASE"
 
 "$MANIFEST_TOOL" validate-release-dir --release-dir "$current_dir" >/dev/null
 "$MANIFEST_TOOL" validate-release-dir --release-dir "$target_dir" >/dev/null
+"$MANIFEST_TOOL" validate-receipt --manifest "$current_dir/release-manifest.json" --receipt "$STATE_DIR/current.json"
+"$MANIFEST_TOOL" validate-receipt --manifest "$target_dir/release-manifest.json" --receipt "$STATE_DIR/$TARGET_RELEASE.json"
 "$MANIFEST_TOOL" validate-rollforward \
   --current-manifest "$current_dir/release-manifest.json" \
   --target-manifest "$target_dir/release-manifest.json" \
@@ -76,6 +82,13 @@ compose=(
   --env-file "$target_image_env"
 )
 
+for dependency in strayhub-secrets.service strayhub-migrate.service; do
+  systemctl is-active --quiet "$dependency" || \
+    fail "dependency units must already be active; refusing implicit migration on restart"
+done
+current_revision="$("$MANIFEST_TOOL" show-field --manifest "$current_dir/release-manifest.json" --field migration_revision)"
+db_revision="$("${compose[@]}" --profile tools run --rm --no-deps migration alembic -c services/api/alembic.ini current 2>&1)"
+python3 "$SCRIPT_DIR/deployment-state.py" head --revision "$current_revision" <<<"$db_revision" || fail "live database revision differs"
 "${compose[@]}" pull api worker web
 "$target_dir/infra/gce/scripts/production-preflight.sh" \
   --config-env "$CONFIG_ENV" \

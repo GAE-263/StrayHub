@@ -17,7 +17,7 @@ OLD = "20260909T000000Z-" + "b" * 12
 # No subprocesses in the stub: even an unexpected executable cannot reach Docker,
 # systemd or the cloud. The script's argument parsing/control flow/trap is real.
 STUB = r"""
-import json, os, sys
+import fcntl, json, os, subprocess, sys
 from pathlib import Path
 root = Path(os.environ['TEST_ROOT'])
 args = sys.argv[1:]
@@ -42,8 +42,15 @@ if name == 'dirname':
 elif name == 'readlink':
     print(path(args[-1]).resolve())
 elif name == 'install':
-    for value in args[-2:]:
+    for value in args[args.index('0755') + 1:]:
         path(value).mkdir(parents=True, exist_ok=True)
+elif name == 'flock':
+    fcntl.flock(int(args[-1]), fcntl.LOCK_EX | fcntl.LOCK_NB)
+elif name == 'cmp':
+    sys.exit(0 if path(args[-2]).read_bytes() == path(args[-1]).read_bytes() else 1)
+elif name == 'python3':
+    assert path(args[0]).name == 'deployment-state.py'
+    sys.exit(subprocess.call([sys.executable, *args]))
 elif name in ('chown', 'chmod'):
     path(args[-1])
 elif name == 'systemctl':
@@ -78,7 +85,7 @@ elif name == 'release-manifest.py':
         (dest / 'infra/gce/docker-compose.production.yml').write_text('synthetic')
         (dest / 'image-digests.env').write_text('synthetic')
         (dest / 'release-manifest.json').write_text(json.dumps({'git_sha': 'a'*40,
-                                                              'release_id': new}))
+            'release_id': new, 'images': {}, 'migration_revision': 'synthetic_head'}))
         for script in ('fetch-secrets.sh', 'production-preflight.sh',
                        'install-systemd-units.sh', 'verify-systemd-runtime.sh',
                        'release-manifest.py'):
@@ -86,9 +93,15 @@ elif name == 'release-manifest.py':
     elif args[0] == 'write-receipt':
         event('receipt')
         manifest = json.loads(path(option('--manifest')).read_text())
-        manifest['previous_release'] = option('--previous-release')
+        manifest['previous_release_id'] = option('--previous-release') or None
+        manifest['verification'] = 'passed'
         path(option('--output')).write_text(json.dumps(manifest))
         fail('receipt-after', 49)
+    elif args[0] == 'validate-release-dir':
+        path(option('--release-dir'))
+    elif args[0] == 'validate-receipt':
+        r = json.loads(path(option('--receipt')).read_text())
+        assert r['release_id'] == new and r['verification'] == 'passed'
     else:
         raise AssertionError('unexpected manifest command')
 elif name == 'fetch-secrets.sh':
@@ -138,7 +151,7 @@ def deploy(tmp_path: Path, scenario: str, *, broken_diagnostic: bool = False):
     commands = (
         "dirname readlink install chown chmod systemctl docker release-manifest.py "
         "fetch-secrets.sh production-preflight.sh install-systemd-units.sh "
-        "verify-systemd-runtime.sh ln mv grep awk curl date python3"
+        "verify-systemd-runtime.sh ln mv grep awk curl date python3 flock cmp"
     ).split()
     for name in commands:
         stub = bin_dir / name
@@ -154,10 +167,20 @@ def deploy(tmp_path: Path, scenario: str, *, broken_diagnostic: bool = False):
     assert not any(f'"{prefix}' in script for prefix in ("/opt/", "/etc/", "/var/lib/"))
     executable = bin_dir / "deploy-release.sh"
     executable.write_text(script)
+    (bin_dir / "deployment-state.py").write_text(
+        (ROOT / "infra/gce/scripts/deployment-state.py").read_text()
+    )
     releases = tmp_path / "opt/strayhub/releases"
     old = releases / OLD
     old.mkdir(parents=True)
     (old / "keep").write_text("old release evidence")
+    old_manifest = {
+        "release_id": OLD,
+        "git_sha": "b" * 40,
+        "images": {},
+        "migration_revision": "synthetic_head",
+    }
+    (old / "release-manifest.json").write_text(json.dumps(old_manifest))
     (releases.parent / "current").symlink_to(old)
     config = tmp_path / "etc/strayhub/production.env"
     config.parent.mkdir(parents=True)
@@ -170,10 +193,21 @@ def deploy(tmp_path: Path, scenario: str, *, broken_diagnostic: bool = False):
         (generation / name).write_text("synthetic-not-a-credential")
     state = tmp_path / "var/lib/strayhub/releases"
     state.mkdir()
-    (state / f"{OLD}.json").write_text("old receipt evidence")
+    old_receipt = json.dumps(old_manifest | {"verification": "passed"})
+    (state / f"{OLD}.json").write_text(old_receipt)
     (state / "current.json").symlink_to(state / f"{OLD}.json")
     artifact = tmp_path / "artifact"
     artifact.mkdir()
+    (artifact / "release-manifest.json").write_text(
+        json.dumps(
+            {
+                "git_sha": "a" * 40,
+                "release_id": NEW,
+                "images": {},
+                "migration_revision": "synthetic_head",
+            }
+        )
+    )
     (artifact / "keep").write_text("diagnostic evidence")
     env = {
         "PATH": str(bin_dir),
@@ -189,7 +223,7 @@ def deploy(tmp_path: Path, scenario: str, *, broken_diagnostic: bool = False):
             'builtin printf "$@"; }\n'
         )
         env["BASH_ENV"] = str(bash_env)
-    # No production lock exists. An inherited advisory FD verifies that even
+    # An inherited outer advisory FD verifies that even
     # error/diagnostic paths terminate and release an outer caller's OS lock.
     runner = (
         "import fcntl,os,sys; fd=os.open(sys.argv[1],os.O_CREAT|os.O_RDWR,0o600); "
@@ -220,7 +254,7 @@ def deploy(tmp_path: Path, scenario: str, *, broken_diagnostic: bool = False):
     with (tmp_path / "test.lock").open() as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     assert (old / "keep").read_text() == "old release evidence"
-    assert (state / f"{OLD}.json").read_text() == "old receipt evidence"
+    assert (state / f"{OLD}.json").read_text() == old_receipt
     assert (artifact / "keep").read_text() == "diagnostic evidence"
     return result, (tmp_path / "trace").read_text().splitlines(), releases, state
 
@@ -335,5 +369,101 @@ def test_success_retains_sequence_and_exact_receipt_identity(tmp_path: Path) -> 
     ]
     assert (releases.parent / "current").resolve() == releases / NEW
     receipt = json.loads((state / "current.json").read_text())
-    assert receipt == {"git_sha": "a" * 40, "release_id": NEW, "previous_release": OLD}
+    assert receipt == {
+        "git_sha": "a" * 40,
+        "release_id": NEW,
+        "previous_release_id": OLD,
+        "verification": "passed",
+        "images": {},
+        "migration_revision": "synthetic_head",
+    }
     assert "[GCE release] PASS" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "preflight",
+        "receipt-after",
+        "receipt-activate",
+        "success",
+        "migration",
+        "head-command",
+        "pointer-before",
+    ],
+)
+def test_full_script_resume_does_not_replay_uncertain_migration(tmp_path: Path, scenario: str):
+    _, _, _, state = deploy(tmp_path, scenario)
+    before = (tmp_path / "trace").read_text()
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(tmp_path / "bin/deploy-release.sh"),
+            "--artifact-dir",
+            str(tmp_path / "artifact"),
+            "--deployment-role",
+            "synthetic tester",
+            "--confirm-production",
+            "DEPLOY_STRAYHUB_PRODUCTION",
+            "--resume",
+        ],
+        env={
+            "PATH": str(tmp_path / "bin"),
+            "TEST_ROOT": str(tmp_path),
+            "SCENARIO": "success",
+            "NEW_RELEASE": NEW,
+        },
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    calls = (tmp_path / "trace").read_text()[len(before) :].splitlines()
+    if scenario in {"migration", "head-command", "pointer-before"}:
+        assert result.returncode != 0
+        assert "manual investigation" in result.stderr
+        assert calls == ["validate"]
+    else:
+        assert result.returncode == 0, result.stderr
+        assert not (state / "active-deployment.json").exists()
+        if scenario != "preflight":
+            assert "migration" not in calls
+            assert not any(call.startswith("systemctl:") for call in calls)
+            assert "materialize" not in calls and "pull" not in calls
+            assert "receipt" not in calls  # Reuse and validate the already-created receipt.
+        else:
+            assert calls.count("migration") == 1
+        assert json.loads((state / f"{NEW}.checkpoint.json").read_text())["stage"] == "complete"
+
+
+def test_real_host_lock_refuses_second_resume_without_side_effects(tmp_path: Path):
+    _, _, _, state = deploy(tmp_path, "preflight")
+    before = (tmp_path / "trace").read_bytes()
+    with (state / ".operation.lock").open("r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(
+            [
+                "/bin/bash",
+                str(tmp_path / "bin/deploy-release.sh"),
+                "--artifact-dir",
+                str(tmp_path / "artifact"),
+                "--deployment-role",
+                "synthetic tester",
+                "--confirm-production",
+                "DEPLOY_STRAYHUB_PRODUCTION",
+                "--resume",
+            ],
+            env={
+                "PATH": str(tmp_path / "bin"),
+                "TEST_ROOT": str(tmp_path),
+                "SCENARIO": "success",
+                "NEW_RELEASE": NEW,
+            },
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    assert result.returncode != 0
+    assert "holds the host lock" in result.stderr
+    assert (tmp_path / "trace").read_bytes() == before

@@ -1,8 +1,8 @@
 # Immutable GCE Release Process
 
-Status at 2026-09-15: immutable publication and hosted Docker staging are live; the production
-evidence gate is active on `release`. Phase 6 standalone verify-only passed against the existing
-production release. Phase 5 first end-to-end production promotion remains pending.
+Status at 2026-09-15 16:17 UTC (2026-09-16 Asia/Taipei): Phase 5 first end-to-end production
+promotion passed through the hosted staging evidence gate, deploying `7bb29ea…` with exact
+digests. Phase 6 standalone verify-only previously passed against the former production release.
 See the [Phase 5/6 acceptance record](cicd-phase-5-6-acceptance.md) for exact runs and identities.
 
 Deletion safety: **BLOCKED**
@@ -340,7 +340,9 @@ release.
   may leave a receipt or temporary symlink; inspect it rather than assuming no receipt exists.
   Release directories, old receipts, bootstrap/staging and temporary pointer evidence are retained.
   The CI wrapper cleans its exact staging files only after deployment succeeds. The deploy script
-  owns no host file lock; workflow concurrency serializes normal CI deployments, not manual invocations.
+  now holds a shared host operation lock with rollback/roll-forward. Phase 7 checkpoint/resume
+  protection is described in [recovery and rollback](recovery-rollback.md); these local changes
+  do not retrofit the currently deployed immutable release.
 - The separate, explicitly authorized rollback/reactivation tools retain their own behavior;
   they are not called by this deploy failure path and must never be invoked as an implicit retry.
 - Normal stop/restart never uses `docker compose down -v`; named volumes and backups remain intact.

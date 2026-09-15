@@ -7,10 +7,12 @@ import argparse
 import ast
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
 import tarfile
+import tempfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -369,9 +371,31 @@ def write_receipt(args: argparse.Namespace) -> None:
         "verification": "passed",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = args.output.with_name(f".{args.output.name}.tmp")
-    temporary.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(args.output)
+    fd, temporary = tempfile.mkstemp(prefix=f".{args.output.name}.", dir=args.output.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Atomic create-only publication: never overwrite earlier evidence, even a symlink.
+        os.link(temporary, args.output)
+        parent = os.open(args.output.parent, os.O_RDONLY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+    finally:
+        os.unlink(temporary)
+
+
+def validate_receipt(manifest_path: Path, receipt_path: Path, previous: str | None = None) -> None:
+    manifest = load_manifest(manifest_path)
+    receipt = load_receipt(receipt_path)
+    for field in ("release_id", "git_sha", "images", "migration_revision"):
+        if receipt.get(field) != manifest[field]:
+            raise ReleaseError(f"receipt/manifest mismatch: {field}")
+    if previous is not None and receipt["previous_release_id"] != (previous or None):
+        raise ReleaseError("receipt previous release mismatch")
 
 
 def load_receipt(path: Path) -> dict[str, Any]:
@@ -482,6 +506,10 @@ def build_parser() -> argparse.ArgumentParser:
     receipt_field.add_argument(
         "--field", choices=("release_id", "previous_release_id"), required=True
     )
+    check_receipt = subparsers.add_parser("validate-receipt")
+    check_receipt.add_argument("--manifest", type=Path, required=True)
+    check_receipt.add_argument("--receipt", type=Path, required=True)
+    check_receipt.add_argument("--previous-release", default=None)
 
     rollback = subparsers.add_parser("validate-rollback")
     rollback.add_argument("--current-manifest", type=Path, required=True)
@@ -518,6 +546,8 @@ def main() -> int:
             print(load_manifest(args.manifest)[args.field])
         elif args.command == "write-receipt":
             write_receipt(args)
+        elif args.command == "validate-receipt":
+            validate_receipt(args.manifest, args.receipt, args.previous_release)
         elif args.command == "show-receipt-field":
             value = load_receipt(args.receipt)[args.field]
             print("" if value is None else value)
