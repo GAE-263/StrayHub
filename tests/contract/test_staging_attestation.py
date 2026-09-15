@@ -6,7 +6,6 @@ import hashlib
 import io
 import json
 import os
-import shutil
 import subprocess
 import zipfile
 
@@ -227,8 +226,6 @@ def test_prepare_generates_private_distinct_synthetic_secrets(tmp_path):
 
 
 def test_generated_configuration_renders_isolated_canonical_runtime(tmp_path):
-    if not shutil.which("docker"):
-        pytest.skip("Docker Compose CLI required")
     directory = tmp_path / "secrets"
     gate.prepare(directory)
     environment = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
