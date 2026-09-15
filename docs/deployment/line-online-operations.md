@@ -81,6 +81,20 @@ immutable image、healthy 狀態及作用中 scope/menu 設定；只改 producti
 bounded 模式不能改 default，只能操作名單內帳號。全域與 test access 仍由應用程式原有
 簽章、身分與 tenant 驗證保護；此工具不改業務資料或角色。
 
+## Runtime secret 讀取契約
+
+Host operator 使用現有 `strayhub:strayhub` secret generation；不得以 `chown`
+正式秘密檔案或放寬 plan／manifest 的 root-only 檢查來修復讀取失敗。
+依本機 `strayhub` 帳號解析 UID/GID，root、generations 與 generation 目錄必須為
+0700；runtime.env 必須是相同 owner/group、0600 的單一連結普通檔案。
+只允許 current 指向 writer 產生的 `generations/YYYYMMDDTHHMMSSZ-xxxxxxxx`，
+以 no-follow directory descriptors 固定讀取對象，拒絕額外 symlink、FIFO 與過大檔案。
+
+Scalar 讀取不執行 shell、不展開變數，只解析 writer 的單引號格式及反斜線／單引號
+跳脫；重複 key、空 token、換行與不合法格式均拒絕。錯誤只輸出
+`credential_unavailable`，不包含 token、環境內容或 upstream response。
+驗證使用合成 generation 與 token；實際部署後仍須重新執行唯讀 Bot／menu readback。
+
 ## 部分失敗與恢復
 
 每筆 mutation 前將 intent 落盤，之後讀回實際 menu。中斷／timeout 保留

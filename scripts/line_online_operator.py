@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import grp
 import hashlib
 import http.client
 import json
 import os
+import pwd
 import re
 import signal
+import stat
 import subprocess
 import sys
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -88,18 +91,70 @@ def deployed_sha() -> str:
     return value
 
 
-def client() -> LineClient:
-    # Existing credential generation only; no Secret Manager calls or new secrets.
-    generation = (SECRETS / "current").resolve(strict=True)
-    generation.relative_to(SECRETS / "generations")
-    values = []
-    for line in protected(generation / "runtime.env").decode().splitlines():
-        key, _, value = line.partition("=")
-        if key == "LINE_CHANNEL_ACCESS_TOKEN":
-            values.append(value)
-    if len(values) != 1:
+def _runtime_secret_bytes() -> bytes:
+    """Pin the service-owned generation with no-follow directory descriptors."""
+    uid = pwd.getpwnam("strayhub").pw_uid
+    gid = grp.getgrnam("strayhub").gr_gid
+    with ExitStack() as stack:
+
+        def open_checked(name, *, parent=None, directory=False):
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            if directory:
+                flags |= os.O_DIRECTORY
+            fd = os.open(name, flags, dir_fd=parent)
+            stack.callback(os.close, fd)
+            details = os.fstat(fd)
+            expected_mode = 0o700 if directory else 0o600
+            expected_type = stat.S_ISDIR if directory else stat.S_ISREG
+            if (
+                not expected_type(details.st_mode)
+                or details.st_uid != uid
+                or details.st_gid != gid
+                or stat.S_IMODE(details.st_mode) != expected_mode
+                or (not directory and (details.st_nlink != 1 or details.st_size > 1_000_000))
+            ):
+                raise ValueError("credential_unavailable")
+            return fd
+
+        root = open_checked(SECRETS, directory=True)
+        target = os.readlink("current", dir_fd=root)
+        if not re.fullmatch(r"generations/[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}", target):
+            raise ValueError("credential_unavailable")
+        generations = open_checked("generations", parent=root, directory=True)
+        generation = open_checked(target.split("/")[1], parent=generations, directory=True)
+        fd = open_checked("runtime.env", parent=generation)
+        # A separate duplicated descriptor is closed by the file wrapper.
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            raw = stream.read(1_000_001)
+        if len(raw) > 1_000_000:
+            raise ValueError("credential_unavailable")
+        return raw
+
+
+def _runtime_token(raw: bytes) -> str:
+    """Decode only the single-quoted scalar format emitted by fetch-secrets.sh."""
+    text = raw.decode("utf-8")
+    if "\r" in text or "\x00" in text:
         raise ValueError("credential_unavailable")
-    return LineClient(values[0])
+    values = {}
+    for line in text.splitlines():
+        match = re.fullmatch(r"([A-Z][A-Z0-9_]+)='((?:[^'\\]|\\['\\])*)'", line)
+        if match is None or match[1] in values:
+            raise ValueError("credential_unavailable")
+        values[match[1]] = re.sub(r"\\(['\\])", r"\1", match[2])
+    token = values["LINE_CHANNEL_ACCESS_TOKEN"]
+    if not token or any(ord(c) < 33 or ord(c) > 126 for c in token):
+        raise ValueError("credential_unavailable")
+    return token
+
+
+def client() -> LineClient:
+    # Never change the root-only policy for plans/config/manifests to read secrets.
+    try:
+        token = _runtime_token(_runtime_secret_bytes())
+    except (OSError, KeyError, ValueError):
+        raise ValueError("credential_unavailable") from None
+    return LineClient(token)
 
 
 def authorize(context: dict, plan: dict, checksum: str) -> None:
