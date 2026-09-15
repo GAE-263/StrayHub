@@ -15,7 +15,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-ALLOWED_ENVIRONMENTS = frozenset({"acceptance", "demo", "gcp-demo"})
+ALLOWED_ENVIRONMENTS = frozenset({"acceptance", "demo", "gcp-demo", "local"})
 CONFIRMATION_ENV = "STRAYHUB_ALLOW_ACCEPTANCE_BOOTSTRAP"
 PASSWORD_ENV = "ACCEPTANCE_BOOTSTRAP_PASSWORD"
 PASSWORD_FILE_ENV = "ACCEPTANCE_BOOTSTRAP_PASSWORD_FILE"

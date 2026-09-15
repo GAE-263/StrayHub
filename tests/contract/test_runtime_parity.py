@@ -52,7 +52,16 @@ def test_mutable_image_and_build_are_rejected(models):
 
 def test_public_staging_port_is_rejected(models):
     changed = copy.deepcopy(models["staging"])
-    changed["services"]["api"]["ports"][0]["host_ip"] = "0.0.0.0"
-    assert "staging: api publishes outside loopback" in compare(
+    changed["services"]["staging-edge"]["ports"][0]["host_ip"] = "0.0.0.0"
+    assert "staging: staging-edge publishes outside loopback" in compare(
         models["production"], changed, "staging"
     )
+
+
+def test_staging_edge_cannot_receive_secrets_or_expose_api_directly(models):
+    changed = copy.deepcopy(models["staging"])
+    changed["services"]["staging-edge"]["environment"] = {"TOKEN": "unsafe"}
+    changed["services"]["api"]["ports"] = [{"host_ip": "127.0.0.1"}]
+    errors = compare(models["production"], changed, "staging")
+    assert "staging: edge must not receive configuration or secrets" in errors
+    assert "staging: api must not publish ports directly" in errors

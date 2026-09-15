@@ -33,13 +33,16 @@ APPLICATION_IMAGES = {
     "celery-beat": "worker",
     "web": "web",
 }
+STAGING_EDGE_COMMAND = ["python", "-m", "scripts.local_staging_proxy"]
+STAGING_EDGE_PORTS = {("127.0.0.1", 8081, "18082"), ("127.0.0.1", 8080, "13002")}
 
 
 def compare(reference: dict, candidate: dict, environment: str) -> list[str]:
     errors = []
     expected = reference["services"]
     actual = candidate["services"]
-    if set(expected) != set(actual):
+    allowed_extra = {"staging-edge"} if environment == "staging" else set()
+    if set(actual) - allowed_extra != set(expected):
         errors.append(f"{environment}: service graph differs")
     for name in sorted(set(expected) & set(actual)):
         for field in PROCESS_FIELDS:
@@ -76,6 +79,34 @@ def compare(reference: dict, candidate: dict, environment: str) -> list[str]:
                 errors.append(f"staging: {name} lacks an exact digest")
         if not candidate.get("networks", {}).get("strayhub_runtime", {}).get("internal"):
             errors.append("staging: outbound network is not isolated")
+        edge = actual.get("staging-edge", {})
+        if edge.get("image") != actual.get("api", {}).get("image"):
+            errors.append("staging: edge must use the immutable API release image")
+        if set(edge.get("networks", {})) != {"strayhub_runtime", "staging_ingress"}:
+            errors.append("staging: edge network boundary differs")
+        if candidate.get("networks", {}).get("staging_ingress", {}).get("internal"):
+            errors.append("staging: ingress network cannot publish loopback ports")
+        if edge.get("environment") or edge.get("secrets") or edge.get("volumes"):
+            errors.append("staging: edge must not receive configuration or secrets")
+        if (
+            not edge.get("read_only")
+            or edge.get("cap_drop") != ["ALL"]
+            or edge.get("security_opt") != ["no-new-privileges:true"]
+            or edge.get("command") != STAGING_EDGE_COMMAND
+        ):
+            errors.append("staging: edge sandbox is incomplete")
+        ports = {
+            (port.get("host_ip"), port.get("target"), str(port.get("published")))
+            for port in edge.get("ports", [])
+        }
+        if ports != STAGING_EDGE_PORTS:
+            errors.append("staging: edge port contract differs")
+        for port in edge.get("ports", []):
+            if port.get("host_ip") != "127.0.0.1":
+                errors.append("staging: staging-edge publishes outside loopback")
+        for name in ("api", "web"):
+            if actual.get(name, {}).get("ports"):
+                errors.append(f"staging: {name} must not publish ports directly")
     # Compose resolves unnamed resources under the project name; explicit shared
     # names or external resources would silently bypass environment isolation.
     if candidate.get("name") == reference.get("name"):
