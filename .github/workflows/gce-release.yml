@@ -44,6 +44,14 @@ on:
         description: Exact bundle SHA-256 from the verified publication receipt (deploy only)
         required: false
         type: string
+      staging_run_id:
+        description: Successful hosted Docker staging run ID (deploy only)
+        required: false
+        type: string
+      staging_artifact_identity:
+        description: Exact staging attestation artifact ID:SHA256 (deploy only)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -196,6 +204,17 @@ jobs:
           printf 'deployed_sha=%s\n' "$INPUT_SHA" >>"$GITHUB_OUTPUT"
           printf 'bundle_sha256=%s\n' "$BUNDLE_SHA256" >>"$GITHUB_OUTPUT"
           printf 'publication_run_id=%s\n' "$PUBLICATION_RUN_ID" >>"$GITHUB_OUTPUT"
+      - name: Validate hosted staging evidence before deployment credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          STAGING_ARTIFACT_IDENTITY: ${{ inputs.staging_artifact_identity }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          BUNDLE_SHA256: ${{ inputs.release_bundle_sha256 }}
+        run: |
+          python3 -m scripts.staging_attestation verify \
+            --run-id "$STAGING_RUN_ID" --artifact-identity "$STAGING_ARTIFACT_IDENTITY" \
+            --git-sha "$INPUT_SHA" --bundle-sha256 "$BUNDLE_SHA256" --publication release-bundle
       - id: config
         name: Validate versioned non-secret deployment configuration
         run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"

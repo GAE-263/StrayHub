@@ -1,6 +1,7 @@
 # Immutable GCE Release Process
 
-Status: single-operator manual publication/deployment gates **IMPLEMENTED IN REPOSITORY**; live activation pending
+Status: immutable publication is live. Hosted Docker staging and receipt-gated production
+promotion are implemented; Phase 5 hosted-run and production activation acceptance is pending.
 
 Deletion safety: **BLOCKED**
 
@@ -37,13 +38,16 @@ Registry is the canonical release store.
 `.github/workflows/gce-release.yml` runs only for `release` pushes and manual operations and calls
 the primary CI as its reusable verification gate. Its manual publication path now consumes the
 canonical main artifact with `--reuse-only` and only adds the publication receipt; it cannot build
-a second image set. Staging promotion remains a later phase, and Phase 2 does not deploy
-production.
+a second image set. The same build workflow now runs hosted Docker staging after publication;
+production additionally requires its successful run and exact attestation archive identity.
+See [Phase 5 promotion](hosted-staging-promotion.md).
 
 The new build workflow requires the publisher WIF provider to trust its exact `main` workflow
 identity and the `release-publication` environment. The repository wiring alone cannot grant that
-GCP trust. Until the external WIF condition is updated, the workflow is intentionally reviewable
-but must not be dispatched as a live build.
+GCP trust. The exact publisher route is active and was verified by successful publisher runs
+`34961402629` and `34961806247`, which reused the same OCI digest. A 2026-09-15 readback confirms
+the route still requires `run_attempt=1`: retry by dispatching a new run for the same main SHA,
+not by using GitHub's re-run button. The new hosted staging job uses this same workflow route.
 
 This repository uses a **single-operator manual gate**. It is not an independent human approval
 control. GitHub Environment names are retained only as OIDC identity namespaces and are not treated
@@ -97,7 +101,7 @@ Registry permission/network errors and empty digest responses stop publication; 
 `NOT_FOUND` permits a build. Reuse pulls the resolved digest and extracts the scratch image without
 starting a container. Executable regression tests exercise the real bundle scripts against a
 simulated registry, including first publication, retry, partial publication, and corrupt identity.
-These tests do not replace the pending live GCP build and same-SHA rerun acceptance.
+Live publication and same-SHA reuse were also confirmed by runs `34961402629` and `34961806247`.
 
 | Store | Role in this design | Limitation |
 | --- | --- | --- |

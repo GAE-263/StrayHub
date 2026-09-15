@@ -47,6 +47,10 @@ REFERENCE_ALLOWLIST = {
     "infra/gce/secrets/acceptance-secret-map.tsv",
     "infra/gce/verification/README.md",
     "review.md",
+    # Generates fresh disposable hosted-runner keys outside the repository;
+    # validates private permissions and never uploads keys or reads production secrets.
+    "scripts/staging_attestation.py",
+    "tests/contract/test_staging_attestation.py",
     # Executes deployment prerequisites in tmp_path with non-credential text;
     # never reads or generates real signing keys.
     "tests/contract/test_deploy_release_failures.py",
