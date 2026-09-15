@@ -164,6 +164,9 @@ class Settings(BaseSettings):
     # suitability-analysis feature's own direct Gemini REST integration, with
     # no shared code path. Left unset, the background analysis task simply
     # skips itself and logs, so no environment breaks by omission.
+    gemini_use_runtime_identity: bool = False
+    gemini_vertex_project: str = ""
+    gemini_runtime_service_account: str = ""
     gemini_api_key: str | None = None
     gemini_model_name: str = "gemini-3.5-flash-lite"
     # Alternative to gemini_api_key: a GCP service account JSON key file,
@@ -209,6 +212,14 @@ class Settings(BaseSettings):
         """Staff LINE entry is independently opt-in and keeps normal role checks."""
         return self.line_staff_menu_enabled and self.line_role_menu_allowed(line_user_id)
 
+    @property
+    def gemini_configured(self) -> bool:
+        return bool(
+            self.gemini_use_runtime_identity
+            or self.gemini_api_key
+            or self.gemini_service_account_path
+        )
+
     def validate_runtime_safety(self, *, process: str = "api") -> "Settings":
         """Reject unsafe defaults before a non-local process starts work."""
 
@@ -229,6 +240,16 @@ class Settings(BaseSettings):
                 )
                 problems.append(f"{field_name} {reason}")
 
+        if self.gemini_use_runtime_identity:
+            if not re.fullmatch(r"[a-z][a-z0-9-]{4,61}[a-z0-9]", self.gemini_vertex_project):
+                problems.append("GEMINI_VERTEX_PROJECT is invalid")
+            if not re.fullmatch(
+                r"[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com",
+                self.gemini_runtime_service_account,
+            ):
+                problems.append("GEMINI_RUNTIME_SERVICE_ACCOUNT is invalid")
+            if environment == "acceptance":
+                problems.append("GEMINI_USE_RUNTIME_IDENTITY must be false in acceptance")
         missing("DATABASE_URL", self.database_url)
         if self.database_url and is_loopback_url(self.database_url):
             problems.append("DATABASE_URL uses a loopback host")
@@ -289,15 +310,16 @@ class Settings(BaseSettings):
             missing("MINIO_BUCKET", self.minio_bucket)
             if self.celery_ai_enabled:
                 placeholder("LINE_CHANNEL_ACCESS_TOKEN", self.line_channel_access_token)
-                if not self.gemini_api_key and not self.gemini_service_account_path:
+                if not self.gemini_configured:
                     problems.append(
                         "GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH is required when "
                         "CELERY_AI_ENABLED=true"
                     )
-                if self.gemini_api_key:
+                if self.gemini_api_key and not self.gemini_use_runtime_identity:
                     placeholder("GEMINI_API_KEY", self.gemini_api_key)
                 if (
-                    self.gemini_service_account_path
+                    not self.gemini_use_runtime_identity
+                    and self.gemini_service_account_path
                     and not Path(self.gemini_service_account_path).is_file()
                 ):
                     problems.append("GEMINI_SERVICE_ACCOUNT_PATH does not exist")

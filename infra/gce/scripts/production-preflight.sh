@@ -193,7 +193,7 @@ broker_url="$(env_value "$runtime_env" CELERY_BROKER_URL)"
   fail "CELERY_BROKER_URL must not use a loopback host"
 [[ "$broker_url" == *"redis://:"*"@redis:6379/"* ]] ||
   fail "CELERY_BROKER_URL must use authenticated private Redis DNS"
-if [[ "$celery_ai_enabled" == "true" ]]; then
+if [[ "$celery_ai_enabled" == "true" && "$(env_value "$CONFIG_ENV" GEMINI_USE_RUNTIME_IDENTITY 2>/dev/null || true)" != "true" ]]; then
   gemini_key="$(env_value "$runtime_env" GEMINI_API_KEY 2>/dev/null || true)"
   gemini_path="$(env_value "$CONFIG_ENV" GEMINI_SERVICE_ACCOUNT_PATH 2>/dev/null || true)"
   [[ -n "$gemini_key" || -n "$gemini_path" ]] ||
@@ -248,6 +248,10 @@ if any(services[name]["environment"].get("ANIMAL_CONFIRMATION_SECRET")
     sys.exit("[Production secret preflight] FAIL: signing key exposed to non-signing service")
 # Legacy worker is a database-backed process, validated separately below.
 environments = [services[name]["environment"] for name in ("api", "celery-worker", "celery-beat")]
+for key in ("GEMINI_USE_RUNTIME_IDENTITY", "GEMINI_VERTEX_PROJECT", "GEMINI_RUNTIME_SERVICE_ACCOUNT"):
+    values = [env.get(key) for env in [*environments, services["worker"]["environment"]]]
+    if any(value != values[0] for value in values):
+        sys.exit("[Production secret preflight] FAIL: inconsistent runtime identity configuration")
 for key in ("CELERY_BROKER_URL", "CELERY_AI_ENABLED"):
     values = [env.get(key) for env in environments]
     if not values[0] or any(value != values[0] for value in values):
