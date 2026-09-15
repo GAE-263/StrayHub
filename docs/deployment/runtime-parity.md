@@ -20,19 +20,21 @@ than inventing an HTTP health endpoint. Phase 4 must verify their running state 
 
 | Contract | Local runtime | Staging | Production |
 | --- | --- | --- | --- |
-| Application graph, commands, dependencies, healthchecks | Shared base | Shared base | Shared base |
+| Application graph, commands, dependencies, healthchecks | Shared base | Shared base plus a constrained ingress-only edge | Shared base |
 | Images | Same Dockerfiles; local build or selected digest | Required release digests, no build | Release digest env, existing no-build deploy |
 | API / Web host ports | Loopback 18081 / 13001 | Loopback 18082 / 13002 | Existing edge-facing configured ports |
 | PostgreSQL / MinIO / Redis | Loopback debug ports 65433 / 19000 / 16379 | Internal network only | Internal network only |
-| Volumes and network | `strayhub-local-runtime` project | Local Docker `strayhub-staging` project; internal network blocks outbound traffic | `strayhub-production` project |
+| Volumes and network | `strayhub-local-runtime` project | Isolated `strayhub-staging` project; applications stay on an internal network, while a secret-free edge alone joins the ingress network | `strayhub-production` project |
 | Config / secrets | Dedicated local env and generated local JWT files | Dedicated local JWT/AES keys; mock AI; `APP_ENV=local` | Existing protected production generations |
 | HTTPS / nginx | Optional external ngrok/nginx; direct local ports are HTTP | Local HTTP; cloud HTTPS checks remain pending | Existing managed nginx edge |
 | LINE / data | Local/test channel and fictional data | Disabled outbound LINE; fictional data only | Production channel and records |
-| Deployment lifecycle | Compose wrapper, explicit migration then startup | Manual immutable artifact fetch, validation, migration, runtime-only receipt | Existing manifest/preflight/migration/systemd/receipt lifecycle |
+| Deployment lifecycle | Compose wrapper, explicit migration then startup | Immutable artifact validation, migration, live acceptance and one fail-closed receipt | Existing manifest/preflight/migration/systemd/receipt lifecycle |
 
-Ingress lives outside the application Compose graph today. Adding a new nginx service only
-to Staging would conceal that difference. Local Docker does not verify the cloud HTTPS edge,
-its routing or upload/security rules; a passing Compose comparison is not ingress parity.
+The Staging-only TCP edge contains no runtime environment, secrets or storage mounts. It is
+read-only, drops all Linux capabilities, enables `no-new-privileges`, uses the exact API release
+image, and publishes only `127.0.0.1:18082` and `127.0.0.1:13002`. API and Web publish no ports
+directly and remain unable to reach external networks. This proves local ingress availability,
+not parity with the production HTTPS/nginx routing and upload/security policy.
 
 The old `infra/local/docker-compose.yml` stays available as an **infrastructure-only test
 fixture** for existing host-run unit/integration tests and their data volumes. It is not the
@@ -59,9 +61,9 @@ bash scripts/runtime-compose.sh /absolute/path/local.env up -d api worker celery
 `scripts/check_runtime_parity.py` renders all three models with every profile enabled, including
 migration. It compares service membership, images, commands, entrypoints, dependencies,
 healthchecks, environment key sets (with explicit local AES config additions), mount contracts
-and network membership. It rejects shared
-production resource names, public local/staging ports, mutable staging image references and
-staging build definitions. Rendered secrets are never printed by the checker.
+and network membership. It permits only the exact constrained Staging edge described above and
+rejects other graph additions, shared production resources, public ports, mutable Staging image
+references and Staging build definitions. Rendered secrets are never printed by the checker.
 
 Run `uv run pytest tests/contract/test_runtime_parity.py`. The fixture uses synthetic config
 and digest values; mutation tests prove contract drift is rejected. These are Compose model
@@ -79,13 +81,30 @@ to a manually initiated local release rehearsal. No VM, DNS, self-hosted runner 
 deployment is created. Release images remain immutable `linux/amd64` images, including on Macs.
 
 The local runner reuses artifact checksum/manifest/extraction validation and the canonical
-Compose bundle. It does not invoke production-only systemd/deploy scripts. Its local overlay
-is hashed separately in evidence: this is not an assertion that local configuration was part
-of an older artifact. Local-only AES config and internal networking are intentional differences.
+Compose bundle. It does not invoke production-only systemd/deploy scripts. The receipt binds the
+local runner and overlay hashes separately from the selected artifact identity. Local-only AES
+configuration, synthetic data and internal networking are intentional differences.
 
-Live authenticated multi-shelter E2E, migration revision readback, task execution and cloud
-WIF/IAP/IAM/KMS/HTTPS checks remain acceptance work. Runtime-only PASS is **not** Phase 4
-acceptance or authorization for production promotion. No cloud equivalence is claimed.
+The local Phase 4 scope now performs exact Alembic revision readback, guarded deterministic
+synthetic bootstrap, authenticated login/API/QR/care-report flows, positive tenant-A access,
+negative tenant-B access, cross-shelter denial, runtime-role `BYPASSRLS`/superuser checks, RLS
+inventory, container image/health checks and both loopback probes. Bootstrap cancels unfinished
+drafts only for the exact synthetic tenant/volunteer, and report idempotency is bound to the new
+draft, so an interrupted attempt can be safely rerun against retained volumes.
+
+The successful immutable artifact for code acceptance was publisher run `34971497626`, Git SHA
+`e77a1745f81a9e80e28717b8984715bd5be9aa47`, release artifact digest
+`sha256:0b8cb3ebe463f955b27c33a304bbacd86ee947c0ab3e69c6549c0dba048f81cf`.
+Fresh attempts `attempt-006` and `attempt-007` both passed against the same artifact and retained
+volumes. Their protected local receipt SHA-256 values are respectively
+`59cd57c751d2a72daaeed7b331dfe3abfd0fcab2fdfec4107d726e7679a893e8` and
+`634c87adf0d35f88998347f624ad02d0b7398588ae2fb88102945ba6e6ad20f1`.
+
+This completes the user-selected **local Docker** Phase 4 scope. It does not claim GCP Staging
+equivalence: WIF/IAP/IAM/KMS, public HTTPS/nginx, systemd/reboot and live LINE resources are not
+applicable to this local environment. Worker and Beat running state is checked, but successful
+background task execution is not claimed. Every local receipt records cloud checks as
+`NOT_APPLICABLE_LOCAL` and `production_promotion_approved: false`; it cannot authorize production.
 
 ## Revert
 
