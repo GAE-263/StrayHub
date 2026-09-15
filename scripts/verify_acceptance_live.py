@@ -224,7 +224,7 @@ async def verify_live(*, base_url: str, password: str) -> dict:
         report = _require(
             await client.post(
                 "/v1/care-reports",
-                headers={**headers, "Idempotency-Key": "e5b-live-acceptance-20260830-v1"},
+                headers={**headers, "Idempotency-Key": f"e5b-live-{draft['id']}"},
                 json={
                     "draft_id": draft["id"],
                     "observations": ANSWERS,
