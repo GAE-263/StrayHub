@@ -118,7 +118,7 @@ def deploy(args: argparse.Namespace) -> None:
     artifact_dir = args.work_dir / "artifact"
     artifact_dir.mkdir()
     print("Fetching immutable release artifact", flush=True)
-    run(docker + ["pull", args.artifact], env)
+    run(docker + ["pull", "--platform", "linux/amd64", args.artifact], env)
     container = run(
         docker + ["create", args.artifact, "/release-artifact-not-executed"], env
     ).strip()

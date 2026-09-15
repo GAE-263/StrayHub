@@ -41,7 +41,8 @@ services:
       - strayhub_runtime
 
   minio-bootstrap:
-    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    # Official MinIO Quay image, pinned to the amd64 manifest for this release.
+    image: quay.io/minio/mc@sha256:771f5ad7925a6b5e069786d8e847a292de320f1e3e3203647e29f47ec9b3d93b
     restart: "no"
     depends_on:
       minio:
