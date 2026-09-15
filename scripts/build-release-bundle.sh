@@ -61,7 +61,15 @@ git -C "$ROOT_DIR" cat-file -e "${git_sha}^{commit}" || fail "Git revision is no
 [[ ! -e "$output_dir" ]] || fail "output directory already exists: $output_dir"
 
 if [[ -z "$created_at" ]]; then
-  created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # The commit timestamp makes the default release identity deterministic for a
+  # given Git SHA. A rerun may get a different Actions run ID, but it cannot
+  # silently create a second timestamp-derived release identity.
+  commit_epoch="$(git -C "$ROOT_DIR" show -s --format=%ct "$git_sha")"
+  if created_at="$(date -u -d "@$commit_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
+    :
+  else
+    created_at="$(date -u -r "$commit_epoch" +%Y-%m-%dT%H:%M:%SZ)"
+  fi
 fi
 release_stamp="$(printf '%s' "$created_at" | tr -d ':-' | sed 's/\.000000//; s/\.000//')"
 [[ "$release_stamp" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || fail "--created-at must be second-precision RFC3339 UTC"

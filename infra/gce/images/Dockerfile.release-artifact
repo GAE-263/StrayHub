@@ -1,0 +1,8 @@
+FROM scratch
+
+LABEL org.opencontainers.image.title="StrayHub immutable release artifact"
+
+COPY release-manifest.json /release-manifest.json
+COPY checksums.sha256 /checksums.sha256
+COPY deployment-bundle.tar /deployment-bundle.tar
+COPY release-identity.json /release-identity.json

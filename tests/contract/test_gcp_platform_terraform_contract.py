@@ -58,7 +58,8 @@ def test_legacy_source_is_removed_without_weakening_current_release() -> None:
         assert "infra/gcp-demo" not in source
     for dockerfile in ("Dockerfile.api", "Dockerfile.worker", "Dockerfile.web"):
         assert dockerfile in compose
-    assert '"infra/gce/images/Dockerfile.$service"' in workflow
+    assert "scripts/build-immutable-release.sh" in workflow
+    assert "--reuse-only" in workflow
     assert "terraform apply" not in workflow
 
 

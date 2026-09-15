@@ -28,9 +28,22 @@ clean Git SHA
 `.github/workflows/ci.yml` is the only pull-request and `main` quality workflow. It owns the full
 backend/frontend/contracts/critical-E2E matrix plus release shell lint, production
 Compose/preflight, Terraform validation without backend access, and the repository secret scan.
+`.github/workflows/build-release.yml` is the main-only Build once boundary: it builds or reuses the
+three full-SHA image tags, reads back immutable Artifact Registry digests, creates the validated
+manifest/bundle/checksum set, and publishes one OCI release artifact. It never deploys. A rerun of
+the same SHA is serialized and reuses the existing release artifact instead of creating a second
+release identity. The GitHub Actions artifact is only a 30-day convenience download; Artifact
+Registry is the canonical release store.
 `.github/workflows/gce-release.yml` runs only for `release` pushes and manual operations and calls
-that primary CI as its reusable verification gate. Verification does not build images; only an
-authorized manual publication builds the API, Worker, and Web images.
+the primary CI as its reusable verification gate. Its manual publication path now consumes the
+canonical main artifact with `--reuse-only` and only adds the publication receipt; it cannot build
+a second image set. Staging promotion remains a later phase, and Phase 2 does not deploy
+production.
+
+The new build workflow requires the publisher WIF provider to trust its exact `main` workflow
+identity and the `release-publication` environment. The repository wiring alone cannot grant that
+GCP trust. Until the external WIF condition is updated, the workflow is intentionally reviewable
+but must not be dispatched as a live build.
 
 This repository uses a **single-operator manual gate**. It is not an independent human approval
 control. GitHub Environment names are retained only as OIDC identity namespaces and are not treated
@@ -66,25 +79,50 @@ dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitl
 resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM and exact
 WIF conditions are configured, repository wiring is ready but manual deployment remains blocked.
 
+### Phase 2 artifact identity
+
+The canonical release reference is:
+
+```text
+asia-east1-docker.pkg.dev/<project>/strayhub/strayhub-release:<full-main-sha>@sha256:<artifact-digest>
+```
+
+The OCI artifact contains `release-manifest.json`, `checksums.sha256`,
+`deployment-bundle.tar`, and `release-identity.json`. The identity records the full source SHA,
+release ID, each exact API/Worker/Web digest, and the manifest/bundle checksums. The build script
+refuses a dirty or mismatched checkout, reads existing tags before building, uses per-service
+BuildKit GHA cache when available, emits OCI revision/source labels and BuildKit provenance, and
+fails closed if a previously published artifact's identity does not agree with its manifest.
+
+| Store | Role in this design | Limitation |
+| --- | --- | --- |
+| GitHub Actions artifact | Short-lived operator download (30 days) | Bound to a workflow run; not the deployment identity |
+| GitHub Release asset | Human-facing version attachment | Adds release/tag lifecycle and is not the registry's digest-native source |
+| Artifact Registry OCI artifact | Canonical release identity and promotion source | Requires publisher/reader IAM and registry retention policy |
+
+Artifact Registry is selected because the runtime already pulls OCI images from it and the same
+full-SHA plus digest identity can be promoted without translating between storage systems.
+
+To inspect a published artifact without deploying it, download the matching GitHub Actions
+convenience artifact or extract the OCI artifact and run:
+
+```bash
+infra/gce/scripts/release-manifest.py validate-artifact --artifact-dir release-bundle
+```
+
 The publish job runs only for `operation=publish`, repository `GAE-263/StrayHub`, event
 `workflow_dispatch`, `refs/heads/release`, and four identical identities: input SHA, GitHub SHA,
 checkout HEAD, and the authoritative GitHub API release HEAD. Both `github.actor` and
 `github.triggering_actor` must be exactly `yawan0203`, and `github.run_attempt` must be exactly `1`.
-The job repeats those checks itself before WIF and repeats the authoritative release readback
-immediately before its first image push. Confirmation is case-sensitive and whitespace-sensitive.
-It builds from the full protected-branch SHA, applies OCI source/revision labels, pushes each image,
-resolves its registry digest, and runs:
+The job repeats those checks before WIF, confirms Docker authentication, and downloads the existing
+canonical artifact for the full protected-branch SHA:
 
 ```bash
-./scripts/build-release-bundle.sh \
+./scripts/build-immutable-release.sh \
   --git-sha "$FULL_GIT_SHA" \
-  --api-image "$API_REPOSITORY@sha256:..." \
-  --worker-image "$WORKER_REPOSITORY@sha256:..." \
-  --web-image "$WEB_REPOSITORY@sha256:..." \
-  --schema-compatibility unknown \
-  --ci-run-id "$RUN_ID" \
-  --ci-workflow "$WORKFLOW" \
-  --output-dir release-bundle
+  --registry "$ARTIFACT_REGISTRY" \
+  --output-dir release-bundle \
+  --reuse-only
 ```
 
 The builder refuses a dirty checkout, a SHA other than `HEAD`, mutable/invalid image references,

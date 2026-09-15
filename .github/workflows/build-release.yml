@@ -1,0 +1,68 @@
+name: Build Immutable Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact lowercase 40-character main SHA to build or resume
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: immutable-release-${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: Build and publish immutable release
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REVISION: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact main source revision
+        run: |
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$REVISION" ]]
+          [[ "$(git rev-parse origin/main)" == "$REVISION" ]]
+          [[ -z "$(git status --porcelain)" ]]
+      - id: config
+        name: Validate versioned non-secret release configuration
+        run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.provider }}
+          service_account: ${{ steps.config.outputs.publisher }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Artifact Registry Docker authentication
+        env:
+          REGISTRY: ${{ steps.config.outputs.registry }}
+        run: gcloud auth configure-docker "${REGISTRY%%/*}" --quiet
+      - name: Build or resume exact immutable release
+        env:
+          REGISTRY: ${{ steps.config.outputs.registry }}
+        run: scripts/build-immutable-release.sh --git-sha "$REVISION" --registry "$REGISTRY" --output-dir release-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strayhub-immutable-release-${{ env.REVISION }}
+          path: release-bundle/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record immutable release identity
+        run: |
+          cat release-bundle/artifact-identity.env >>"$GITHUB_STEP_SUMMARY"
+          printf 'Actions artifact is a convenience copy; Artifact Registry is the canonical release store.\n' >>"$GITHUB_STEP_SUMMARY"
