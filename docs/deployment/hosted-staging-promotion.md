@@ -1,7 +1,9 @@
 # Phase 5: hosted Docker staging and production promotion
 
-Implementation is ready for review. Hosted execution and production promotion still need live
-acceptance after this change reaches the protected branches. No new GCP VM is required.
+Status at the 2026-09-15 acceptance checkpoint: hosted Docker staging passed and the gated
+workflow is active on both `main` and `release`. The first production promotion through this gate
+has NOT been performed; Phase 5 end-to-end production acceptance remains pending. No new GCP VM
+was created. See the [acceptance record](cicd-phase-5-6-acceptance.md) for exact identities and runs.
 
 ## Step 1: hosted staging evidence
 
@@ -59,12 +61,15 @@ receipt; application images and the deployment bundle remain unchanged.
 ## Branch transition and activation
 
 The existing production WIF route still requires `gce-release.yml@refs/heads/release` and exact
-release HEAD. To promote a tested main SHA, `release` must select that exact commit through a
-reviewed fast-forward; a new main-to-release merge commit has a different identity and is rejected.
+release HEAD. To promote a tested main SHA, `release` must select that exact commit, normally through
+a reviewed fast-forward; a new main-to-release merge commit has a different identity and is rejected.
 Do not bypass freshness or rebuild a release-only merge SHA. Retiring this branch is Phase 8 work.
-Older workflow code on `release` will not contain the new gate until this reviewed transition is
-performed. Treat Phase 5 as unactivated until both branches have the gated workflow and live hosted
-acceptance has passed. No production dispatch should occur before that point.
+The 2026-09-15 transition could not fast-forward: `release` contained seven historical merge
+commits absent from main. With explicit operator authorization, the old release was backed up and
+an exact-old-SHA `force-with-lease` aligned release to the tested main commit. The backup, old/new
+SHAs and successful push/verify runs are recorded in the acceptance record. This was a one-time
+history transition, not a standing authorization to force-update future releases. Future divergence
+requires a new review; never bypass freshness or silently overwrite branch history.
 
 GitHub Environment names remain OIDC namespaces. The current independent reviewer protection is
 absent; the existing single-operator manual confirmation remains the approval mechanism.
@@ -76,10 +81,11 @@ Secret Manager materialization, public nginx/HTTPS, systemd/reboot and real LINE
 the staging evidence. Worker/Beat checks establish running state, not successful task execution.
 Production retains its existing cloud preflight and receipt/runtime verification.
 
-Run the focused attestation, local staging, runtime parity, immutable release, manual gate and
-release workflow tests. The first live run must show publisher reuse/build PASS, hosted acceptance
-PASS, and one attestation archive. A production activation must show evidence validation before
-the deployer auth step, then read back the exact deployed images and receipt. Existing production
+Focused attestation, local staging, runtime parity, immutable release, manual gate and release
+workflow tests and live hosted acceptance have passed. For the remaining first production
+promotion, record evidence validation before deployer auth, then read back the exact deployed
+images and receipt against the staging identity. The successful Phase 6 verify-only run checked
+the OLD deployed release; it does not substitute for this promotion acceptance. Existing production
 remains in place until a separately authorized manual deployment.
 
 ## Reversal

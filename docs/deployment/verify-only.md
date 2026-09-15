@@ -1,7 +1,8 @@
 # Phase 6: independent production verification
 
-Implementation is local until reviewed, merged and activated on `release`. No production
-verification or deployment has been dispatched as part of this implementation.
+Status at the 2026-09-15 acceptance checkpoint: PR #40 is merged, the workflow is active on
+`release`, and independent production verification passed. No production deployment was performed.
+See the [acceptance record](cicd-phase-5-6-acceptance.md) for exact targets, runs and branch backup.
 
 ## Manual operation
 
@@ -54,7 +55,14 @@ authentication side effects. No authenticated synthetic production writes are pe
 
 ## Acceptance and activation
 
-Run the verify-only, SSH transport, release contract and staging attestation tests plus actionlint.
-After separately authorized merge and exact-SHA release activation, dispatch verify against the
-existing production release before promoting a new release. Record the run URL, target identities
-and all three outcomes. Until that live run passes, Phase 6 cloud acceptance remains pending.
+Local verification passed 128 relevant tests plus Ruff, actionlint and `git diff --check`.
+PR CI, main CI and release-push CI passed. Following explicit merge and branch-transition
+authorization, [run 34986498828](https://github.com/GAE-263/StrayHub/actions/runs/34986498828)
+passed target validation, WIF, SSH transport, exact receipt/runtime and public health checks.
+The full quality gate, publication, deployment and write-authorization jobs were skipped.
+
+The workflow SHA was `2e121a644ff79f290d2d390b6ea4bb49442c947c`; the deployed target was
+`f07c643d63f92a2cf7fdc19078c4ea5418aac539`, release `20260915T055145Z-f07c643d63f9`.
+This demonstrates independent verification of an older deployed SHA without deploying workflow
+HEAD. Phase 6 cloud acceptance is complete. Failure classification was tested locally with
+simulated failures; no SSH outage or unhealthy state was deliberately induced in production.

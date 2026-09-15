@@ -145,6 +145,32 @@ def test_lookup_errors_never_build(release_cli, error):
     )
 
 
+@pytest.mark.parametrize(
+    ("error", "category"),
+    [
+        ("The given credential is rejected by the attribute condition", "WIF_TRUST_REJECTED"),
+        ("iam.serviceAccounts.getAccessToken denied", "SERVICE_ACCOUNT_TOKEN_FAILURE"),
+        ("invalid_grant: token expired", "AUTHENTICATION_FAILURE"),
+        ("PERMISSION_DENIED: NOT_FOUND: nested message", "PERMISSION_DENIED"),
+        ("SERVICE_DISABLED", "API_DISABLED"),
+        ("connection timed out", "NETWORK_OR_SERVICE_FAILURE"),
+        ("unexpected error", "UNKNOWN"),
+    ],
+)
+def test_lookup_diagnostics_are_classified_without_exposing_stderr(release_cli, error, category):
+    run, state = release_cli
+    secret_marker = "SYNTHETIC_PRIVATE_VALUE_DO_NOT_LOG"
+    result, output = run("diagnostic", "--reuse-only", LOOKUP_ERROR=f"{error}\n{secret_marker}")
+    assert result.returncode != 0
+    assert f"category={category} gcloud_exit=1" in result.stderr
+    assert secret_marker not in result.stdout + result.stderr
+    assert error not in result.stdout + result.stderr
+    assert not output.exists()
+    assert all(
+        json.loads(line)[0] != "docker" for line in (state / "calls").read_text().splitlines()
+    )
+
+
 def test_empty_successful_registry_response_is_rejected(release_cli):
     run, state = release_cli
     result, _ = run("empty", EMPTY_DIGEST="1")

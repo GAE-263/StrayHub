@@ -1,7 +1,9 @@
 # Immutable GCE Release Process
 
-Status: immutable publication is live. Hosted Docker staging and receipt-gated production
-promotion are implemented; Phase 5 hosted-run and production activation acceptance is pending.
+Status at 2026-09-15: immutable publication and hosted Docker staging are live; the production
+evidence gate is active on `release`. Phase 6 standalone verify-only passed against the existing
+production release. Phase 5 first end-to-end production promotion remains pending.
+See the [Phase 5/6 acceptance record](cicd-phase-5-6-acceptance.md) for exact runs and identities.
 
 Deletion safety: **BLOCKED**
 
@@ -18,7 +20,8 @@ clean Git SHA
   -> registry@sha256 references
   -> deterministic deployment-bundle.tar
   -> release-manifest.json + checksums.sha256
-  -> merge/push exact commit to release (verification only)
+  -> hosted Docker staging PASS + run-bound attestation
+  -> align release to the exact tested main commit (push runs CI only)
   -> manual immutable publication of exact release HEAD
   -> separate receipt-backed manual WIF + OS Login/IAP deployment
   -> exact receipt/runtime/public-health verification
@@ -36,7 +39,8 @@ the same SHA is serialized and reuses the existing release artifact instead of c
 release identity. The GitHub Actions artifact is only a 30-day convenience download; Artifact
 Registry is the canonical release store.
 `.github/workflows/gce-release.yml` runs only for `release` pushes and manual operations and calls
-the primary CI as its reusable verification gate. Its manual publication path now consumes the
+the primary CI for release pushes and manual publication, not standalone verify or deploy.
+Its manual publication path now consumes the
 canonical main artifact with `--reuse-only` and only adds the publication receipt; it cannot build
 a second image set. The same build workflow now runs hosted Docker staging after publication;
 production additionally requires its successful run and exact attestation archive identity.
@@ -59,12 +63,17 @@ Application publication and deployment read strict versioned non-secret values f
 The manual sequence is:
 
 ```text
-main → release review → release push verification only
+main → hosted staging PASS → exact-SHA release alignment → release push CI only
 → dispatch publish with PUBLISH <full-sha>
 → record publication run/artifact/bundle digests
 → separate dispatch deploy with DEPLOY PRODUCTION <full-sha> <bundle-sha256>
+  plus exact staging run ID and attestation artifact ID:SHA256
 → production receipt verification
 ```
+
+For independent verification without publication or deployment, use `operation=verify` and
+`VERIFY PRODUCTION <deployed-full-sha> <deployed-release-id>` from the release workflow.
+The deployed target may differ from release HEAD. See [verify-only](verify-only.md).
 
 The former variable names are no longer workflow inputs:
 
@@ -80,8 +89,9 @@ GCP_PRODUCTION_ZONE
 
 The publisher and deployer are separate short-lived GitHub OIDC/WIF identities. The registry is a
 dedicated StrayHub Artifact Registry path, not `rrbot-9527` and not an implicitly adopted legacy
-resource. No service-account JSON or SSH private key is accepted. Until the deployer IAM and exact
-WIF conditions are configured, repository wiring is ready but manual deployment remains blocked.
+resource. No service-account JSON or SSH private key is accepted. The existing deployer WIF and
+OS Login/IAP route was exercised successfully by the Phase 6 verify-only acceptance; no IAM
+expansion was made. A new production promotion still requires separate operator authorization.
 
 ### Phase 2 artifact identity
 
@@ -210,7 +220,7 @@ checks public Web/API health. A successful deployment writes a non-secret immuta
 
 The deploy job independently repeats the manual identity and attempt checks and authoritative release
 readback before WIF, then repeats the readback immediately before SSH deployment. The final
-`verify-production` job is bound to that same run's successful deploy outputs. It reconnects through
+`verify-production` job, in deploy mode, is bound to that same run's successful deploy outputs. It reconnects through
 IAP and proves that the current pointer, manifest, successful receipt, and running digest set all
 match the deployed release ID and Git SHA, then checks the canonical public Web/API health endpoints.
 If release advances after deployment, verification records
@@ -223,11 +233,15 @@ verification fail closed. After a failure, start a new `workflow_dispatch` from 
 HEAD with fresh confirmation. A deploy recovery may reference only the explicitly selected,
 validated publication artifact from its trusted source run.
 
-The first transition merge into `release` is safe because GitHub evaluates the workflow definition
+The exact-SHA transition update to `release` does not deploy because GitHub evaluates the workflow definition
 from that pushed commit, whose publication and deployment jobs both require `workflow_dispatch` and
 an exact operation. No Environment approval is needed to suppress writes on that transition push.
 
-### Live activation checklist
+### Infrastructure activation checklist (historical setup and future revalidation)
+
+The release branch and existing WIF/IAP route are active as recorded above. This checklist is not
+an instruction to recreate environments, remove protection, or modify IAM. Revalidate the relevant
+controls before a future promotion; any configuration change needs its own authorization.
 
 Repository implementation does not grant cloud access. Before the first manual deployment, an
 operator must separately verify all of the following in GitHub and GCP:
@@ -277,6 +291,9 @@ Runtime secrets remain only under `/var/lib/strayhub/secrets`, non-secret host c
 under `/etc/strayhub`, and PostgreSQL/MinIO named volumes remain unchanged.
 
 ## Rollback refusal and roll-forward
+
+The existing tools and historical drill below predate this CI/CD refactor. They do not establish
+completion of Phase 7 checkpoint/resume and rollback acceptance for the current release pair.
 
 A rollback target must be the successful receipt's recorded `N-1`. The current `N` manifest must
 explicitly state `backward-compatible-with-previous`; `unknown`, `forward-only`, missing metadata,
@@ -334,6 +351,10 @@ release.
   and do not authorize any release-time Terraform mutation.
 
 ## Phase F4 first immutable release
+
+Historical record (2026-08-31): the F4/F5b sections below describe state and permissions at that
+time, not current production or WIF configuration. Use the dated Phase 5/6 acceptance record above
+for the 2026-09-15 checkpoint. These older drills do not authorize a new production operation.
 
 F3/F4 publication-fix checkpoint `38ab34dc6aaff78e0f3a9f20dbf954a071fb355a` is pushed on
 `review/system_over_all` and is the only approved F4 source revision. The dedicated Docker
