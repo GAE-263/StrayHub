@@ -1308,18 +1308,18 @@ async def _adoption_reply_for_state(
 
 
 def _build_gemini_client(settings) -> GeminiClient | None:
-    """None when neither auth mode is configured — callers treat that as
-    "skip this background task silently". A service account (Vertex AI)
-    takes precedence over a plain API key (AI Studio) when both are set."""
-    if settings.gemini_service_account_path:
-        return GeminiClient(
-            model_name=settings.gemini_model_name,
-            service_account_path=settings.gemini_service_account_path,
-            location=settings.gemini_vertex_location,
-        )
-    if settings.gemini_api_key:
-        return GeminiClient(model_name=settings.gemini_model_name, api_key=settings.gemini_api_key)
-    return None
+    """Use explicit runtime identity when enabled; never fall back on failure."""
+    if not settings.gemini_configured:
+        return None
+    return GeminiClient(
+        model_name=settings.gemini_model_name,
+        api_key=settings.gemini_api_key,
+        service_account_path=settings.gemini_service_account_path,
+        location=settings.gemini_vertex_location,
+        use_runtime_identity=settings.gemini_use_runtime_identity,
+        project_id=settings.gemini_vertex_project,
+        runtime_service_account=settings.gemini_runtime_service_account,
+    )
 
 
 async def _run_adoption_profile_extraction(
@@ -1964,7 +1964,7 @@ async def _organization_today(session, organization_id: UUID) -> date:
     organization = await session.get(Organization, organization_id)
     timezone_name = organization.timezone if organization is not None else "UTC"
     try:
-        timezone_info = ZoneInfo(timezone_name)
+        timezone_info: ZoneInfo | timezone = ZoneInfo(timezone_name)
     except Exception:
         logger.warning(
             "invalid organization timezone; using UTC",
@@ -2054,7 +2054,7 @@ async def _handle_growth_diary_message(
         )
         pending_draft.current_entry_id = entry.id
         pending_draft.entry_date = today
-    configured = bool(get_settings().gemini_service_account_path or get_settings().gemini_api_key)
+    configured = get_settings().gemini_configured
     settings = get_settings()
     celery_enabled = settings.celery_ai_enabled
     local_legacy = (

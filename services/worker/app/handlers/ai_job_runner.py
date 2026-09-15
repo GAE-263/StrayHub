@@ -210,12 +210,15 @@ class AIJobRunner:
         else:
             settings = get_worker_settings()
             raw = None
-            if settings.gemini_api_key or settings.gemini_service_account_path:
+            if settings.gemini_configured:
                 client = GeminiClient(
                     model_name=job.model_name,
                     api_key=settings.gemini_api_key,
                     service_account_path=settings.gemini_service_account_path,
                     location=settings.gemini_vertex_location,
+                    use_runtime_identity=settings.gemini_use_runtime_identity,
+                    project_id=settings.gemini_vertex_project,
+                    runtime_service_account=settings.gemini_runtime_service_account,
                 )
                 try:
                     raw = await client.generate_report_summary(build_prompt(report))
@@ -326,7 +329,7 @@ class AIJobRunner:
     @staticmethod
     def _mark_no_stool_media(job: AIProcessingJob, context: _JobContext) -> None:
         raw = {"skipped": "no_stool_media"}
-        formal = {"observations": []}
+        formal: dict[str, list] = {"observations": []}
         job.raw_ai_output = raw
         job.validation_result = {"status": "valid", "outcome": "skipped"}
         job.failure_reason = None

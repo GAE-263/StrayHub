@@ -456,3 +456,22 @@ def test_vm_rejects_stale_duplicate_malformed_authoritative_head(monkeypatch, ra
     monkeypatch.setattr(operator.http.client, "HTTPSConnection", lambda *a, **k: Connection())
     with pytest.raises(RuntimeError):
         operator.authorize(context, plan, CHECKSUM)
+
+
+def test_keyless_rollout_allows_only_explicit_public_identity(manifest):
+    data = bounded()
+    data["ai"] = {
+        "celery_ai_enabled": True,
+        "gemini_model_name": "gemini-synthetic",
+        "runtime_identity": {
+            "project": "synthetic-project",
+            "service_account": "runtime@synthetic-project.iam.gserviceaccount.com",
+        },
+    }
+    values = validate_rollout(data, manifest, production=False)
+    assert values["GEMINI_USE_RUNTIME_IDENTITY"] == "true"
+    assert values["GEMINI_VERTEX_PROJECT"] == "synthetic-project"
+    assert values["LINE_STAFF_MENU_ENABLED"] == "false"
+    data["ai"]["runtime_identity"]["private_key"] = "not-allowed"
+    with pytest.raises(ValueError, match="runtime_identity_configuration"):
+        validate_rollout(data, manifest, production=False)

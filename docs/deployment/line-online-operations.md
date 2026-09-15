@@ -132,3 +132,32 @@ schema 3 是獨立的 operator 授權路徑，並非 schema 2 真人驗收報告
 正式 global config-sync/preflight 仍驗證完整授權與候選身分；同版本可正常 reload，
 SHA/images/config/menu 改變時必須重新審查授權。撤銷文件後須 disable/reload 清除快取。
 此路徑不自行切 default、遷移使用者、授予志工資格或啟用 Staff。
+
+## Keyless Vertex AI runtime identity
+
+Production Gemini can explicitly select `GEMINI_USE_RUNTIME_IDENTITY=true`,
+`GEMINI_VERTEX_PROJECT` and `GEMINI_RUNTIME_SERVICE_ACCOUNT`. API and Celery use
+Google Compute Engine metadata credentials with short-lived tokens. No local ADC
+file, JSON private key, Secret Manager service-account key or GitHub credential is
+used. Runtime identity takes precedence over legacy API-key/JSON settings and never
+falls back after an identity or token refresh failure. Refresh runs off the asyncio
+loop; errors contain only safe classifications. Legacy authentication remains for
+existing local setups.
+
+The attached VM account needs only model inference permission
+`aiplatform.endpoints.predict` in the selected Vertex project. The production grant
+uses `projects/canvas-primacy-502703-k1/roles/strayhubVertexPredictor`, containing only
+that permission, bound to `strayhub-gce-sa@canvas-primacy-502703-k1.iam.gserviceaccount.com`.
+This role/member was provisioned through the reviewed operator path; it has not
+been imported into the retained platform Terraform state. API enablement,
+billing/model availability and a synthetic real inference must be verified before
+opening the AI features. The VM identity is shared by workloads that can reach its
+metadata service; this is not container-level IAM isolation. Acceptance remains
+AI-disabled and cannot enable this runtime mode through its safety preflight.
+
+A reviewed rollout may provide `ai.runtime_identity` containing only `project` and
+`service_account`. The exact identity participates in the opening report config
+hash and runtime readback; changing identity requires new authorization evidence.
+Configuration, deployment and LINE default/user switching remain separate fresh
+manual operations. Never upload `service.json`, build it into an image, or print
+credential values. Local `service.json` is excluded from Docker build contexts.

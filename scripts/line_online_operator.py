@@ -283,8 +283,17 @@ def assert_menu_scope(plan: dict) -> None:
         "LINE_RICH_MENU_VOLUNTEER_ID",
         "LINE_RICH_MENU_ADOPTION_HUB_ID",
         "LINE_ROLE_MENU_REPORT_SHA256",
+        "CELERY_AI_ENABLED",
+        "GEMINI_MODEL_NAME",
+        "GEMINI_USE_RUNTIME_IDENTITY",
+        "GEMINI_VERTEX_PROJECT",
+        "GEMINI_RUNTIME_SERVICE_ACCOUNT",
     }
-    if any(environment.get(key, "") != values.get(key, "") for key in checked):
+    if any(
+        environment.get(key, "false" if key == "GEMINI_USE_RUNTIME_IDENTITY" else "")
+        != values.get(key, "false" if key == "GEMINI_USE_RUNTIME_IDENTITY" else "")
+        for key in checked
+    ):
         raise ValueError("runtime_config_not_loaded")
     if runtime["State"].get("Health", {}).get("Status") != "healthy":
         raise ValueError("runtime_unhealthy")

@@ -1,15 +1,18 @@
 """Thin client for Google Gemini's `generateContent` REST endpoint — used
 by adoption matching, growth diaries, and background care-report summaries.
 
-Two auth modes, picked automatically by what's configured:
+Explicit runtime identity takes precedence; legacy modes remain available locally:
+
+- Runtime identity — Google Compute Engine metadata credentials and short-lived
+  OAuth tokens. Does not search local ADC files or fall back to API keys/private keys.
 
 - API key (`api_key`) — Google AI Studio's Generative Language API,
   `?key=...` on the query string.
 - Service account (`service_account_path`) — Vertex AI's own copy of the
   same models, authenticated as that service account via a hand-signed
   OAuth2 JWT-bearer exchange (RFC 7523) using `cryptography`, which this
-  project already depends on for PII encryption — no `google-auth`/
-  `google-cloud-aiplatform` SDK needed for this one token exchange.
+  project already depends on for PII encryption. This legacy path is not used
+  when runtime identity is enabled.
 
 Deliberately never raises: every failure mode (missing credentials, network
 error, non-2xx, malformed JSON, missing fields) collapses to `None` so a
@@ -19,16 +22,22 @@ inline with a reply the adopter is waiting on."""
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import re
 import time
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import httpx
+import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from google.auth import compute_engine
+from google.auth.transport.requests import Request
 
 from services.api.app.observability.logging import get_logger
 
@@ -128,17 +137,37 @@ class GeminiClient:
         api_key: str | None = None,
         service_account_path: str | None = None,
         location: str = "us-central1",
+        use_runtime_identity: bool = False,
+        project_id: str = "",
+        runtime_service_account: str = "",
         timeout_seconds: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        if not api_key and not service_account_path:
+        if not use_runtime_identity and not api_key and not service_account_path:
             raise ValueError("GeminiClient needs either api_key or service_account_path")
-        self.api_key = api_key
+        if use_runtime_identity and (
+            not re.fullmatch(r"[a-z][a-z0-9-]{4,61}[a-z0-9]", project_id)
+            or not re.fullmatch(
+                r"[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com", runtime_service_account
+            )
+            or not re.fullmatch(r"[a-z0-9-]+", location)
+        ):
+            raise ValueError("invalid_runtime_identity_configuration")
+        self._runtime_credentials = (
+            compute_engine.Credentials(
+                service_account_email=runtime_service_account, scopes=[_CLOUD_PLATFORM_SCOPE]
+            )
+            if use_runtime_identity
+            else None
+        )
+        self._runtime_service_account = runtime_service_account
+        self._runtime_lock = asyncio.Lock()
+        self.api_key = None if use_runtime_identity else api_key
         self.location = location
         self.model_name = model_name
         self._service_account_info: dict[str, Any] | None = None
-        self._project_id: str | None = None
-        if service_account_path:
+        self._project_id: str | None = project_id if use_runtime_identity else None
+        if service_account_path and not use_runtime_identity:
             # A local JSON read at construction time, not network I/O — the
             # actual key material never leaves this process; only the
             # resulting short-lived OAuth2 access token goes over the wire.
@@ -149,7 +178,27 @@ class GeminiClient:
         self._cached_token: str | None = None
         self._token_expires_at: float = 0.0
 
+    def _refresh_runtime_token(self) -> str:
+        credentials = self._runtime_credentials
+        assert credentials is not None
+        try:
+            if not credentials.valid:
+                with requests.Session() as session:
+                    session.trust_env = False
+                    credentials.refresh(partial(Request(session=session), timeout=10))
+        except Exception:
+            # Never retain provider response, token or ambient credential paths.
+            raise TransientAiError("runtime_identity_unavailable") from None
+        if credentials.service_account_email != self._runtime_service_account:
+            raise PermanentAiError("runtime_identity_mismatch")
+        if not isinstance(credentials.token, str) or not credentials.token:
+            raise TransientAiError("runtime_identity_unavailable")
+        return credentials.token
+
     async def _vertex_access_token(self) -> str:
+        if self._runtime_credentials is not None:
+            async with self._runtime_lock:
+                return await asyncio.to_thread(self._refresh_runtime_token)
         if self._cached_token and time.monotonic() < self._token_expires_at:
             return self._cached_token
         assertion = _sign_service_account_jwt(
@@ -214,7 +263,7 @@ class GeminiClient:
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": generation_config,
         }
-        if self._service_account_info is not None:
+        if self._runtime_credentials is not None or self._service_account_info is not None:
             token = await self._vertex_access_token()
             # The "global" location is a real Vertex AI location (some
             # models — e.g. gemini-3.5-flash-lite — are served there and

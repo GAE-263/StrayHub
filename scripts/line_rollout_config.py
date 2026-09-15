@@ -60,7 +60,11 @@ def validate_rollout(
         ai = doc["ai"]
         if (
             not isinstance(ai, dict)
-            or set(ai) != {"celery_ai_enabled", "gemini_model_name"}
+            or set(ai)
+            not in (
+                {"celery_ai_enabled", "gemini_model_name"},
+                {"celery_ai_enabled", "gemini_model_name", "runtime_identity"},
+            )
             or type(ai["celery_ai_enabled"]) is not bool
             or not isinstance(ai["gemini_model_name"], str)
             or not re.fullmatch(r"gemini-[a-z0-9.-]{1,80}", ai["gemini_model_name"])
@@ -68,6 +72,25 @@ def validate_rollout(
             raise ValueError("ai_configuration")
         values["CELERY_AI_ENABLED"] = str(ai["celery_ai_enabled"]).lower()
         values["GEMINI_MODEL_NAME"] = ai["gemini_model_name"]
+        if "runtime_identity" in ai:
+            identity = ai["runtime_identity"]
+            if (
+                not isinstance(identity, dict)
+                or set(identity) != {"project", "service_account"}
+                or not isinstance(identity["project"], str)
+                or not re.fullmatch(r"[a-z][a-z0-9-]{4,61}[a-z0-9]", identity["project"])
+                or not isinstance(identity["service_account"], str)
+                or not re.fullmatch(
+                    r"[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com", identity["service_account"]
+                )
+            ):
+                raise ValueError("runtime_identity_configuration")
+            values.update(
+                GEMINI_USE_RUNTIME_IDENTITY="true",
+                GEMINI_VERTEX_PROJECT=identity["project"],
+                GEMINI_RUNTIME_SERVICE_ACCOUNT=identity["service_account"],
+            )
+
     if mode == "bounded":
         hashes = doc["user_sha256"]
         if (
