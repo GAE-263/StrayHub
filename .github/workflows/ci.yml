@@ -88,3 +88,32 @@ jobs:
       - run: npm ci --prefix apps/web
       - run: npm --prefix apps/web exec -- playwright install --with-deps chromium
       - run: npm --prefix apps/web run test:e2e:critical
+
+  release-static:
+    name: GCE Release Static Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Shell syntax and lint
+        run: |
+          bash -n scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
+          shellcheck scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
+      - name: Production Compose and preflight contract
+        run: |
+          ./infra/gce/scripts/preflight.sh
+          docker compose -f infra/gce/docker-compose.production.yml --env-file infra/gce/.env.production.example config --quiet
+      - name: Terraform validation without backend access
+        run: |
+          terraform fmt -check -recursive infra/gce/terraform infra/gcp-platform/terraform
+          terraform -chdir=infra/gce/terraform init -backend=false -input=false
+          terraform -chdir=infra/gce/terraform validate
+          terraform -chdir=infra/gcp-platform/terraform init -backend=false -input=false
+          terraform -chdir=infra/gcp-platform/terraform validate
+      - name: Repository-native secret scan
+        run: |
+          ! rg -n --hidden --glob '!.git/**' --glob '!node_modules/**' --glob '!**/.venv/**' --glob '!**/.terraform/**' --glob '!**/*.lock' '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----)' .

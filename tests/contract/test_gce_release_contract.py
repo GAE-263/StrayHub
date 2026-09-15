@@ -482,7 +482,7 @@ def test_gce_release_workflow_requires_separate_manual_write_operations() -> Non
     assert "id-token: write" in workflow
     assert "google-github-actions/auth" in workflow
     assert "workflow_dispatch" in workflow
-    assert "branches: [main, release]" in workflow
+    assert "branches: [release]" in workflow
     assert "paths:" not in release_push
     assert "workflow_call:" in ci_workflow
     assert "environment: release-publication" in workflow
@@ -491,7 +491,7 @@ def test_gce_release_workflow_requires_separate_manual_write_operations() -> Non
     assert "deploy-production:" in workflow
     assert "verify-production:" in workflow
     assert "uses: ./.github/workflows/ci.yml" in workflow
-    assert "needs: [full-quality-gate, verify-release, authorize-manual-write]" in workflow
+    assert "needs: [full-quality-gate, authorize-manual-write]" in workflow
     assert "operation:" in workflow
     assert "options:" in workflow
     assert "- verify" in workflow and "- publish" in workflow and "- deploy" in workflow
