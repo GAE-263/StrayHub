@@ -111,7 +111,8 @@ def validate_model(model: dict) -> None:
         raise ValueError("Staging edge must be the isolated ingress boundary")
     if model["networks"]["staging_ingress"].get("internal"):
         raise ValueError("Staging ingress network must support loopback publication")
-    if edge.get("environment") or edge.get("secrets") or edge.get("volumes"):
+    edge_secret_mounts = edge["secrets"] if "secrets" in edge else None
+    if edge.get("environment") or edge_secret_mounts or edge.get("volumes"):
         raise ValueError("Staging edge must not receive configuration or secrets")
     if (
         not edge.get("read_only")

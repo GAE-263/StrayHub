@@ -86,7 +86,8 @@ def compare(reference: dict, candidate: dict, environment: str) -> list[str]:
             errors.append("staging: edge network boundary differs")
         if candidate.get("networks", {}).get("staging_ingress", {}).get("internal"):
             errors.append("staging: ingress network cannot publish loopback ports")
-        if edge.get("environment") or edge.get("secrets") or edge.get("volumes"):
+        edge_secret_mounts = edge["secrets"] if "secrets" in edge else None
+        if edge.get("environment") or edge_secret_mounts or edge.get("volumes"):
             errors.append("staging: edge must not receive configuration or secrets")
         if (
             not edge.get("read_only")
