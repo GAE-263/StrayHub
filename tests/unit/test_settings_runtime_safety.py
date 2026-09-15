@@ -359,3 +359,29 @@ def test_enabled_celery_worker_requires_broker_line_and_gemini_credentials() -> 
     message = str(caught.value)
     assert "LINE_CHANNEL_ACCESS_TOKEN" in message
     assert "GEMINI_API_KEY or GEMINI_SERVICE_ACCOUNT_PATH" in message
+
+
+def test_keyless_worker_needs_identity_not_private_key():
+    settings = safe_non_local_settings(
+        gemini_use_runtime_identity=True,
+        gemini_vertex_project="synthetic-project",
+        gemini_runtime_service_account="runtime@synthetic-project.iam.gserviceaccount.com",
+        gemini_api_key=None,
+        gemini_service_account_path=None,
+        celery_ai_enabled=True,
+        celery_broker_url="redis://:synthetic@redis:6379/0",
+    )
+    assert settings.gemini_configured
+    assert settings.validate_runtime_safety(process="worker") is settings
+
+
+@pytest.mark.parametrize("field", ["gemini_vertex_project", "gemini_runtime_service_account"])
+def test_keyless_runtime_rejects_missing_identity(field):
+    values = dict(
+        gemini_use_runtime_identity=True,
+        gemini_vertex_project="synthetic-project",
+        gemini_runtime_service_account="runtime@synthetic-project.iam.gserviceaccount.com",
+    )
+    values[field] = ""
+    with pytest.raises(UnsafeRuntimeConfigurationError, match=field.upper()):
+        safe_non_local_settings(**values).validate_runtime_safety()

@@ -151,16 +151,15 @@ def analyze_entry(
             except PermanentStorageError as exc:
                 failure_reason = f"storage_permanent:{exc}"
         can_analyze = bool(snapshot.note or photo is not None)
-        if (
-            snapshot.skip_ai_reason is None
-            and can_analyze
-            and (settings.gemini_service_account_path or settings.gemini_api_key)
-        ):
+        if snapshot.skip_ai_reason is None and can_analyze and (settings.gemini_configured):
             gemini = GeminiClient(
                 model_name=settings.gemini_model_name,
                 api_key=settings.gemini_api_key,
                 service_account_path=settings.gemini_service_account_path,
                 location=settings.gemini_vertex_location,
+                use_runtime_identity=settings.gemini_use_runtime_identity,
+                project_id=settings.gemini_vertex_project,
+                runtime_service_account=settings.gemini_runtime_service_account,
                 timeout_seconds=max(
                     0.25,
                     min(20.0, float(settings.celery_task_soft_time_limit - 1)),

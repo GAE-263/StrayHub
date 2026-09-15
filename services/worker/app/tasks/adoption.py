@@ -112,14 +112,15 @@ def curate_recommendations(
     failure_reason = snapshot.skip_ai_reason
     gemini = None
     try:
-        if snapshot.skip_ai_reason is None and (
-            settings.gemini_service_account_path or settings.gemini_api_key
-        ):
+        if snapshot.skip_ai_reason is None and (settings.gemini_configured):
             gemini = GeminiClient(
                 model_name=settings.gemini_model_name,
                 api_key=settings.gemini_api_key,
                 service_account_path=settings.gemini_service_account_path,
                 location=settings.gemini_vertex_location,
+                use_runtime_identity=settings.gemini_use_runtime_identity,
+                project_id=settings.gemini_vertex_project,
+                runtime_service_account=settings.gemini_runtime_service_account,
                 timeout_seconds=max(
                     0.25,
                     min(20.0, float(settings.celery_task_soft_time_limit - 1)),
@@ -374,14 +375,15 @@ def generate_followups(
     failure_reason = snapshot.skip_ai_reason
     gemini = None
     try:
-        if snapshot.skip_ai_reason is None and (
-            settings.gemini_service_account_path or settings.gemini_api_key
-        ):
+        if snapshot.skip_ai_reason is None and (settings.gemini_configured):
             gemini = GeminiClient(
                 model_name=settings.gemini_model_name,
                 api_key=settings.gemini_api_key,
                 service_account_path=settings.gemini_service_account_path,
                 location=settings.gemini_vertex_location,
+                use_runtime_identity=settings.gemini_use_runtime_identity,
+                project_id=settings.gemini_vertex_project,
+                runtime_service_account=settings.gemini_runtime_service_account,
                 timeout_seconds=max(
                     0.25,
                     min(20.0, float(settings.celery_task_soft_time_limit - 1)),
@@ -656,14 +658,15 @@ def extract_profile(
     failure_reason: str | None = snapshot.skip_ai_reason
     gemini = None
     try:
-        if snapshot.skip_ai_reason is None and (
-            settings.gemini_service_account_path or settings.gemini_api_key
-        ):
+        if snapshot.skip_ai_reason is None and (settings.gemini_configured):
             gemini = GeminiClient(
                 model_name=settings.gemini_model_name,
                 api_key=settings.gemini_api_key,
                 service_account_path=settings.gemini_service_account_path,
                 location=settings.gemini_vertex_location,
+                use_runtime_identity=settings.gemini_use_runtime_identity,
+                project_id=settings.gemini_vertex_project,
+                runtime_service_account=settings.gemini_runtime_service_account,
                 timeout_seconds=max(
                     0.25,
                     min(20.0, float(settings.celery_task_soft_time_limit - 1)),
@@ -923,12 +926,15 @@ def analyze_suitability(
     try:
         if snapshot.skip_ai_reason:
             failure_reason = snapshot.skip_ai_reason
-        elif settings.gemini_service_account_path or settings.gemini_api_key:
+        elif settings.gemini_configured:
             gemini = GeminiClient(
                 model_name=settings.gemini_model_name,
                 api_key=settings.gemini_api_key,
                 service_account_path=settings.gemini_service_account_path,
                 location=settings.gemini_vertex_location,
+                use_runtime_identity=settings.gemini_use_runtime_identity,
+                project_id=settings.gemini_vertex_project,
+                runtime_service_account=settings.gemini_runtime_service_account,
                 timeout_seconds=max(
                     0.25,
                     min(20.0, float(settings.celery_task_soft_time_limit - 1)),

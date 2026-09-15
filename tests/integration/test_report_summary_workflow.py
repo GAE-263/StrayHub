@@ -1,5 +1,4 @@
 import json
-from types import SimpleNamespace
 from uuid import uuid4
 
 import asyncpg
@@ -27,7 +26,7 @@ def summary_credentials(monkeypatch):
     from services.worker.app.handlers import ai_job_runner
 
     real_settings = ai_job_runner.get_worker_settings()
-    settings = SimpleNamespace(**real_settings.model_dump())
+    settings = real_settings.model_copy()
     settings.gemini_api_key = "test-key"
     settings.gemini_service_account_path = None
     monkeypatch.setattr(ai_job_runner, "get_worker_settings", lambda: settings)
