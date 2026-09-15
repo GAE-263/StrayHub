@@ -64,14 +64,35 @@ trap cleanup EXIT
 
 image_digest() {
   local image="$1"
-  local digest
-  if ! digest="$(gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)' 2>"$lookup_error")"; then
+  local digest lookup_status category
+  if digest="$(gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)' 2>"$lookup_error")"; then
+    :
+  else
+    lookup_status=$?
+    # Emit only fixed classifications, never raw stderr, URLs, tokens or credentials.
+    # Authentication/transport failures take precedence over a nested NOT_FOUND message.
+    category=UNKNOWN
+    if grep -Eqi 'attribute condition|invalid_target|invalid audience|audience.*invalid' "$lookup_error"; then
+      category=WIF_TRUST_REJECTED
+    elif grep -Eqi 'iam.serviceAccounts.getAccessToken|generateAccessToken|impersonat' "$lookup_error"; then
+      category=SERVICE_ACCOUNT_TOKEN_FAILURE
+    elif grep -Eqi 'invalid_grant|invalid_request|UNAUTHENTICATED|refresh.*token|expired|authentication|credentials|reauth' "$lookup_error"; then
+      category=AUTHENTICATION_FAILURE
+    elif grep -Eqi 'PERMISSION_DENIED|permission.*denied|403|forbidden' "$lookup_error"; then
+      category=PERMISSION_DENIED
+    elif grep -Eqi 'SERVICE_DISABLED|has not been used|API.*disabled' "$lookup_error"; then
+      category=API_DISABLED
+    elif grep -Eqi 'timed out|timeout|connection|SSL|TLS|DNS|resolve|503|502|UNAVAILABLE' "$lookup_error"; then
+      category=NETWORK_OR_SERVICE_FAILURE
+    fi
     # gcloud emits "Image not found." for a missing tag and NOT_FOUND for some
     # API transports. Both mean the immutable tag has not been published yet;
     # every other lookup failure remains fail-closed to avoid duplicate builds.
-    if grep -Eq 'NOT_FOUND:|Image not found\.' "$lookup_error"; then
+    if [[ "$category" == UNKNOWN ]] && grep -Eq 'NOT_FOUND:|Image not found\.' "$lookup_error"; then
       return 0
     fi
+    printf '[Immutable release] Registry diagnostic: category=%s gcloud_exit=%s\n' \
+      "$category" "$lookup_status" >&2
     fail "registry lookup failed for $image; refusing to rebuild"
   fi
   if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
