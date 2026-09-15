@@ -589,8 +589,8 @@ def test_manual_write_jobs_recheck_release_head_and_reject_reruns() -> None:
             mutation_command = (
                 "docker push" if "docker push" in mutation_step else "build-immutable-release.sh"
             )
-            assert first_gate < credential_helper < last_gate < mutation_step.index(
-                mutation_command
+            assert (
+                first_gate < credential_helper < last_gate < mutation_step.index(mutation_command)
             )
         else:
             assert mutation_step.index("release_head_gate") < mutation_step.index(

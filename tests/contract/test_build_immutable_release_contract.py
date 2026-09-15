@@ -20,8 +20,7 @@ def test_build_workflow_is_main_only_and_serializes_same_sha() -> None:
     assert "cancel-in-progress: false" in text
     assert (
         "immutable-release-${{ github.event_name == 'workflow_dispatch' && "
-        "inputs.git_sha || github.sha }}"
-        in text
+        "inputs.git_sha || github.sha }}" in text
     )
     assert "google-github-actions/auth@v2" in text
     assert "id-token: write" in text
@@ -34,8 +33,8 @@ def test_immutable_builder_reuses_registry_identity_before_building() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
 
     assert "gcloud artifacts docker images describe" in text
-    assert "if [[ -n \"$artifact_digest\" ]]" in text
-    assert "docker cp \"$artifact_container:/release-manifest.json\"" in text
+    assert 'if [[ -n "$artifact_digest" ]]' in text
+    assert 'docker cp "$artifact_container:/release-manifest.json"' in text
     assert "existing release identity manifest checksum mismatch" in text
     assert "bundle_sha256=%s\\n" in text
     assert "buildx build" in text
@@ -43,8 +42,8 @@ def test_immutable_builder_reuses_registry_identity_before_building() -> None:
     assert "--sbom=false" in text
     assert "type=gha,scope=strayhub-$service" in text
     assert "type=gha,mode=max,scope=strayhub-$service" in text
-    assert "--label \"org.opencontainers.image.revision=$git_sha\"" in text
-    assert "--tag \"$artifact_tag\"" in text
+    assert '--label "org.opencontainers.image.revision=$git_sha"' in text
+    assert '--tag "$artifact_tag"' in text
     assert "artifact-identity.env" in text
 
 
@@ -66,5 +65,5 @@ def test_bundle_identity_defaults_to_commit_time_instead_of_wall_clock() -> None
     text = (ROOT / "scripts/build-release-bundle.sh").read_text(encoding="utf-8")
 
     assert 'git -C "$ROOT_DIR" show -s --format=%ct' in text
-    assert "date -u -d \"@$commit_epoch\"" in text
+    assert 'date -u -d "@$commit_epoch"' in text
     assert 'created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"' not in text
