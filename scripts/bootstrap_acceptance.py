@@ -514,6 +514,31 @@ async def _ensure_reportable_scope(
     return scope, "reused"
 
 
+async def _cancel_interrupted_acceptance_drafts(
+    session: AsyncSession, *, organization_id: UUID, volunteer_user_id: UUID
+) -> int:
+    """Reset only unfinished synthetic acceptance work so rehearsals are repeatable."""
+    from services.api.app.persistence.models.care_report_draft import CareReportDraft
+    from sqlalchemy import select
+
+    drafts = list(
+        (
+            await session.scalars(
+                select(CareReportDraft).where(
+                    CareReportDraft.organization_id == organization_id,
+                    CareReportDraft.volunteer_user_id == volunteer_user_id,
+                    CareReportDraft.status == "active",
+                )
+            )
+        ).all()
+    )
+    for draft in drafts:
+        draft.status = "cancelled"
+        draft.current_step = "cancelled"
+    await session.flush()
+    return len(drafts)
+
+
 async def bootstrap_acceptance(
     session: AsyncSession,
     *,
@@ -595,6 +620,11 @@ async def bootstrap_acceptance(
         volunteer_user_id=volunteer_a.id,
         admin_user_id=admin_a.id,
         now=clock,
+    )
+    await _cancel_interrupted_acceptance_drafts(
+        session,
+        organization_id=tenant_a.id,
+        volunteer_user_id=volunteer_a.id,
     )
 
     await set_organization_scope(session, tenant_b.id)

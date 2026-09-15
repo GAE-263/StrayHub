@@ -298,6 +298,21 @@ async def test_acceptance_bootstrap_is_idempotent_and_auth_tenant_volunteer_comp
         )
         assert report.organization_id == first.tenant_a.id
 
+        # Simulate an interrupted live check. A rerun resets only this exact
+        # synthetic volunteer's active draft and leaves submitted evidence intact.
+        interrupted, _ = await CreateReportDraftService(drafts).create(
+            volunteer_user_id=first.volunteer_a.id,
+            organization_id=first.tenant_a.id,
+            membership_id=first.volunteer_membership_a.id,
+            session_id=login["session_id"],
+            animal_id=first.animal_a.id,
+            confirmation_token=confirmation,
+        )
+        assert interrupted.status == "active"
+        rerun = await bootstrap_acceptance(session, password=PASSWORD, now=clock)
+        assert interrupted.status == "cancelled"
+        assert {fixture.status for fixture in rerun.__dict__.values()} == {"reused"}
+
         await set_organization_scope(session, first.tenant_b.id)
         qr_b = await QrCodeRepository(session, first.tenant_b.id).get(first.qr_b.id)
         animal_b = await AnimalRepository(session, first.tenant_b.id).get(first.animal_b.id)
