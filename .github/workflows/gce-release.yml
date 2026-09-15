@@ -15,11 +15,11 @@ on:
           - publish
           - deploy
       git_sha:
-        description: Exact lowercase 40-character release HEAD
+        description: Exact lowercase SHA (deployed target for verify; release HEAD for writes)
         required: true
         type: string
       confirmation:
-        description: Exact operation confirmation including the full SHA
+        description: 'Exact confirmation; verify: VERIFY PRODUCTION <SHA> <release-ID>'
         required: false
         type: string
       schema_compatibility:
@@ -63,7 +63,7 @@ concurrency:
 jobs:
   full-quality-gate:
     name: Full repository quality gate
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation != 'deploy' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation == 'publish' }}
     uses: ./.github/workflows/ci.yml
 
   authorize-manual-write:
@@ -243,8 +243,9 @@ jobs:
   verify-production:
     name: Verify production release
     needs: deploy-production
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && inputs.operation == 'deploy' && needs.deploy-production.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && (inputs.operation == 'verify' || (inputs.operation == 'deploy' && needs.deploy-production.result == 'success')) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: production
     permissions:
       contents: read
@@ -252,10 +253,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.git_sha }}
+          # Execute trusted workflow-revision code, never code from a verify target input.
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - id: target
+        name: Validate exact verification target before credentials
+        env:
+          OPERATION: ${{ inputs.operation }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOYED_RELEASE_ID: ${{ needs.deploy-production.outputs.release_id }}
+        run: |
+          python3 -m scripts.manual_release_gate run-identity --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}' || exit 1
+          [[ "$INPUT_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || exit 1
+          if [[ "$OPERATION" == verify ]]; then
+            prefix="VERIFY PRODUCTION $INPUT_SHA "
+            [[ "$CONFIRMATION" == "$prefix"* ]] || exit 1
+            release_id="${CONFIRMATION#"$prefix"}"
+          else
+            [[ "$OPERATION" == deploy ]] || exit 1
+            release_id="$DEPLOYED_RELEASE_ID"
+          fi
+          [[ "$release_id" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$ ]] || exit 1
+          [[ "${release_id##*-}" == "${INPUT_SHA:0:12}" ]] || exit 1
+          printf 'release_id=%s\n' "$release_id" >>"$GITHUB_OUTPUT"
       - name: Bind verification to the successful deployment in this run
+        if: ${{ inputs.operation == 'deploy' }}
         env:
           DEPLOYED_BUNDLE_SHA256: ${{ needs.deploy-production.outputs.bundle_sha256 }}
           DEPLOYED_PUBLICATION_RUN_ID: ${{ needs.deploy-production.outputs.publication_run_id }}
@@ -269,12 +294,14 @@ jobs:
           [[ "$DEPLOYED_BUNDLE_SHA256" == "$INPUT_BUNDLE_SHA256" && "$DEPLOYED_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$DEPLOYED_PUBLICATION_RUN_ID" == "$INPUT_PUBLICATION_RUN_ID" && "$DEPLOYED_PUBLICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
       - id: release_state
+        if: ${{ inputs.operation == 'deploy' }}
         name: Record whether release advanced after the completed deployment
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_SHA: ${{ inputs.git_sha }}
         run: python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$(git rev-parse HEAD)" --allow-superseded --github-output "$GITHUB_OUTPUT"
       - name: Record deployed release status
+        if: ${{ inputs.operation == 'deploy' }}
         run: |
           printf 'Deployed SHA: `%s`\n' '${{ needs.deploy-production.outputs.deployed_sha }}' >>"$GITHUB_STEP_SUMMARY"
           printf 'Current release SHA: `%s`\n' '${{ steps.release_state.outputs.current_release_sha }}' >>"$GITHUB_STEP_SUMMARY"
@@ -287,6 +314,7 @@ jobs:
           service_account: ${{ steps.config.outputs.deployer }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Establish verification SSH transport
+        id: transport
         env:
           VERIFY_INSTANCE: ${{ steps.config.outputs.instance }}
           VERIFY_PROJECT: ${{ steps.config.outputs.project_id }}
@@ -308,8 +336,43 @@ jobs:
             sleep 10
           done
       - name: Verify exact receipt and runtime over IAP
-        run: gcloud compute ssh "${{ steps.config.outputs.instance }}" --project "${{ steps.config.outputs.project_id }}" --zone "${{ steps.config.outputs.zone }}" --tunnel-through-iap --quiet --command "sudo -n /opt/strayhub/current/infra/gce/scripts/verify-release-receipt.sh --git-sha '${{ inputs.git_sha }}' --release-id '${{ needs.deploy-production.outputs.release_id }}'"
+        id: runtime
+        env:
+          VERIFY_INSTANCE: ${{ steps.config.outputs.instance }}
+          VERIFY_PROJECT: ${{ steps.config.outputs.project_id }}
+          VERIFY_ZONE: ${{ steps.config.outputs.zone }}
+          INPUT_SHA: ${{ inputs.git_sha }}
+          RELEASE_ID: ${{ steps.target.outputs.release_id }}
+        run: |
+          # Map a completed remote verification failure to 40; SSH failure remains 255.
+          if gcloud compute ssh "$VERIFY_INSTANCE" --project "$VERIFY_PROJECT" --zone "$VERIFY_ZONE" --tunnel-through-iap --quiet --ssh-flag='-o ConnectTimeout=15' --command "sudo -n /opt/strayhub/current/infra/gce/scripts/verify-release-receipt.sh --git-sha '$INPUT_SHA' --release-id '$RELEASE_ID' || exit 40"; then
+            echo 'classification=PASS' >>"$GITHUB_OUTPUT"
+          else
+            status=$?
+            case "$status" in
+              255) classification=SSH_TRANSPORT_FAILURE ;;
+              40) classification=REMOTE_VERIFICATION_FAILURE ;;
+              *) classification=TRANSPORT_OR_EXECUTION_FAILURE ;;
+            esac
+            printf 'classification=%s\n' "$classification" >>"$GITHUB_OUTPUT"
+            exit "$status"
+          fi
       - name: Verify canonical public health
+        id: public_health
+        if: ${{ !cancelled() && steps.transport.outcome == 'success' }}
         run: |
           curl --fail --silent --show-error --max-time 15 https://strayhub.enadv.quest/ >/dev/null
           curl --fail --silent --show-error --max-time 15 https://strayhub.enadv.quest/healthz >/dev/null
+      - name: Record independent verification outcomes
+        if: ${{ always() }}
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+          TARGET_RELEASE: ${{ steps.target.outputs.release_id }}
+          TRANSPORT: ${{ steps.transport.outcome }}
+          RUNTIME: ${{ steps.runtime.outputs.classification }}
+          PUBLIC_HEALTH: ${{ steps.public_health.outcome }}
+        run: |
+          printf '### Production verification\n' >>"$GITHUB_STEP_SUMMARY"
+          printf 'Target SHA: `%s`; release: `%s`\n' "$TARGET_SHA" "$TARGET_RELEASE" >>"$GITHUB_STEP_SUMMARY"
+          printf 'SSH probe: `%s`; receipt/runtime: `%s`; public health: `%s`\n' "$TRANSPORT" "${RUNTIME:-NOT_RUN}" "$PUBLIC_HEALTH" >>"$GITHUB_STEP_SUMMARY"
+          printf 'Verification does not build, publish, migrate, restart or deploy.\n' >>"$GITHUB_STEP_SUMMARY"
