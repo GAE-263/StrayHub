@@ -101,6 +101,8 @@ jobs:
           terraform_version: 1.9.8
       - name: Shell syntax and lint
         run: |
+          bash -n scripts/build-immutable-release.sh
+          shellcheck scripts/build-immutable-release.sh
           bash -n scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
           shellcheck scripts/build-release-bundle.sh infra/gce/scripts/deploy-release-ci.sh infra/gce/scripts/deploy-release.sh infra/gce/scripts/rollback-release.sh infra/gce/scripts/verify-release-receipt.sh infra/gce/scripts/acceptance-preflight.sh infra/gce/scripts/cleanup-acceptance.sh infra/gce/scripts/sync-production-config.sh
       - name: Production Compose and preflight contract

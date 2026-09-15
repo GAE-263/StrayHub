@@ -53,8 +53,9 @@ command -v gcloud >/dev/null || fail "gcloud is required"
 [[ "$(git -C "$ROOT_DIR" rev-parse HEAD)" == "$git_sha" ]] || fail "HEAD does not match --git-sha"
 [[ -z "$(git -C "$ROOT_DIR" status --porcelain)" ]] || fail "source checkout must be clean"
 
-mkdir -p "$output_dir"
+lookup_error="$(mktemp)"
 cleanup() {
+  rm -f "$lookup_error"
   if [[ -n "${artifact_container:-}" ]]; then
     docker rm "$artifact_container" >/dev/null 2>&1 || true
   fi
@@ -64,8 +65,13 @@ trap cleanup EXIT
 image_digest() {
   local image="$1"
   local digest
-  digest="$(gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)' 2>/dev/null || true)"
-  if [[ -n "$digest" && ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  if ! digest="$(gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)' 2>"$lookup_error")"; then
+    if grep -q 'NOT_FOUND:' "$lookup_error"; then
+      return 0
+    fi
+    fail "registry lookup failed for $image; refusing to rebuild"
+  fi
+  if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     fail "registry returned an invalid digest for $image"
   fi
   printf '%s' "$digest"
@@ -75,11 +81,12 @@ build_or_reuse_image() {
   local service="$1"
   local image="$registry/strayhub-$service:$git_sha"
   local digest
-  local -a cache_args=()
-  if [[ -n "${ACTIONS_CACHE_URL:-}" && -n "${ACTIONS_RUNTIME_TOKEN:-}" ]]; then
+  local -a cache_args=(--platform linux/amd64)
+  if [[ -n "${ACTIONS_RESULTS_URL:-}" && -n "${ACTIONS_RUNTIME_TOKEN:-}" ]]; then
     cache_args=(
-      --cache-from "type=gha,scope=strayhub-$service"
-      --cache-to "type=gha,mode=max,scope=strayhub-$service"
+      --platform linux/amd64
+      --cache-from "type=gha,scope=strayhub-$service,version=2"
+      --cache-to "type=gha,mode=max,scope=strayhub-$service,version=2"
     )
   fi
   digest="$(image_digest "$image")"
@@ -93,7 +100,7 @@ build_or_reuse_image() {
       --label "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-GAE-263/StrayHub}" \
       --file "$ROOT_DIR/infra/gce/images/Dockerfile.$service" \
       --tag "$image" \
-      "$ROOT_DIR"
+      "$ROOT_DIR" >&2
     digest="$(image_digest "$image")"
   fi
   [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "image digest readback failed for $image"
@@ -103,7 +110,11 @@ build_or_reuse_image() {
 artifact_tag="$registry/strayhub-release:$git_sha"
 artifact_digest="$(image_digest "$artifact_tag")"
 if [[ -n "$artifact_digest" ]]; then
-  artifact_container="$(docker create "$artifact_tag")"
+  mkdir -p "$output_dir"
+  artifact_reference="${artifact_tag%%:*}@$artifact_digest"
+  docker pull "$artifact_reference" >&2
+  # The scratch artifact has no command. This placeholder is never executed.
+  artifact_container="$(docker create "$artifact_reference" /release-artifact-not-executed)"
   docker cp "$artifact_container:/release-manifest.json" "$output_dir/release-manifest.json"
   docker cp "$artifact_container:/checksums.sha256" "$output_dir/checksums.sha256"
   docker cp "$artifact_container:/deployment-bundle.tar" "$output_dir/deployment-bundle.tar"

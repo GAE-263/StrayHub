@@ -93,6 +93,11 @@ release ID, each exact API/Worker/Web digest, and the manifest/bundle checksums.
 refuses a dirty or mismatched checkout, reads existing tags before building, uses per-service
 BuildKit GHA cache when available, emits OCI revision/source labels and BuildKit provenance, and
 fails closed if a previously published artifact's identity does not agree with its manifest.
+Registry permission/network errors and empty digest responses stop publication; only an explicit
+`NOT_FOUND` permits a build. Reuse pulls the resolved digest and extracts the scratch image without
+starting a container. Executable regression tests exercise the real bundle scripts against a
+simulated registry, including first publication, retry, partial publication, and corrupt identity.
+These tests do not replace the pending live GCP build and same-SHA rerun acceptance.
 
 | Store | Role in this design | Limitation |
 | --- | --- | --- |
