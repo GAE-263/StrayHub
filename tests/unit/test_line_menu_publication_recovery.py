@@ -389,3 +389,110 @@ def test_github_adapter_download_failure_is_explicit(plan):
                 current_attempt="1",
                 plan=plan,
             )
+
+
+def storage_failure_archive(plan, tmp_path, mutation=None):
+    """Use the real failure-receipt producer, including its empty orphan list."""
+    progress = progress_document(plan)
+    progress["resources"] = {
+        item["fingerprint"]: {
+            "role": role,
+            "definition_sha256": item["definition_sha256"],
+            "image_sha256": item["image_sha256"],
+            "stage": "ready",
+            "verified": True,
+            "id": "richmenu-" + role.replace("_", "-"),
+            "history": [],
+        }
+        for role, item in plan.items()
+    }
+    progress["recovery"]["manifest_produced"] = True
+    path = tmp_path / "source-progress.json"
+    path.write_bytes(canonical(progress))
+    receipt = failure_receipt(
+        git_sha=GIT_SHA,
+        failure_gate="immutable_manifest_storage",
+        progress_path=path,
+        run_id=SOURCE_RUN,
+        run_attempt=SOURCE_ATTEMPT,
+        verified_manifest_created=True,
+        manifest_uploaded=False,
+        error_code="immutable_manifest_storage",
+    )
+    receipt["timestamp"] = NOW.isoformat()
+    if mutation:
+        mutation(progress, receipt)
+    raw = canonical(progress)
+    receipt["progress_sha256"] = sha256(raw).hexdigest()
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as bundle:
+        bundle.writestr("progress.json", raw)
+        bundle.writestr("receipt.json", canonical(receipt))
+    return stream.getvalue()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("drift", [None, "image", "definition"])
+async def test_storage_failure_resume_revalidates_all_ready_menus_without_line_writes(
+    plan, tmp_path, drift
+):
+    archive = storage_failure_archive(plan, tmp_path)
+    recovered = validate(archive, plan)
+    state = json.loads(recovered)
+    assert state["recovery"]["manifest_produced"] is False
+    assert state["recovery"]["manifest_uploaded"] is False
+    assert all(r["verified"] is False for r in state["resources"].values())
+    path = tmp_path / "resume.json"
+    path.write_bytes(recovered)
+    fake = FakeLine()
+    fake.resources = {r["id"]: plan[r["role"]]["definition"] for r in state["resources"].values()}
+    fake.images = {r["id"]: plan[r["role"]]["image"] for r in state["resources"].values()}
+    if drift == "image":
+        fake.images["richmenu-volunteer"] = b"changed-image"
+    elif drift == "definition":
+        fake.resources["richmenu-volunteer"] = {"name": "changed-definition"}
+    if drift:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(fake.handle)) as client:
+            with pytest.raises(PublicationError):
+                await ResourcePublisher(client).publish(
+                    plan,
+                    path,
+                    BOT,
+                    GIT_SHA,
+                    recovery_identity=state["recovery"],
+                )
+        assert all(method == "GET" for method, _ in fake.calls)
+        return
+    async with httpx.AsyncClient(transport=httpx.MockTransport(fake.handle)) as client:
+        result = await ResourcePublisher(client).publish(
+            plan,
+            path,
+            BOT,
+            GIT_SHA,
+            recovery_identity=state["recovery"],
+        )
+    assert set(result) == set(plan)
+    assert all(method == "GET" for method, _ in fake.calls)
+    for resource_id in result.values():
+        assert ("GET", f"richmenu/{resource_id}") in fake.calls
+        assert ("GET", f"richmenu/{resource_id}/content") in fake.calls
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda p, r: r.update(manifest_uploaded=True),
+        lambda p, r: p["recovery"].update(manifest_uploaded=True),
+        lambda p, r: p["recovery"].update(manifest_produced=False),
+        lambda p, r: r.update(verified_manifest_created=False),
+        lambda p, r: r.update(verified_manifest_created=1),
+        lambda p, r: r.update(failure_gate="resource_publication"),
+        lambda p, r: r.update(orphan_candidate_ids=["richmenu-default"]),
+        lambda p, r: p["resources"].pop(next(iter(p["resources"]))),
+        lambda p, r: next(iter(p["resources"].values())).update(verified=False),
+        lambda p, r: next(iter(p["resources"].values())).update(stage="upload_pending"),
+    ],
+)
+def test_storage_failure_recovery_rejects_inconsistent_state(plan, tmp_path, mutation):
+    with pytest.raises(RecoveryError):
+        validate(storage_failure_archive(plan, tmp_path, mutation), plan)

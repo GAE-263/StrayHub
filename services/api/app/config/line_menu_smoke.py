@@ -322,6 +322,13 @@ def validate_report(settings: Settings) -> None:
         data, checksum = protected_json(settings.line_role_menu_report_file)
         if checksum != settings.line_role_menu_report_sha256:
             raise ValueError("report checksum mismatch")
+        if data.get("schema_version") == 3:
+            from services.api.app.config.line_menu_approval import validate_direct_opening
+
+            manifest, _ = protected_json(settings.line_role_menu_release_file)
+            resources, _ = protected_json(settings.line_role_menu_resources_file)
+            validate_direct_opening(data, settings, manifest, resources)
+            return
         durable = data.get("schema_version") == 2
         if durable:
             from services.api.app.config.line_menu_approval import validate_approval

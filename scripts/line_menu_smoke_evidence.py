@@ -28,7 +28,10 @@ from services.api.app.config.settings import Settings
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("template", "validate", "approve"))
+    parser.add_argument(
+        "operation",
+        choices=("template", "validate", "approve", "direct-template", "authorize-direct"),
+    )
     parser.add_argument("--config-env", type=Path, required=True)
     parser.add_argument("--release-manifest", required=True)
     parser.add_argument("--resources", required=True)
@@ -77,6 +80,68 @@ def main() -> None:
         settings.line_role_menu_release_file = args.release_manifest
         settings.line_role_menu_resources_file = args.resources
         settings.line_role_menu_report_file = args.report
+        if args.operation in {"direct-template", "authorize-direct"}:
+            from services.api.app.config.line_menu_approval import DirectOpening, evidence_digest
+
+            manifest, _ = protected_json(args.release_manifest)
+            resources, _ = protected_json(args.resources)
+            if settings.line_staff_menu_enabled or settings.app_env != "production":
+                raise ValueError("direct opening scope")
+            if args.operation == "direct-template":
+                data = {
+                    "schema_version": 3,
+                    "kind": "operator-authorized-direct-opening",
+                    "environment": "production",
+                    "candidate": release_identity(manifest).model_dump(),
+                    "channel_id": settings.line_channel_id,
+                    "bot_sha256": settings.line_role_menu_bot_sha256,
+                    "config_sha256": config_digest(settings, include_ai=True),
+                    "resources": {
+                        role: menu.model_dump()
+                        for role, menu in required_resources(settings, resources).items()
+                    },
+                    "human_validation": "NOT RUN",
+                    "accept_unverified_user_flows": True,
+                    "staff_enabled": False,
+                    "approval": {
+                        "status": "pending",
+                        "operator": "yawan0203",
+                        "approved_at": "",
+                        "evidence_sha256": "0" * 64,
+                        "reference": "pending",
+                    },
+                }
+                DirectOpening.model_validate(data)
+                output_path = Path(args.report)
+            else:
+                data, checksum = protected_json(args.report)
+                direct = DirectOpening.model_validate(data)
+                if (
+                    direct.approval.status != "pending"
+                    or args.output is None
+                    or args.confirmation
+                    != f"AUTHORIZE DIRECT LINE OPEN {direct.candidate.git_sha} {checksum}"
+                ):
+                    raise ValueError("explicit direct opening confirmation required")
+                data["approval"] = {
+                    "status": "approved",
+                    "operator": "yawan0203",
+                    "approved_at": datetime.now(timezone.utc).isoformat(),
+                    "evidence_sha256": evidence_digest(data),
+                    "reference": args.reference,
+                }
+                from services.api.app.config.line_menu_approval import validate_direct_opening
+
+                validate_direct_opening(data, settings, manifest, resources)
+                output_path = args.output
+            raw = (json.dumps(data, indent=2) + "\n").encode()
+            fd = os.open(output_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, "wb") as output:
+                output.write(raw)
+                output.flush()
+                os.fsync(output.fileno())
+            print("Direct opening attestation; human_validation=NOT RUN; sha256=" + digest(raw))
+            return
         if args.operation == "approve":
             from services.api.app.config.line_menu_approval import evidence_digest
             from services.api.app.config.line_menu_smoke import _scope_contract_valid

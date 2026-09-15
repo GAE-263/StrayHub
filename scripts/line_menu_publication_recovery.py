@@ -113,6 +113,7 @@ def _validate_progress(
     expected_bot: str,
     source_run_id: str,
     source_attempt: str,
+    manifest_produced: bool,
     now: datetime,
 ) -> dict[str, Any]:
     progress = _json(raw, "progress")
@@ -150,7 +151,7 @@ def _validate_progress(
         or recovery["run_id"] != source_run_id
         or recovery["run_attempt"] != source_attempt
         or recovery["operation"] != "publish"
-        or recovery["manifest_produced"] is not False
+        or recovery["manifest_produced"] is not manifest_produced
         or recovery["manifest_uploaded"] is not False
     ):
         raise RecoveryError("resume_source_invalid: recovery identity mismatch")
@@ -221,7 +222,13 @@ def _validate_progress(
             _parse_time(event["at"])
             if not isinstance(event["stage"], str):
                 raise RecoveryError("resume_source_invalid: invalid resource history")
+        if manifest_produced and (
+            resource_id is None or record["stage"] != "ready" or record["verified"] is not True
+        ):
+            raise RecoveryError("resume_source_invalid: incomplete stored-manifest candidate")
         record["verified"] = False
+    if manifest_produced and seen_roles != set(ROLES):
+        raise RecoveryError("resume_source_invalid: incomplete manifest roles")
     if not seen_ids:
         raise RecoveryError("resume_source_invalid: no resumable candidate")
     return progress
@@ -306,7 +313,11 @@ def validate_and_prepare(
         or receipt["git_sha"] != git_sha
         or receipt["workflow"] != {"run_id": source_run_id, "run_attempt": source_attempt}
         or receipt["status"] != "failure"
-        or receipt["verified_manifest_created"] is not False
+        or not isinstance(receipt["verified_manifest_created"], bool)
+        or (
+            receipt["verified_manifest_created"]
+            and receipt["failure_gate"] != "immutable_manifest_storage"
+        )
         or receipt["manifest_uploaded"] is not False
         or not re.fullmatch(r"[0-9a-f]{64}", str(receipt["publication_config_sha256"]))
         or not isinstance(receipt["credential"], dict)
@@ -329,12 +340,15 @@ def validate_and_prepare(
         expected_bot=expected_bot,
         source_run_id=source_run_id,
         source_attempt=source_attempt,
+        manifest_produced=receipt["verified_manifest_created"],
         now=now,
     )
     progress_ids = sorted(
         record["id"]
         for record in progress["resources"].values()
-        if isinstance(record, dict) and isinstance(record.get("id"), str)
+        if isinstance(record, dict)
+        and isinstance(record.get("id"), str)
+        and record.get("stage") != "ready"
     )
     if receipt["orphan_candidate_ids"] != progress_ids:
         raise RecoveryError("resume_source_invalid: receipt candidate mismatch")
