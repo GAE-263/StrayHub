@@ -71,10 +71,31 @@ if name == 'git':
         sys.exit(128)
 elif name == 'gh':
     endpoint = '/repos/GAE-263/StrayHub/git/ref/heads/release'
-    assert sys.argv[1:] == ['api', '--method', 'GET', endpoint]
+    assert sys.argv[1:4] == ['api', '--method', 'GET']
     assert os.environ.get('GH_TOKEN') == 'synthetic-offline-github-token'
-    sys.stdout.write(os.environ['API_RESPONSE'])
-    sys.exit(int(os.environ['API_STATUS']))
+    if sys.argv[4] == endpoint:
+        sys.stdout.write(os.environ['API_RESPONSE'])
+        sys.exit(int(os.environ['API_STATUS']))
+    sha = os.environ['CHECKOUT_SHA']
+    repo = {'full_name': 'GAE-263/StrayHub'}
+    workflow = {'id': 17, 'path': '.github/workflows/ci.yml'}
+    run = dict(id=81, workflow_id=17, path=workflow['path'], head_sha=sha,
+               head_branch='main', event='push', status='completed',
+               conclusion=os.environ['CI_CONCLUSION'], run_attempt=1,
+               repository=repo, head_repository=repo)
+    names = ['python', 'Frontend Quality', 'Contracts', 'Critical E2E',
+             'GCE Release Static Contracts']
+    prefix = 'repos/GAE-263/StrayHub/actions/'
+    responses = {
+        prefix + 'workflows/ci.yml': workflow,
+        prefix + 'workflows/ci.yml/runs?branch=main&event=push&head_sha=' + sha + '&per_page=1':
+            {'workflow_runs': [run]},
+        prefix + 'runs/81': run,
+        prefix + 'runs/81/attempts/1/jobs?per_page=100': {'total_count': 5, 'jobs': [
+            dict(name=n, run_id=81, run_attempt=1, head_sha=sha,
+                 status='completed', conclusion='success') for n in names]},
+    }
+    print(json.dumps(responses[sys.argv[4]]))
 else:
     sys.exit('external mutation forbidden in authorization')
 """
@@ -102,6 +123,7 @@ else:
             json.dumps({"ref": "refs/heads/release", "object": {"type": "commit", "sha": SHA}}),
         ),
         "API_STATUS": overrides.get("api_status", "0"),
+        "CI_CONCLUSION": overrides.get("ci_conclusion", "success"),
         "CALLS": str(tmp_path / "calls"),
     }
     env.update({k: render(v) for k, v in step.get("env", {}).items()})
@@ -131,6 +153,13 @@ def test_manual_authorization_without_persisted_git_credentials(
     calls = (tmp_path / "calls").read_text()
     assert "gh api --method GET /repos/GAE-263/StrayHub/git/ref/heads/release" in calls
     assert "git fetch" not in calls
+
+
+@pytest.mark.parametrize("operation", ["publish", "deploy"])
+def test_failed_main_ci_never_authorizes_write(tmp_path: Path, operation: str) -> None:
+    result = execute_step(tmp_path, operation, ci_conclusion="failure")
+    assert result.returncode != 0
+    assert not (tmp_path / "summary").exists()
 
 
 @pytest.mark.parametrize("operation", ["publish", "deploy", "line"])

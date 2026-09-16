@@ -469,9 +469,6 @@ def test_repository_release_wiring_is_digest_aware_and_systemd_canonical() -> No
 def test_gce_release_workflow_requires_separate_manual_write_operations() -> None:
     workflow = (ROOT / ".github/workflows/gce-release.yml").read_text(encoding="utf-8")
     ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    release_push = workflow.split("  push:", maxsplit=1)[1].split(
-        "  workflow_dispatch:", maxsplit=1
-    )[0]
     publication = workflow.split("  publish-release:", maxsplit=1)[1].split(
         "  deploy-production:", maxsplit=1
     )[0]
@@ -482,9 +479,8 @@ def test_gce_release_workflow_requires_separate_manual_write_operations() -> Non
     assert "id-token: write" in workflow
     assert "google-github-actions/auth" in workflow
     assert "workflow_dispatch" in workflow
-    assert "branches: [release]" in workflow
-    assert "paths:" not in release_push
-    assert "workflow_call:" in ci_workflow
+    assert "  push:" not in workflow
+    assert "workflow_call:" not in ci_workflow
     assert "environment: release-publication" in workflow
     assert "name: production" in workflow
     assert "build-immutable-release.sh" in workflow
@@ -492,8 +488,9 @@ def test_gce_release_workflow_requires_separate_manual_write_operations() -> Non
     assert "docker build" not in publication
     assert "deploy-production:" in workflow
     assert "verify-production:" in workflow
-    assert "uses: ./.github/workflows/ci.yml" in workflow
-    assert "needs: [full-quality-gate, authorize-manual-write]" in workflow
+    assert "uses: ./.github/workflows/ci.yml" not in workflow
+    assert "needs: authorize-manual-write" in workflow
+    assert "scripts.main_ci_gate" in workflow
     assert "operation:" in workflow
     assert "options:" in workflow
     assert "- verify" in workflow and "- publish" in workflow and "- deploy" in workflow

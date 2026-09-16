@@ -21,7 +21,7 @@ clean Git SHA
   -> deterministic deployment-bundle.tar
   -> release-manifest.json + checksums.sha256
   -> hosted Docker staging PASS + run-bound attestation
-  -> align release to the exact tested main commit (push runs CI only)
+  -> align release to the exact tested main commit (no push workflow)
   -> manual immutable publication of exact release HEAD
   -> separate receipt-backed manual WIF + OS Login/IAP deployment
   -> exact receipt/runtime/public-health verification
@@ -38,8 +38,9 @@ manifest/bundle/checksum set, and publishes one OCI release artifact. It never d
 the same SHA is serialized and reuses the existing release artifact instead of creating a second
 release identity. The GitHub Actions artifact is only a 30-day convenience download; Artifact
 Registry is the canonical release store.
-`.github/workflows/gce-release.yml` runs only for `release` pushes and manual operations and calls
-the primary CI for release pushes and manual publication, not standalone verify or deploy.
+`.github/workflows/gce-release.yml` is manual-only. Publication and deployment read back the newest
+exact-SHA main push CI run and all five successful jobs from the same attempt before credentials;
+they never call or rerun the full suite. Missing, running, failed or mixed evidence fails closed.
 Its manual publication path now consumes the
 canonical main artifact with `--reuse-only` and only adds the publication receipt; it cannot build
 a second image set. The same build workflow now runs hosted Docker staging after publication;
@@ -55,15 +56,16 @@ not by using GitHub's re-run button. The new hosted staging job uses this same w
 
 This repository uses a **single-operator manual gate**. It is not an independent human approval
 control. GitHub Environment names are retained only as OIDC identity namespaces and are not treated
-as approval, secret, or variable protection. A push to `release` runs the reusable CI verification
-only; its image build and write jobs are excluded by job-level `workflow_dispatch` conditions.
+as approval, secret, or variable protection. A push to `release` triggers no workflow after Phase 8
+activation. The branch selects an existing tested main artifact and retains the WIF/LINE ref identity;
+it is not a build source. See [Phase 8 transition](cicd-phase-8-retirement.md).
 
 Application publication and deployment read strict versioned non-secret values from
 `infra/gce/application-release-config.json`; they do not read GitHub Environment variables.
 The manual sequence is:
 
 ```text
-main → hosted staging PASS → exact-SHA release alignment → release push CI only
+main CI + hosted staging PASS → exact-SHA release alignment (no new CI/build)
 → dispatch publish with PUBLISH <full-sha>
 → record publication run/artifact/bundle digests
 → separate dispatch deploy with DEPLOY PRODUCTION <full-sha> <bundle-sha256>
@@ -233,9 +235,9 @@ verification fail closed. After a failure, start a new `workflow_dispatch` from 
 HEAD with fresh confirmation. A deploy recovery may reference only the explicitly selected,
 validated publication artifact from its trusted source run.
 
-The exact-SHA transition update to `release` does not deploy because GitHub evaluates the workflow definition
-from that pushed commit, whose publication and deployment jobs both require `workflow_dispatch` and
-an exact operation. No Environment approval is needed to suppress writes on that transition push.
+The exact-SHA transition update to `release` does not deploy: the Phase 8 workflow definition has no
+push trigger, and write jobs still require manual dispatch plus an exact operation. Older retained
+commits may contain historical triggers; never move release backwards to activate obsolete code.
 
 ### Infrastructure activation checklist (historical setup and future revalidation)
 

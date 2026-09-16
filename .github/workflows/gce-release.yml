@@ -1,8 +1,6 @@
 name: GCE Immutable Release
 
 on:
-  push:
-    branches: [release]
   workflow_dispatch:
     inputs:
       operation:
@@ -22,12 +20,6 @@ on:
         description: 'Exact confirmation; verify: VERIFY PRODUCTION <SHA> <release-ID>'
         required: false
         type: string
-      schema_compatibility:
-        description: Reviewed rollback compatibility for publication
-        required: true
-        default: unknown
-        type: choice
-        options: [unknown, forward-only, backward-compatible-with-previous]
       publication_run_id:
         description: Successful prior publication workflow run ID (deploy only)
         required: false
@@ -55,17 +47,13 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: gce-immutable-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  full-quality-gate:
-    name: Full repository quality gate
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.operation == 'publish' }}
-    uses: ./.github/workflows/ci.yml
-
   authorize-manual-write:
     name: Authorize exact manual write operation
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && (inputs.operation == 'publish' || inputs.operation == 'deploy') }}
@@ -90,16 +78,18 @@ jobs:
           if [[ -n "$BUNDLE_SHA256" ]]; then args+=(--bundle-sha256 "$BUNDLE_SHA256"); fi
           python3 -m scripts.manual_release_gate "${args[@]}" --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}'
           python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$checkout_sha"
+          python3 -m scripts.main_ci_gate --git-sha "$INPUT_SHA"
           printf '### Authorized `%s` for `%s`\n' "$OPERATION" "$release_sha" >>"$GITHUB_STEP_SUMMARY"
 
   publish-release:
     name: Publish immutable release candidate
-    needs: [full-quality-gate, authorize-manual-write]
+    needs: authorize-manual-write
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release' && inputs.operation == 'publish' }}
     runs-on: ubuntu-latest
     # OIDC namespace only; not an approval, secret, or variable gate.
     environment: release-publication
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
@@ -116,6 +106,7 @@ jobs:
         run: |
           python3 -m scripts.manual_release_gate gate --operation publish --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$(git rev-parse HEAD)" --release-sha "$INPUT_SHA" --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}'
           python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$(git rev-parse HEAD)"
+          python3 -m scripts.main_ci_gate --git-sha "$INPUT_SHA"
       - id: config
         name: Validate versioned non-secret release configuration
         run: python3 -m scripts.manual_release_gate export-application-config --config infra/gce/application-release-config.json --github-output "$GITHUB_OUTPUT"
@@ -227,6 +218,7 @@ jobs:
         run: |
           python3 -m scripts.manual_release_gate gate --operation deploy --confirmation "$CONFIRMATION" --git-sha "$INPUT_SHA" --checkout-sha "$(git rev-parse HEAD)" --release-sha "$INPUT_SHA" --bundle-sha256 "$BUNDLE_SHA256" --actor '${{ github.actor }}' --triggering-actor '${{ github.triggering_actor }}' --run-attempt '${{ github.run_attempt }}'
           python3 -m scripts.release_head_gate --requested-sha "$INPUT_SHA" --github-sha "$GITHUB_SHA" --checkout-sha "$(git rev-parse HEAD)"
+          python3 -m scripts.main_ci_gate --git-sha "$INPUT_SHA"
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ steps.config.outputs.provider }}

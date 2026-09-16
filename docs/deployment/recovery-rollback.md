@@ -1,10 +1,11 @@
 # Phase 7: checkpoint, resume and rollback protection
 
-Status: base Phase 7 implementation merged in PR #42. Production activation and a controlled
-recovery/rollback drill have been authorized, but are not yet performed. The follow-up compatibility
-binding must pass review, CI and hosted staging before proceeding.
-The currently deployed Phase 5 artifact predates these protections; do not mutate its immutable
-directory or claim that its old scripts now provide checkpoint/resume support.
+Status: Phase 7 implementation and exact-predecessor binding merged in PRs #42 and #43. Production
+deployment, same-artifact verify-only resume, controlled rollback and roll-forward, and final
+independent verification passed on 2026-09-16. Production finishes on `4a476159…`; see the
+[live acceptance record](cicd-phase-7-acceptance.md) for exact identities and evidence.
+The retained Phase 5 predecessor predates these protections; do not mutate its immutable directory
+or invoke its old scripts as though they provide checkpoint/resume and shared-lock support.
 
 ## Boundaries
 
@@ -95,7 +96,7 @@ rollback requires a separately designed and reviewed compatibility procedure.
 
 ### Reviewed exact predecessor declaration
 
-`infra/gce/release-compatibility.json` is versioned review input, not a manual workflow override.
+An optional `infra/gce/release-compatibility.json` is versioned review input, not a manual workflow override.
 Its `unchanged-runtime` mode binds the previous full SHA, release ID, manifest SHA-256 and migration
 revision. Before declaring backward compatibility, the builder compares tracked Git blob identities
 between that predecessor and HEAD. Only docs, tests and an explicit deployment-tooling file list
@@ -111,9 +112,14 @@ head, preflight and the existing compatibility flag. A matching migration revisi
 grant compatibility. The older predecessor's own `unknown` flag does not prevent returning from
 the newly reviewed compatible successor; it still prevents an unrelated further rollback.
 
-This review permits only the current accepted `7bb29ea…` predecessor and tooling-only successors.
+The Phase 7 review permitted only the accepted `7bb29ea…` predecessor and tooling-only successors.
 It does not authorize other pairs or relax tenant/authentication behavior. The first Phase 7
 artifact (`f70f9b5…`) remains `unknown` and will not be used for the live rollback drill.
+
+Phase 8 removes that single-pair declaration from new source because CI/workflow changes fall outside
+its reviewed allowlist. Without a new reviewed declaration, future artifacts default to `unknown`.
+Published Phase 7 artifacts retain their original binding and remain usable for the accepted pair;
+removing the source declaration never edits their manifest or receipt.
 
 ## Acceptance and remaining live work
 
@@ -122,7 +128,10 @@ exercise real durable-state/receipt code. Coverage includes before/after pointer
 migration ambiguity, receipt write/link interruptions, repeat resume, identity drift, multiple DB
 heads, secret-free diagnostics, and shared-lock placement. No production outage is induced.
 
-Before declaring live Phase 7 acceptance, merge through CI, build and stage an exact artifact
-containing these tools, then separately authorize deployment and a controlled recovery/rollback
-drill with a fresh backup and an explicitly compatible known-good release pair. Existing Phase 5
-production success and older F5b drills do not replace this acceptance.
+The first live Phase 7 acceptance completed those gates with a fresh verified GCS backup and the
+explicitly reviewed `7bb29ea…` / `4a476159…` pair. Its resume drill proved completed-release
+verification without changing container start times, unit execution timestamps or the original
+receipt. No production crash, uncertain migration or data restore was induced. Existing isolated
+failure tests cover those conservative refusal/recovery branches; the live drill does not claim
+to exercise them in production. Future deployments still require their own CI, exact-artifact
+staging, authorization and compatible-pair review.
