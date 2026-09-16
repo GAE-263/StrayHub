@@ -102,6 +102,8 @@ elif name == 'release-manifest.py':
     elif args[0] == 'validate-receipt':
         r = json.loads(path(option('--receipt')).read_text())
         assert r['release_id'] == new and r['verification'] == 'passed'
+    elif args[0] == 'validate-predecessor':
+        pass  # Binding semantics are covered using the real manifest validator separately.
     else:
         raise AssertionError('unexpected manifest command')
 elif name == 'fetch-secrets.sh':

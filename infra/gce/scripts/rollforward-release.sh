@@ -63,6 +63,8 @@ target_dir="$RELEASE_ROOT/$TARGET_RELEASE"
 
 "$MANIFEST_TOOL" validate-release-dir --release-dir "$current_dir" >/dev/null
 "$MANIFEST_TOOL" validate-release-dir --release-dir "$target_dir" >/dev/null
+"$MANIFEST_TOOL" validate-predecessor --manifest "$target_dir/release-manifest.json" \
+  --previous-manifest "$current_dir/release-manifest.json"
 "$MANIFEST_TOOL" validate-receipt --manifest "$current_dir/release-manifest.json" --receipt "$STATE_DIR/current.json"
 "$MANIFEST_TOOL" validate-receipt --manifest "$target_dir/release-manifest.json" --receipt "$STATE_DIR/$TARGET_RELEASE.json"
 "$MANIFEST_TOOL" validate-rollforward \

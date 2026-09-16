@@ -1,7 +1,8 @@
 # Phase 7: checkpoint, resume and rollback protection
 
-Status: local implementation and fault-injection validation; not yet merged or deployed.
-No production failure/rollback drill has been authorized or performed for this phase.
+Status: base Phase 7 implementation merged in PR #42. Production activation and a controlled
+recovery/rollback drill have been authorized, but are not yet performed. The follow-up compatibility
+binding must pass review, CI and hosted staging before proceeding.
 The currently deployed Phase 5 artifact predates these protections; do not mutate its immutable
 directory or claim that its old scripts now provide checkpoint/resume support.
 
@@ -91,6 +92,28 @@ This is intentionally stricter than the earlier rollback implementation. An `unk
 `forward-only` compatibility declaration still blocks rollback even when migrations happen to
 match. Never edit a published manifest to change that declaration. A future schema-changing
 rollback requires a separately designed and reviewed compatibility procedure.
+
+### Reviewed exact predecessor declaration
+
+`infra/gce/release-compatibility.json` is versioned review input, not a manual workflow override.
+Its `unchanged-runtime` mode binds the previous full SHA, release ID, manifest SHA-256 and migration
+revision. Before declaring backward compatibility, the builder compares tracked Git blob identities
+between that predecessor and HEAD. Only docs, tests and an explicit deployment-tooling file list
+may differ. Application, migrations, dependencies, Compose, secret maps, image Dockerfiles and any
+other non-allowlisted file must be unchanged. Missing Git history or runtime drift fails closed.
+Remove or renew the declaration through a reviewed PR for later application changes.
+
+The builder embeds `rollback_predecessor` into a NEW immutable manifest before checksums and OCI
+publication. Existing artifacts remain unchanged; `--reuse-only` does not change their metadata.
+Normal deployment validates the actual current manifest against this binding before any runtime
+change. Rollback and roll-forward validate the same exact pair, in addition to receipts, live DB
+head, preflight and the existing compatibility flag. A matching migration revision alone does not
+grant compatibility. The older predecessor's own `unknown` flag does not prevent returning from
+the newly reviewed compatible successor; it still prevents an unrelated further rollback.
+
+This review permits only the current accepted `7bb29ea…` predecessor and tooling-only successors.
+It does not authorize other pairs or relax tenant/authentication behavior. The first Phase 7
+artifact (`f70f9b5…`) remains `unknown` and will not be used for the live rollback drill.
 
 ## Acceptance and remaining live work
 

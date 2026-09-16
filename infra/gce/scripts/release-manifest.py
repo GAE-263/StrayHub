@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -35,6 +36,84 @@ ALLOWED_NONSECRET_ENV_TEMPLATES = {"infra/gce/.env.acceptance.template"}
 
 class ReleaseError(ValueError):
     """A fail-closed release artifact validation error."""
+
+
+def validate_predecessor_identity(value: dict) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "git_sha",
+        "release_id",
+        "manifest_sha256",
+        "migration_revision",
+    }:
+        raise ReleaseError("invalid rollback predecessor fields")
+    if (
+        not GIT_SHA_RE.fullmatch(str(value["git_sha"]))
+        or not RELEASE_ID_RE.fullmatch(str(value["release_id"]))
+        or not value["release_id"].endswith(value["git_sha"][:12])
+    ):
+        raise ReleaseError("invalid rollback predecessor identity")
+    if not re.fullmatch(
+        r"[0-9a-f]{64}", str(value["manifest_sha256"])
+    ) or not REVISION_RE.fullmatch(str(value["migration_revision"])):
+        raise ReleaseError("invalid rollback predecessor checksum/revision")
+
+
+def reviewed_predecessor(path: Path, source: Path, revision: str) -> dict:
+    review = json.loads(path.read_text())
+    if set(review) != {"schema_version", "mode", "reason", "previous"} or (
+        review["schema_version"] != 1
+        or review["mode"] != "unchanged-runtime"
+        or not review["reason"]
+    ):
+        raise ReleaseError("unsupported compatibility review")
+    previous = review["previous"]
+    validate_predecessor_identity(previous)
+    if previous["migration_revision"] != revision:
+        raise ReleaseError("compatibility review migration mismatch")
+    allowed = {
+        "infra/gce/release-compatibility.json",
+        "infra/gce/scripts/deploy-release.sh",
+        "infra/gce/scripts/deployment-state.py",
+        "infra/gce/scripts/release-manifest.py",
+        "infra/gce/scripts/rollback-release.sh",
+        "infra/gce/scripts/rollforward-release.sh",
+        "scripts/build-immutable-release.sh",
+        "scripts/build-release-bundle.sh",
+    }
+
+    # Compare tracked blob identities, not only Alembic revision or a caller-provided boolean.
+    def runtime_tree(ref: str) -> list[bytes]:
+        result = subprocess.run(
+            ["git", "-C", str(source), "ls-tree", "-r", "-z", ref],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode:
+            raise ReleaseError("review predecessor Git tree is unavailable")
+        entries = []
+        for entry in result.stdout.split(b"\0"):
+            if not entry:
+                continue
+            name = entry.split(b"\t", 1)[1].decode()
+            if name not in allowed and not name.startswith(("docs/", "tests/")):
+                entries.append(entry)
+        return entries
+
+    if runtime_tree(previous["git_sha"]) != runtime_tree("HEAD"):
+        raise ReleaseError("runtime changed: renew or remove the compatibility review")
+    return previous
+
+
+def validate_predecessor(candidate_path: Path, previous_path: Path) -> None:
+    candidate = load_manifest(candidate_path)
+    binding = candidate.get("rollback_predecessor")
+    if binding is None:
+        return  # Historical manifests retain their old unknown/forward-only behavior.
+    previous = load_manifest(previous_path)
+    if any(
+        previous[key] != binding[key] for key in ("git_sha", "release_id", "migration_revision")
+    ) or (sha256_file(previous_path) != binding["manifest_sha256"]):
+        raise ReleaseError("exact rollback predecessor mismatch")
 
 
 def sha256_file(path: Path) -> str:
@@ -218,6 +297,12 @@ def validate_manifest(data: dict[str, Any]) -> None:
         raise ReleaseError("invalid migration_revision")
     if data["schema_compatibility"] not in COMPATIBILITY_VALUES:
         raise ReleaseError("invalid schema_compatibility")
+    if "rollback_predecessor" in data:
+        validate_predecessor_identity(data["rollback_predecessor"])
+        if data["schema_compatibility"] != "backward-compatible-with-previous" or (
+            data["migration_revision"] != data["rollback_predecessor"]["migration_revision"]
+        ):
+            raise ReleaseError("rollback binding incompatible with manifest")
     for field in ("compose_sha256", "release_bundle_sha256"):
         if not re.fullmatch(r"[0-9a-f]{64}", str(data[field])):
             raise ReleaseError(f"invalid {field}")
@@ -261,6 +346,14 @@ def create_manifest(args: argparse.Namespace) -> None:
             "workflow": args.ci_workflow,
         },
     }
+    review = getattr(args, "compatibility_review", None)
+    if review:
+        if args.source_root is None:
+            raise ReleaseError("compatibility review requires source root")
+        data["rollback_predecessor"] = reviewed_predecessor(
+            review, args.source_root, args.migration_revision
+        )
+        data["schema_compatibility"] = "backward-compatible-with-previous"
     validate_manifest(data)
     args.output.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -458,6 +551,8 @@ def build_parser() -> argparse.ArgumentParser:
     bundle.add_argument("--output", type=Path, required=True)
 
     create = subparsers.add_parser("create-manifest")
+    create.add_argument("--compatibility-review", type=Path)
+    create.add_argument("--source-root", type=Path)
     create.add_argument("--output", type=Path, required=True)
     create.add_argument("--release-id", required=True)
     create.add_argument("--git-sha", required=True)
@@ -515,6 +610,10 @@ def build_parser() -> argparse.ArgumentParser:
     rollback.add_argument("--current-manifest", type=Path, required=True)
     rollback.add_argument("--target-release", required=True)
     rollback.add_argument("--receipt", type=Path, required=True)
+    rollback.add_argument("--target-manifest", type=Path)
+    predecessor = subparsers.add_parser("validate-predecessor")
+    predecessor.add_argument("--manifest", type=Path, required=True)
+    predecessor.add_argument("--previous-manifest", type=Path, required=True)
 
     rollforward = subparsers.add_parser("validate-rollforward")
     rollforward.add_argument("--current-manifest", type=Path, required=True)
@@ -553,7 +652,13 @@ def main() -> int:
             print("" if value is None else value)
         elif args.command == "validate-rollback":
             validate_rollback(args.current_manifest, args.target_release, args.receipt)
+            if load_manifest(args.current_manifest).get("rollback_predecessor"):
+                if args.target_manifest is None:
+                    raise ReleaseError("bound rollback requires target manifest")
+                validate_predecessor(args.current_manifest, args.target_manifest)
             print(f"rollback compatibility valid: {args.target_release}")
+        elif args.command == "validate-predecessor":
+            validate_predecessor(args.manifest, args.previous_manifest)
         elif args.command == "validate-rollforward":
             validate_rollforward(args.current_manifest, args.target_manifest, args.receipt)
             target = load_manifest(args.target_manifest)

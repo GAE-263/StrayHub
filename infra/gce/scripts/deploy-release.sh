@@ -101,6 +101,10 @@ for protected_file in runtime.env jwt-private.pem jwt-public.pem; do
 done
 
 state_args=(--manifest "$manifest" --state-dir "$STATE_DIR" --current-link "$CURRENT_LINK")
+if [[ "$RESUME" != true && -L "$CURRENT_LINK" ]]; then
+  "$MANIFEST_TOOL" validate-predecessor --manifest "$manifest" \
+    --previous-manifest "$CURRENT_LINK/release-manifest.json"
+fi
 if [[ "$RESUME" == true ]]; then state_args+=(--resume); fi
 resume_plan="$(python3 "$STATE_TOOL" plan "${state_args[@]}")"
 read -r resume_mode previous_release <<<"$resume_plan"
