@@ -29,9 +29,8 @@ def test_verify_only_has_no_build_or_write_path() -> None:
         assert "inputs.operation == 'deploy'" in DOCUMENT["jobs"][name]["if"] or (
             "inputs.operation == 'publish'" in DOCUMENT["jobs"][name]["if"]
         )
-    assert DOCUMENT["jobs"]["full-quality-gate"]["if"] == (
-        "${{ github.event_name != 'workflow_dispatch' || inputs.operation == 'publish' }}"
-    )
+    assert "full-quality-gate" not in DOCUMENT["jobs"]
+    assert "scripts.main_ci_gate" not in str(JOB)
     assert JOB["steps"][0]["with"]["ref"] == "${{ github.sha }}"
     text = str(JOB)
     for forbidden in ("docker build", "docker push", "deploy-release-ci.sh", "alembic upgrade"):

@@ -63,7 +63,10 @@ receipt; application images and the deployment bundle remain unchanged.
 The existing production WIF route still requires `gce-release.yml@refs/heads/release` and exact
 release HEAD. To promote a tested main SHA, `release` must select that exact commit, normally through
 a reviewed fast-forward; a new main-to-release merge commit has a different identity and is rejected.
-Do not bypass freshness or rebuild a release-only merge SHA. Retiring this branch is Phase 8 work.
+Do not bypass freshness or rebuild a release-only merge SHA. Phase 8 retains this branch solely as
+an exact-artifact selector and existing WIF/LINE identity; its push CI entry point is removed.
+Publication/deployment instead verify the exact main CI result before credentials. No ref-trust
+migration, branch deletion or independent reviewer control is implied by that change.
 The 2026-09-15 transition could not fast-forward: `release` contained seven historical merge
 commits absent from main. With explicit operator authorization, the old release was backed up and
 an exact-old-SHA `force-with-lease` aligned release to the tested main commit. The backup, old/new

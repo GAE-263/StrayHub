@@ -86,12 +86,27 @@ def release_cli(tmp_path: Path):
     # shallow checkout only guarantees HEAD. Review this synthetic same-tree
     # predecessor; the real publisher independently fetches complete history.
     review_path = source / "infra/gce/release-compatibility.json"
-    review = json.loads(review_path.read_text())
-    review["previous"].update(
-        git_sha=sha,
-        release_id=f"20260915T154252Z-{sha[:12]}",
-        manifest_sha256="a" * 64,
-    )
+    revision = subprocess.check_output(
+        [
+            "python3",
+            str(ROOT / "infra/gce/scripts/release-manifest.py"),
+            "migration-head",
+            "--source-root",
+            str(ROOT),
+        ],
+        text=True,
+    ).strip()
+    review = {
+        "schema_version": 1,
+        "mode": "unchanged-runtime",
+        "reason": "Synthetic fixture",
+        "previous": {
+            "git_sha": sha,
+            "release_id": f"20260915T154252Z-{sha[:12]}",
+            "manifest_sha256": "a" * 64,
+            "migration_revision": revision,
+        },
+    }
     review_path.write_text(json.dumps(review))
     env = os.environ | {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -147,6 +162,16 @@ def test_gcloud_image_not_found_response_is_rebuilt_once(release_cli):
     result, _ = run("gcloud-not-found", FAKE_NOT_FOUND="Image not found.")
     assert result.returncode == 0, result.stderr
     assert (state / "calls").read_text().count('"buildx"') == 4
+
+
+def test_absent_review_defaults_to_unknown(release_cli):
+    run, state = release_cli
+    (state.parent / "source/infra/gce/release-compatibility.json").unlink()
+    result, output = run("unreviewed")
+    assert result.returncode == 0, result.stderr
+    manifest = json.loads((output / "release-manifest.json").read_text())
+    assert manifest["schema_compatibility"] == "unknown"
+    assert "rollback_predecessor" not in manifest
 
 
 @pytest.mark.parametrize("error", ["PERMISSION_DENIED: denied", "connection timed out"])
