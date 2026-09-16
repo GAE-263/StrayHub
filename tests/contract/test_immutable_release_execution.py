@@ -82,6 +82,17 @@ def release_cli(tmp_path: Path):
         path.write_text(CLI)
         path.chmod(0o755)
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    # The simulated registry must not depend on production Git history: CI's
+    # shallow checkout only guarantees HEAD. Review this synthetic same-tree
+    # predecessor; the real publisher independently fetches complete history.
+    review_path = source / "infra/gce/release-compatibility.json"
+    review = json.loads(review_path.read_text())
+    review["previous"].update(
+        git_sha=sha,
+        release_id=f"20260915T154252Z-{sha[:12]}",
+        manifest_sha256="a" * 64,
+    )
+    review_path.write_text(json.dumps(review))
     env = os.environ | {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "REAL_GIT": str(shutil.which("git")),
@@ -118,6 +129,9 @@ def test_first_publish_and_rerun_preserve_exact_artifact(release_cli):
     run, state = release_cli
     first, original = run("first")
     assert first.returncode == 0, first.stderr
+    manifest = json.loads((original / "release-manifest.json").read_text())
+    assert manifest["schema_compatibility"] == "backward-compatible-with-previous"
+    assert manifest["rollback_predecessor"]["git_sha"] == manifest["git_sha"]
     calls_before = (state / "calls").read_text()
     second, reused = run("second", GITHUB_RUN_ID="456")
     assert second.returncode == 0, second.stderr

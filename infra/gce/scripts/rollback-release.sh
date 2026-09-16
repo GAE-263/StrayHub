@@ -69,6 +69,7 @@ target_revision="$("$MANIFEST_TOOL" show-field --manifest "$target_dir/release-m
 "$MANIFEST_TOOL" validate-rollback \
   --current-manifest "$current_dir/release-manifest.json" \
   --target-release "$TARGET_RELEASE" \
+  --target-manifest "$target_dir/release-manifest.json" \
   --receipt "$STATE_DIR/current.json" >/dev/null
 
 runtime_env="$SECRETS_ROOT/current/runtime.env"

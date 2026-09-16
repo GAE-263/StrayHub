@@ -14,6 +14,7 @@ Usage: build-release-bundle.sh \
   --output-dir DIRECTORY \
   [--created-at RFC3339_UTC] \
   [--schema-compatibility unknown|forward-only|backward-compatible-with-previous] \
+  [--compatibility-review VERSIONED_JSON] \
   [--ci-run-id ID] [--ci-workflow NAME]
 
 The source checkout must be clean and HEAD must equal --git-sha. The output directory must not exist.
@@ -34,6 +35,7 @@ created_at=""
 schema_compatibility="unknown"
 ci_run_id="${GITHUB_RUN_ID:-local-verification}"
 ci_workflow="${GITHUB_WORKFLOW:-local-release-verification}"
+compatibility_review=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --output-dir) output_dir="${2:-}"; shift 2 ;;
     --created-at) created_at="${2:-}"; shift 2 ;;
     --schema-compatibility) schema_compatibility="${2:-}"; shift 2 ;;
+    --compatibility-review) compatibility_review="${2:-}"; shift 2 ;;
     --ci-run-id) ci_run_id="${2:-}"; shift 2 ;;
     --ci-workflow) ci_workflow="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -111,7 +114,11 @@ migration_revision="$("$MANIFEST_TOOL" migration-head --source-root "$ROOT_DIR")
 "$MANIFEST_TOOL" create-bundle \
   --payload-dir "$payload_dir" \
   --output "$output_dir/deployment-bundle.tar"
-"$MANIFEST_TOOL" create-manifest \
+review_args=(--schema-compatibility "$schema_compatibility")
+if [[ -n "$compatibility_review" ]]; then
+  review_args+=(--compatibility-review "$compatibility_review" --source-root "$ROOT_DIR")
+fi
+"$MANIFEST_TOOL" create-manifest "${review_args[@]}" \
   --output "$output_dir/release-manifest.json" \
   --release-id "$release_id" \
   --git-sha "$git_sha" \
@@ -120,7 +127,6 @@ migration_revision="$("$MANIFEST_TOOL" migration-head --source-root "$ROOT_DIR")
   --worker-image "$worker_image" \
   --web-image "$web_image" \
   --migration-revision "$migration_revision" \
-  --schema-compatibility "$schema_compatibility" \
   --compose "$payload_dir/infra/gce/docker-compose.production.yml" \
   --bundle "$output_dir/deployment-bundle.tar" \
   --ci-run-id "$ci_run_id" \

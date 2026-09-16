@@ -182,14 +182,17 @@ fi
 api_image="$(build_or_reuse_image api)"
 worker_image="$(build_or_reuse_image worker)"
 web_image="$(build_or_reuse_image web)"
+review_args=(--schema-compatibility unknown)
+if [[ -f "$ROOT_DIR/infra/gce/release-compatibility.json" ]]; then
+  review_args+=(--compatibility-review "$ROOT_DIR/infra/gce/release-compatibility.json")
+fi
 
-"$BUNDLE_BUILDER" \
+"$BUNDLE_BUILDER" "${review_args[@]}" \
   --git-sha "$git_sha" \
   --api-image "$api_image" \
   --worker-image "$worker_image" \
   --web-image "$web_image" \
   --output-dir "$output_dir" \
-  --schema-compatibility unknown \
   --ci-run-id "${GITHUB_RUN_ID:-local-verification}" \
   --ci-workflow "${GITHUB_WORKFLOW:-Build Immutable Release}"
 
