@@ -68,6 +68,9 @@ def test_unchanged_runtime_review_is_bound_to_exact_predecessor(review_repo):
         "services/api/migrations/versions/new.py",
         "infra/gce/docker-compose.production.yml",
         "new-runtime-file",
+        ".github/workflows/ci.yml",
+        ".github/workflows/other.yml",
+        "scripts/main_ci_gate.py",
     ],
 )
 def test_any_unreviewed_runtime_change_refuses_compatibility(review_repo, name):
@@ -87,6 +90,65 @@ def test_migration_and_predecessor_identity_must_match(review_repo):
         tool.reviewed_predecessor(review, root, "different_revision")
     with pytest.raises(tool.ReleaseError, match="identity"):
         tool.validate_predecessor_identity(previous | {"git_sha": "b" * 40})
+
+
+def test_v2_ci_exception_is_exact_blob_and_regular_file(review_repo):
+    root, review, previous = review_repo
+    name = ".github/workflows/ci.yml"
+    path = root / name
+    path.parent.mkdir(parents=True)
+    path.write_text("# reviewed CI\n")
+    git(root, "add", name)
+    git(root, "commit", "-qm", "CI only")
+    data = json.loads(review.read_text()) | {
+        "schema_version": 2,
+        "reviewed_ci_blobs": {name: git(root, "rev-parse", f"HEAD:{name}")},
+    }
+    review.write_text(json.dumps(data))
+    assert tool.reviewed_predecessor(review, root, "revision_7") == previous
+    path.write_text("# unreviewed CI\n")
+    git(root, "add", name)
+    git(root, "commit", "-qm", "CI drift")
+    with pytest.raises(tool.ReleaseError, match="CI blob changed"):
+        tool.reviewed_predecessor(review, root, "revision_7")
+
+
+@pytest.mark.parametrize("change", ["delete", "executable", "symlink"])
+def test_v2_ci_exception_rejects_missing_or_changed_mode(review_repo, change):
+    root, review, _ = review_repo
+    name = "scripts/main_ci_gate.py"
+    path = root / name
+    path.parent.mkdir(parents=True)
+    path.write_text("# reviewed gate\n")
+    git(root, "add", name)
+    git(root, "commit", "-qm", "gate")
+    data = json.loads(review.read_text()) | {
+        "schema_version": 2,
+        "reviewed_ci_blobs": {name: git(root, "rev-parse", f"HEAD:{name}")},
+    }
+    review.write_text(json.dumps(data))
+    if change == "executable":
+        path.chmod(0o755)
+    else:
+        path.unlink()
+        if change == "symlink":
+            path.symlink_to("../app.py")
+    git(root, "add", name)
+    git(root, "commit", "-qm", "changed mode")
+    with pytest.raises(tool.ReleaseError, match="reviewed CI"):
+        tool.reviewed_predecessor(review, root, "revision_7")
+
+
+@pytest.mark.parametrize("name,blob", [("app.py", "a" * 40), (".github/workflows/ci.yml", "bad")])
+def test_v2_cannot_exempt_arbitrary_runtime_paths(review_repo, name, blob):
+    root, review, _ = review_repo
+    data = json.loads(review.read_text()) | {
+        "schema_version": 2,
+        "reviewed_ci_blobs": {name: blob},
+    }
+    review.write_text(json.dumps(data))
+    with pytest.raises(tool.ReleaseError, match="invalid reviewed CI"):
+        tool.reviewed_predecessor(review, root, "revision_7")
 
 
 def test_unavailable_predecessor_history_refuses_review(review_repo):
