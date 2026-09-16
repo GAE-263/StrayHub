@@ -1,6 +1,8 @@
 # Phase 8: retire duplicate workflow entry points
 
-Status: implemented locally; not yet committed, merged or activated on remote refs.
+Implementation checkpoint: [PR #44](https://github.com/GAE-263/StrayHub/pull/44).
+Remote activation/publication acceptance is pending at this source checkpoint; the PR timeline
+records the subsequent exact merge SHA, CI/staging/publication runs and final activation result.
 Production remains the Phase 7 accepted `4a476159…` release. This change performs no deployment,
 registry deletion, branch deletion, environment deletion, LINE operation or IAM/WIF mutation.
 
@@ -76,8 +78,8 @@ environmental failures, not waived tests. Two offline authorization fixtures wer
 the new CI metadata. The subsequently expanded gate suite passed all 23 tests (including two added
 after full-suite collection). Ruff, format, actionlint and diff checks passed. No application/API
 or tenant authorization implementation changed.
-Remote merge/activation and publication acceptance remain pending; do not report Phase 8 fully live
-until those steps have evidence.
+At this source checkpoint, remote merge/activation and publication acceptance remain pending;
+do not report Phase 8 fully live until the PR timeline records those run identities and evidence.
 
 Stop if required checks drift, main CI evidence is absent, freshness fails, an existing PR overlaps,
 or remote refs diverge. Do not restore functionality by bypassing gates. Reversal is a reviewed
