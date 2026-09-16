@@ -121,6 +121,11 @@ its reviewed allowlist. Without a new reviewed declaration, future artifacts def
 Published Phase 7 artifacts retain their original binding and remain usable for the accepted pair;
 removing the source declaration never edits their manifest or receipt.
 
+The subsequent [Phase 8 production review](phase-8-production-promotion.md) renews the declaration
+for the exact `4a476159…` live predecessor. Schema v2 allows only three explicit CI paths to be
+reviewed by pinned Git blobs; changed/missing blobs or file modes fail closed. It never exempts
+arbitrary workflow or application directories, and it does not change existing published artifacts.
+
 ## Acceptance and remaining live work
 
 Local tests execute deployment shell with a temporary-only toolchain and injected failures, and

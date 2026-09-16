@@ -60,8 +60,11 @@ def validate_predecessor_identity(value: dict) -> None:
 
 def reviewed_predecessor(path: Path, source: Path, revision: str) -> dict:
     review = json.loads(path.read_text())
-    if set(review) != {"schema_version", "mode", "reason", "previous"} or (
-        review["schema_version"] != 1
+    fields = {"schema_version", "mode", "reason", "previous"}
+    if review.get("schema_version") == 2:
+        fields.add("reviewed_ci_blobs")
+    if set(review) != fields or (
+        review["schema_version"] not in {1, 2}
         or review["mode"] != "unchanged-runtime"
         or not review["reason"]
     ):
@@ -70,6 +73,22 @@ def reviewed_predecessor(path: Path, source: Path, revision: str) -> dict:
     validate_predecessor_identity(previous)
     if previous["migration_revision"] != revision:
         raise ReleaseError("compatibility review migration mismatch")
+    # CI-only exceptions are reviewed by exact blob, never by a directory wildcard.
+    ci_blobs = review.get("reviewed_ci_blobs", {})
+    ci_paths = {
+        ".github/workflows/ci.yml",
+        ".github/workflows/gce-release.yml",
+        "scripts/main_ci_gate.py",
+    }
+    if (
+        not isinstance(ci_blobs, dict)
+        or not set(ci_blobs) <= ci_paths
+        or any(
+            not isinstance(blob, str) or not GIT_SHA_RE.fullmatch(blob)
+            for blob in ci_blobs.values()
+        )
+    ):
+        raise ReleaseError("invalid reviewed CI blobs")
     allowed = {
         "infra/gce/release-compatibility.json",
         "infra/gce/scripts/deploy-release.sh",
@@ -91,12 +110,23 @@ def reviewed_predecessor(path: Path, source: Path, revision: str) -> dict:
         if result.returncode:
             raise ReleaseError("review predecessor Git tree is unavailable")
         entries = []
+        seen_ci = set()
         for entry in result.stdout.split(b"\0"):
             if not entry:
                 continue
             name = entry.split(b"\t", 1)[1].decode()
+            if name in ci_blobs:
+                if (
+                    ref == "HEAD"
+                    and entry.split(b"\t", 1)[0] != ("100644 blob " + ci_blobs[name]).encode()
+                ):
+                    raise ReleaseError("reviewed CI blob changed")
+                seen_ci.add(name)
+                continue
             if name not in allowed and not name.startswith(("docs/", "tests/")):
                 entries.append(entry)
+        if ref == "HEAD" and seen_ci != set(ci_blobs):
+            raise ReleaseError("reviewed CI file missing")
         return entries
 
     if runtime_tree(previous["git_sha"]) != runtime_tree("HEAD"):
