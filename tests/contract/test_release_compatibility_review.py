@@ -89,6 +89,18 @@ def test_migration_and_predecessor_identity_must_match(review_repo):
         tool.validate_predecessor_identity(previous | {"git_sha": "b" * 40})
 
 
+def test_unavailable_predecessor_history_refuses_review(review_repo):
+    root, review, previous = review_repo
+    data = json.loads(review.read_text())
+    data["previous"] = previous | {
+        "git_sha": "b" * 40,
+        "release_id": "20260915T154252Z-" + "b" * 12,
+    }
+    review.write_text(json.dumps(data))
+    with pytest.raises(tool.ReleaseError, match="Git tree is unavailable"):
+        tool.reviewed_predecessor(review, root, "revision_7")
+
+
 def test_live_previous_manifest_is_matched_by_full_identity_and_checksum(tmp_path, monkeypatch):
     previous_path = tmp_path / "previous.json"
     previous = {
