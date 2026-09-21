@@ -44,3 +44,5 @@ AGENTS.md
 /rose
 service.json
 /test.txt
+.playwright-mcp/
+CLAUDE.local.md
