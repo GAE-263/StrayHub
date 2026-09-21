@@ -164,9 +164,7 @@ async def test_application_detail_allows_platform_support_without_membership() -
 
     detail = await service.application_detail(
         application.id,
-        tenant_context=TenantContext(
-            uuid4(), None, "PLATFORM_ADMIN", platform_scope=True
-        ),
+        tenant_context=TenantContext(uuid4(), None, "PLATFORM_ADMIN", platform_scope=True),
     )
 
     assert detail.application.id == application.id
