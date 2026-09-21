@@ -380,4 +380,105 @@ describe("VolunteerApplicantDetail", () => {
     await act(async () => flush());
     expect(container?.textContent).not.toContain("累積服務99 次");
   });
+
+  it("attaches the platform support reason header to the detail request when reviewing as PLATFORM_ADMIN", async () => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        response({
+          id: "application-a",
+          organization_id: "org-a",
+          display_name: "LINE 志工",
+          status: "pending",
+          submitted_at: "2026-08-24T00:00:00Z",
+          decided_at: null,
+          decision_reason: null,
+          version: 1,
+          service_dates: [],
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <VolunteerApplicantDetail
+          organizationId="org-a"
+          applicationId="application-a"
+          open
+          onClose={vi.fn()}
+          platformSupportReason="平台支援：協助收容所審核積壓申請"
+        />,
+      );
+    });
+    await act(async () => flush());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    const headers = new Headers((init as RequestInit | undefined)?.headers);
+    expect(headers.get("X-Platform-Support-Reason")).toBe(
+      encodeURIComponent("平台支援：協助收容所審核積壓申請"),
+    );
+  });
+
+  it("skips PII reveal and service-summary requests for PLATFORM_ADMIN and shows a fallback note", async () => {
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (
+        String(input).includes("service-summary") ||
+        String(input).endsWith("/pii-reveal")
+      ) {
+        throw new Error(
+          `should not call platform-restricted endpoint: ${String(input)}`,
+        );
+      }
+      return response({
+        id: "application-a",
+        organization_id: "org-a",
+        display_name: "LINE 志工",
+        status: "pending",
+        submitted_at: "2026-08-24T00:00:00Z",
+        decided_at: null,
+        decision_reason: null,
+        version: 1,
+        service_dates: [],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <VolunteerApplicantDetail
+          organizationId="org-a"
+          applicationId="application-a"
+          open
+          onClose={vi.fn()}
+          platformSupportReason="平台支援：協助收容所審核積壓申請"
+        />,
+      );
+    });
+    await act(async () => flush());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container?.textContent).toContain("LINE 志工");
+    expect(container?.textContent).toContain(
+      "姓名、電話等個資與跨收容所服務紀錄僅收容所管理員可查看",
+    );
+    expect(container?.textContent).not.toContain("申請人資料僅供本次審核使用");
+  });
 });

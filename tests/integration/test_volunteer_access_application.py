@@ -153,6 +153,27 @@ async def test_application_detail_is_tenant_scoped_and_masks_profile_fields() ->
 
 
 @pytest.mark.asyncio
+async def test_application_detail_allows_platform_support_without_membership() -> None:
+    organization_id = uuid4()
+    application = _detail_application(organization_id)
+    service = VolunteerAccessService(
+        _DetailRepository(organization_id, application, membership=False),
+        _IdentityRepository(),
+        _Verifier(),
+    )
+
+    detail = await service.application_detail(
+        application.id,
+        tenant_context=TenantContext(
+            uuid4(), None, "PLATFORM_ADMIN", platform_scope=True
+        ),
+    )
+
+    assert detail.application.id == application.id
+    assert detail.service_dates == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("membership_status", ["inactive", "suspended"])
 async def test_application_detail_denies_inactive_or_suspended_membership(
     membership_status: str,

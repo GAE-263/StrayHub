@@ -145,11 +145,12 @@ class VolunteerAccessService:
         tenant_context: TenantContext,
     ) -> VolunteerApplicationDetailResult:
         organization_id = self.repository.organization_id
-        if tenant_context.platform_scope or tenant_context.organization_id != organization_id:
-            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
-        membership = await self.repository.active_membership(tenant_context.user_id)
-        if membership is None:
-            raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+        if not tenant_context.platform_scope:
+            if tenant_context.organization_id != organization_id:
+                raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
+            membership = await self.repository.active_membership(tenant_context.user_id)
+            if membership is None:
+                raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
         detail = await self.repository.application_detail(application_id)
         if detail is None:
             raise DomainError("volunteer_application_not_found", "志工申請不存在", 404)
