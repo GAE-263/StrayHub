@@ -44,24 +44,6 @@ function todayLocalDate(): string {
   return `${value.getFullYear()}-${month}-${day}`;
 }
 
-function localDateTimeValue(value: Date): string {
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  const hours = String(value.getHours()).padStart(2, "0");
-  const minutes = String(value.getMinutes()).padStart(2, "0");
-  return `${value.getFullYear()}-${month}-${day}T${hours}:${minutes}`;
-}
-
-function defaultSubmittedFrom(): string {
-  const value = new Date();
-  value.setDate(value.getDate() - 7);
-  return localDateTimeValue(value);
-}
-
-function defaultSubmittedTo(): string {
-  return localDateTimeValue(new Date());
-}
-
 export default function VolunteerApplicationsPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [applications, setApplications] = useState<Application[]>([]);
@@ -74,8 +56,8 @@ export default function VolunteerApplicationsPage() {
   >(null);
   const [serviceDate, setServiceDate] = useState(todayLocalDate);
   const [unassigned, setUnassigned] = useState(false);
-  const [submittedFrom, setSubmittedFrom] = useState(defaultSubmittedFrom);
-  const [submittedTo, setSubmittedTo] = useState(defaultSubmittedTo);
+  const [submittedFrom, setSubmittedFrom] = useState("");
+  const [submittedTo, setSubmittedTo] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(false);
   const [detailApplicationId, setDetailApplicationId] = useState<string | null>(
@@ -313,6 +295,15 @@ export default function VolunteerApplicationsPage() {
     );
   }
 
+  const calendarPending = unassigned
+    ? 0
+    : (reviewCalendar.find((item) => item.service_date === serviceDate)
+        ?.pending_count ?? 0);
+  const hiddenByTimeFilter =
+    !loading && (submittedFrom || submittedTo)
+      ? Math.max(0, calendarPending - matchingCount)
+      : 0;
+
   return (
     <div className="volunteer-review-page">
       <div className="page-heading volunteer-review-heading">
@@ -448,6 +439,11 @@ export default function VolunteerApplicationsPage() {
                   ? `目前顯示 ${serviceDate} 的待審核申請`
                   : "")}
             </p>
+            {hiddenByTimeFilter > 0 ? (
+              <p className="volunteer-filter-status" role="status">
+                此日期另有 {hiddenByTimeFilter} 筆待審核申請被「送出時間」篩選排除，清除送出時間後套用即可看到。
+              </p>
+            ) : null}
           </form>
           {defaultGrantDurationHours === null ? (
             <p role="status">載入志工授權設定中…</p>
