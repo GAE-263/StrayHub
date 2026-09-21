@@ -40,11 +40,9 @@ screenshots/
 
 # google-github-actions/auth temporary credentials
 gha-creds-*.json
+AGENTS.md
 /rose
 service.json
 /test.txt
 .playwright-mcp/
-
-AGENTS.md
-
 CLAUDE.local.md
