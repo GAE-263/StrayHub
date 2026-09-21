@@ -60,6 +60,8 @@ describe("volunteer application review date", () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/v1/auth/me"))
+          return response({ user: { platform_role: "SHELTER_ADMIN" } });
         if (url.pathname.endsWith("/volunteer-access-policy"))
           return response({ default_grant_duration_hours: 168 });
         if (url.pathname.endsWith("/volunteer-decision-batches")) {
@@ -199,6 +201,8 @@ describe("volunteer application review date", () => {
     const requestedDates: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/v1/auth/me"))
+        return response({ user: { platform_role: "SHELTER_ADMIN" } });
       if (url.pathname.endsWith("/volunteer-access-policy"))
         return response({ default_grant_duration_hours: 168 });
       requestedDates.push(url.searchParams.get("service_date") ?? "");
@@ -246,6 +250,8 @@ describe("volunteer application review date", () => {
     const nextDate = dateFromTestClock(1);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/v1/auth/me"))
+        return response({ user: { platform_role: "SHELTER_ADMIN" } });
       if (url.pathname.endsWith("/volunteer-access-policy"))
         return response({ default_grant_duration_hours: 168 });
       const selectedDate = url.searchParams.get("service_date");
@@ -291,7 +297,7 @@ describe("volunteer application review date", () => {
       (container.querySelector('input[type="date"]') as HTMLInputElement).value,
     ).toBe(nextDate);
     expect(container.textContent).toContain("LINE 志工");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("does not let an older date response replace the current list", async () => {
@@ -302,6 +308,8 @@ describe("volunteer application review date", () => {
     });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/v1/auth/me"))
+        return response({ user: { platform_role: "SHELTER_ADMIN" } });
       if (url.pathname.endsWith("/volunteer-access-policy"))
         return response({ default_grant_duration_hours: 168 });
       if (url.searchParams.get("service_date") === today) return todayResponse;
@@ -372,6 +380,8 @@ describe("volunteer application review date", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/v1/auth/me"))
+          return response({ user: { platform_role: "SHELTER_ADMIN" } });
         if (url.pathname.endsWith("/volunteer-access-policy"))
           return response({ default_grant_duration_hours: 168 });
         if (url.searchParams.get("service_date") === today)
@@ -427,6 +437,8 @@ describe("volunteer application review date", () => {
     const today = dateFromTestClock();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/v1/auth/me"))
+        return response({ user: { platform_role: "SHELTER_ADMIN" } });
       if (url.pathname.endsWith("/volunteer-access-policy"))
         return response({ default_grant_duration_hours: 168 });
       if (url.searchParams.get("service_date") === today) {
@@ -487,6 +499,8 @@ describe("volunteer application review date", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/v1/auth/me"))
+          return response({ user: { platform_role: "SHELTER_ADMIN" } });
         if (url.pathname.endsWith("/volunteer-access-policy"))
           return response({ default_grant_duration_hours: 168 });
         return response({
@@ -528,5 +542,86 @@ describe("volunteer application review date", () => {
     });
 
     expect(container.textContent).not.toContain("舊日期申請");
+  });
+
+  it("gates PLATFORM_ADMIN behind a support reason and attaches it to every volunteer request", async () => {
+    const today = dateFromTestClock();
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/v1/auth/me"))
+          return response({ user: { platform_role: "PLATFORM_ADMIN" } });
+        const headers = new Headers(init?.headers);
+        const supportReason = headers.get("X-Platform-Support-Reason");
+        if (!supportReason) {
+          return {
+            ok: false,
+            status: 422,
+            json: async () => ({ code: "platform_support_reason_required" }),
+          } as Response;
+        }
+        expect(supportReason).toBe(encodeURIComponent("跨收容所支援審核"));
+        if (url.pathname.endsWith("/volunteer-access-policy"))
+          return response({ default_grant_duration_hours: 168 });
+        return response({
+          items: [
+            {
+              id: "application-a",
+              display_name: "LINE 志工",
+              status: "pending",
+              version: 1,
+            },
+          ],
+          matching_count: 1,
+          review_calendar: [{ service_date: today, pending_count: 1 }],
+          available_service_dates: [],
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("React", React);
+    window.sessionStorage.setItem("access_token", "local-token");
+    window.sessionStorage.setItem("active_organization_id", "org-a");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<VolunteerApplicationsPage />);
+      await flush();
+    });
+
+    expect(container.textContent).toContain("平台支援原因");
+    expect(container.textContent).not.toContain("LINE 志工");
+
+    const reasonInput = container.querySelector(
+      "#platform-support-reason",
+    ) as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(reasonInput, "跨收容所支援審核");
+      reasonInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container
+        ?.querySelector("form")
+        ?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+      await flush();
+    });
+
+    expect(container.textContent).toContain("LINE 志工");
+    expect(
+      fetchMock.mock.calls.some(([, init]) => {
+        const headers = new Headers((init as RequestInit | undefined)?.headers);
+        return (
+          headers.get("X-Platform-Support-Reason") ===
+          encodeURIComponent("跨收容所支援審核")
+        );
+      }),
+    ).toBe(true);
   });
 });
