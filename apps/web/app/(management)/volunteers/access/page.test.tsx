@@ -120,9 +120,9 @@ describe("VolunteerAccessPage", () => {
 
     expect(container.textContent).toContain("測試志工");
 
-    const revokeButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("撤銷授權"));
+    const revokeButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("撤銷授權"),
+    );
     const reasonField = container.querySelector(
       'input[aria-label="測試志工 操作原因"]',
     ) as HTMLInputElement;
@@ -134,9 +134,9 @@ describe("VolunteerAccessPage", () => {
       reasonField.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => revokeButton?.click());
-    const confirmButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("確認調整"));
+    const confirmButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("確認調整"),
+    );
     await act(async () => {
       confirmButton?.click();
       await flush();

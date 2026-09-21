@@ -80,7 +80,9 @@ export default function VolunteerAccessPage() {
         }
       } catch (roleError) {
         setRoleCheckError(
-          roleError instanceof Error ? roleError.message : "無法確認目前使用者權限",
+          roleError instanceof Error
+            ? roleError.message
+            : "無法確認目前使用者權限",
         );
       } finally {
         setCheckingRole(false);
@@ -161,10 +163,7 @@ export default function VolunteerAccessPage() {
           }
         />
       ) : requiresSupportReason && !supportReasonReady ? (
-        <form
-          className="ui-card ui-card-padded"
-          onSubmit={submitSupportReason}
-        >
+        <form className="ui-card ui-card-padded" onSubmit={submitSupportReason}>
           <Field>
             <label htmlFor="platform-support-reason">平台支援原因</label>
             <Input
