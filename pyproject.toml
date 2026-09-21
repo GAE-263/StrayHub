@@ -33,6 +33,7 @@ dev = [
   "pytest-cov>=6,<7",
   "mypy>=1.13,<2",
   "ruff>=0.8,<1",
+  "pre-commit>=4,<5",
 ]
 
 [tool.uv]
