@@ -300,6 +300,107 @@ describe("volunteer application review date", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it("does not limit submitted time by default so past-dated pending applications are listed", async () => {
+    const pastDate = dateFromTestClock(-19);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/v1/auth/me"))
+        return response({ user: { platform_role: "SHELTER_ADMIN" } });
+      if (url.pathname.endsWith("/volunteer-access-policy"))
+        return response({ default_grant_duration_hours: 168 });
+      expect(url.searchParams.has("submitted_from")).toBe(false);
+      expect(url.searchParams.has("submitted_to")).toBe(false);
+      const listed = url.searchParams.get("service_date") === pastDate;
+      return response({
+        items: listed
+          ? [
+              {
+                id: "application-a",
+                display_name: "LINE 志工",
+                status: "pending",
+                version: 1,
+              },
+            ]
+          : [],
+        matching_count: listed ? 1 : 0,
+        next_cursor: null,
+        available_service_dates: [{ service_date: pastDate, pending_count: 1 }],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("React", React);
+    window.sessionStorage.setItem("access_token", "local-token");
+    window.sessionStorage.setItem("active_organization_id", "org-a");
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<VolunteerApplicationsPage />);
+      await flush();
+    });
+
+    expect(container.textContent).toContain("LINE 志工");
+    expect(
+      (container.querySelector("#volunteer-submitted-from") as HTMLInputElement)
+        .value,
+    ).toBe("");
+  });
+
+  it("explains when the submitted-time filter hides pending applications", async () => {
+    const pastDate = dateFromTestClock(-3);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname.endsWith("/v1/auth/me"))
+        return response({ user: { platform_role: "SHELTER_ADMIN" } });
+      if (url.pathname.endsWith("/volunteer-access-policy"))
+        return response({ default_grant_duration_hours: 168 });
+      return response({
+        items: [],
+        matching_count: 0,
+        next_cursor: null,
+        available_service_dates: [{ service_date: pastDate, pending_count: 2 }],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("React", React);
+    window.sessionStorage.setItem("access_token", "local-token");
+    window.sessionStorage.setItem("active_organization_id", "org-a");
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<VolunteerApplicationsPage />);
+      await flush();
+    });
+    expect(container.textContent).not.toContain("被「送出時間」篩選排除");
+
+    const from = container.querySelector(
+      "#volunteer-submitted-from",
+    ) as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    await act(async () => {
+      setter?.call(from, "2026-08-25T00:00");
+      from.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container
+        ?.querySelector("form[aria-label='志工申請篩選']")
+        ?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+      await flush();
+    });
+
+    expect(container.textContent).toContain(
+      "此日期另有 2 筆待審核申請被「送出時間」篩選排除",
+    );
+  });
+
   it("does not let an older date response replace the current list", async () => {
     const today = dateFromTestClock();
     let resolveToday: ((value: Response) => void) | undefined;
