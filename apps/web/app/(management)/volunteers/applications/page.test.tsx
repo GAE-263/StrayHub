@@ -717,9 +717,7 @@ describe("volunteer application review date", () => {
     expect(container.textContent).toContain("LINE 志工");
     expect(
       fetchMock.mock.calls.some(([, init]) => {
-        const headers = new Headers(
-          (init as RequestInit | undefined)?.headers,
-        );
+        const headers = new Headers((init as RequestInit | undefined)?.headers);
         return (
           headers.get("X-Platform-Support-Reason") ===
           encodeURIComponent("跨收容所支援審核")

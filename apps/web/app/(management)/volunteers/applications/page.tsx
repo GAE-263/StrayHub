@@ -333,10 +333,7 @@ export default function VolunteerApplicationsPage() {
           }
         />
       ) : requiresSupportReason && !supportReasonReady ? (
-        <form
-          className="ui-card ui-card-padded"
-          onSubmit={submitSupportReason}
-        >
+        <form className="ui-card ui-card-padded" onSubmit={submitSupportReason}>
           <Field>
             <label htmlFor="platform-support-reason">平台支援原因</label>
             <Input
@@ -368,7 +365,9 @@ export default function VolunteerApplicationsPage() {
             onSubmit={(event) => {
               event.preventDefault();
               void loadApplications(organizationId).catch((error) =>
-                setLoadError(error instanceof Error ? error.message : "載入失敗"),
+                setLoadError(
+                  error instanceof Error ? error.message : "載入失敗",
+                ),
               );
             }}
           >
@@ -413,7 +412,10 @@ export default function VolunteerApplicationsPage() {
               </Field>
               <div className="volunteer-filter-toggle">
                 <span className="ui-label">申請範圍</span>
-                <label htmlFor="volunteer-unassigned" className="toggle-control">
+                <label
+                  htmlFor="volunteer-unassigned"
+                  className="toggle-control"
+                >
                   <Checkbox
                     id="volunteer-unassigned"
                     checked={unassigned}
