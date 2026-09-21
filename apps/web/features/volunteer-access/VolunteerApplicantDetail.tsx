@@ -41,11 +41,13 @@ export function VolunteerApplicantDetail({
   applicationId,
   open,
   onClose,
+  platformSupportReason = null,
 }: {
   organizationId: string;
   applicationId: string | null;
   open: boolean;
   onClose: () => void;
+  platformSupportReason?: string | null;
 }) {
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
   const [revealed, setRevealed] = useState<RevealedProfile | null>(null);
@@ -60,9 +62,21 @@ export function VolunteerApplicantDetail({
   const [summaryError, setSummaryError] = useState("");
   const requestGeneration = useRef(0);
 
+  function buildHeaders(extra?: HeadersInit): Headers {
+    const headers = new Headers(extra);
+    if (platformSupportReason) {
+      headers.set(
+        "X-Platform-Support-Reason",
+        encodeURIComponent(platformSupportReason),
+      );
+    }
+    return headers;
+  }
+
   useEffect(() => {
     if (!open || !applicationId || !organizationId) return;
     const generation = ++requestGeneration.current;
+    const isPlatformSupportView = Boolean(platformSupportReason);
     setDetail(null);
     setRevealed(null);
     setError("");
@@ -71,11 +85,12 @@ export function VolunteerApplicantDetail({
     setSummaryError("");
     setSummaryLoading(false);
     setLoading(true);
-    setRevealing(true);
+    setRevealing(!isPlatformSupportView);
     void (async () => {
       try {
         const response = await authFetch(
           `/v1/organizations/${organizationId}/volunteer-applications/${applicationId}`,
+          { headers: buildHeaders() },
         );
         if (!response.ok) throw new Error("無法載入申請人遮罩資料");
         const value = (await response.json()) as ApplicationDetail;
@@ -88,6 +103,7 @@ export function VolunteerApplicantDetail({
         if (generation === requestGeneration.current) setLoading(false);
       }
     })();
+    if (isPlatformSupportView) return;
     void loadSummary(generation);
     void (async () => {
       try {
@@ -95,7 +111,7 @@ export function VolunteerApplicantDetail({
           `/v1/organizations/${organizationId}/volunteer-applications/${applicationId}/pii-reveal`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: buildHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ purpose_code: "application_review" }),
           },
         );
@@ -110,7 +126,7 @@ export function VolunteerApplicantDetail({
         if (generation === requestGeneration.current) setRevealing(false);
       }
     })();
-  }, [applicationId, open, organizationId]);
+  }, [applicationId, open, organizationId, platformSupportReason]);
 
   function close() {
     requestGeneration.current += 1;
@@ -136,6 +152,7 @@ export function VolunteerApplicantDetail({
       });
       const response = await authFetch(
         `/v1/organizations/${organizationId}/volunteer-applications/${applicationId}/service-summary?${query.toString()}`,
+        { headers: buildHeaders() },
       );
       if (!response.ok) throw new Error("目前無法載入跨收容所服務紀錄");
       const value = (await response.json()) as VolunteerExperienceSummary;
@@ -186,28 +203,36 @@ export function VolunteerApplicantDetail({
               )}
             </ul>
           </div>
-          <section aria-labelledby="applicant-information-title">
-            <h3 id="applicant-information-title">申請人資料</h3>
-            <p className="muted">
-              申請人資料僅供本次審核使用，查看紀錄將留存。
-            </p>
-            {revealing ? <p role="status">正在載入申請人資料…</p> : null}
-            {revealError ? <Alert role="alert">{revealError}</Alert> : null}
-            {revealed ? (
-              <div>
-                <p>姓名：{revealed.applicant_name}</p>
-                <p>電話：{revealed.phone_number}</p>
-                {revealed.basic_profile?.experience ? (
-                  <p>照護經驗：{revealed.basic_profile.experience}</p>
+          {platformSupportReason ? (
+            <Alert role="status">
+              平台支援模式僅提供申請狀態與服務日期；姓名、電話等個資與跨收容所服務紀錄僅收容所管理員可查看。
+            </Alert>
+          ) : (
+            <>
+              <section aria-labelledby="applicant-information-title">
+                <h3 id="applicant-information-title">申請人資料</h3>
+                <p className="muted">
+                  申請人資料僅供本次審核使用，查看紀錄將留存。
+                </p>
+                {revealing ? <p role="status">正在載入申請人資料…</p> : null}
+                {revealError ? <Alert role="alert">{revealError}</Alert> : null}
+                {revealed ? (
+                  <div>
+                    <p>姓名：{revealed.applicant_name}</p>
+                    <p>電話：{revealed.phone_number}</p>
+                    {revealed.basic_profile?.experience ? (
+                      <p>照護經驗：{revealed.basic_profile.experience}</p>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
-            ) : null}
-          </section>
-          <VolunteerServiceSummary
-            summary={summary}
-            loading={summaryLoading}
-            error={summaryError}
-          />
+              </section>
+              <VolunteerServiceSummary
+                summary={summary}
+                loading={summaryLoading}
+                error={summaryError}
+              />
+            </>
+          )}
         </div>
       ) : null}
     </Dialog>

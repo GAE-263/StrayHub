@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 
-import { authFetch } from "../../../../lib/auth";
+import { authFetch, type CurrentUser } from "../../../../lib/auth";
 import { Button } from "../../../../components/ui/button";
 import { Checkbox } from "../../../../components/ui/checkbox";
 import { Field } from "../../../../components/ui/field";
 import { Input } from "../../../../components/ui/input";
+import {
+  ErrorState,
+  LoadingState,
+} from "../../../../components/management/StateViews";
 import { ApplicationBatchWorkbench } from "../../../../features/volunteer-access/ApplicationBatchWorkbench";
 import { VolunteerApplicantDetail } from "../../../../features/volunteer-access/VolunteerApplicantDetail";
 import {
@@ -76,7 +81,23 @@ export default function VolunteerApplicationsPage() {
   const [detailApplicationId, setDetailApplicationId] = useState<string | null>(
     null,
   );
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [roleCheckError, setRoleCheckError] = useState("");
+  const [requiresSupportReason, setRequiresSupportReason] = useState(false);
+  const [supportReason, setSupportReason] = useState("");
+  const [supportReasonReady, setSupportReasonReady] = useState(false);
   const loadGeneration = useRef(0);
+
+  function supportHeaders(extra?: HeadersInit): Headers {
+    const headers = new Headers(extra);
+    if (requiresSupportReason) {
+      headers.set(
+        "X-Platform-Support-Reason",
+        encodeURIComponent(supportReason.trim()),
+      );
+    }
+    return headers;
+  }
 
   async function loadApplications(
     id: string,
@@ -98,6 +119,7 @@ export default function VolunteerApplicationsPage() {
       if (to) query.set("submitted_to", new Date(to).toISOString());
       const response = await authFetch(
         `/v1/organizations/${id}/volunteer-applications?${query.toString()}`,
+        { headers: supportHeaders() },
       );
       if (!response.ok) {
         if (response.status === 403) {
@@ -140,6 +162,7 @@ export default function VolunteerApplicationsPage() {
   async function loadPolicy(id: string) {
     const response = await authFetch(
       `/v1/organizations/${id}/volunteer-access-policy`,
+      { headers: supportHeaders() },
     );
     if (!response.ok) throw new Error("無法載入志工授權設定");
     const value = (await response.json()) as {
@@ -154,10 +177,7 @@ export default function VolunteerApplicationsPage() {
     setDefaultGrantDurationHours(value.default_grant_duration_hours);
   }
 
-  useEffect(() => {
-    const id = window.sessionStorage.getItem("active_organization_id") ?? "";
-    setOrganizationId(id);
-    if (!id) return;
+  async function runInitialLoad(id: string) {
     void loadPolicy(id).catch((error) =>
       setLoadError(error instanceof Error ? error.message : "載入失敗"),
     );
@@ -176,16 +196,64 @@ export default function VolunteerApplicationsPage() {
       .catch((error) =>
         setLoadError(error instanceof Error ? error.message : "載入失敗"),
       );
-    // Initial load uses the default local date-filter range.
+  }
+
+  useEffect(() => {
+    const id = window.sessionStorage.getItem("active_organization_id") ?? "";
+    setOrganizationId(id);
+    if (!id) {
+      setCheckingRole(false);
+      return;
+    }
+    void (async () => {
+      try {
+        const profileResponse = await authFetch("/v1/auth/me");
+        if (!profileResponse.ok) throw new Error("無法確認目前使用者權限");
+        const profile = (await profileResponse.json()) as CurrentUser;
+        if (profile.user.platform_role === "PLATFORM_ADMIN") {
+          setRequiresSupportReason(true);
+        } else {
+          setSupportReasonReady(true);
+        }
+      } catch (error) {
+        setRoleCheckError(
+          error instanceof Error ? error.message : "無法確認目前使用者權限",
+        );
+      } finally {
+        setCheckingRole(false);
+      }
+    })();
+    // Role check runs once for the active shelter snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!supportReasonReady || !organizationId) return;
+    void runInitialLoad(organizationId);
+    // Initial load uses the default local date-filter range.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supportReasonReady, organizationId]);
+
+  function submitSupportReason(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const reason = String(
+      new FormData(event.currentTarget).get("platform-support-reason") ?? "",
+    ).trim();
+    if (!reason) {
+      setLoadError("請填寫平台支援原因");
+      return;
+    }
+    setLoadError("");
+    setSupportReason(reason);
+    setSupportReasonReady(true);
+  }
 
   async function createBatch(payload: object) {
     const response = await authFetch(
       `/v1/organizations/${organizationId}/volunteer-decision-batches`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: supportHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       },
     );
@@ -201,6 +269,7 @@ export default function VolunteerApplicationsPage() {
       if (cursor) query.set("cursor", cursor);
       const response = await authFetch(
         `/v1/organizations/${organizationId}/volunteer-decision-batches/${batchId}/items?${query.toString()}`,
+        { headers: supportHeaders() },
       );
       if (!response.ok) throw new Error("逐筆結果載入失敗");
       const page = (await response.json()) as {
@@ -216,6 +285,7 @@ export default function VolunteerApplicationsPage() {
   async function loadBatch(batchId: string) {
     const response = await authFetch(
       `/v1/organizations/${organizationId}/volunteer-decision-batches/${batchId}`,
+      { headers: supportHeaders() },
     );
     if (!response.ok) throw new Error("批次進度載入失敗");
     return response.json();
@@ -252,133 +322,182 @@ export default function VolunteerApplicationsPage() {
           <p>選取申請後，批次核准或拒絕目前的服務日期。</p>
         </div>
       </div>
-      <VolunteerReviewCalendar
-        dates={reviewCalendar}
-        selectedDate={unassigned ? "" : serviceDate}
-        loading={loading && applications.length === 0}
-        error={loadError}
-        onSelectDate={selectReviewDate}
-      />
-      <form
-        className="ui-card ui-card-padded volunteer-review-filters"
-        aria-label="志工申請篩選"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void loadApplications(organizationId).catch((error) =>
-            setLoadError(error instanceof Error ? error.message : "載入失敗"),
-          );
-        }}
-      >
-        <div className="volunteer-filter-grid">
-          <Field>
-            <label htmlFor="volunteer-service-date">審核服務日期</label>
-            <Input
-              id="volunteer-service-date"
-              type="date"
-              value={serviceDate}
-              onChange={(event) => {
-                invalidateLoadedApplications();
-                setServiceDate(event.target.value);
-              }}
-              disabled={unassigned}
-              required={!unassigned}
-            />
-          </Field>
-          <Field>
-            <label htmlFor="volunteer-submitted-from">送出時間起</label>
-            <Input
-              id="volunteer-submitted-from"
-              type="datetime-local"
-              value={submittedFrom}
-              onChange={(event) => {
-                invalidateLoadedApplications();
-                setSubmittedFrom(event.target.value);
-              }}
-            />
-          </Field>
-          <Field>
-            <label htmlFor="volunteer-submitted-to">送出時間迄</label>
-            <Input
-              id="volunteer-submitted-to"
-              type="datetime-local"
-              value={submittedTo}
-              onChange={(event) => {
-                invalidateLoadedApplications();
-                setSubmittedTo(event.target.value);
-              }}
-            />
-          </Field>
-          <div className="volunteer-filter-toggle">
-            <span className="ui-label">申請範圍</span>
-            <label htmlFor="volunteer-unassigned" className="toggle-control">
-              <Checkbox
-                id="volunteer-unassigned"
-                checked={unassigned}
-                onChange={(event) => {
-                  invalidateLoadedApplications();
-                  setUnassigned(event.target.checked);
-                }}
-              />
-              <span>未指定日期（既有歷史申請）</span>
-            </label>
-          </div>
-          <div className="volunteer-filter-action">
-            <Button type="submit">套用篩選</Button>
-          </div>
-        </div>
-        <p
-          className="volunteer-filter-status"
-          role={loadError ? "alert" : "status"}
-          aria-live="polite"
-        >
-          {loadError ||
-            (!unassigned && serviceDate
-              ? `目前顯示 ${serviceDate} 的待審核申請`
-              : "")}
-        </p>
-      </form>
-      {defaultGrantDurationHours === null ? (
-        <p role="status">載入志工授權設定中…</p>
-      ) : (
-        <ApplicationBatchWorkbench
-          key={`${serviceDate}:${unassigned}:${submittedFrom}:${submittedTo}`}
-          applications={loading ? [] : applications}
-          loading={loading}
-          matchingCount={loading ? 0 : matchingCount}
-          defaultGrantDurationHours={defaultGrantDurationHours}
-          filter={{
-            status: "pending",
-            ...(unassigned
-              ? { unassigned: true }
-              : { service_date: serviceDate }),
-            ...(submittedFrom
-              ? { submitted_from: new Date(submittedFrom).toISOString() }
-              : {}),
-            ...(submittedTo
-              ? { submitted_to: new Date(submittedTo).toISOString() }
-              : {}),
-          }}
-          onSubmit={createBatch}
-          onLoadItems={loadItems}
-          onLoadBatch={loadBatch}
-          onBatchTerminalSuccess={() => {
-            void loadApplications(
-              organizationId,
-              submittedFrom,
-              submittedTo,
-              serviceDate,
-              unassigned,
-            );
-          }}
-          onViewApplicant={setDetailApplicationId}
+      {checkingRole ? (
+        <LoadingState
+          title="正在確認使用者權限…"
+          description="正在確認目前帳號是否為平台管理員。"
         />
+      ) : roleCheckError ? (
+        <ErrorState
+          title="無法確認目前使用者權限"
+          description={roleCheckError}
+          action={
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              重試
+            </Button>
+          }
+        />
+      ) : requiresSupportReason && !supportReasonReady ? (
+        <form className="ui-card ui-card-padded" onSubmit={submitSupportReason}>
+          <Field>
+            <label htmlFor="platform-support-reason">平台支援原因</label>
+            <Input
+              id="platform-support-reason"
+              name="platform-support-reason"
+              maxLength={500}
+            />
+          </Field>
+          <p className="policy-note">
+            平台管理員跨收容所查詢志工報名審核都會記錄此原因。
+          </p>
+          {loadError ? <p role="alert">{loadError}</p> : null}
+          <Button type="submit" variant="secondary">
+            載入志工報名名單
+          </Button>
+        </form>
+      ) : (
+        <>
+          <VolunteerReviewCalendar
+            dates={reviewCalendar}
+            selectedDate={unassigned ? "" : serviceDate}
+            loading={loading && applications.length === 0}
+            error={loadError}
+            onSelectDate={selectReviewDate}
+          />
+          <form
+            className="ui-card ui-card-padded volunteer-review-filters"
+            aria-label="志工申請篩選"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadApplications(organizationId).catch((error) =>
+                setLoadError(
+                  error instanceof Error ? error.message : "載入失敗",
+                ),
+              );
+            }}
+          >
+            <div className="volunteer-filter-grid">
+              <Field>
+                <label htmlFor="volunteer-service-date">審核服務日期</label>
+                <Input
+                  id="volunteer-service-date"
+                  type="date"
+                  value={serviceDate}
+                  onChange={(event) => {
+                    invalidateLoadedApplications();
+                    setServiceDate(event.target.value);
+                  }}
+                  disabled={unassigned}
+                  required={!unassigned}
+                />
+              </Field>
+              <Field>
+                <label htmlFor="volunteer-submitted-from">送出時間起</label>
+                <Input
+                  id="volunteer-submitted-from"
+                  type="datetime-local"
+                  value={submittedFrom}
+                  onChange={(event) => {
+                    invalidateLoadedApplications();
+                    setSubmittedFrom(event.target.value);
+                  }}
+                />
+              </Field>
+              <Field>
+                <label htmlFor="volunteer-submitted-to">送出時間迄</label>
+                <Input
+                  id="volunteer-submitted-to"
+                  type="datetime-local"
+                  value={submittedTo}
+                  onChange={(event) => {
+                    invalidateLoadedApplications();
+                    setSubmittedTo(event.target.value);
+                  }}
+                />
+              </Field>
+              <div className="volunteer-filter-toggle">
+                <span className="ui-label">申請範圍</span>
+                <label
+                  htmlFor="volunteer-unassigned"
+                  className="toggle-control"
+                >
+                  <Checkbox
+                    id="volunteer-unassigned"
+                    checked={unassigned}
+                    onChange={(event) => {
+                      invalidateLoadedApplications();
+                      setUnassigned(event.target.checked);
+                    }}
+                  />
+                  <span>未指定日期（既有歷史申請）</span>
+                </label>
+              </div>
+              <div className="volunteer-filter-action">
+                <Button type="submit">套用篩選</Button>
+              </div>
+            </div>
+            <p
+              className="volunteer-filter-status"
+              role={loadError ? "alert" : "status"}
+              aria-live="polite"
+            >
+              {loadError ||
+                (!unassigned && serviceDate
+                  ? `目前顯示 ${serviceDate} 的待審核申請`
+                  : "")}
+            </p>
+          </form>
+          {defaultGrantDurationHours === null ? (
+            <p role="status">載入志工授權設定中…</p>
+          ) : (
+            <ApplicationBatchWorkbench
+              key={`${serviceDate}:${unassigned}:${submittedFrom}:${submittedTo}`}
+              applications={loading ? [] : applications}
+              loading={loading}
+              matchingCount={loading ? 0 : matchingCount}
+              defaultGrantDurationHours={defaultGrantDurationHours}
+              filter={{
+                status: "pending",
+                ...(unassigned
+                  ? { unassigned: true }
+                  : { service_date: serviceDate }),
+                ...(submittedFrom
+                  ? { submitted_from: new Date(submittedFrom).toISOString() }
+                  : {}),
+                ...(submittedTo
+                  ? { submitted_to: new Date(submittedTo).toISOString() }
+                  : {}),
+              }}
+              onSubmit={createBatch}
+              onLoadItems={loadItems}
+              onLoadBatch={loadBatch}
+              onBatchTerminalSuccess={() => {
+                void loadApplications(
+                  organizationId,
+                  submittedFrom,
+                  submittedTo,
+                  serviceDate,
+                  unassigned,
+                );
+              }}
+              onViewApplicant={setDetailApplicationId}
+            />
+          )}
+          <VolunteerApplicantDetail
+            organizationId={organizationId}
+            applicationId={detailApplicationId}
+            open={detailApplicationId !== null}
+            onClose={() => setDetailApplicationId(null)}
+            platformSupportReason={
+              requiresSupportReason ? supportReason.trim() : null
+            }
+          />
+        </>
       )}
-      <VolunteerApplicantDetail
-        organizationId={organizationId}
-        applicationId={detailApplicationId}
-        open={detailApplicationId !== null}
-        onClose={() => setDetailApplicationId(null)}
-      />
     </div>
   );
 }
