@@ -1,0 +1,22 @@
+# Mirrors the formatting gates in .github/workflows/ci.yml.
+# One-time setup per clone: `uv run pre-commit install`
+# Frontend hook needs `npm ci --prefix apps/web` to have been run.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: prettier
+        name: prettier (apps/web)
+        entry: scripts/pre_commit_prettier.sh
+        language: script
+        files: ^apps/web/
+        exclude: ^apps/web/(node_modules|\.next)/
