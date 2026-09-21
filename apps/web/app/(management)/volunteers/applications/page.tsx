@@ -443,7 +443,8 @@ export default function VolunteerApplicationsPage() {
             </p>
             {hiddenByTimeFilter > 0 ? (
               <p className="volunteer-filter-status" role="status">
-                此日期另有 {hiddenByTimeFilter} 筆待審核申請被「送出時間」篩選排除，清除送出時間後套用即可看到。
+                此日期另有 {hiddenByTimeFilter}{" "}
+                筆待審核申請被「送出時間」篩選排除，清除送出時間後套用即可看到。
               </p>
             ) : null}
           </form>
