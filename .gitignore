@@ -46,3 +46,4 @@ service.json
 /test.txt
 .playwright-mcp/
 CLAUDE.local.md
+infra/gce/line-publication-manifest.json*
