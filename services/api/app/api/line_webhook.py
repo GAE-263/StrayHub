@@ -2030,6 +2030,10 @@ async def _handle_growth_diary_message(
         await _reply(line, event, [_text("請直接傳照片或輸入文字記錄成長日記。")])
         return
 
+    # The pending-draft peek ran in authentication-user scope (the shelter was
+    # not yet known). animals has only a tenant-scoped RLS policy, so the
+    # repository's animal lookup needs the draft's organization scope.
+    await set_organization_scope(session, pending_draft.organization_id)
     today = await _organization_today(session, pending_draft.organization_id)
     repository = GrowthDiaryRepository(session, pending_draft.organization_id)
     if pending_draft.current_entry_id is not None and pending_draft.entry_date == today:
