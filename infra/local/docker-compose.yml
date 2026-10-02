@@ -15,7 +15,9 @@ services:
       timeout: 5s
       retries: 10
   minio:
-    image: mirror.gcr.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    # Community-maintained fork (pgsty/Silo, RELEASE.2026-08-04T00-00-00Z), pinned to the multi-arch
+    # index so amd64 and arm64 dev machines both work. Matches infra/gce production.
+    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: local-access-key
