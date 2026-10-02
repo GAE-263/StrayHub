@@ -178,7 +178,7 @@ def test_deployment_receipt_is_fail_closed(tmp_path, monkeypatch, fail_step):
     monkeypatch.setattr(staging, "compare", lambda *args: [])
     calls = []
 
-    def fake_run(command, env):
+    def fake_run(command, env, *, diagnose=False):
         calls.append(command)
         if "context" in command and "inspect" in command:
             return json.dumps([{"Endpoints": {"docker": {"Host": "unix:///local.sock"}}}])
