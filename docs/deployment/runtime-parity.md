@@ -11,8 +11,9 @@ unchanged by this phase.
 The full graph is PostgreSQL, MinIO, MinIO bootstrap, Redis, API, migration (tools profile),
 database-polling Worker, Celery Worker, Celery Beat and Web. The legacy database Worker and
 Celery Worker execute different queues; neither replaces the other. Beat is the scheduler.
-MinIO server and bootstrap use official Quay images pinned to amd64 manifest digests; the
-former Docker Hub tags are no longer pullable.
+MinIO server and bootstrap use the community-maintained `pgsty/minio` and `pgsty/mc` images
+pinned to amd64 manifest digests; upstream stopped publishing images (the former Docker Hub tags
+and the Quay digests are no longer pullable).
 The existing lack of Docker healthchecks for the database Worker and Beat is preserved rather
 than inventing an HTTP health endpoint. Phase 4 must verify their running state and task imports.
 

@@ -23,8 +23,9 @@ services:
       - strayhub_runtime
 
   minio:
-    # Official MinIO Quay image, pinned to the amd64 manifest for this release.
-    image: quay.io/minio/minio@sha256:34c8e2f52a5984492555427fee07254c80036bdb7079bb91679232abd7a4fa20
+    # Community-maintained MinIO fork (pgsty/Silo, RELEASE.2026-08-04T00-00-00Z), pinned to the
+    # amd64 manifest. Upstream minio/minio stopped publishing images and was archived.
+    image: pgsty/minio@sha256:2b36182f3479c58b5cba920f20479738ee85ce218de0596a244f9a1368268db9
     restart: unless-stopped
     command: server /data
     environment:
@@ -42,8 +43,8 @@ services:
       - strayhub_runtime
 
   minio-bootstrap:
-    # Official MinIO Quay image, pinned to the amd64 manifest for this release.
-    image: quay.io/minio/mc@sha256:771f5ad7925a6b5e069786d8e847a292de320f1e3e3203647e29f47ec9b3d93b
+    # Matching pgsty mc client (RELEASE.2026-09-16T00-00-00Z), pinned to the amd64 manifest.
+    image: pgsty/mc@sha256:8ac3333f012adb27c406df77c7cae6ce700892cc44ee489036404e3fc356e9ea
     restart: "no"
     depends_on:
       minio:
