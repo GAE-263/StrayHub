@@ -30,10 +30,30 @@ EDGE_COMMAND = ["python", "-m", "scripts.local_staging_proxy"]
 EDGE_PORTS = {("127.0.0.1", 8081, "18082"), ("127.0.0.1", 8080, "13002")}
 
 
-def run(args: list[str], env: dict[str, str]) -> str:
+_SENSITIVE_MARKERS = ("token", "password", "secret", "authorization", "credential", "key")
+
+
+def _safe_diagnostic(text: str, limit: int = 1500) -> str:
+    """Registry/orchestration errors only: drop any line that could carry a secret."""
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not any(marker in line.lower() for marker in _SENSITIVE_MARKERS)
+    ]
+    return "\n".join(lines)[:limit]
+
+
+def run(args: list[str], env: dict[str, str], *, diagnose: bool = False) -> str:
     result = subprocess.run(args, env=env, capture_output=True, text=True, check=False)
     if result.returncode:
-        # Docker diagnostics and application output may contain secrets.
+        # Docker diagnostics and application output may contain secrets, so they stay
+        # suppressed unless the caller opts in for image-pull/startup orchestration only.
+        detail = _safe_diagnostic(result.stderr) if diagnose else ""
+        if detail:
+            raise ValueError(
+                f"Command failed (exit {result.returncode}); no runtime receipt issued. "
+                f"Filtered diagnostics:\n{detail}"
+            )
         raise ValueError("Command failed; no runtime receipt issued (diagnostics suppressed)")
     return result.stdout
 
@@ -246,11 +266,12 @@ def deploy(args: argparse.Namespace) -> None:
     if compare(reference, model, "staging"):
         raise ValueError("Selected artifact does not match the local staging runtime contract")
     print("Pulling release images; migrating isolated database", flush=True)
-    run(compose + ["--profile", "*", "pull"], env)
+    run(compose + ["--profile", "*", "pull"], env, diagnose=True)
     # Stop only this project's application processes before migrating persistent local data.
     run(
         compose + ["stop", "staging-edge", "api", "web", "worker", "celery-worker", "celery-beat"],
         env,
+        diagnose=True,
     )
     run(
         compose
@@ -266,6 +287,7 @@ def deploy(args: argparse.Namespace) -> None:
             "redis",
         ],
         env,
+        diagnose=True,
     )
     run(compose + ["run", "--rm", "--no-deps", "migration"], env)
     print("Starting runtime and waiting for health checks", flush=True)
