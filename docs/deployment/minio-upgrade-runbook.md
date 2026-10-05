@@ -76,8 +76,9 @@ dc() { sudo -u strayhub docker compose --project-name strayhub-production \
 1. Logical backup with its SHA-256 inventory: `infra/gce/scripts/backup-all.sh` (see
    [backup-restore.md](backup-restore.md)); verify the manifest and confirm the GCS upload wrote
    `_COMPLETE`.
-2. Stop everything that writes to MinIO, then MinIO itself, so the volume is quiescent:
-   `dc stop web api worker celery-worker celery-beat minio`.
+2. Quiesce the volume with the unit that owns the runtime (`Type=oneshot`, `RemainAfterExit=yes`, so
+   stopping containers by hand would leave the unit "active" and a later `start` would do nothing):
+   `sudo systemctl stop strayhub.service`. This stops writers and MinIO, like the deploy does.
 3. Physical copy of the volume, with a checksum, stored off the VM:
 
    ```bash
@@ -89,11 +90,33 @@ dc() { sudo -u strayhub docker compose --project-name strayhub-production \
 
 ### 2. Cutover
 
-Deploy the release containing the `pgsty` images with the canonical entrypoint
-([gce-release-process.md](gce-release-process.md)); Compose recreates `minio` on the existing
-volume. **Assumption to verify on the first read of the deploy script:** `deploy-release.sh`
-restarts the writers. From that point until step 3 passes, new objects (for example a diary photo)
-would be lost by a rollback. Keep the window short and, if possible, block LINE traffic at the edge.
+What `deploy-release.sh` actually does (read from the script, not assumed):
+
+1. `compose pull api worker web` and the production preflight run **first**. MinIO and
+   `minio-bootstrap` are **not** in that pull. The `pgsty` images would only be pulled implicitly by
+   `systemctl restart strayhub.service` (`compose up`) *after* the runtime is stopped. If Docker Hub
+   is unreachable at that moment the stack is down and the deploy fails after `release_preparation`
+   (recoverable only by the manual `--resume` on the VM, see the release notes). **Pre-pull both
+   images on the VM before starting the deploy:**
+
+   ```bash
+   sudo docker pull pgsty/minio@sha256:2b36182f3479c58b5cba920f20479738ee85ce218de0596a244f9a1368268db9
+   sudo docker pull pgsty/mc@sha256:8ac3333f012adb27c406df77c7cae6ce700892cc44ee489036404e3fc356e9ea
+   ```
+
+2. `systemctl stop strayhub.service` stops the **whole** runtime (writers and MinIO), then
+   migration, pointer switch and unit install. There is no hook between stop and start, so the
+   physical volume copy of step 1 must already exist; the script never takes one.
+3. `systemctl restart strayhub.service` starts the upgraded MinIO **and** the writers together.
+   `verify-systemd-runtime.sh` and the public `/healthz` checks run after that, and they do not
+   inspect MinIO data. Traffic from the existing edge can reach the writers as soon as they are up,
+   so a failed step 3 below can lose objects written in that window.
+
+Sequence: step 1 (stop writers and MinIO, tar, then **start the current release again** with
+`sudo systemctl start strayhub.service`, whose `ExecStartPost` re-runs the runtime verification, so
+production is not left down), pre-pull, then run the
+canonical deploy. Skipping the restart and deploying while stopped is faster but unverified (the
+preflight's behavior with a stopped runtime was not checked), so it is not the default.
 
 ### 3. Verify (all must pass before leaving the window)
 
@@ -106,16 +129,21 @@ would be lost by a rollback. Keep the window short and, if possible, block LINE 
 
 ### 4. Rollback (any failed check)
 
-The application rollback entrypoint (`rollback-release.sh`) never touches volumes and does not
-undo the MinIO data format. Restore the data explicitly:
+**Do not use `rollback-release.sh` on its own.** It pulls only `api worker web` of release N-1 and
+restarts N-1's Compose, which still pins the *old* `quay.io/minio/...` images. Those would start on
+the already-upgraded volume and fail (`Unknown xl meta version 3`), and the old image may no longer
+be pullable. It is also refused unless release N records backward compatibility; that claim does
+not cover the MinIO data format and must not be written to make a MinIO rollback pass.
+Restore the data explicitly first:
 
-1. `dc stop web api worker celery-worker celery-beat minio`, then remove the MinIO container.
+1. `sudo systemctl stop strayhub.service`, then remove the MinIO container
+   (`dc rm -f minio`).
 2. Replace the volume contents with the pre-upgrade tar (verify its checksum first):
    `docker run --rm -v strayhub-production_minio_data:/data -v …:/backup postgres:16-alpine sh -c
    'find /data -mindepth 1 -delete && tar xzf /backup/minio-data-pre-pgsty.tgz -C /data'`.
-3. Start the **old** server image on that volume (load the saved copy if Quay no longer serves it)
-   by pointing the Compose `image:` line at it for the rollback window, then repeat step 3 checks
-   against the pre-upgrade inventory.
+3. Make sure the old server image is present on the VM (load the saved copy if Quay no longer
+   serves it), then run the application rollback entrypoint to N-1, whose Compose pins that image.
+   Repeat the step 3 checks against the pre-upgrade inventory.
 4. Anything written after the tar was taken must be re-created from other sources or accepted as lost.
 
 ## Follow-ups
